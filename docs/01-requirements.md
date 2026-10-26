@@ -103,6 +103,24 @@ CREATE (1-line host brief + deadline)
 - FR7.2 Landing page explains the game in <30s with "Start a game" and
   "Try the 3-minute demo" as the only primary actions.
 
+### FR8 — Creator auth, flagged OFF first (working-lite, PIN-22)
+- FR8.1 `AUTH_MODE=link-only|optional`, default `link-only`: creators
+  use the admin link/token, players use signed cookies. No auth UI
+  exists in `link-only`; tests and the judge demo run in this mode.
+- FR8.2 In `optional`, creators may sign in (Google first; Microsoft/
+  Facebook if free) to claim link-created games/chains. The admin-token
+  path keeps working in both modes; flipping the flag needs no migration.
+- FR8.3 Players are never asked to authenticate in any mode. Entitlements
+  (free caps now, paid packs later) attach to creator/chain, not players.
+
+### FR9 — Language seams (EN main, FR later, PIN-23)
+- FR9.1 All UI strings live in a message catalog from the first scaffold;
+  `en` is complete and is the shipping UI language.
+- FR9.2 `fr` catalog exists empty with fallback to `en`; translation is
+  deferred until family playtesting (post-M3 slack or post-hackathon).
+- FR9.3 Host *voice* language is independent of UI locale: the persona
+  carries a language field derived from the creator's brief.
+
 ## 4. Non-functional requirements
 
 - NFR1 **Mobile-first:** every flow usable one-handed on a phone browser;
@@ -127,10 +145,11 @@ CREATE (1-line host brief + deadline)
 
 ## 5. Explicit non-goals (MVP)
 
-Accounts/passwords, native apps, push notifications, real-time sync play,
-points economy, player-vs-player dares, public discovery/matchmaking,
-payments, video submissions, multi-language UI (host *voice* may follow
-the brief's language; UI ships in English).
+Mandatory accounts (optional creator auth is FR8), native apps, push
+notifications, real-time sync play, points economy, player-vs-player
+dares, public discovery/matchmaking, live payments (Stripe test-mode
+packs are working-lite scope, PIN-21/PIN-22), video submissions,
+translated UI beyond the FR9 seam (UI ships in English; `fr` stays empty).
 
 ## 6. Gaps found in the pitch → how closed (decision log)
 
@@ -162,7 +181,9 @@ Suspicious) using the same assets. The host/persona core does not pivot.
 
 ## 8. Open questions (resolve by end of Day 2)
 
-- Q1 Hosting vendor pick (see `02-architecture.md` §6) — decide at scaffold.
+- Q1 Hosting: direction decided Day 1 — **Firebase-first** (PIN-21
+  validates data model/costs; PIN-2 records the ADR). AWS remains the
+  documented fallback if Firebase fit fails research.
 - Q2 Exact SAM 3.1 request/response shape on Meta Model API — retired by
   Day-1 smoke test (`PIN-3`); gateway interface isolates the answer.
 - Q3 Guessing-window default (immediate vs timed) — decide from first
