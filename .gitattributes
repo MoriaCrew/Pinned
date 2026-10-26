@@ -1,0 +1,2 @@
+# Shell scripts must stay LF or bash breaks on Linux CI (Windows clones convert by default).
+*.sh text eol=lf

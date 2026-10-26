@@ -34,13 +34,20 @@ the step — and amend this doc in the same PR._
    `prompts/`; new AI calls go through `ModelGateway` with a mock;
    add/adjust tests per the issue's test plan. Agent commits in small,
    named steps; never rewrites history on shared branches.
-3. **PR:** open against `main` using the PR template: Linear link,
-   FR/NFR IDs, what changed, test evidence (commands + output), AI/cost
-   impact, screenshots for UI, rollback note. CI must be green.
-4. **Review (human = Robin, assisted by Muse):** check acceptance
-   criteria one by one on the preview deploy; request changes on the PR,
-   not in chat. Solo rule: no self-merge without (a) green CI, (b) a
-   preview click-through, (c) PR description evidence filled in.
+3. **PR:** open against `main` using the PR template: short issue ID
+   (`PIN-n`, never a full Linear URL — §4), FR/NFR IDs, what changed,
+   test evidence (commands + output), AI/cost impact, screenshots for
+   UI, rollback note. CI must be green.
+4. **Review (human = Robin, assisted by Muse + Cursor Bugbot):**
+   check acceptance criteria one by one on the preview deploy; request
+   changes on the PR, not in chat. **Bugbot gate:** do not merge until
+   Bugbot's review has *finished* (pending ≠ pass — PR #1 merged at
+   15:20, Bugbot landed 15:23 with a real Medium finding; see PIN-19).
+   Triage every finding in-thread: fix in the PR, file a follow-up
+   `PIN` issue, or dismiss with a written reason. Medium+ security
+   findings block merge. Solo rule: no self-merge without (a) green CI,
+   (b) Bugbot triaged, (c) a preview click-through, (d) PR description
+   evidence filled in.
 5. **Merge & update:** squash-merge; production deploy from `main`;
    smoke the golden path; move Linear issue → *Done* with PR + deploy
    links and any follow-up issues filed. Branch deleted.
@@ -54,6 +61,11 @@ the step — and amend this doc in the same PR._
   `fix(vision): …`, `docs: …`, `chore(ci): …`.
 - One issue per PR; PRs >~400 lines get split. No direct pushes to
   `main` after Day-1 bootstrap; `main` protected (PR + CI required).
+- **Public-link hygiene:** this repo is public, Linear is private.
+  Public artifacts (PRs, commits, README, code) carry only the short
+  `PIN-n` ID — full Linear URLs leak issue-title slugs and dead-end
+  judges at a login wall. Full links live inside Linear, which also
+  auto-links PRs from the branch name for authenticated viewers.
 
 ## 5. Agent guardrails (Muse / coding agents)
 
