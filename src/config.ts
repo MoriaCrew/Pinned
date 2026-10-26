@@ -18,10 +18,15 @@ export interface MetaConfig {
   imageModel: string;
 }
 
+export type DataBackend = "firestore" | "memory";
+
 export interface AppConfig {
   authMode: AuthMode;
   aiMock: boolean;
   appBaseUrl: string;
+  dataBackend: DataBackend;
+  firebaseProjectId: string | null;
+  firestoreEmulatorHost: string | null;
   meta: MetaConfig;
 }
 
@@ -38,6 +43,12 @@ export function parseConfig(
     authMode: env.AUTH_MODE === "optional" ? "optional" : "link-only",
     aiMock: env.AI_MOCK !== "0",
     appBaseUrl: env.APP_BASE_URL ?? "http://localhost:3000",
+    dataBackend: env.DATA_BACKEND === "firestore" ? "firestore" : "memory",
+    firebaseProjectId:
+      nonEmpty(env.FIREBASE_PROJECT_ID) ??
+      nonEmpty(env.GOOGLE_CLOUD_PROJECT) ??
+      nonEmpty(env.GCLOUD_PROJECT),
+    firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
     meta: {
       apiKey: nonEmpty(env.META_API_KEY),
       baseUrl: (nonEmpty(env.META_API_BASE_URL) ?? "https://api.meta.ai/v1").replace(/\/$/, ""),

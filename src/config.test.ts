@@ -28,6 +28,23 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.meta.imageModel).toBe("muse-image-1.0");
   });
 
+  it("defaults persistence to memory and honours explicit Firestore config", () => {
+    const empty = parseConfig({});
+    expect(empty.dataBackend).toBe("memory");
+    expect(empty.firebaseProjectId).toBeNull();
+    expect(empty.firestoreEmulatorHost).toBeNull();
+
+    const hosted = parseConfig({
+      DATA_BACKEND: "firestore",
+      FIREBASE_PROJECT_ID: " demo-project ",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+    });
+    expect(hosted.dataBackend).toBe("firestore");
+    expect(hosted.firebaseProjectId).toBe("demo-project");
+    expect(hosted.firestoreEmulatorHost).toBe("127.0.0.1:8080");
+    expect(parseConfig({ DATA_BACKEND: "Firestore" }).dataBackend).toBe("memory");
+  });
+
   it("honours Meta env overrides and trims a trailing slash", () => {
     const cfg = parseConfig({
       META_API_KEY: " k ",

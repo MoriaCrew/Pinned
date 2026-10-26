@@ -6,7 +6,7 @@
  * target state and gets { changed: false }, not an error.
  */
 import { transitionGame, type GameState, type TransitionResult } from "./game-state";
-import type { AiCallLog, Game, Player, Submission } from "./types";
+import type { AiCallLog, Game, GameChain, Player, Submission } from "./types";
 
 export class VersionConflictError extends Error {
   constructor(
@@ -19,6 +19,8 @@ export class VersionConflictError extends Error {
 }
 
 export interface GameRepository {
+  createChain(chain: GameChain): Promise<void>;
+  getChain(chainId: string): Promise<GameChain | null>;
   createGame(game: Game): Promise<void>;
   getGame(slug: string): Promise<Game | null>;
   /** Optimistic transition; same-target no-op returns changed:false. */
@@ -41,10 +43,21 @@ function clone<T>(value: T): T {
 }
 
 export class InMemoryGameRepository implements GameRepository {
+  private chains = new Map<string, GameChain>();
   private games = new Map<string, Game>();
   private players = new Map<string, Player>();
   private submissions = new Map<string, Submission>();
   private aiLogs: AiCallLog[] = [];
+
+  async createChain(chain: GameChain): Promise<void> {
+    if (this.chains.has(chain.id)) throw new RangeError(`Chain ${chain.id} already exists`);
+    this.chains.set(chain.id, clone(chain));
+  }
+
+  async getChain(chainId: string): Promise<GameChain | null> {
+    const chain = this.chains.get(chainId);
+    return chain ? clone(chain) : null;
+  }
 
   async createGame(game: Game): Promise<void> {
     if (this.games.has(game.id)) throw new RangeError(`Game ${game.id} already exists`);

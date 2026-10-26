@@ -5,6 +5,8 @@
 env:
   - variable: AI_MOCK
     value: "1"
+  - variable: DATA_BACKEND
+    value: firestore
   - variable: FIREBASE_PROJECT_ID
     value: moriacrew-pinned-prod
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID

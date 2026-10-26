@@ -54,6 +54,14 @@ describe("InMemoryGameRepository", () => {
     );
   });
 
+  it("stores chains and rejects duplicates", async () => {
+    const repo = new InMemoryGameRepository();
+    const chain = { id: "chain-1", gameCount: 1, createdAt: 0 };
+    await repo.createChain(chain);
+    expect(await repo.getChain("chain-1")).toEqual(chain);
+    await expect(repo.createChain(chain)).rejects.toThrow(RangeError);
+  });
+
   it("stores players, submissions and day-bucketed AI logs", async () => {
     const repo = new InMemoryGameRepository();
     await repo.putPlayer({
