@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "moriacrew-pinned-dev",
+    "dev": "moriacrew-pinned-dev",
+    "prod": "moriacrew-pinned-prod"
+  }
+}
