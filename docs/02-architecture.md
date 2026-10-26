@@ -73,6 +73,23 @@ posterBackground(persona, challenge, winnerLabel) -> image
 writeDiary(gameSummary) -> DiaryEntryJSON
 ```
 
+**PIN-3 model pins (Oct 26, 2026):** base `https://api.meta.ai/v1`,
+Bearer auth; unauthenticated `GET /models` returns the OpenAI-style
+`401 invalid_api_key` envelope (verified live). Spark
+`muse-spark-1.3` via `/chat/completions` (text + vision), Muse Image
+`muse-image-1.0` via `/images/generations`, SAM `sam-3.1` via
+`/responses` (Responses-only; judge `objectLabel` becomes its
+`input_text`). Standard IDs only — `*-contributor` variants never
+touch player photos. Implementation: `src/gateway/meta-gateway.ts`
+(plain fetch, no SDK) + `npm run smoke:meta` for live validation.
+SAM output is geometry, not an image: special-token text carrying
+one box + one base85 mask per match (`sam/reading-segmentation`);
+the gateway parses records and the segment step decodes/composites.
+Still unverified until an authenticated smoke runs: SAM payload
+keys (adapter searches defensively, `sam_shape_unknown` otherwise),
+vision content-part acceptance, per-call cost/latency (PIN-15
+measures), and account credit terms (PIN-27 operator check).
+
 1. **Persona (Spark, text):** brief → constrained JSON. System prompt
    carries the roast policy; brief is treated as data, never instructions
    that can override policy (G6). One retry on schema failure, then a

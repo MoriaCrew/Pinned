@@ -34,10 +34,19 @@ export interface DiaryEntry {
   runningJokes: string[];
 }
 
+/** One SAM 3.1 match: box in frame pixels + encoded mask raster.
+ *  Mask payload is base85 (Meta docs sam/reading-segmentation);
+ *  decoding to a PNG cut-out is compositing, not gateway work. */
+export interface SamSegment {
+  id: string;
+  box: { x1: number; y1: number; x2: number; y2: number; w: number; h: number; confidence?: number };
+  mask: { height: number; width: number; encoding: string; payload: string };
+}
+
 export interface ModelGateway {
   generatePersona(brief: string): Promise<{ persona: HostPersona; challenge: string }>;
   judgePhoto(input: { imageRef: string; challenge: string }): Promise<Judgement>;
-  segmentObject(input: { imageRef: string; concept: string }): Promise<{ cutoutRef: string }>;
+  segmentObject(input: { imageRef: string; concept: string }): Promise<{ segments: SamSegment[] }>;
   posterBackground(input: { challenge: string }): Promise<{ imageRef: string }>;
   writeDiary(input: { winner: string }): Promise<DiaryEntry>;
 }
