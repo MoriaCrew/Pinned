@@ -1,6 +1,6 @@
 ## Linear
 
-- Issue: PIN-<!-- n + full Linear URL -->
+- Issue: PIN-<!-- n only. No Linear URL: this repo is public, Linear is private (see docs/03 §4). -->
 
 ## Requirements
 
@@ -14,6 +14,7 @@
 
 <!-- Paste the exact commands run and their outcome. CI green is necessary, not sufficient. -->
 
+- [ ] Bugbot review finished and every finding triaged (fix / follow-up PIN / justified dismissal in-thread):
 - [ ] Unit / contract tests:
 - [ ] Preview click-through (phone viewport) for UI changes:
 - [ ] Screenshots attached (UI changes):

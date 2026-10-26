@@ -11,8 +11,12 @@ matters more. Full workflow: `docs/03-ai-sdlc.md`. Requirements:
    `PIN-{n}/short-slug` from `main`. File anything out-of-scope as a new
    Linear issue instead of building it.
 2. **Small PRs.** One issue per PR, squash-merged to `main`. Fill the PR
-   template completely (Linear link, FR/NFR IDs, test evidence, AI/cost
-   impact). CI green before requesting review.
+   template completely (short `PIN-n` ID only — never a full Linear URL
+   in this public repo; FR/NFR IDs, test evidence, AI/cost
+   impact). CI green before requesting review. **Never merge before
+   Cursor Bugbot finishes** (pending ≠ pass): triage each finding
+   in-thread — fix, follow-up issue, or written dismissal. Medium+
+   security findings block merge.
 3. **AI behind the gateway.** All model calls go through `ModelGateway`
    (Meta Model API primary, partner fallback, mock for CI). Never call a
    provider SDK from UI/domain code. Never make paid calls in CI
