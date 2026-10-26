@@ -1,0 +1,12 @@
+rules_version = '2';
+// Pinned: deny-all client access. Every read/write goes through the
+// server (Admin SDK), which verifies the game slug, signed player
+// cookie and creator admin token itself (docs/02 §2/§8, PIN-21 model).
+// Do not open these rules for convenience — add a server route instead.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

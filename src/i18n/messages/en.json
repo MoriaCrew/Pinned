@@ -1,0 +1,13 @@
+{
+  "landing.title": "Pinned",
+  "landing.tagline": "One link. One game. Hosted by an AI you invent.",
+  "landing.body": "Describe a host in one line, drop the link in your group chat, and play a photo game in the gaps of your day. Nothing to install.",
+  "landing.start": "Start a game",
+  "landing.demo": "Try the 3-minute demo",
+  "landing.howTitle": "How it plays",
+  "landing.step1": "The host sets a photo challenge — “Find the most suspicious object on your desk.”",
+  "landing.step2": "Everyone submits privately whenever they get a minute. The host judges and teases.",
+  "landing.step3": "Cut-outs are revealed, you guess whose is whose, and the host makes the poster.",
+  "landing.soon": "Scaffold preview — the game loop lands issue by issue.",
+  "footer.source": "Open source (AGPL-3.0)"
+}

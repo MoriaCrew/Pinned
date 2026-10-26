@@ -1,0 +1,16 @@
+# Firebase App Hosting config (PIN-2). Backend creation is a one-time
+# operator step once Blaze billing is linked (see PIN-2 Linear comment):
+#   firebase apphosting:backends:create --project moriacrew-pinned-dev
+# Secrets (META_API_KEY etc.) are referenced from Secret Manager at deploy
+# time — never put secret values in this file.
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: AI_MOCK
+    value: "1"
+  - variable: AUTH_MODE
+    value: link-only

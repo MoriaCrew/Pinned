@@ -15,13 +15,23 @@ secrets/
 
 # Dependencies & build output
 node_modules/
+*.tsbuildinfo
+next-env.d.ts
 .next/
 dist/
 build/
 .turbo/
 
+# Firebase local state
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
 # Local data (originals must never be persisted; sample assets live in eval/)
 data/
 uploads/
+coverage/
 *.log
 .DS_Store

@@ -57,7 +57,8 @@ processed to cut-outs and not kept as originals; EXIF is stripped.
 
 ## Status
 
-🚧 **Day 1 — foundation.** Requirements, architecture and work breakdown
+🚧 **Day 1 — scaffold.** The Next.js/Firebase foundation, requirements,
+architecture and work breakdown
 are in `docs/`; implementation is tracked as `PIN-*` issues in Linear and
 delivered as small PRs (see `docs/03-ai-sdlc.md`). Demo link and video
 will be added here before submission (deadline Nov 4, 9:00 PM ET).
@@ -73,13 +74,24 @@ will be added here before submission (deadline Nov 4, 9:00 PM ET).
 
 ## Quick start (developers)
 
-Implementation stack is being scaffolded under Linear `PIN-2`. Until then:
+Requirements: Node 20.9+ and npm. The scaffold runs fully offline with
+mock AI; no API key is needed for the landing page or tests.
 
 ```bash
 git clone https://github.com/MoriaCrew/Pinned.git
 cd Pinned
-cp .env.example .env   # fill in Meta Model API key; never commit .env
+npm install
+cp .env.example .env.local
+npm run dev
 ```
+
+Open http://localhost:3000 in a browser. Health check:
+http://localhost:3000/api/health
+
+Quality gates: `npm run typecheck`, `npm test`, and `npm run build`.
+Firebase projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod`
+exist with Firestore in `eur3`, billing enabled, and `pinned-web`
+App Hosting backends in `europe-west4`; the first rollout follows merge.
 
 ## License
 

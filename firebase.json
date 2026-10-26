@@ -1,0 +1,16 @@
+{
+  "apphosting": [
+    {
+      "backendId": "pinned-web",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
+    }
+  ],
+  "firestore": [{ "database": "(default)", "rules": "firestore.rules" }],
+  "storage": { "rules": "storage.rules" },
+  "emulators": {
+    "firestore": { "port": 8080 },
+    "storage": { "port": 9199 },
+    "ui": { "enabled": true, "port": 4000 },
+    "singleProjectMode": true
+  }
+}
