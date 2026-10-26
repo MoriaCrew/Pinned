@@ -1,0 +1,21 @@
+# Gitleaks config for Pinned (public repo).
+# Extends the default ruleset. Allowlists are deliberately narrow:
+# allowlist exact placeholder shapes, never whole secret categories.
+# Docs: https://github.com/gitleaks/gitleaks
+title = "Pinned gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders and empty assignments only"
+regexes = [
+  '''(?i)(api[_-]?key|secret|token|password)\s*=\s*$''',          # empty value in .env.example
+  '''(?i)(api[_-]?key|secret|token|password)\s*=\s*(your[-_ ].*|changeme|example|placeholder|xxx+|<[^>]+>)\s*$''',
+  '''AI_MOCK''',                                                  # flag name, not a secret
+]
+paths = [
+  '''(^|/)\.env\.example$''',                                    # template with empty values only
+  '''^docs/.*\.md$''',                                           # prose mentions keys; values still caught by entropy rules in code paths
+  '''^\.gitleaks\.toml$''',
+]

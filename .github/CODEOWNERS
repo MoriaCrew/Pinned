@@ -1,0 +1,9 @@
+# Solo project: every change is owned (and reviewed) by the operator.
+# Especially: workflows, licence and security config must never land unreviewed.
+* @Robin-ELM
+/.github/ @Robin-ELM
+/LICENSE @Robin-ELM
+/SECURITY.md @Robin-ELM
+/.gitleaks.toml @Robin-ELM
+/.pre-commit-config.yaml @Robin-ELM
+/prompts/ @Robin-ELM

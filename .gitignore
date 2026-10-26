@@ -1,7 +1,17 @@
-# Secrets — never commit real credentials or player data
+# Secrets — never commit real credentials or player data (see SECURITY.md)
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials.json
+credentials*.json
+*service-account*.json
+secrets/
 
 # Dependencies & build output
 node_modules/
