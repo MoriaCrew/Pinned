@@ -82,7 +82,10 @@ Bearer auth; unauthenticated `GET /models` returns the OpenAI-style
 `input_text`). Standard IDs only — `*-contributor` variants never
 touch player photos. Implementation: `src/gateway/meta-gateway.ts`
 (plain fetch, no SDK) + `npm run smoke:meta` for live validation.
-Still unverified until an authenticated smoke runs: SAM mask payload
+SAM output is geometry, not an image: special-token text carrying
+one box + one base85 mask per match (`sam/reading-segmentation`);
+the gateway parses records and the segment step decodes/composites.
+Still unverified until an authenticated smoke runs: SAM payload
 keys (adapter searches defensively, `sam_shape_unknown` otherwise),
 vision content-part acceptance, per-call cost/latency (PIN-15
 measures), and account credit terms (PIN-27 operator check).

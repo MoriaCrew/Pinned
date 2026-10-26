@@ -185,9 +185,11 @@ async function main() {
           ],
         }),
       });
-      const ref = findImageRef(json);
-      record("SAM 3.1 /responses", res.ok && !!ref, `${ms}ms ref=${ref} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
-      if (!ref) console.log("  SAM raw shape (first 800 chars):", JSON.stringify(json).slice(0, 800));
+      const raw = JSON.stringify(json);
+      const boxes = (raw.match(/<\|box;/g) || []).length;
+      const masks = (raw.match(/<\|mask;/g) || []).length;
+      record("SAM 3.1 /responses", res.ok && boxes > 0, `${ms}ms boxes=${boxes} masks=${masks} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
+      if (!boxes) console.log("  SAM raw shape (first 800 chars):", raw.slice(0, 800));
     } catch (e) {
       record("SAM 3.1 /responses", false, String(e));
     }

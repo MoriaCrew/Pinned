@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MetaApiError, MetaGateway, findImageRef, parseModelJson } from "./meta-gateway";
+import { MetaApiError, MetaGateway, findImageRef, parseModelJson, parseSamOutput } from "./meta-gateway";
 
 function fakeFetch(handler: (url: string, init: RequestInit) => unknown) {
   return async (url: string | URL | Request, init?: RequestInit) => {
@@ -103,6 +103,19 @@ describe("MetaGateway (contract, fake fetch)", () => {
     expect(findImageRef({ data: [{ url: "https://cdn.test/x?sig=1" }] })).toBe("https://cdn.test/x?sig=1");
     expect(findImageRef({ output: [{ b64_json: "AAA" }] })).toBe("data:image/png;base64,AAA");
     expect(findImageRef({ nothing: true })).toBeNull();
+  });
+
+  it("parses SAM special-token records (docs grammar)", async () => {
+    const line =
+      "<0f>0<|box;x1=353;y1=382;x2=453;y2=427;w=537;h=561|><|mask;x=0;y=0;data=46,101,~abc!|>,1<|box;x1=260;y1=382;x2=340;y2=427;w=537;h=561|><|mask;x=0;y=0;data=46,81,~def|>";
+    const segs = parseSamOutput(line);
+    expect(segs).toHaveLength(2);
+    expect(segs[0].box).toEqual({ x1: 353, y1: 382, x2: 453, y2: 427, w: 537, h: 561 });
+    expect(segs[0].mask).toEqual({ height: 46, width: 101, encoding: "~", payload: "abc!" });
+    expect(parseSamOutput("")).toEqual([]);
+    const gw = gateway(fakeFetch(() => ({ output: [{ content: [{ type: "output_text", text: line }] }] })) as typeof fetch);
+    const out = await gw.segmentObject({ imageRef: "https://x/a.jpg", concept: "button" });
+    expect(out.segments).toHaveLength(2);
   });
 
   it("SAM unknown shape throws sam_shape_unknown with keys", async () => {

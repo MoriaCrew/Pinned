@@ -15,6 +15,7 @@ import type {
   HostPersona,
   Judgement,
   ModelGateway,
+  SamSegment,
 } from "./model-gateway";
 
 export interface MetaGatewayOptions {
@@ -217,33 +218,34 @@ export class MetaGateway implements ModelGateway {
   }
 
   /**
-   * SAM 3.1 is Responses-only. The exact mask payload keys were not
-   * confirmable from public docs at PIN-3 research time, so the
-   * response is searched defensively; an unknown shape throws
-   * code sam_shape_unknown with top-level keys for the smoke log.
+   * SAM 3.1 is Responses-only. It returns box+mask geometry as
+   * special-token output_text, NOT an image (Meta docs:
+   * sam/segmenting, sam/reading-segmentation). One concept per
+   * request; comma lists return zero matches. We parse records
+   * here; mask decoding/compositing happens in the segment step.
    */
-  async segmentObject(input: { imageRef: string; concept: string }): Promise<{ cutoutRef: string }> {
+  async segmentObject(input: { imageRef: string; concept: string }): Promise<{ segments: SamSegment[] }> {
     const json = await this.request("segmentObject", this.options.samModel, "/responses", {
       model: this.options.samModel,
       input: [
         {
           role: "user",
           content: [
-            { type: "input_image", image_url: input.imageRef },
             { type: "input_text", text: input.concept },
+            { type: "input_image", image_url: input.imageRef },
           ],
         },
       ],
     });
-    const found = findImageRef(json);
-    if (!found) {
+    const text = findSamText(json);
+    if (!text) {
       throw new MetaApiError(
-        `SAM response had no recognisable image field; top-level keys: ${Object.keys(json).join(",")}`,
+        `SAM response had no segmentation text; top-level keys: ${Object.keys(json).join(",")}`,
         undefined,
         "sam_shape_unknown",
       );
     }
-    return { cutoutRef: found };
+    return { segments: parseSamOutput(text) };
   }
 
   async posterBackground(input: { challenge: string }): Promise<{ imageRef: string }> {
@@ -268,6 +270,55 @@ export class MetaGateway implements ModelGateway {
       runningJokes: strArray(out.runningJokes, 3),
     };
   }
+}
+
+const SAM_RECORD =
+  /(\d+)<\|box;x1=(-?\d+);y1=(-?\d+);x2=(-?\d+);y2=(-?\d+);w=(\d+);h=(\d+)(?:;c=([0-9.]+))?\|><\|mask;x=0;y=0(?:;c=[0-9.]+)?;data=(\d+),(\d+),(.)([\s\S]*?)\|>/g;
+
+/**
+ * Parse SAM special-token output (docs grammar):
+ * `<Nf>id<|box;x1=..;y1=..;x2=..;y2=..;w=..;h=..|><|mask;x=0;y=0;data=H,W,<enc>payload|>,...`
+ * Empty text (no matches) parses to an empty list, not an error.
+ */
+export function parseSamOutput(text: string): SamSegment[] {
+  const segments: SamSegment[] = [];
+  for (const m of text.matchAll(SAM_RECORD)) {
+    segments.push({
+      id: m[1],
+      box: {
+        x1: Number(m[2]),
+        y1: Number(m[3]),
+        x2: Number(m[4]),
+        y2: Number(m[5]),
+        w: Number(m[6]),
+        h: Number(m[7]),
+        ...(m[8] !== undefined ? { confidence: Number(m[8]) } : {}),
+      },
+      mask: { height: Number(m[9]), width: Number(m[10]), encoding: m[11], payload: m[12] },
+    });
+  }
+  return segments;
+}
+
+/** Locate the segmentation output_text inside a Responses payload. */
+export function findSamText(value: unknown, depth = 0): string | null {
+  if (depth > 8 || value === null || value === undefined) return null;
+  if (typeof value === "string") return value.includes("<|box;") ? value : null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = findSamText(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (isRecord(value)) {
+    if (typeof value.output_text === "string") return value.output_text;
+    for (const v of Object.values(value)) {
+      const hit = findSamText(v, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
 }
 
 /** Depth-first search for an image URL or base64 payload. */

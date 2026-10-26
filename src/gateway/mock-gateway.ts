@@ -26,7 +26,16 @@ export const mockGateway: ModelGateway = {
     };
   },
   async segmentObject({ imageRef }) {
-    return { cutoutRef: imageRef };
+    void imageRef;
+    return {
+      segments: [
+        {
+          id: "0",
+          box: { x1: 0, y1: 0, x2: 10, y2: 10, w: 100, h: 100 },
+          mask: { height: 10, width: 10, encoding: "~", payload: "mock" },
+        },
+      ],
+    };
   },
   async posterBackground() {
     return { imageRef: "mock://poster-background" };

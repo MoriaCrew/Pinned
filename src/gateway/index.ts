@@ -3,7 +3,7 @@ import { MetaGateway } from "./meta-gateway";
 import { mockGateway } from "./mock-gateway";
 import type { ModelGateway } from "./model-gateway";
 
-export type { DiaryEntry, HostPersona, Judgement, ModelGateway, RubricScores } from "./model-gateway";
+export type { DiaryEntry, HostPersona, Judgement, ModelGateway, RubricScores, SamSegment } from "./model-gateway";
 export { MetaApiError, MetaGateway } from "./meta-gateway";
 export type { MetaCallLog, MetaGatewayOptions } from "./meta-gateway";
 
