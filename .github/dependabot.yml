@@ -1,0 +1,8 @@
+# Keep GitHub Actions pinned and patched. Add the app's package ecosystem
+# here in the same PR that scaffolds it (PIN-2).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

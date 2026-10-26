@@ -1,0 +1,19 @@
+# Local guardrails — install once per clone:  pre-commit install
+# These hooks are the first gate; GitHub push protection + CI are gates 2 and 3.
+# Never bypass with --no-verify. If a hook fires on a real secret: rotate it (SECURITY.md).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=5000"] # photos/binaries don't belong in git (eval samples excepted deliberately)
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+        exclude: ^LICENSE$
+      - id: trailing-whitespace
+        exclude: ^LICENSE$

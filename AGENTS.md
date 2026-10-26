@@ -24,10 +24,15 @@ matters more. Full workflow: `docs/03-ai-sdlc.md`. Requirements:
 5. **Privacy invariants (never break):** original photos are never
    persisted (cut-outs/posters only); EXIF stripped; secrets only from
    env; no keys, `.env`, or real player photos in git history.
-6. **Tests travel with code.** Domain logic (state machine, rubric,
+6. **Public-repo guardrails (`SECURITY.md`):** run `pre-commit install`
+   once per clone; never use `--no-verify` or force-push past a scanner;
+   never print env values, full AI payloads or signed URLs into code,
+   logs, PRs or Linear. If a scanner fires, treat the value as leaked:
+   stop, tell the operator to rotate, then fix.
+7. **Tests travel with code.** Domain logic (state machine, rubric,
    diary) gets unit tests; gateway changes get contract tests; UI changes
    get a phone-viewport click-through note + screenshot in the PR.
-7. **Blocked? Stop and report** on the Linear issue with evidence and
+8. **Blocked? Stop and report** on the Linear issue with evidence and
    options. Do not silently narrow acceptance criteria, stub out a
    criterion, or disable a failing check to go green.
 
