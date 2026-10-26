@@ -12,7 +12,7 @@
 - Hackathon: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details
 - Meta event page: https://dev.meta.ai/events/global-hackathon
 - Org: https://github.com/MoriaCrew · Tracking: Linear team `PIN` (Pinned)
-- Repository: https://github.com/MoriaCrew/Pinned (public, MIT — per hackathon open-source rule)
+- Repository: https://github.com/MoriaCrew/Pinned (public, AGPL-3.0 — see License below)
 
 ## The game in 30 seconds
 
@@ -46,7 +46,7 @@ underneath never changes — the comedy comes from who is running it.
 Fallback / scale path: Muse Spark Open (open weights) via a hosted
 inference partner (Baseten / Fireworks) behind the same gateway
 interface; Modal for GPU batch jobs (segmentation/poster) if needed.
-See `docs/04-partner-applications.md`.
+Partner status is tracked in Linear (PIN-4), not in this public repo.
 
 ## Made to stay friendly
 
@@ -67,7 +67,7 @@ will be added here before submission (deadline Nov 4, 9:00 PM ET).
 - `docs/01-requirements.md` — high-level requirements, scope, gaps & decisions
 - `docs/02-architecture.md` — conceptual design, data model, AI pipelines
 - `docs/03-ai-sdlc.md` — Linear → coding agent → PR → review workflow (solo + Muse)
-- `docs/04-partner-applications.md` — inference-partner applications (copy-paste ready)
+- `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
 - `AGENTS.md` — instructions for coding agents working this repo
 
 ## Quick start (developers)
@@ -82,6 +82,8 @@ cp .env.example .env   # fill in Meta Model API key; never commit .env
 
 ## License
 
-MIT — see `LICENSE`. Hackathon note: the organisers receive a broad
-licence to submitted materials under the event rules; this repo's MIT
-licence governs reuse by everyone else.
+AGPL-3.0 — see `LICENSE`. In short: you may use, study and modify this
+code, but if you offer a modified version to others over a network you
+must release your source under the same licence. Hackathon note: the
+organisers separately receive a broad licence to submitted materials
+under the event rules; the AGPL governs reuse by everyone else.
