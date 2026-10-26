@@ -147,11 +147,22 @@ Cloud Storage holds cut-outs/posters only (lifecycle-delete temp data);
 Cloud Tasks plus a scheduler sweeper own deadlines and poster jobs.
 Projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod` use
 Firestore in `eur3`; billing is enabled and `pinned-web` App Hosting
-backends exist in `europe-west4`. First rollout / GitHub connection
-and GitHub connection are the remaining PIN-2 deploy wiring; local and
+backends exist in `europe-west4`, GitHub-connected (PIN-28). Rollouts
+are live on both backends; local and
 CI verification do not depend on them. The boundaries above keep the
 vendor decision reversible at the data/gateway ports.
 
+
+**Branch → backend map (PIN-28):** the dev backend (environment
+name `dev`) auto-builds the `dev` branch; the prod backend
+(environment name `prod`) auto-builds `main`. Feature PRs merge
+into `dev` first, get a hosted smoke on dev, then promote via a
+`dev` → `main` PR. App Hosting merges `apphosting.dev.yaml` /
+`apphosting.prod.yaml` over base `apphosting.yaml` per backend, so
+both env files live on both branches. Secrets are added later as
+Secret Manager references by name in the env files — values never
+enter the repo; `AI_MOCK=1` stays on in both envs until the PIN-3
+Meta secret exists.
 
 **Environments:** Preview (per PR, `AI_MOCK=1` by default) → Production
 (real keys, budget alerts). **CI gates on every PR:** secret scan,
