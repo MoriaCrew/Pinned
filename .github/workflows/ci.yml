@@ -26,7 +26,7 @@ jobs:
           echo "Docs sanity OK"
 
       # App checks activate automatically once PIN-2 scaffolds package.json.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: hashFiles('package.json') != ''
         with:
           node-version: "20"
