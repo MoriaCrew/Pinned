@@ -1,0 +1,13 @@
+# App Hosting environment overrides: PROD backend (PIN-28).
+# Merged over apphosting.yaml when the prod backend builds `main`.
+# AI_MOCK stays on until the PIN-3 Meta secret exists in Secret
+# Manager and is referenced here by name (never by value).
+env:
+  - variable: AI_MOCK
+    value: "1"
+  - variable: FIREBASE_PROJECT_ID
+    value: moriacrew-pinned-prod
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: moriacrew-pinned-prod
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: moriacrew-pinned-prod.firebasestorage.app
