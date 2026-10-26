@@ -226,8 +226,8 @@ verified list stays out of demo/submission copy.
 
 **Still unverified — struck from external copy:**
 
-- $150 credit amount/terms as applied to this account (operator
-  dashboard check; credits were reported received).
+- Hackathon credit amount/terms as applied to this account (operator
+  dashboard check).
 - Exact Firestore eur3 unit prices beyond no-cost quotas.
 - US Stripe net-of-fees example (pricing page locale-redirects;
   also depends on account country). Pack copy stays designed-
