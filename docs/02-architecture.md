@@ -35,7 +35,16 @@ server-rendered so chat link previews (Open Graph) work.
   `{name, voiceRules[], catchphrases[], judgingStyle, formats{}}` +
   prompt-template version. Immutable per game (rematch may regenerate).
 - **Player** — per-game: display name, signed-cookie secret hash, roast
-  level, poster opt-in. No global account.
+  level, poster opt-in. No global account; players never authenticate.
+- **Creator identity (FR8, PIN-22)** — `AUTH_MODE=link-only` (default):
+  admin token only. `optional`: Firebase Auth uid stored as nullable
+  `creatorUid` on Game/GameChain; claim = present admin token once while
+  signed in. Authorization accepts admin token OR matching uid in both
+  modes, so the flag flips without migration. Entitlements + cost caps
+  key off chain/creator, never off players.
+- **i18n seam (FR9, PIN-23)** — UI strings in a message catalog (`en`
+  complete, `fr` empty→fallback); persona JSON carries `language` for
+  host voice, independent of UI locale. No hard-coded UI strings.
 - **Submission** — per player per game (unique): cut-out URL, object
   label, rubric scores + reason, private judgement, public teaser,
   safety flags, status. Original photo: **never a column** — processed
