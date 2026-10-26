@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke:meta": "node scripts/meta-smoke.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
