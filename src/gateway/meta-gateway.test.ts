@@ -118,6 +118,17 @@ describe("MetaGateway (contract, fake fetch)", () => {
     expect(out.segments).toHaveLength(2);
   });
 
+  it("SAM empty output_text is a valid no-match, not an error", async () => {
+    const gw = gateway(fakeFetch(() => ({ output: [{ content: [{ type: "output_text", text: "" }] }] })) as typeof fetch);
+    await expect(gw.segmentObject({ imageRef: "https://x/a.jpg", concept: "mug" })).resolves.toEqual({
+      segments: [],
+    });
+    const gwTop = gateway(fakeFetch(() => ({ output_text: "" })) as typeof fetch);
+    await expect(gwTop.segmentObject({ imageRef: "https://x/a.jpg", concept: "mug" })).resolves.toEqual({
+      segments: [],
+    });
+  });
+
   it("SAM unknown shape throws sam_shape_unknown with keys", async () => {
     const gw = gateway(fakeFetch(() => ({ id: "r1", output: [{ type: "text", text: "?" }] })) as typeof fetch);
     const err = await gw.segmentObject({ imageRef: "https://x/a.jpg", concept: "mug" }).catch((e) => e);

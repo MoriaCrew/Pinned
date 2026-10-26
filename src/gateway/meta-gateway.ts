@@ -238,7 +238,7 @@ export class MetaGateway implements ModelGateway {
       ],
     });
     const text = findSamText(json);
-    if (!text) {
+    if (text === null) {
       throw new MetaApiError(
         `SAM response had no segmentation text; top-level keys: ${Object.keys(json).join(",")}`,
         undefined,
@@ -313,6 +313,8 @@ export function findSamText(value: unknown, depth = 0): string | null {
   }
   if (isRecord(value)) {
     if (typeof value.output_text === "string") return value.output_text;
+    // An output_text content part may legitimately be empty (no match).
+    if (value.type === "output_text" && typeof value.text === "string") return value.text;
     for (const v of Object.values(value)) {
       const hit = findSamText(v, depth + 1);
       if (hit) return hit;
