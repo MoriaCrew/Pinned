@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import {
+  generateAdminToken,
+  generateSlug,
+  hashToken,
+  signPlayerCookie,
+  verifyPlayerCookie,
+  verifyToken,
+} from "./tokens";
+
+describe("tokens", () => {
+  it("generates URL-safe slugs and tokens of distinct values", () => {
+    const slug = generateSlug();
+    expect(slug).toMatch(/^[A-Za-z0-9_-]{22}$/); // 128-bit base64url
+    expect(generateSlug()).not.toBe(slug);
+    expect(generateAdminToken()).not.toBe(generateAdminToken());
+  });
+
+  it("hashes and verifies admin tokens (hash never equals token)", () => {
+    const token = generateAdminToken();
+    const hash = hashToken(token);
+    expect(hash).not.toContain(token);
+    expect(verifyToken(token, hash)).toBe(true);
+    expect(verifyToken("wrong", hash)).toBe(false);
+    expect(verifyToken(token, "not-hex")).toBe(false);
+  });
+
+  it("round-trips a signed player cookie", () => {
+    const payload = { gameId: "g1", playerId: "p1", issuedAt: 100 };
+    const cookie = signPlayerCookie(payload, "secret");
+    expect(verifyPlayerCookie(cookie, "secret")).toEqual(payload);
+  });
+
+  it("rejects tampered, wrong-secret and garbage cookies without throwing", () => {
+    const cookie = signPlayerCookie({ gameId: "g1", playerId: "p1", issuedAt: 100 }, "secret");
+    const tampered = cookie.slice(0, -1) + (cookie.endsWith("A") ? "B" : "A");
+    expect(verifyPlayerCookie(tampered, "secret")).toBeNull();
+    expect(verifyPlayerCookie(cookie, "other")).toBeNull();
+    expect(verifyPlayerCookie("garbage", "secret")).toBeNull();
+    expect(verifyPlayerCookie("", "secret")).toBeNull();
+  });
+
+  it("enforces max age when asked", () => {
+    const cookie = signPlayerCookie({ gameId: "g1", playerId: "p1", issuedAt: 0 }, "secret");
+    expect(verifyPlayerCookie(cookie, "secret", { now: 50, maxAgeMs: 100 })).not.toBeNull();
+    expect(verifyPlayerCookie(cookie, "secret", { now: 200, maxAgeMs: 100 })).toBeNull();
+  });
+
+  it("refuses to sign with an empty secret", () => {
+    expect(() => signPlayerCookie({ gameId: "g", playerId: "p", issuedAt: 0 }, "")).toThrow(
+      RangeError,
+    );
+  });
+});
