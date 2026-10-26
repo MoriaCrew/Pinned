@@ -1,6 +1,10 @@
 # Gitleaks config for Pinned (public repo).
-# Extends the default ruleset. Allowlists are deliberately narrow:
-# allowlist exact placeholder shapes, never whole secret categories.
+# Extends the default ruleset. The allowlist is REGEX-ONLY (PIN-19):
+# a `paths` allowlist is OR-matched, so allowlisting a path suppresses
+# every rule for that file — a real key in docs/ or .env.example would
+# pass silently (Cursor Bugbot, PR #1). Never re-add path allowlists;
+# allowlist exact placeholder shapes instead. Guarded by
+# scripts/test-secret-scan.sh in CI.
 # Docs: https://github.com/gitleaks/gitleaks
 title = "Pinned gitleaks config"
 
@@ -8,14 +12,9 @@ title = "Pinned gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Placeholders and empty assignments only"
+description = "Empty and placeholder assignments only (any path)"
+regexTarget = "line"
 regexes = [
-  '''(?i)(api[_-]?key|secret|token|password)\s*=\s*$''',          # empty value in .env.example
+  '''(?i)(api[_-]?key|secret|token|password)\s*=\s*$''',
   '''(?i)(api[_-]?key|secret|token|password)\s*=\s*(your[-_ ].*|changeme|example|placeholder|xxx+|<[^>]+>)\s*$''',
-  '''AI_MOCK''',                                                  # flag name, not a secret
-]
-paths = [
-  '''(^|/)\.env\.example$''',                                    # template with empty values only
-  '''^docs/.*\.md$''',                                           # prose mentions keys; values still caught by entropy rules in code paths
-  '''^\.gitleaks\.toml$''',
 ]
