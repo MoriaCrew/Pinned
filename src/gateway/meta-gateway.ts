@@ -307,7 +307,7 @@ export function findSamText(value: unknown, depth = 0): string | null {
   if (Array.isArray(value)) {
     for (const item of value) {
       const hit = findSamText(item, depth + 1);
-      if (hit) return hit;
+      if (hit !== null) return hit; // "" is a valid no-match, not a miss
     }
     return null;
   }
@@ -317,7 +317,7 @@ export function findSamText(value: unknown, depth = 0): string | null {
     if (value.type === "output_text" && typeof value.text === "string") return value.text;
     for (const v of Object.values(value)) {
       const hit = findSamText(v, depth + 1);
-      if (hit) return hit;
+      if (hit !== null) return hit;
     }
   }
   return null;
