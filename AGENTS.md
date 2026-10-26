@@ -40,6 +40,27 @@ matters more. Full workflow: `docs/03-ai-sdlc.md`. Requirements:
    options. Do not silently narrow acceptance criteria, stub out a
    criterion, or disable a failing check to go green.
 
+## Stack and commands (PIN-2 scaffold)
+
+- **App:** Next.js App Router + TypeScript at repo root, React server
+  components by default. Keep client components small and explicit.
+- **Boundaries:** `src/domain` is pure and tested; `src/gateway` is the
+  only AI-provider boundary; `src/config.ts` is the only place that reads
+  `process.env`; UI strings go through `src/i18n` (EN complete, FR stub).
+- **Firebase:** Firestore/Storage are server-only through Admin SDK in
+  later issues. Client Firestore/Storage rules stay deny-all. Projects
+  are `moriacrew-pinned-dev` (default) and `moriacrew-pinned-prod` in
+  `.firebaserc`; project IDs are public, credentials are never committed.
+- **Modes:** default `AUTH_MODE=link-only` and `AI_MOCK=1`. Players never
+  authenticate. Do not add Firebase Auth, Stripe, or live model calls
+  unless the assigned issue explicitly says so and its gate has passed.
+- **Commands:** `npm run dev`, `npm run typecheck`, `npm test`,
+  `npm run build`, `npm start`. Health check: `GET /api/health`.
+- **Frontend:** mobile-first, 44px minimum targets, visible focus,
+  semantic controls, reduced-motion support, no hard-coded UI strings.
+- **Prompts:** start from `prompts/README.md`; bump the prompt version on
+  any behavioral change and record eval evidence in the PR.
+
 ## Conventions
 
 - Commits: `feat(game|ai|vision|poster|infra): …`, `fix(…): …`,

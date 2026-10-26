@@ -13,7 +13,7 @@ Group chat (WhatsApp/iMessage/Discord/…)
         ▼
 Players' phone browsers ──► Pinned web app (pages + API)
                               │            │
-                              │            ├─► Postgres (game state)
+                              │            ├─► Firestore via server repository port (game state)
                               │            ├─► Object store (cut-outs, posters ONLY)
                               │            └─► Job queue (segment, poster, close-at-deadline)
                               ▼
@@ -109,44 +109,57 @@ poster job → diary job → scoreboard live.
 **Rematch:** new Game in same chain; persona regenerated or reused;
 diary injected into persona/challenge prompts; fresh slug + admin token.
 
-## 5. Repo shape (target; scaffolded incrementally via PIN issues)
+## 5. Repo shape (PIN-2 scaffold, ADR-001)
 
 ```
 Pinned/
-├─ apps/web/          # web app: pages, API routes, compositor
-├─ packages/
+├─ src/
+│  ├─ app/            # Next.js routes, landing, API routes
 │  ├─ domain/         # state machine, rubric, diary schemas (pure, tested)
-│  └─ model-gateway/  # ModelGateway impls: meta-api, partner, mock
-├─ prompts/           # versioned prompt templates
-├─ eval/              # 20-photo golden set + runner (seg/roast/cost)
-├─ docs/              # requirements, architecture, SDLC, partners
+│  ├─ gateway/        # ModelGateway interface; mock now, Meta in PIN-3
+│  └─ i18n/           # EN catalog, FR stub, fallback helper
+├─ prompts/           # versioned prompt templates and output contracts
+├─ eval/              # golden-set policy and future runner (PIN-15)
+├─ docs/              # requirements, architecture, SDLC, research
+├─ .agents/skills/    # project-local Muse skill
 └─ .github/           # CI + PR template
 ```
 
-Monorepo-lite is preferred for solo speed; if scaffolding friction
-appears, collapse to a single app with `src/domain` + `src/gateway`
-folders — the boundaries matter, the folders don't.
+**ADR-001 (accepted Oct 26, PIN-2):** one Next.js TypeScript app at
+the repository root, not a monorepo. This keeps Firebase App Hosting,
+CI, and solo navigation simple while preserving pure domain logic,
+the `ModelGateway` boundary, and a future server repository port.
+Rejected alternatives: monorepo packages (extra navigation/deploy
+friction), AWS assembly (more moving parts under deadline), and a
+Postgres SaaS (better relational fit, but another vendor to wire now).
+The boundaries matter more than the folder count.
 
-## 6. Hosting, CI/CD (decision at scaffold — criteria fixed now)
+## 6. Hosting, CI/CD (ADR-001)
 
 **Criteria (in order):** (1) merge-to-production in minutes with preview
-deploys per PR; (2) managed Postgres + object storage + cron/queue with
+deploys per PR; (2) managed Firestore + object storage + cron/queue with
 zero servers to patch; (3) secrets per environment; (4) free/cheap at
 hackathon scale; (5) custom domain optional (judges use the host URL).
 
-**Recommended default:** TypeScript web framework with server rendering
-+ API routes on a managed serverless host; managed Postgres; S3-compatible
-object storage (cut-outs/posters, lifecycle-delete anything else);
-host cron/queue for deadline + poster jobs. Exact vendors are picked in
-`PIN-2` and recorded here as an ADR; the domain/gateway boundaries above
-make the pick reversible.
+**Decision:** Firebase App Hosting serves the Next.js SSR app and API
+routes; Firestore is accessed only through a server repository port;
+Cloud Storage holds cut-outs/posters only (lifecycle-delete temp data);
+Cloud Tasks plus a scheduler sweeper own deadlines and poster jobs.
+Projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod` use
+Firestore in `eur3`; billing is enabled and `pinned-web` App Hosting
+backends exist in `europe-west4`. First rollout / GitHub connection
+and GitHub connection are the remaining PIN-2 deploy wiring; local and
+CI verification do not depend on them. The boundaries above keep the
+vendor decision reversible at the data/gateway ports.
+
 
 **Environments:** Preview (per PR, `AI_MOCK=1` by default) → Production
-(real keys, budget alerts). **CI gates on every PR:** lint, typecheck,
-unit tests (domain), gateway contract tests (fixtures), build. Nightly:
+(real keys, budget alerts). **CI gates on every PR:** secret scan,
+typecheck, unit tests, build, and Bugbot review.
+Gateway contract tests use fixtures. Nightly:
 live smoke + eval-set run (manual trigger during hackathon is fine).
 
-## 7. Cost guardrails (budget: $150 Meta API credits)
+## 7. Cost guardrails (Meta credits; applied amount verified in PIN-27)
 
 Per-game ceilings (submissions × judge+segment, 1 poster, 1 diary);
 identical re-judges served from stored results; persona/poster cached
