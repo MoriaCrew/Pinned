@@ -67,6 +67,7 @@ will be added here before submission (deadline Nov 4, 9:00 PM ET).
 - `docs/01-requirements.md` — high-level requirements, scope, gaps & decisions
 - `docs/02-architecture.md` — conceptual design, data model, AI pipelines
 - `docs/03-ai-sdlc.md` — Linear → coding agent → PR → review workflow (solo + Muse)
+- `docs/05-research-synthesis.md` — PIN-21 deep research: Firebase model, costs, decomposition, risks
 - `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
 - `AGENTS.md` — instructions for coding agents working this repo
 
