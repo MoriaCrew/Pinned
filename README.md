@@ -82,7 +82,7 @@ cp .env.example .env   # fill in Meta Model API key; never commit .env
 
 ## License
 
-AGPL-3.0 — see `LICENSE`. In short: you may use, study and modify this
+Copyright (C) 2026 Moria Crew. AGPL-3.0 — see `LICENSE`. In short: you may use, study and modify this
 code, but if you offer a modified version to others over a network you
 must release your source under the same licence. Hackathon note: the
 organisers separately receive a broad licence to submitted materials
