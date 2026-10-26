@@ -42,6 +42,29 @@ as the code it unblocks — allowlist changes need their own reviewed PR.
    incident — inform the person, purge, document in Linear.
 4. Record what happened (no secret values) in the relevant Linear issue.
 
+## Repository settings inventory (PIN-20)
+
+Settings live in GitHub (not in git); this inventory is the record.
+Verify anytime with `gh api repos/MoriaCrew/Pinned/rulesets` and
+`gh api repos/MoriaCrew/Pinned/rules/branches/main`.
+
+- **Ruleset `Protect main`** (active, default branch): PR required
+  (0 approvals — solo; review threads must resolve; squash only),
+  required checks `check`, `gitleaks (full history)`, `Cursor Bugbot`
+  (branches need not be strictly up-to-date), linear history, no
+  force-push, no branch deletion. Repository Admin bypass is
+  *pull-requests-only*: even admins (and agents using admin tokens)
+  cannot push directly, but may bypass at PR merge as break-glass.
+- **Merges:** squash only; delete branch on merge; auto-merge and
+  update-branch enabled. Wiki and Discussions off.
+- **Actions:** default `GITHUB_TOKEN` permissions read-only; workflows
+  cannot approve PR reviews.
+- **Security features:** secret scanning + push protection +
+  non-provider patterns + validity checks + AI detection on;
+  Dependabot alerts + security updates on; private vulnerability
+  reporting on. Forking stays allowed (public open-source repo);
+  the AGPL — not settings — governs reuse.
+
 ## Reporting
 
 Found a secret or personal data in this repo? Contact the owner via
