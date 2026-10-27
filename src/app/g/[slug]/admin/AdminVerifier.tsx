@@ -65,11 +65,16 @@ export function AdminVerifier({ slug }: { slug: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ adminToken: token }),
         });
-        if (!response.ok) throw new Error("invalid");
+        if (response.status === 401) {
+          // Only an explicit credential rejection may discard the token.
+          forgetAdminToken(slug);
+          throw new Error("invalid");
+        }
+        if (!response.ok) throw new Error("transient");
         const data = (await response.json()) as { game: AdminGame };
         if (!cancelled) setGame(data.game);
       } catch {
-        forgetAdminToken(slug);
+        // Network/5xx failures keep the captured token for a retry.
         if (!cancelled) setFailed(true);
       }
     }
