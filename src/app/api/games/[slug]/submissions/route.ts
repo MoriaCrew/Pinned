@@ -32,10 +32,6 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
   const { slug } = await context.params;
-    const gate = RATE_LIMITS.submissionsPerIpGame;
-    if (!checkRateLimit(`${clientKey(request, "submit")}:${slug}`, gate.limit, gate.windowMs)) {
-      return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
-    }
   const cookie = readCookieValue(request.headers.get("cookie"), playerCookieName(slug));
   const own = await getOwnSubmission(slug, cookie, sessionDeps());
   if (!own) {
@@ -54,6 +50,11 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const { slug } = await context.params;
+  const gate = RATE_LIMITS.submissionsPerIpGame;
+  if (!checkRateLimit(`${clientKey(request, "submit")}:${slug}`, gate.limit, gate.windowMs)) {
+    return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
+  }
   const lengthHeader = request.headers.get("content-length");
   const contentLength = Number(lengthHeader ?? NaN);
   if (!lengthHeader || !Number.isFinite(contentLength) || contentLength <= 0) {
@@ -94,11 +95,6 @@ export async function POST(
   }
 
   try {
-    const { slug } = await context.params;
-    const gate = RATE_LIMITS.submissionsPerIpGame;
-    if (!checkRateLimit(`${clientKey(request, "submit")}:${slug}`, gate.limit, gate.windowMs)) {
-      return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
-    }
     const cookie = readCookieValue(request.headers.get("cookie"), playerCookieName(slug));
     const bytes = new Uint8Array(await photo.arrayBuffer());
     const result = await submitPhoto(slug, cookie, bytes, {

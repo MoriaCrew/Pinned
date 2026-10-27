@@ -158,8 +158,9 @@ export async function submitPhoto(
       throw new SubmitPhotoError("Give it a few seconds before submitting again.", 429);
     }
     // Ambiguous commit: only clean up if the record truly is absent.
-    const saved = await deps.repository.listSubmissions(slug).then((all) => all.some((s) => s.id === submissionId), () => false);
-    if (!saved) await deps.store.delete(workingRef).catch(() => undefined);
+    const saved = await deps.repository.listSubmissions(slug).then((all) => all.some((s) => s.id === submissionId), () => null);
+    // Delete only on positive proof of absence; unknown state keeps the object.
+    if (saved === false) await deps.store.delete(workingRef).catch(() => undefined);
     throw error;
   }
 
