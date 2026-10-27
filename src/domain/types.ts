@@ -6,8 +6,10 @@
  */
 import type { HostPersona, RubricScores } from "../gateway/model-gateway";
 import type { GameState } from "./game-state";
+import type { GameTheme } from "./presets";
 
 export type { GameState, HostPersona, RubricScores };
+export type { GameTheme };
 
 
 export interface GameChain {
@@ -25,6 +27,8 @@ export interface Game {
   challenge: string;
   persona: HostPersona; // embedded, immutable per game
   personaPromptVersion?: string; // prompts/persona.v*.md contract used
+  presetId?: string; // curated preset (PIN-39); absent for invented hosts
+  theme?: GameTheme; // per-game design tokens (PIN-39)
   adminTokenHash: string; // sha256 hex, never the token itself
   creatorUid?: string;
   deadlineAt: number;

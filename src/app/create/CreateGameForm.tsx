@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useRef, useEffect, useState, type FormEvent } from "react";
 import { t } from "../../i18n";
+import { HOST_PRESETS, type HostPreset } from "../../domain/presets";
 import type { HostPersona } from "../../gateway/model-gateway";
 
-type Preset = "express" | "evening" | "24h" | "custom";
+type Deadline = "express" | "evening" | "24h" | "custom";
 
 interface CreatedGame {
   game: {
@@ -28,41 +29,81 @@ function formatDeadline(value: number): string {
 }
 
 function CopyField({ label, value, rows = 1 }: { label: string; value: string; rows?: number }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const id = useId();
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      setState("copied");
+      window.setTimeout(() => setState("idle"), 1600);
     } catch {
-      setCopied(false);
+      setState("failed");
     }
   }
 
   return (
     <div className="field">
-      <label>{label}</label>
+      <label htmlFor={id}>{label}</label>
       <div className="copy-row">
-        <textarea readOnly rows={rows} value={value} onFocus={(event) => event.target.select()} />
+        <textarea id={id} readOnly rows={rows} value={value} onFocus={(event) => event.target.select()} />
         <button type="button" className="btn btn-small" onClick={copy}>
-          {copied ? t("en", "create.copied") : t("en", "create.copy")}
+          {state === "copied" ? t("en", "create.copied") : t("en", "create.copy")}
         </button>
       </div>
+      {state === "failed" ? (
+        <p className="field-help" role="status">{t("en", "create.copyFailed")}</p>
+      ) : null}
     </div>
   );
 }
 
+function PresetCard({
+  preset,
+  selected,
+  onSelect,
+}: {
+  preset: HostPreset;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={selected ? "preset-card selected" : "preset-card"}
+      aria-pressed={selected}
+      onClick={onSelect}
+      style={{
+        background: `linear-gradient(150deg, ${preset.theme.paper} 55%, ${preset.theme.line})`,
+        borderColor: selected ? preset.theme.accent : undefined,
+      }}
+    >
+      <span className="preset-motif" aria-hidden="true">{preset.motif}</span>
+      <span className="preset-name">{preset.persona.name}</span>
+      <span className="preset-catch">{preset.catchline}</span>
+      {selected ? <span className="preset-check" aria-hidden="true">✓</span> : null}
+    </button>
+  );
+}
+
 export function CreateGameForm() {
+  const [presetId, setPresetId] = useState<string>(HOST_PRESETS[0].id);
+  const [invent, setInvent] = useState(false);
   const [brief, setBrief] = useState("");
-  const [preset, setPreset] = useState<Preset>("express");
+  const [deadline, setDeadline] = useState<Deadline>("express");
   const [customHours, setCustomHours] = useState(6);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<CreatedGame | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (result) resultRef.current?.focus();
+  }, [result]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -70,9 +111,9 @@ export function CreateGameForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brief,
-          deadlinePreset: preset,
-          customHours: preset === "custom" ? customHours : undefined,
+          ...(invent ? { brief } : { presetId }),
+          deadlinePreset: deadline,
+          customHours: deadline === "custom" ? customHours : undefined,
           timeZoneOffsetMinutes: new Date().getTimezoneOffset(),
         }),
       });
@@ -89,14 +130,13 @@ export function CreateGameForm() {
   if (result) {
     const { game } = result;
     return (
-      <section className="card" aria-live="polite">
+      <section className="card" aria-live="polite" tabIndex={-1} ref={resultRef}>
         <h2>{t("en", "create.resultTitle")}</h2>
         <p>{t("en", "create.resultIntro")}</p>
         <div className="persona-card">
           <p className="eyebrow">{t("en", "game.host")}</p>
           <h3>{game.persona.name}</h3>
           <p className="challenge">“{game.challenge}”</p>
-          <p>{game.persona.judgingStyle}</p>
           <p><strong>{t("en", "create.deadline")}:</strong> {formatDeadline(game.deadlineAt)}</p>
         </div>
         <CopyField label={t("en", "create.playerLink")} value={result.playerUrl} rows={2} />
@@ -114,49 +154,79 @@ export function CreateGameForm() {
 
   return (
     <form className="card" onSubmit={onSubmit}>
-      <div className="field">
-        <label htmlFor="brief">{t("en", "create.briefLabel")}</label>
-        <input
-          id="brief"
-          value={brief}
-          onChange={(event) => setBrief(event.target.value)}
-          placeholder={t("en", "create.briefPlaceholder")}
-          autoComplete="off"
-          required
-        />
-        <div className="lab-chips">
-          {(["create.example1", "create.example2", "create.example3"] as const).map((key) => (
-            <button key={key} type="button" className="chip" onClick={() => setBrief(t("en", key))}>
-              {t("en", key)}
-            </button>
+      <fieldset className="field">
+        <legend>{t("en", "create.pickHost")}</legend>
+        <div className="preset-grid">
+          {HOST_PRESETS.map((preset) => (
+            <PresetCard
+              key={preset.id}
+              preset={preset}
+              selected={!invent && presetId === preset.id}
+              onSelect={() => {
+                setInvent(false);
+                setPresetId(preset.id);
+              }}
+            />
           ))}
+          <button
+            type="button"
+            className={invent ? "preset-card selected" : "preset-card"}
+            aria-pressed={invent}
+            onClick={() => setInvent(true)}
+          >
+            <span className="preset-motif" aria-hidden="true">✨</span>
+            <span className="preset-name">{t("en", "create.invent")}</span>
+            <span className="preset-catch">{t("en", "create.inventCatch")}</span>
+            {invent ? <span className="preset-check" aria-hidden="true">✓</span> : null}
+          </button>
         </div>
-      </div>
+      </fieldset>
+
+      {invent ? (
+        <div className="field">
+          <label htmlFor="brief">{t("en", "create.briefLabel")}</label>
+          <input
+            id="brief"
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            placeholder={t("en", "create.briefPlaceholder")}
+            autoComplete="off"
+            required
+          />
+          <div className="lab-chips">
+            {(["create.example1", "create.example2", "create.example3"] as const).map((key) => (
+              <button key={key} type="button" className="chip" onClick={() => setBrief(t("en", key))}>
+                {t("en", key)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <fieldset className="field">
         <legend>{t("en", "create.deadlineLegend")}</legend>
         <div className="choice-cards">
-        {([
-          ["express", "create.express"],
-          ["evening", "create.evening"],
-          ["24h", "create.day"],
-          ["custom", "create.custom"],
-        ] as const).map(([value, label]) => (
-          <label className="choice-card" key={value}>
-            <input
-              type="radio"
-              name="deadline"
-              value={value}
-              checked={preset === value}
-              onChange={() => setPreset(value)}
-            />
-            <span>{t("en", label)}</span>
-          </label>
-        ))}
+          {([
+            ["express", "create.express"],
+            ["evening", "create.evening"],
+            ["24h", "create.day"],
+            ["custom", "create.custom"],
+          ] as const).map(([value, label]) => (
+            <label className="choice-card" key={value}>
+              <input
+                type="radio"
+                name="deadline"
+                value={value}
+                checked={deadline === value}
+                onChange={() => setDeadline(value)}
+              />
+              <span>{t("en", label)}</span>
+            </label>
+          ))}
         </div>
       </fieldset>
 
-      {preset === "custom" ? (
+      {deadline === "custom" ? (
         <div className="field">
           <label htmlFor="custom-hours">{t("en", "create.customLabel")}</label>
           <input
@@ -173,7 +243,7 @@ export function CreateGameForm() {
       ) : null}
 
       {error ? <p className="error" role="alert">{error}</p> : null}
-      <button className="btn btn-primary" type="submit" disabled={busy || !brief.trim()}>
+      <button className="btn btn-primary" type="submit" disabled={busy || (invent && !brief.trim())}>
         {busy ? t("en", "create.working") : t("en", "create.submit")}
       </button>
     </form>

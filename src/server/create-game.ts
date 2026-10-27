@@ -6,6 +6,13 @@ import { randomUUID } from "node:crypto";
 import { resolveDeadline, type DeadlinePreset } from "../domain/deadlines";
 import type { GameRepository } from "../domain/repository";
 import { generateAdminToken, generateSlug, hashToken } from "../domain/tokens";
+import {
+  PRESET_PROMPT_VERSION,
+  getPreset,
+  isPresetId,
+  pickPresetChallenge,
+  themeForCustomGame,
+} from "../domain/presets";
 import type { Game } from "../domain/types";
 import type { HostPersona, ModelGateway } from "../gateway/model-gateway";
 
@@ -30,7 +37,9 @@ export class CreateGameValidationError extends Error {
 }
 
 export interface CreateGameInput {
-  brief: string;
+  /** One-line host brief, or a presetId for zero-typing create. */
+  brief?: string;
+  presetId?: string;
   deadlinePreset: DeadlinePreset;
   customHours?: number;
   timeZoneOffsetMinutes?: number;
@@ -122,7 +131,11 @@ export function parseCreateGameInput(value: unknown): CreateGameInput {
     throw new CreateGameValidationError("Send a JSON object with a host brief and deadline.");
   }
   const body = value as Record<string, unknown>;
-  const brief = normalizeBrief(body.brief);
+  const presetId = body.presetId as string | undefined;
+  if (presetId !== undefined && !isPresetId(presetId)) {
+    throw new CreateGameValidationError("Choose a valid host preset.");
+  }
+  const brief = presetId ? undefined : normalizeBrief(body.brief);
   if (!DEADLINE_PRESETS.includes(body.deadlinePreset as DeadlinePreset)) {
     throw new CreateGameValidationError("Choose a valid deadline.");
   }
@@ -143,6 +156,8 @@ export function parseCreateGameInput(value: unknown): CreateGameInput {
   }
   return {
     brief,
+    presetId,
+
     deadlinePreset: body.deadlinePreset as DeadlinePreset,
     customHours: body.customHours as number | undefined,
     timeZoneOffsetMinutes: body.timeZoneOffsetMinutes as number | undefined,
@@ -153,7 +168,11 @@ export async function createGame(
   input: CreateGameInput,
   deps: CreateGameDependencies,
 ): Promise<CreateGameResult> {
-  const brief = normalizeBrief(input.brief);
+  const preset = getPreset(input.presetId);
+  if (input.presetId !== undefined && !preset) {
+    throw new CreateGameValidationError("Choose a valid host preset.");
+  }
+  const brief = preset ? `Preset: ${preset.persona.name}` : normalizeBrief(input.brief);
   const now = deps.now?.() ?? Date.now();
 
   let deadlineAt: number;
@@ -169,8 +188,11 @@ export async function createGame(
     throw error;
   }
 
-  const { persona, challenge } = await generatePersonaWithRetry(deps.gateway, brief);
   const chainId = deps.createId?.() ?? randomUUID();
+  const { persona, challenge } = preset
+    ? { persona: structuredClone(preset.persona), challenge: pickPresetChallenge(preset, chainId) }
+    : await generatePersonaWithRetry(deps.gateway, brief);
+  const theme = preset ? { ...preset.theme } : themeForCustomGame(chainId);
   const adminToken = deps.createAdminToken?.() ?? generateAdminToken();
   const adminTokenHash = hashToken(adminToken);
 
@@ -183,9 +205,11 @@ export async function createGame(
       chainId,
       state: "OPEN",
       brief,
+      ...(preset ? { presetId: preset.id } : {}),
+      theme,
       challenge,
       persona,
-      personaPromptVersion: PERSONA_PROMPT_VERSION,
+      personaPromptVersion: preset ? PRESET_PROMPT_VERSION : PERSONA_PROMPT_VERSION,
       adminTokenHash,
       deadlineAt,
       entryCount: 0,
