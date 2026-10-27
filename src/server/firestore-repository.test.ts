@@ -169,7 +169,6 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
       gameId: "slug-1",
       displayName: "Robin",
       cookieSecretHash: "hash",
-      roastLevel: "spicy",
       posterOptIn: true,
       createdAt: 1,
     });

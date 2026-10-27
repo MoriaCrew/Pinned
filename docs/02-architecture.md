@@ -209,3 +209,24 @@ rate limits on create/submit/judge, no originals at rest, no secrets in
 repo (`.env.example` only), Standard (non-Contributor) API mode for any
 real player photos. Public repo contains code + docs only — never keys,
 never playtest photos.
+
+## 9. ADR-002: Play over friction — no levels (PIN-38, Oct 27 2026)
+
+**Context.** Join originally asked each player to pick a roast
+level (Gentle/Spicy/Feral). In practice it was a settings screen
+in front of the game: a decision with no visible payoff, asked of
+someone who just tapped a chat link. Host tone already comes from
+the creator's one-line brief and generated persona.
+
+**Decision.** Roast level is removed everywhere — domain, player
+record, join API/UI, copy. More generally: no per-player levels,
+difficulty, or intensity settings anywhere in the game. The host's
+voice is set once by the creator brief and bounded for everyone by
+one rule in every persona: roast the photo, effort, and timing —
+never the person. Consent that actually matters (poster opt-in:
+may we share your photo) is not a level and stays.
+
+**Consequences.** Join asks a name and nothing else that is not
+directly play. Any future "preference" must justify itself against
+this ADR: if it doesn't change what the player does next, it does
+not ship. Judging prompts take no per-player tone input.

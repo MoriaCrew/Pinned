@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import { t } from "../../../i18n";
-import type { RoastLevel } from "../../../domain/types";
 import { SubmitPanel } from "./SubmitPanel";
 
 function Steps({ current }: { current: 1 | 2 | 3 }) {
@@ -30,7 +29,6 @@ function Steps({ current }: { current: 1 | 2 | 3 }) {
 export interface JoinPlayerView {
   id: string;
   displayName: string;
-  roastLevel: RoastLevel;
   posterOptIn: boolean;
   hasReclaimPin: boolean;
 }
@@ -47,7 +45,6 @@ export function JoinPanel({
   const [player, setPlayer] = useState(initialPlayer);
   const [editing, setEditing] = useState(!initialPlayer);
   const [displayName, setDisplayName] = useState(initialPlayer?.displayName ?? "");
-  const [roastLevel, setRoastLevel] = useState<RoastLevel>(initialPlayer?.roastLevel ?? "spicy");
   const [posterOptIn, setPosterOptIn] = useState(initialPlayer?.posterOptIn ?? true);
   const [reclaimPin, setReclaimPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,7 +71,6 @@ export function JoinPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           displayName,
-          roastLevel,
           posterOptIn,
           reclaimPin: reclaimPin || undefined,
         }),
@@ -83,7 +79,6 @@ export function JoinPanel({
       if (!response.ok || !data.player) throw new Error(data.error || t("en", "join.error"));
       setPlayer(data.player);
       setDisplayName(data.player.displayName);
-      setRoastLevel(data.player.roastLevel);
       setPosterOptIn(data.player.posterOptIn);
       setReclaimPin("");
       setEditing(false);
@@ -102,7 +97,6 @@ export function JoinPanel({
           <h2>{t("en", "join.ready")}</h2>
           <p className="fact-chips">
             <span className="fact-chip">👤 {player.displayName}</span>
-            <span className="fact-chip">{t("en", `join.${player.roastLevel}`)}</span>
             <span className="fact-chip">{player.posterOptIn ? "🖼 ✓" : "🖼 ✗"}</span>
             {canJoin ? (
               <button type="button" className="btn btn-small" onClick={() => setEditing(true)}>
@@ -134,23 +128,6 @@ export function JoinPanel({
         />
       </div>
 
-      <fieldset className="field">
-        <legend>{t("en", "join.roast")}</legend>
-        <div className="choice-cards">
-          {(["gentle", "spicy", "feral"] as const).map((level) => (
-            <label className="choice-card" key={level}>
-              <input
-                type="radio"
-                name="roast-level"
-                value={level}
-                checked={roastLevel === level}
-                onChange={() => setRoastLevel(level)}
-              />
-              <span>{t("en", `join.${level}`)}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       <label className="choice field">
         <input

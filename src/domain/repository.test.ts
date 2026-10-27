@@ -69,7 +69,6 @@ describe("InMemoryGameRepository", () => {
       gameId: "slug-1",
       displayName: "Ana",
       cookieSecretHash: "h",
-      roastLevel: "spicy",
       posterOptIn: true,
       createdAt: 0,
     });

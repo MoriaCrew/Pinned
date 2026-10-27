@@ -50,8 +50,8 @@ CREATE (1-line host brief + deadline)
   explains, never contradicts, the scores.
 
 ### FR2 — Join & submit (no account)
-- FR2.1 First visit asks only: display name, roast level
-  (Gentle/Spicy/Feral, default Spicy), poster opt-in (default on,
+- FR2.1 First visit asks only: display name, poster opt-in
+  (default on, one-tap off). No levels or settings (ADR-002).
   one-tap off). A signed player cookie makes return visits one tap.
 - FR2.2 Player submits one photo (camera or upload; JPEG/PNG/WebP,
   ≤10 MB). Resubmission before close replaces the entry.
@@ -157,7 +157,7 @@ translated UI beyond the FR9 seam (UI ships in English; `fr` stays empty).
 | --- | --- | --- |
 | G1 | AI winner feels arbitrary | Published rubric; scores decide, prose explains (FR1.4, FR3.1) |
 | G2 | No notifications → dead async games | Deadline presets + copy-paste nudges; chat stays the channel (FR1.1, FR3.3) |
-| G3 | Identity without accounts undefined | Capability link + signed player cookie + admin token (FR2.1) |
+- FR2.1 First visit asks only: display name, poster opt-in
 | G4 | "Most suspicious object" is not a SAM concept prompt | Spark names the object in plain nouns → SAM prompt; tap-reselect + whole-photo fallback (FR2.3) |
 | G5 | "Blurs PII before storage" over-claims | Narrowed claim + ephemeral originals + safety-flag warning (NFR2) |
 | G6 | Persona brief = prompt-injection / roast-safety risk | Structured persona JSON + system roast policy + per-player cap + regenerate/fallback (FR1.2, NFR3) |

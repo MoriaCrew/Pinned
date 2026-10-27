@@ -60,7 +60,7 @@ async function setup(now: () => number = () => NOW) {
   };
   const joined = await joinGame(
     SLUG,
-    { displayName: "Ada", roastLevel: "spicy", posterOptIn: true },
+    { displayName: "Ada", posterOptIn: true },
     null,
     { repository, sessionSecret: SECRET, now },
   );
@@ -170,7 +170,7 @@ describe("submitPhoto (PIN-35)", () => {
     for (const name of ["Bo", "Cy"]) {
       const joined = await joinGame(
         SLUG,
-        { displayName: name, roastLevel: "gentle", posterOptIn: true },
+        { displayName: name, posterOptIn: true },
         null,
         { repository, sessionSecret: SECRET, now: () => NOW },
       );
@@ -188,7 +188,7 @@ describe("submitPhoto (PIN-35)", () => {
     const { repository, deps, cookie } = await setup();
     const second = await joinGame(
       SLUG,
-      { displayName: "Bo", roastLevel: "gentle", posterOptIn: false },
+      { displayName: "Bo", posterOptIn: false },
       null,
       { repository, sessionSecret: SECRET, now: () => NOW },
     );

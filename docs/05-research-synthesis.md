@@ -75,7 +75,7 @@ ADR + issue amendments; this doc is the record):
   challenge, embedded immutable persona (incl. language), entryCount
   (transaction), winnerSubmissionId, posterStatus, creatorUid?.
 - `games/{slug}/players/{playerId}` — displayName, cookieSecretHash,
-  roastLevel, posterOptIn, reclaimPinHash.
+  posterOptIn, reclaimPinHash.
 - `games/{slug}/submissions/{playerId}` — doc ID enforces one entry;
   cutoutPath, objectLabel, altLabel, scores (hidden until reveal),
   privateJudgement, teaser, safetyFlags, status, hidden, version,

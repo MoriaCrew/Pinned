@@ -9,7 +9,6 @@ import type { GameState } from "./game-state";
 
 export type { GameState, HostPersona, RubricScores };
 
-export type RoastLevel = "gentle" | "spicy" | "feral";
 
 export interface GameChain {
   id: string;
@@ -42,7 +41,6 @@ export interface Player {
   gameId: string;
   displayName: string;
   cookieSecretHash: string;
-  roastLevel: RoastLevel;
   posterOptIn: boolean;
   reclaimPinHash?: string;
   createdAt: number;

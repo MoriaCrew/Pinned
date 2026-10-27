@@ -16,9 +16,8 @@ import {
   verifyPlayerCookie,
   verifyToken,
 } from "../domain/tokens";
-import type { Game, Player, RoastLevel } from "../domain/types";
+import type { Game, Player } from "../domain/types";
 
-const ROAST_LEVELS: readonly RoastLevel[] = ["gentle", "spicy", "feral"];
 const SESSION_TAIL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class PlayerJoinError extends Error {
@@ -33,7 +32,6 @@ export class PlayerJoinError extends Error {
 
 export interface JoinGameInput {
   displayName: string;
-  roastLevel: RoastLevel;
   posterOptIn: boolean;
   reclaimPin?: string;
 }
@@ -70,10 +68,6 @@ export function parseJoinGameInput(value: unknown): JoinGameInput {
     throw new PlayerJoinError("Send your display name and host preferences.");
   }
   const body = value as Record<string, unknown>;
-  const roastLevel = body.roastLevel === undefined ? "spicy" : body.roastLevel;
-  if (!ROAST_LEVELS.includes(roastLevel as RoastLevel)) {
-    throw new PlayerJoinError("Choose a roast level.");
-  }
   if (body.posterOptIn !== undefined && typeof body.posterOptIn !== "boolean") {
     throw new PlayerJoinError("Poster preference must be true or false.");
   }
@@ -86,7 +80,6 @@ export function parseJoinGameInput(value: unknown): JoinGameInput {
   }
   return {
     displayName: normalizeDisplayName(body.displayName),
-    roastLevel: roastLevel as RoastLevel,
     posterOptIn: body.posterOptIn ?? true,
     reclaimPin,
   };
@@ -187,7 +180,6 @@ export async function joinGame(
 
   const updates = {
     displayName: input.displayName,
-    roastLevel: input.roastLevel,
     posterOptIn: input.posterOptIn,
     ...(input.reclaimPin
       ? { reclaimPinHash: reclaimPinHash(slug, input.reclaimPin) }
@@ -217,7 +209,6 @@ export async function joinGame(
     gameId: slug,
     displayName: input.displayName,
     cookieSecretHash: "",
-    roastLevel: input.roastLevel,
     posterOptIn: input.posterOptIn,
     ...(input.reclaimPin
       ? { reclaimPinHash: reclaimPinHash(slug, input.reclaimPin) }
@@ -249,7 +240,6 @@ export function publicPlayer(player: Player) {
     id: player.id,
     gameId: player.gameId,
     displayName: player.displayName,
-    roastLevel: player.roastLevel,
     posterOptIn: player.posterOptIn,
     hasReclaimPin: Boolean(player.reclaimPinHash),
     createdAt: player.createdAt,
