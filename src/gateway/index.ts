@@ -1,5 +1,5 @@
 import { getConfig } from "../config";
-import { MetaGateway } from "./meta-gateway";
+import { MetaGateway, type MetaGatewayOptions } from "./meta-gateway";
 import { mockGateway } from "./mock-gateway";
 import type { ModelGateway } from "./model-gateway";
 
@@ -11,7 +11,7 @@ export type { MetaCallLog, MetaGatewayOptions } from "./meta-gateway";
  * Mock stays the default (AI_MOCK=1). Live mode requires a Meta key
  * and fails loud without one — never silently falls back.
  */
-export function getModelGateway(): ModelGateway {
+export function getModelGateway(options: { onLog?: MetaGatewayOptions["onLog"] } = {}): ModelGateway {
   const cfg = getConfig();
   if (cfg.aiMock) return mockGateway;
   if (!cfg.meta.apiKey) {
@@ -23,5 +23,6 @@ export function getModelGateway(): ModelGateway {
     sparkModel: cfg.meta.sparkModel,
     samModel: cfg.meta.samModel,
     imageModel: cfg.meta.imageModel,
+    onLog: options.onLog,
   });
 }

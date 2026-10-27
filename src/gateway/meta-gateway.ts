@@ -26,7 +26,7 @@ export interface MetaGatewayOptions {
   imageModel: string;
   fetchFn?: typeof fetch;
   /** Observability hook; caller persists AiCallLog rows (NFR4). */
-  onLog?: (entry: MetaCallLog) => void;
+  onLog?: (entry: MetaCallLog) => void | Promise<void>;
 }
 
 export interface MetaCallLog {
@@ -36,6 +36,7 @@ export interface MetaCallLog {
   outcome: "ok" | "error";
   inputTokens?: number;
   outputTokens?: number;
+  images?: number;
   errorCode?: string;
 }
 
@@ -109,9 +110,9 @@ export class MetaGateway implements ModelGateway {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  private log(entry: MetaCallLog): void {
+  private async log(entry: MetaCallLog): Promise<void> {
     try {
-      this.options.onLog?.(entry);
+      await this.options.onLog?.(entry);
     } catch {
       // Logging must never break a game flow.
     }
@@ -130,7 +131,7 @@ export class MetaGateway implements ModelGateway {
         body: JSON.stringify(body),
       });
     } catch (cause) {
-      this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: "network" });
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: "network" });
       throw new MetaApiError(`Meta API unreachable: ${String(cause)}`, undefined, "network");
     }
     const text = await response.text();
@@ -144,17 +145,22 @@ export class MetaGateway implements ModelGateway {
     if (!response.ok) {
       const err = isRecord(json.error) ? json.error : {};
       const code = str(err.code, `http_${response.status}`);
-      this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: code });
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: code });
       throw new MetaApiError(str(err.message, `Meta API HTTP ${response.status}`), response.status, code);
     }
     const usage = isRecord(json.usage) ? json.usage : {};
-    this.log({
+    const tokenCount = (...keys: string[]): number | undefined => {
+      for (const key of keys) if (typeof usage[key] === "number") return usage[key] as number;
+      return undefined;
+    };
+    await this.log({
       operation,
       model,
       latencyMs: Date.now() - started,
       outcome: "ok",
-      inputTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined,
-      outputTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : undefined,
+      inputTokens: tokenCount("prompt_tokens", "input_tokens"),
+      outputTokens: tokenCount("completion_tokens", "output_tokens"),
+      images: operation === "segmentObject" || operation === "posterBackground" ? 1 : undefined,
     });
     return json;
   }
