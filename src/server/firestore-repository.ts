@@ -124,6 +124,17 @@ export class FirestoreGameRepository implements GameRepository {
     return snapshot.docs.map((doc) => structuredClone(doc.data() as Player));
   }
 
+  async setEntryCount(slug: string, entryCount: number): Promise<void> {
+    const ref = this.gameRef(slug);
+    await this.db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const current = fromSnapshot<Game>(snapshot);
+      if (!current) throw new RangeError(`Game ${slug} not found`);
+      if (current.entryCount === entryCount) return;
+      transaction.set(ref, toFirestoreData({ ...current, entryCount }));
+    });
+  }
+
   async putSubmission(submission: Submission): Promise<void> {
     await this.gameRef(submission.gameId)
       .collection(SUBMISSIONS)

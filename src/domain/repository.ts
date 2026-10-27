@@ -33,6 +33,11 @@ export interface GameRepository {
   putPlayer(player: Player): Promise<void>;
   getPlayer(gameId: string, playerId: string): Promise<Player | null>;
   listPlayers(gameId: string): Promise<Player[]>;
+  /**
+   * Refresh the derived active-entry count (PIN-35). Display data
+   * only: deliberately does not bump the state-transition version.
+   */
+  setEntryCount(slug: string, entryCount: number): Promise<void>;
   putSubmission(submission: Submission): Promise<void>;
   listSubmissions(gameId: string): Promise<Submission[]>;
   appendAiCallLog(log: AiCallLog): Promise<void>;
@@ -99,6 +104,12 @@ export class InMemoryGameRepository implements GameRepository {
 
   async listPlayers(gameId: string): Promise<Player[]> {
     return [...this.players.values()].filter((p) => p.gameId === gameId).map(clone);
+  }
+
+  async setEntryCount(slug: string, entryCount: number): Promise<void> {
+    const game = this.games.get(slug);
+    if (!game) throw new RangeError(`Game ${slug} not found`);
+    this.games.set(slug, { ...clone(game), entryCount });
   }
 
   async putSubmission(submission: Submission): Promise<void> {

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { t } from "../../../i18n";
 import type { RoastLevel } from "../../../domain/types";
+import { SubmitPanel } from "./SubmitPanel";
 
 export interface JoinPlayerView {
   id: string;
@@ -71,6 +72,7 @@ export function JoinPanel({
 
   if (player && !editing) {
     return (
+      <>
       <section className="card" aria-live="polite">
         <p className="eyebrow">{t("en", "join.ready")}</p>
         <h2>{player.displayName}</h2>
@@ -91,6 +93,8 @@ export function JoinPanel({
           </button>
         ) : null}
       </section>
+      <SubmitPanel slug={slug} canSubmit={canJoin} />
+      </>
     );
   }
 
