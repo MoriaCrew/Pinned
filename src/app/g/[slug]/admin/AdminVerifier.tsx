@@ -21,7 +21,7 @@ function captureAdminToken(slug: string): string {
     memoryTokens.set(slug, fromFragment);
     try {
       window.sessionStorage.setItem(storageKey, fromFragment);
-    } catch {
+      } catch (error) {
       // In-memory capture still covers remounts in this page lifetime.
     }
     window.history.replaceState(null, "", window.location.pathname);
@@ -32,7 +32,7 @@ function captureAdminToken(slug: string): string {
   if (remembered) return remembered;
   try {
     return window.sessionStorage.getItem(storageKey) ?? "";
-  } catch {
+      } catch (error) {
     return "";
   }
 }
@@ -41,19 +41,20 @@ function forgetAdminToken(slug: string): void {
   memoryTokens.delete(slug);
   try {
     window.sessionStorage.removeItem(`pinned-admin:${slug}`);
-  } catch {
+      } catch (error) {
     // Nothing else to do if storage is unavailable.
   }
 }
 
 export function AdminVerifier({ slug }: { slug: string }) {
   const [game, setGame] = useState<AdminGame | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<"invalid" | "unavailable" | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const token = captureAdminToken(slug);
     if (!token) {
-      setFailed(true);
+      setFailure("invalid");
       return;
     }
 
@@ -73,18 +74,26 @@ export function AdminVerifier({ slug }: { slug: string }) {
         if (!response.ok) throw new Error("transient");
         const data = (await response.json()) as { game: AdminGame };
         if (!cancelled) setGame(data.game);
-      } catch {
+      } catch (error) {
         // Network/5xx failures keep the captured token for a retry.
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setFailure(error instanceof Error && error.message === "invalid" ? "invalid" : "unavailable");
       }
     }
     void verify();
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, attempt]);
 
-  if (failed) return <p className="error" role="alert">{t("en", "admin.invalid")}</p>;
+  if (failure === "invalid") return <p className="error" role="alert">{t("en", "admin.invalid")}</p>;
+  if (failure === "unavailable") {
+    return (
+      <section className="card">
+        <p className="error" role="alert">{t("en", "admin.unavailable")}</p>
+        <button type="button" className="btn btn-primary" onClick={() => { setFailure(null); setAttempt((n) => n + 1); }}>{t("en", "admin.retry")}</button>
+      </section>
+    );
+  }
   if (!game) return <p>{t("en", "admin.loading")}</p>;
 
   return (

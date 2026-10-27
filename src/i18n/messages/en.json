@@ -39,6 +39,7 @@
   "create.customLabel": "Hours (1–72)",
   "create.submit": "✨ Create game",
   "create.working": "✨ Creating…",
+  "create.workingPreset": "Creating your game…",
   "create.error": "❌ Try again.",
   "create.resultTitle": "🎉 Live!",
   "create.resultIntro": "Send 🔗 to your chat. Keep 🔒 secret.",
@@ -65,6 +66,8 @@
   "admin.title": "Creator controls",
   "admin.loading": "Checking your private admin link…",
   "admin.invalid": "This admin link is invalid or incomplete. Open the full private link from game creation.",
+  "admin.unavailable": "We could not reach the game just now. Check your connection and try again — your admin link is still saved.",
+  "admin.retry": "Try again",
   "admin.ready": "Admin link verified. Force-close and deadline controls arrive with the reveal build step.",
   "admin.openPlayer": "▶ Open game",
   "join.title": "👋 Join",
@@ -92,5 +95,9 @@
   "submit.current": "Your photo",
   "submit.none": "One object. That's it.",
   "submit.tooLarge": "Too big — 10 MB max.",
-  "submit.error": "❌ Try again."
+  "submit.error": "❌ Try again.",
+  "notFound.title": "That game is not here.",
+  "notFound.body": "The link may be mistyped, or the game never existed. Check the link, or start a fresh game below.",
+  "notFound.start": "Start a game",
+  "notFound.home": "Home"
 }
