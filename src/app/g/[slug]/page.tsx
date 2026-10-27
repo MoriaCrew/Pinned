@@ -11,9 +11,11 @@ export const metadata: Metadata = {
 };
 
 function formatDeadline(value: number): string {
+  // Server-rendered for every player, so use one explicit timezone.
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "UTC",
   }).format(value);
 }
 
@@ -39,7 +41,7 @@ export default async function GamePage({
         <dl className="facts">
           <div>
             <dt>{t("en", "game.deadline")}</dt>
-            <dd>{formatDeadline(game.deadlineAt)}</dd>
+            <dd><time dateTime={new Date(game.deadlineAt).toISOString()}>{formatDeadline(game.deadlineAt)} UTC</time></dd>
           </div>
           <div>
             <dt>{t("en", "game.entries")}</dt>

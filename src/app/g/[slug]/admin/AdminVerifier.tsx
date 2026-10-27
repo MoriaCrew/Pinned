@@ -11,15 +11,51 @@ interface AdminGame {
   persona: { name: string };
 }
 
+const memoryTokens = new Map<string, string>();
+
+function captureAdminToken(slug: string): string {
+  const storageKey = `pinned-admin:${slug}`;
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const fromFragment = fragment.get("token") ?? "";
+  if (fromFragment) {
+    memoryTokens.set(slug, fromFragment);
+    try {
+      window.sessionStorage.setItem(storageKey, fromFragment);
+    } catch {
+      // In-memory capture still covers remounts in this page lifetime.
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+    return fromFragment;
+  }
+
+  const remembered = memoryTokens.get(slug);
+  if (remembered) return remembered;
+  try {
+    return window.sessionStorage.getItem(storageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function forgetAdminToken(slug: string): void {
+  memoryTokens.delete(slug);
+  try {
+    window.sessionStorage.removeItem(`pinned-admin:${slug}`);
+  } catch {
+    // Nothing else to do if storage is unavailable.
+  }
+}
+
 export function AdminVerifier({ slug }: { slug: string }) {
   const [game, setGame] = useState<AdminGame | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const fragment = new URLSearchParams(window.location.hash.slice(1));
-    const token = fragment.get("token") ?? "";
-    // Remove the credential from the address bar/history immediately.
-    window.history.replaceState(null, "", window.location.pathname);
+    const token = captureAdminToken(slug);
+    if (!token) {
+      setFailed(true);
+      return;
+    }
 
     let cancelled = false;
     async function verify() {
@@ -33,6 +69,7 @@ export function AdminVerifier({ slug }: { slug: string }) {
         const data = (await response.json()) as { game: AdminGame };
         if (!cancelled) setGame(data.game);
       } catch {
+        forgetAdminToken(slug);
         if (!cancelled) setFailed(true);
       }
     }
