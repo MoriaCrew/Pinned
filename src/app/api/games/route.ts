@@ -5,6 +5,8 @@ import {
   createGame,
   parseCreateGameInput,
 } from "../../../server/create-game";
+import { getConfig } from "../../../config";
+import { getPublicOrigin } from "../../../server/public-origin";
 import { getGameRepository } from "../../../server/repository";
 
 export const runtime = "nodejs";
@@ -31,7 +33,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       gateway: getModelGateway(),
     });
 
-    const origin = new URL(request.url).origin;
+    const origin = getPublicOrigin(request, getConfig().appBaseUrl);
     const playerUrl = `${origin}/g/${game.id}`;
     const adminUrl = `${origin}/g/${game.id}/admin#token=${encodeURIComponent(adminToken)}`;
     const deadline = new Intl.DateTimeFormat("en", {

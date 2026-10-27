@@ -5,6 +5,8 @@
 env:
   - variable: AI_MOCK
     value: "1"
+  - variable: APP_BASE_URL
+    value: https://pinned-web--moriacrew-pinned-prod.europe-west4.hosted.app
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID
