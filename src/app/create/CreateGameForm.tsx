@@ -71,7 +71,9 @@ function PresetCard({
     <button
       type="button"
       className={selected ? "preset-card selected" : "preset-card"}
-      aria-pressed={selected}
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       style={{
         background: `linear-gradient(150deg, ${preset.theme.paper} 55%, ${preset.theme.line})`,
@@ -86,8 +88,17 @@ function PresetCard({
   );
 }
 
+function themeStyle(theme: HostPreset["theme"]): React.CSSProperties {
+  return {
+    "--paper": theme.paper,
+    "--accent": theme.accent,
+    "--line": theme.line,
+  } as React.CSSProperties;
+}
+
 export function CreateGameForm() {
   const [presetId, setPresetId] = useState<string>(HOST_PRESETS[0].id);
+  const activePreset = HOST_PRESETS.find((preset) => preset.id === presetId) ?? HOST_PRESETS[0];
   const [invent, setInvent] = useState(false);
   const [brief, setBrief] = useState("");
   const [deadline, setDeadline] = useState<Deadline>("express");
@@ -141,7 +152,7 @@ export function CreateGameForm() {
         </div>
         <CopyField label={t("en", "create.playerLink")} value={result.playerUrl} rows={2} />
         <CopyField label={t("en", "create.adminLink")} value={result.adminUrl} rows={3} />
-        <CopyField label={t("en", "create.invite")} value={result.inviteText} rows={4} />
+        <CopyField label={t("en", "create.invite")} value={`Pinned: ${game.persona.name} is hosting a photo game. Challenge: ${game.challenge} Join before ${formatDeadline(game.deadlineAt)}: ${result.playerUrl}`} rows={4} />
         <div className="actions">
           <a className="btn btn-primary" href={result.playerUrl}>{t("en", "create.openPlayer")}</a>
           <button type="button" className="btn" onClick={() => setResult(null)}>
@@ -153,10 +164,10 @@ export function CreateGameForm() {
   }
 
   return (
-    <form className="card" onSubmit={onSubmit}>
+    <form className="card themed" onSubmit={onSubmit} style={invent ? undefined : themeStyle(activePreset.theme)}>
       <fieldset className="field">
         <legend>{t("en", "create.pickHost")}</legend>
-        <div className="preset-grid">
+        <div className="preset-grid" role="radiogroup" aria-label={t("en", "create.pickHost")}>
           {HOST_PRESETS.map((preset) => (
             <PresetCard
               key={preset.id}
@@ -171,7 +182,9 @@ export function CreateGameForm() {
           <button
             type="button"
             className={invent ? "preset-card selected" : "preset-card"}
-            aria-pressed={invent}
+            role="radio"
+            aria-checked={invent}
+            tabIndex={invent ? 0 : -1}
             onClick={() => setInvent(true)}
           >
             <span className="preset-motif" aria-hidden="true">✨</span>
@@ -244,7 +257,7 @@ export function CreateGameForm() {
 
       {error ? <p className="error" role="alert">{error}</p> : null}
       <button className="btn btn-primary" type="submit" disabled={busy || (invent && !brief.trim())}>
-        {busy ? t("en", "create.working") : t("en", "create.submit")}
+        {busy ? t("en", invent ? "create.working" : "create.workingPreset") : t("en", "create.submit")}
       </button>
     </form>
   );

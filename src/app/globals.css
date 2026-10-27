@@ -57,6 +57,8 @@ h1 {
 }
 
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary, .copy-row .btn { min-height: 48px; }
+.card.themed { background: var(--paper); }
 
 .btn:focus-visible, a:focus-visible {
   outline: 3px solid var(--accent);
