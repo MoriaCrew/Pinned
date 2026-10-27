@@ -124,6 +124,51 @@ export class FirestoreGameRepository implements GameRepository {
     return snapshot.docs.map((doc) => structuredClone(doc.data() as Player));
   }
 
+  async recordSubmission(submission: Submission, supersededAt: number) {
+    const gameRef = this.gameRef(submission.gameId);
+    const submissionsRef = gameRef.collection(SUBMISSIONS);
+    return this.db.runTransaction(async (transaction) => {
+      const game = fromSnapshot<Game>(await transaction.get(gameRef));
+      if (!game) throw new RangeError(`Game ${submission.gameId} not found`);
+      const snapshot = await transaction.get(submissionsRef);
+      const existing = snapshot.docs.map(
+        (doc) => structuredClone(doc.data() as Submission),
+      );
+      const superseded = existing
+        .filter(
+          (entry) =>
+            entry.playerId === submission.playerId &&
+            entry.id !== submission.id &&
+            entry.status === "active",
+        )
+        .map((entry) => ({
+          ...entry,
+          status: "superseded" as const,
+          supersededAt,
+          version: entry.version + 1,
+        }));
+      transaction.set(
+        submissionsRef.doc(submission.id),
+        toFirestoreData(submission),
+      );
+      for (const replaced of superseded) {
+        transaction.set(submissionsRef.doc(replaced.id), toFirestoreData(replaced));
+      }
+      const supersededIds = new Set(superseded.map((entry) => entry.id));
+      const activePlayers = new Set(
+        existing
+          .filter((entry) => entry.status === "active" && !supersededIds.has(entry.id))
+          .map((entry) => entry.playerId),
+      );
+      activePlayers.add(submission.playerId);
+      const entryCount = activePlayers.size;
+      if (entryCount !== game.entryCount) {
+        transaction.set(gameRef, toFirestoreData({ ...game, entryCount }));
+      }
+      return { superseded, entryCount };
+    });
+  }
+
   async putSubmission(submission: Submission): Promise<void> {
     await this.gameRef(submission.gameId)
       .collection(SUBMISSIONS)

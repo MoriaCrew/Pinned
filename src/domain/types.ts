@@ -48,13 +48,14 @@ export interface Player {
   createdAt: number;
 }
 
-export type SubmissionStatus = "active" | "hidden";
+export type SubmissionStatus = "active" | "hidden" | "superseded";
 
 export interface Submission {
   id: string;
   gameId: string;
   playerId: string;
-  cutoutRef: string; // storage path of cut-out only, never original
+  workingRef?: string; // metadata-stripped working derivative (PIN-34), never original
+  cutoutRef?: string; // SAM cut-out (PIN-8), never original
   objectLabel: string;
   altLabel: string;
   scores: RubricScores | null; // hidden from players until REVEAL
@@ -66,6 +67,7 @@ export interface Submission {
   judgeCount: number; // caps: max 2 (docs/05 §2.3)
   segmentCount: number; // caps: max 2 (1 + 1 tap-reselect)
   submittedAt: number;
+  supersededAt?: number; // set when the player replaces this entry (PIN-35)
   version: number;
 }
 

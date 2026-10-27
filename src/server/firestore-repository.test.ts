@@ -197,6 +197,46 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
     expect(await repo.listSubmissions("other-game")).toHaveLength(0);
   });
 
+  it("recordSubmission supersedes prior actives and counts entries in one transaction", async () => {
+    const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
+    await repo.createGame(makeGame());
+    const submission = (id: string, playerId: string, submittedAt: number) => ({
+      id,
+      gameId: "slug-1",
+      playerId,
+      workingRef: `tmp/games/slug-1/players/${playerId}/submissions/${id}/working.webp`,
+      objectLabel: "",
+      altLabel: "",
+      scores: null,
+      reason: "",
+      privateJudgement: "",
+      teaser: "",
+      safetyFlags: {},
+      status: "active" as const,
+      judgeCount: 0,
+      segmentCount: 0,
+      submittedAt,
+      version: 1,
+    });
+
+    const first = await repo.recordSubmission(submission("s1", "p1", 10), 10);
+    expect(first).toMatchObject({ superseded: [], entryCount: 1 });
+    const second = await repo.recordSubmission(submission("s2", "p2", 20), 20);
+    expect(second.entryCount).toBe(2);
+    const replaced = await repo.recordSubmission(submission("s3", "p1", 30), 30);
+    expect(replaced.entryCount).toBe(2);
+    expect(replaced.superseded.map((s) => s.id)).toEqual(["s1"]);
+    expect(replaced.superseded[0]).toMatchObject({ status: "superseded", supersededAt: 30 });
+
+    const all = await repo.listSubmissions("slug-1");
+    expect(all.filter((s) => s.status === "active").map((s) => s.id).sort()).toEqual(["s2", "s3"]);
+    expect((await repo.getGame("slug-1"))?.entryCount).toBe(2);
+    await expect(repo.recordSubmission(submission("s9", "p9", 40), 40)).resolves.toBeTruthy();
+    await expect(
+      repo.recordSubmission({ ...submission("sx", "p1", 50), gameId: "missing" }, 50),
+    ).rejects.toThrow(RangeError);
+  });
+
   it("filters AI logs by day bucket", async () => {
     const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
     const base = {
