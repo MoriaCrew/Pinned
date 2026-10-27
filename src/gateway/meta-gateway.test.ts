@@ -31,6 +31,36 @@ function gateway(fetchFn: typeof fetch, logs: unknown[] = []) {
 }
 
 describe("MetaGateway (contract, fake fetch)", () => {
+  it("aborts a hung provider call with a timeout error code (PIN-43)", async () => {
+    const hanging = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "TimeoutError";
+          reject(err);
+        });
+      })) as typeof fetch;
+    const gw = new MetaGateway({
+      apiKey: "test-key",
+      baseUrl: "https://api.meta.ai/v1",
+      sparkModel: "muse-spark-1.3",
+      samModel: "sam-3.1",
+      imageModel: "muse-image-1.0",
+      fetchFn: hanging,
+      timeoutMs: 20,
+    });
+    await expect(gw.generatePersona("a judge")).rejects.toMatchObject({ code: "timeout" });
+  });
+
+  it("caps chat output tokens (PIN-43)", async () => {
+    let seenBody: Record<string, unknown> = {};
+    const gw = gateway(fakeFetch((_url, init) => {
+      seenBody = JSON.parse(String(init.body));
+      return chat({ persona: {}, challenge: "c" });
+    }) as typeof fetch);
+    await gw.generatePersona("a judge");
+    expect(seenBody.max_tokens).toBe(1200);
+  });
   it("parses a persona chat response and logs usage", async () => {
     const logs: unknown[] = [];
     const gw = gateway(

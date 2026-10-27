@@ -28,7 +28,18 @@ describe("getPublicOrigin", () => {
       "x-forwarded-proto": "https",
       host: "pinned.example.com",
     });
-    expect(getPublicOrigin(req, "https://fallback.example.com")).toBe("https://pinned.example.com");
+    expect(getPublicOrigin(req)).toBe("https://pinned.example.com");
+  });
+
+  it("configured deployment origin beats hostile request headers", () => {
+    const req = request("http://0.0.0.0:8080/api/games", {
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "evil.example.com",
+      host: "evil.example.com",
+    });
+    expect(getPublicOrigin(req, "https://pinned.example.com")).toBe(
+      "https://pinned.example.com",
+    );
   });
 
   it("uses a normal Host header locally", () => {

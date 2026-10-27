@@ -121,6 +121,23 @@ describe("player sessions", () => {
     expect(readCookieValue(`other=1; ${header}`, playerCookieName("game-slug"))).toBe("a.b");
   });
 
+  it("caps the roster so PIN guessing cannot mint endless players (PIN-43)", async () => {
+    const { repository, deps } = await setup();
+    for (let i = 0; i < 50; i++) {
+      await repository.putPlayer({
+        id: `p-${i}`,
+        gameId: "game-slug",
+        displayName: `P${i}`,
+        cookieSecretHash: "h",
+        posterOptIn: true,
+        createdAt: NOW,
+      });
+    }
+    await expect(joinGame("game-slug", { displayName: "Late" }, null, deps)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
   it("fails closed when the session secret is missing or short", async () => {
     const { deps } = await setup();
     await expect(joinGame("game-slug", { displayName: "Robin" }, null, {

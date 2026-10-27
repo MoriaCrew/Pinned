@@ -25,6 +25,8 @@ export interface MetaGatewayOptions {
   samModel: string;
   imageModel: string;
   fetchFn?: typeof fetch;
+  /** Per-request deadline; timeouts surface as code "timeout" and must not be retried. */
+  timeoutMs?: number;
   /** Observability hook; caller persists AiCallLog rows (NFR4). */
   onLog?: (entry: MetaCallLog) => void | Promise<void>;
 }
@@ -120,6 +122,7 @@ export class MetaGateway implements ModelGateway {
 
   private async request(operation: string, model: string, path: string, body: Json): Promise<Json> {
     const started = Date.now();
+    const timeoutMs = this.options.timeoutMs ?? 25_000;
     let response: Response;
     try {
       response = await this.fetchFn(`${this.options.baseUrl}${path}`, {
@@ -129,12 +132,19 @@ export class MetaGateway implements ModelGateway {
           "content-type": "application/json",
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (cause) {
-      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: "network" });
-      throw new MetaApiError(`Meta API unreachable: ${String(cause)}`, undefined, "network");
+      const timedOut = cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError");
+      const code = timedOut ? "timeout" : "network";
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: code });
+      throw new MetaApiError(timedOut ? `Meta API timed out after ${timeoutMs}ms` : `Meta API unreachable: ${String(cause)}`, undefined, code);
     }
     const text = await response.text();
+    if (text.length > 4_000_000) {
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: "oversized_response" });
+      throw new MetaApiError("Meta API response exceeded the size limit", response.status, "oversized_response");
+    }
     let json: Json = {};
     try {
       const parsed: unknown = JSON.parse(text);
@@ -168,6 +178,7 @@ export class MetaGateway implements ModelGateway {
   private async chatJson(operation: string, system: string, user: unknown): Promise<Json> {
     const json = await this.request(operation, this.options.sparkModel, "/chat/completions", {
       model: this.options.sparkModel,
+      max_tokens: 1200,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

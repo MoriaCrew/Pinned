@@ -67,6 +67,44 @@ async function setup(now: () => number = () => NOW) {
   return { repository, store, deps, cookie: joined.cookieValue, player: joined.player };
 }
 
+describe("recordSubmission transactional guard (PIN-43)", () => {
+  it("rejects inside the transaction when the game closed after pre-checks", async () => {
+    const { repository, store, deps, cookie, player } = await setup();
+    const game = await repository.getGame(SLUG);
+    await repository.compareAndSetGameState(SLUG, (game as Game).version, "REVEAL", NOW);
+    // Simulate the race: call the repository directly with a guard,
+    // as submitPhoto now does after its snapshot checks passed.
+    await expect(
+      repository.recordSubmission(
+        {
+          id: "late-1",
+          gameId: SLUG,
+          playerId: player.id,
+          workingRef: "tmp/games/x/working.webp",
+          objectLabel: "",
+          altLabel: "",
+          scores: null,
+          reason: "",
+          privateJudgement: "",
+          teaser: "",
+          safetyFlags: {},
+          status: "active",
+          judgeCount: 0,
+          segmentCount: 0,
+          submittedAt: NOW,
+          version: 1,
+        },
+        NOW,
+        { now: NOW, maxSubmissionsPerPlayer: 12, maxSubmissionsPerGame: 300, minIntervalMs: 0 },
+      ),
+    ).rejects.toMatchObject({ code: "game_closed" });
+    expect(await repository.listSubmissions(SLUG)).toHaveLength(0);
+    void store;
+    void deps;
+    void cookie;
+  });
+});
+
 describe("submitPhoto (PIN-35)", () => {
   it("stores only the derivative and counts the entry", async () => {
     const { repository, store, deps, cookie } = await setup();

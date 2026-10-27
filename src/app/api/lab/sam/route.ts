@@ -9,6 +9,7 @@ import {
 } from "../../../../server/ai-usage";
 import { MAX_PHOTO_BYTES, PhotoIntakeError } from "../../../../server/photo-intake";
 import { getGameRepository } from "../../../../server/repository";
+import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../server/rate-limit";
 import { SamLabError, parseSamLabInput, runSamLab } from "../../../../server/sam-lab";
 
 export const runtime = "nodejs";
@@ -26,7 +27,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!labAvailable()) {
     return NextResponse.json({ error: "Not found." }, { status: 404, headers: JSON_HEADERS });
   }
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  const gate = RATE_LIMITS.labPerIp;
+  if (!checkRateLimit(clientKey(request, "lab"), gate.limit, gate.windowMs)) {
+    return NextResponse.json({ error: "Lab rate limit reached. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
+  }
+  const lengthHeader = request.headers.get("content-length");
+  const contentLength = Number(lengthHeader ?? NaN);
+  if (!lengthHeader || !Number.isFinite(contentLength) || contentLength <= 0) {
+    return NextResponse.json({ error: "Send the photo with a content length." }, { status: 411, headers: JSON_HEADERS });
+  }
   if (Number.isFinite(contentLength) && contentLength > MAX_PHOTO_BYTES + 1024 * 1024) {
     return NextResponse.json(
       { error: "Photo too large (10 MB max)." },

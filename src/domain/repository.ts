@@ -24,6 +24,39 @@ export interface RecordSubmissionResult {
   entryCount: number;
 }
 
+export interface RecordSubmissionGuard {
+  now: number;
+  maxSubmissionsPerPlayer: number;
+  maxSubmissionsPerGame: number;
+  minIntervalMs: number;
+}
+
+export type SubmissionRejection = "game_closed" | "player_cap" | "game_cap" | "too_fast";
+
+export class SubmissionRejectedError extends Error {
+  constructor(public readonly code: SubmissionRejection) {
+    super(`Submission rejected: ${code}`);
+    this.name = "SubmissionRejectedError";
+  }
+}
+
+/** Shared transactional guard so both repositories enforce identically. */
+export function assertSubmissionAllowed(
+  game: { state: GameState; deadlineAt: number },
+  existing: readonly Submission[],
+  submission: Submission,
+  guard: RecordSubmissionGuard,
+): void {
+  if (game.state !== "OPEN" || guard.now >= game.deadlineAt) {
+    throw new SubmissionRejectedError("game_closed");
+  }
+  const mine = existing.filter((entry) => entry.playerId === submission.playerId);
+  if (mine.length >= guard.maxSubmissionsPerPlayer) throw new SubmissionRejectedError("player_cap");
+  if (existing.length >= guard.maxSubmissionsPerGame) throw new SubmissionRejectedError("game_cap");
+  const lastAt = mine.reduce((max, entry) => Math.max(max, entry.submittedAt), 0);
+  if (lastAt && guard.now - lastAt < guard.minIntervalMs) throw new SubmissionRejectedError("too_fast");
+}
+
 export interface GameRepository {
   createChain(chain: GameChain): Promise<void>;
   getChain(chainId: string): Promise<GameChain | null>;
@@ -50,6 +83,7 @@ export interface GameRepository {
   recordSubmission(
     submission: Submission,
     supersededAt: number,
+    guard?: RecordSubmissionGuard,
   ): Promise<RecordSubmissionResult>;
   putSubmission(submission: Submission): Promise<void>;
   listSubmissions(gameId: string): Promise<Submission[]>;
@@ -124,9 +158,13 @@ export class InMemoryGameRepository implements GameRepository {
   async recordSubmission(
     submission: Submission,
     supersededAt: number,
+    guard?: RecordSubmissionGuard,
   ): Promise<RecordSubmissionResult> {
     const game = this.games.get(submission.gameId);
     if (!game) throw new RangeError(`Game ${submission.gameId} not found`);
+    if (guard) {
+      assertSubmissionAllowed(game, [...this.submissions.values()].filter((s) => s.gameId === submission.gameId), submission, guard);
+    }
     const superseded: Submission[] = [];
     for (const existing of this.submissions.values()) {
       if (
