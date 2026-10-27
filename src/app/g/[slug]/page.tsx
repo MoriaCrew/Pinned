@@ -23,6 +23,28 @@ function formatDeadline(value: number): string {
   }).format(value);
 }
 
+function Steps({ current }: { current: 1 | 2 }) {
+  const steps = [
+    { n: 1, label: t("en", "steps.join") },
+    { n: 2, label: t("en", "steps.photo") },
+    { n: 3, label: t("en", "steps.done") },
+  ];
+  return (
+    <ol className="steps" aria-label="Progress">
+      {steps.map((step) => (
+        <li
+          key={step.n}
+          className={step.n < current ? "step done" : step.n === current ? "step now" : "step"}
+          aria-current={step.n === current ? "step" : undefined}
+        >
+          <span className="step-num">{step.n < current ? "✓" : step.n}</span>
+          {step.label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export default async function GamePage({
   params,
 }: {
@@ -42,30 +64,24 @@ export default async function GamePage({
 
   return (
     <main>
-      <p className="eyebrow"><a href="/">Pinned</a></p>
-      <p className="state-pill">{game.state}</p>
-      <h1 className="page-title">{game.persona.name}</h1>
-      <p className="tagline">{game.persona.judgingStyle}</p>
+      <p className="eyebrow"><a href="/">📌 Pinned</a></p>
 
       <section className="card">
         <p className="eyebrow">{t("en", "game.challenge")}</p>
         <p className="challenge">“{game.challenge}”</p>
-        <dl className="facts">
-          <div>
-            <dt>{t("en", "game.deadline")}</dt>
-            <dd><time dateTime={new Date(game.deadlineAt).toISOString()}>{formatDeadline(game.deadlineAt)} UTC</time></dd>
-          </div>
-          <div>
-            <dt>{t("en", "game.entries")}</dt>
-            <dd>{game.entryCount}</dd>
-          </div>
-          <div>
-            <dt>{t("en", "game.state")}</dt>
-            <dd>{game.state}</dd>
-          </div>
-        </dl>
-        <p className="notice">{t("en", "game.next")}</p>
+        <p className="fact-chips">
+          <span className="fact-chip">🎭 {game.persona.name}</span>
+          <span className="fact-chip">
+            {t("en", "game.deadline")}{" "}
+            <time dateTime={new Date(game.deadlineAt).toISOString()}>
+              {formatDeadline(game.deadlineAt)} UTC
+            </time>
+          </span>
+          <span className="fact-chip">{game.entryCount} {t("en", "game.entries")}</span>
+        </p>
       </section>
+
+      <Steps current={currentPlayer ? 2 : 1} />
 
       <JoinPanel
         slug={slug}
@@ -73,18 +89,17 @@ export default async function GamePage({
         canJoin={canJoin}
       />
 
-      <section className="card">
-        <h2>{t("en", "game.rubricTitle")}</h2>
+      <details className="card">
+        <summary>{t("en", "game.meetHost")}</summary>
+        <p>{game.persona.judgingStyle}</p>
+        <h3>{t("en", "game.rubricTitle")}</h3>
         <ul className="plain-list">
           <li>{t("en", "game.rubricFit")}</li>
           <li>{t("en", "game.rubricEffort")}</li>
           <li>{t("en", "game.rubricChaos")}</li>
         </ul>
         <p>{t("en", "game.rubricNote")}</p>
-      </section>
-
-      <section className="card">
-        <h2>{t("en", "game.voice")}</h2>
+        <h3>{t("en", "game.voice")}</h3>
         <ul className="plain-list">
           {game.persona.voiceRules.map((rule) => <li key={rule}>{rule}</li>)}
         </ul>
@@ -96,7 +111,7 @@ export default async function GamePage({
             </ul>
           </>
         ) : null}
-      </section>
+      </details>
     </main>
   );
 }

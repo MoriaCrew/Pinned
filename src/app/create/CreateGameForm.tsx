@@ -124,21 +124,25 @@ export function CreateGameForm() {
           autoComplete="off"
           required
         />
-        <div className="field-meta">
-          <span>{t("en", "create.briefHelp")}</span>
-          <span aria-live="polite">{[...brief].length}/140</span>
+        <div className="lab-chips">
+          {(["create.example1", "create.example2", "create.example3"] as const).map((key) => (
+            <button key={key} type="button" className="chip" onClick={() => setBrief(t("en", key))}>
+              {t("en", key)}
+            </button>
+          ))}
         </div>
       </div>
 
       <fieldset className="field">
         <legend>{t("en", "create.deadlineLegend")}</legend>
+        <div className="choice-cards">
         {([
           ["express", "create.express"],
           ["evening", "create.evening"],
           ["24h", "create.day"],
           ["custom", "create.custom"],
         ] as const).map(([value, label]) => (
-          <label className="choice" key={value}>
+          <label className="choice-card" key={value}>
             <input
               type="radio"
               name="deadline"
@@ -149,6 +153,7 @@ export function CreateGameForm() {
             <span>{t("en", label)}</span>
           </label>
         ))}
+        </div>
       </fieldset>
 
       {preset === "custom" ? (
