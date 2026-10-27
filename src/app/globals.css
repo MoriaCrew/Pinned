@@ -133,12 +133,12 @@ footer a { color: inherit; }
 .chip.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .chip-dot { width: 14px; height: 14px; border-radius: 50%; }
 .lab-raw { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: #f3ead7; border-radius: 8px; padding: 0.75rem; }
-.steps { display: flex; gap: 0.5rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
-.step { display: inline-flex; gap: 0.45rem; align-items: center; padding: 0.45rem 0.9rem; border: 1.5px solid var(--line); border-radius: 999px; background: #fffdf8; color: var(--muted); font-weight: 700; }
-.step.now { border-color: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px var(--accent) inset; }
-.step.done { color: var(--ink); }
-.step-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--line); color: var(--ink); font-size: 0.85rem; }
-.step.now .step-num { background: var(--accent); color: white; }
+.progress-steps { display: flex; gap: 0.5rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.pstep { display: inline-flex; gap: 0.45rem; align-items: center; padding: 0.45rem 0.9rem; border: 1.5px solid var(--line); border-radius: 999px; background: #fffdf8; color: var(--muted); font-weight: 700; }
+.pstep.now { border-color: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px var(--accent) inset; }
+.pstep.done { color: var(--ink); }
+.pstep-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--line); color: var(--ink); font-size: 0.85rem; }
+.pstep.now .pstep-num { background: var(--accent); color: white; }
 .fact-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .fact-chip { display: inline-flex; align-items: center; min-height: 36px; padding: 0.3rem 0.8rem; border: 1px solid var(--line); border-radius: 999px; background: white; font-weight: 650; }
 .choice-cards { display: flex; gap: 0.6rem; flex-wrap: wrap; }

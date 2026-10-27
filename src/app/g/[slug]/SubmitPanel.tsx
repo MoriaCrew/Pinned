@@ -12,7 +12,15 @@ interface OwnSubmission {
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: boolean }) {
+export function SubmitPanel({
+  slug,
+  canSubmit,
+  onHasPhoto,
+}: {
+  slug: string;
+  canSubmit: boolean;
+  onHasPhoto?: (hasPhoto: boolean) => void;
+}) {
   const [submission, setSubmission] = useState<OwnSubmission | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -30,7 +38,10 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
         const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions`);
         if (response.ok) {
           const data = (await response.json()) as { submission: OwnSubmission | null };
-          if (!cancelled) setSubmission(data.submission);
+          if (!cancelled) {
+            setSubmission(data.submission);
+            onHasPhoto?.(Boolean(data.submission?.hasPhoto));
+          }
         }
       } catch {
         // The form below still works; a failed prefetch only hides state.
@@ -45,10 +56,10 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
 
   if (!canSubmit) return null;
 
-  function pickFile(next: File | null) {
+  function pickFile(next: File | null, clearNotice = true) {
     if (localPreview) URL.revokeObjectURL(localPreview);
     setFile(next);
-    setNotice("");
+    if (clearNotice) setNotice("");
     setLocalPreview(next ? URL.createObjectURL(next) : "");
     setError(next && next.size > MAX_BYTES ? t("en", "submit.tooLarge") : "");
   }
@@ -83,9 +94,10 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
         throw new Error(data.error || t("en", "submit.error"));
       }
       setSubmission(data.submission);
+      onHasPhoto?.(true);
+      pickFile(null, false);
       setNotice(data.outcome === "replaced" ? t("en", "submit.replaced") : t("en", "submit.in"));
       setPreviewBust((value) => value + 1);
-      pickFile(null);
       if (fileRef.current) fileRef.current.value = "";
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("en", "submit.error"));
@@ -116,7 +128,7 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
       ) : null}
 
       <form onSubmit={onSubmit}>
-        <label className="btn photo-pick" htmlFor="photo-file">
+        <label className="btn photo-pick" htmlFor="photo-file" aria-disabled={busy}>
           {t("en", "submit.choose")}
         </label>
         <input
@@ -125,6 +137,7 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
           className="visually-hidden"
           type="file"
           accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
         />
         {notice ? <p className="notice" role="status">{notice}</p> : null}

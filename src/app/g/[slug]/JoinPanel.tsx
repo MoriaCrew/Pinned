@@ -5,6 +5,28 @@ import { t } from "../../../i18n";
 import type { RoastLevel } from "../../../domain/types";
 import { SubmitPanel } from "./SubmitPanel";
 
+function Steps({ current }: { current: 1 | 2 | 3 }) {
+  const steps = [
+    { n: 1, label: t("en", "steps.join") },
+    { n: 2, label: t("en", "steps.photo") },
+    { n: 3, label: t("en", "steps.done") },
+  ] as const;
+  return (
+    <ol className="progress-steps" aria-label="Progress">
+      {steps.map((step) => (
+        <li
+          key={step.n}
+          className={step.n < current ? "pstep done" : step.n === current ? "pstep now" : "pstep"}
+          aria-current={step.n === current ? "step" : undefined}
+        >
+          <span className="pstep-num">{step.n < current ? "✓" : step.n}</span>
+          {step.label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export interface JoinPlayerView {
   id: string;
   displayName: string;
@@ -30,6 +52,7 @@ export function JoinPanel({
   const [reclaimPin, setReclaimPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [photoDone, setPhotoDone] = useState(false);
 
   if (!canJoin && !player) {
     return (
@@ -74,6 +97,7 @@ export function JoinPanel({
   if (player && !editing) {
     return (
       <>
+        <Steps current={photoDone ? 3 : 2} />
         <section className="card" aria-live="polite">
           <h2>{t("en", "join.ready")}</h2>
           <p className="fact-chips">
@@ -87,12 +111,14 @@ export function JoinPanel({
             ) : null}
           </p>
         </section>
-        <SubmitPanel slug={slug} canSubmit={canJoin} />
+        <SubmitPanel slug={slug} canSubmit={canJoin} onHasPhoto={setPhotoDone} />
       </>
     );
   }
 
   return (
+    <>
+    <Steps current={1} />
     <form className="card" onSubmit={onSubmit}>
       <h2>{t("en", "join.title")}</h2>
       <div className="field">
@@ -154,5 +180,6 @@ export function JoinPanel({
         {busy ? t("en", "join.saving") : player ? t("en", "join.update") : t("en", "join.submit")}
       </button>
     </form>
+    </>
   );
 }

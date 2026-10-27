@@ -23,28 +23,6 @@ function formatDeadline(value: number): string {
   }).format(value);
 }
 
-function Steps({ current }: { current: 1 | 2 }) {
-  const steps = [
-    { n: 1, label: t("en", "steps.join") },
-    { n: 2, label: t("en", "steps.photo") },
-    { n: 3, label: t("en", "steps.done") },
-  ];
-  return (
-    <ol className="steps" aria-label="Progress">
-      {steps.map((step) => (
-        <li
-          key={step.n}
-          className={step.n < current ? "step done" : step.n === current ? "step now" : "step"}
-          aria-current={step.n === current ? "step" : undefined}
-        >
-          <span className="step-num">{step.n < current ? "✓" : step.n}</span>
-          {step.label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export default async function GamePage({
   params,
 }: {
@@ -80,8 +58,6 @@ export default async function GamePage({
           <span className="fact-chip">{game.entryCount} {t("en", "game.entries")}</span>
         </p>
       </section>
-
-      <Steps current={currentPlayer ? 2 : 1} />
 
       <JoinPanel
         slug={slug}
