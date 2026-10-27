@@ -50,7 +50,7 @@ export function JoinPanel({
   const [reclaimPin, setReclaimPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [photoDone, setPhotoDone] = useState(false);
+  const [photoDone, setPhotoDone] = useState<boolean | null>(null);
   const [hintDismissed, setHintDismissed] = useState(false);
 
   if (!canJoin && !player) {
@@ -94,9 +94,9 @@ export function JoinPanel({
   if (player && !editing) {
     return (
       <>
-        <Steps current={photoDone ? 3 : 2} />
-        <PlayerCard player={player} photoDone={photoDone} onEdit={canJoin ? () => setEditing(true) : undefined} />
-        {!photoDone && !hintDismissed ? (
+        <Steps current={photoDone === true ? 3 : 2} />
+        <PlayerCard player={player} photoDone={photoDone === true} onEdit={canJoin ? () => setEditing(true) : undefined} />
+        {canJoin && photoDone === false && !hintDismissed ? (
           <p className="hint" role="status">
             {t("en", "hint.photo")}{" "}
             <button type="button" className="btn btn-small" onClick={() => setHintDismissed(true)}>{t("en", "hint.dismiss")}</button>
@@ -113,7 +113,7 @@ export function JoinPanel({
     <form className="card" onSubmit={onSubmit}>
       <h2>{t("en", "join.title")}</h2>
       <div className="field">
-        {!hintDismissed ? <p className="hint" role="status">{t("en", "hint.name")}</p> : null}
+        {!player && !hintDismissed ? <p className="hint" role="status">{t("en", "hint.name")}</p> : null}
         <label htmlFor="join-name">{t("en", "join.name")}</label>
         <input
           id="join-name"
