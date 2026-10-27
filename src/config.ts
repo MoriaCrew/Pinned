@@ -31,6 +31,7 @@ export interface AppConfig {
   aiDailyCallLimit: number;
   sessionSecret: string | null;
   storageBucket: string | null;
+  labEnabled: boolean;
   meta: MetaConfig;
 }
 
@@ -60,6 +61,7 @@ export function parseConfig(
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
     aiDailyBudgetUsd: positiveNumber(env.AI_DAILY_BUDGET_USD, 2),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
+    labEnabled: env.PINNED_LAB === "1",
     sessionSecret: nonEmpty(env.SESSION_SECRET),
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??

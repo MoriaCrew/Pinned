@@ -13,6 +13,8 @@ env:
     secret: SESSION_SECRET
     availability:
       - RUNTIME
+  - variable: PINNED_LAB
+    value: "1"
   - variable: AI_DAILY_BUDGET_USD
     value: "2"
   - variable: AI_DAILY_CALL_LIMIT

@@ -116,6 +116,23 @@ footer a { color: inherit; }
 .entry-preview { margin: 0 0 1.25rem; }
 .entry-preview img { display: block; max-width: 100%; max-height: 320px; border-radius: 10px; border: 1.5px solid var(--line); background: white; }
 .entry-preview figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 0.35rem; }
+.seg-control { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1.25rem; }
+.seg { min-height: 48px; padding: 0.5rem 1rem; border: 1.5px solid var(--line); border-radius: 999px; background: white; font: inherit; font-weight: 700; cursor: pointer; }
+.seg.active { border-color: var(--accent); background: var(--accent); color: white; }
+.lab-stage { position: relative; margin: 0 0 1.25rem; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #f3ead7; touch-action: none; }
+.lab-stage img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.lab-stage img.checker { background: repeating-conic-gradient(#e8e2d4 0% 25%, #fffdf8 0% 50%) 0 0 / 24px 24px; }
+.lab-empty { text-align: center; padding: 3rem 1rem; margin: 0; color: var(--muted); font-weight: 700; }
+.lab-dot { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 3px solid white; pointer-events: none; }
+.lab-dot.pos { background: #34c759; }
+.lab-dot.neg { background: #ff3b30; }
+.lab-box { position: absolute; border: 3px solid var(--accent); border-radius: 6px; pointer-events: none; }
+.lab-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.lab-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1.25rem; }
+.chip { display: inline-flex; gap: 0.45rem; align-items: center; min-height: 44px; padding: 0.4rem 0.9rem; border: 1.5px solid var(--line); border-radius: 999px; background: white; font: inherit; font-weight: 650; cursor: pointer; }
+.chip.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.chip-dot { width: 14px; height: 14px; border-radius: 50%; }
+.lab-raw { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: #f3ead7; border-radius: 8px; padding: 0.75rem; }
 .choice { display: flex !important; gap: 0.6rem; align-items: center; font-weight: 500 !important; min-height: 44px; }
 .choice input { width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }
 .copy-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: start; }
