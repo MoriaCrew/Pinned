@@ -167,7 +167,22 @@ export function CreateGameForm() {
     <form className="card themed" onSubmit={onSubmit} style={invent ? undefined : themeStyle(activePreset.theme)}>
       <fieldset className="field">
         <legend>{t("en", "create.pickHost")}</legend>
-        <div className="preset-grid" role="radiogroup" aria-label={t("en", "create.pickHost")}>
+        <div className="preset-grid" role="radiogroup" aria-label={t("en", "create.pickHost")}
+          onKeyDown={(event) => {
+            const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+            if (!keys.includes(event.key)) return;
+            event.preventDefault();
+            const options = [...HOST_PRESETS.map((preset) => preset.id), "invent"];
+            const current = invent ? "invent" : presetId;
+            const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+            const next = options[(options.indexOf(current) + step + options.length) % options.length];
+            if (next === "invent") setInvent(true); else { setInvent(false); setPresetId(next); }
+            requestAnimationFrame(() => {
+              const group = event.currentTarget;
+              group.querySelector<HTMLElement>("[aria-checked='true']")?.focus();
+            });
+          }}
+        >
           {HOST_PRESETS.map((preset) => (
             <PresetCard
               key={preset.id}
