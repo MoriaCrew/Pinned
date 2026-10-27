@@ -230,14 +230,24 @@ export class MetaGateway implements ModelGateway {
    * request; comma lists return zero matches. We parse records
    * here; mask decoding/compositing happens in the segment step.
    */
-  async segmentObject(input: { imageRef: string; concept: string }): Promise<{ segments: SamSegment[] }> {
+  async segmentObject(input: {
+    imageRef: string;
+    concept: string;
+    promptText?: string;
+    maskEncoding?: "lossless" | "one_bit";
+    includeConfidence?: boolean;
+  }): Promise<{ segments: SamSegment[] }> {
+    const metadata: Record<string, string> = {};
+    if (input.maskEncoding) metadata.mask_encoding = input.maskEncoding;
+    if (input.includeConfidence) metadata.include_confidence = "true";
     const json = await this.request("segmentObject", this.options.samModel, "/responses", {
       model: this.options.samModel,
+      ...(Object.keys(metadata).length ? { metadata } : {}),
       input: [
         {
           role: "user",
           content: [
-            { type: "input_text", text: input.concept },
+            { type: "input_text", text: input.promptText ?? input.concept },
             { type: "input_image", image_url: input.imageRef },
           ],
         },

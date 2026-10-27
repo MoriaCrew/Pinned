@@ -46,7 +46,15 @@ export interface SamSegment {
 export interface ModelGateway {
   generatePersona(brief: string): Promise<{ persona: HostPersona; challenge: string }>;
   judgePhoto(input: { imageRef: string; challenge: string }): Promise<Judgement>;
-  segmentObject(input: { imageRef: string; concept: string }): Promise<{ segments: SamSegment[] }>;
+  segmentObject(input: {
+    imageRef: string;
+    /** Short noun phrase, one concept (ignored when promptText is set). */
+    concept: string;
+    /** Raw object-prompt text (box/point tokens) for tap reselect. */
+    promptText?: string;
+    maskEncoding?: "lossless" | "one_bit";
+    includeConfidence?: boolean;
+  }): Promise<{ segments: SamSegment[] }>;
   posterBackground(input: { challenge: string }): Promise<{ imageRef: string }>;
   writeDiary(input: { winner: string }): Promise<DiaryEntry>;
 }
