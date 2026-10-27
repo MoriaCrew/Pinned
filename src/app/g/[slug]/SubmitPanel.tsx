@@ -12,9 +12,19 @@ interface OwnSubmission {
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: boolean }) {
+export function SubmitPanel({
+  slug,
+  canSubmit,
+  onHasPhoto,
+}: {
+  slug: string;
+  canSubmit: boolean;
+  onHasPhoto?: (hasPhoto: boolean) => void;
+}) {
   const [submission, setSubmission] = useState<OwnSubmission | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [localPreview, setLocalPreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -28,7 +38,10 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
         const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions`);
         if (response.ok) {
           const data = (await response.json()) as { submission: OwnSubmission | null };
-          if (!cancelled) setSubmission(data.submission);
+          if (!cancelled) {
+            setSubmission(data.submission);
+            onHasPhoto?.(Boolean(data.submission?.hasPhoto));
+          }
         }
       } catch {
         // The form below still works; a failed prefetch only hides state.
@@ -43,10 +56,17 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
 
   if (!canSubmit) return null;
 
+  function pickFile(next: File | null, clearNotice = true) {
+    if (localPreview) URL.revokeObjectURL(localPreview);
+    setFile(next);
+    if (clearNotice) setNotice("");
+    setLocalPreview(next ? URL.createObjectURL(next) : "");
+    setError(next && next.size > MAX_BYTES ? t("en", "submit.tooLarge") : "");
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const file = fileRef.current?.files?.[0];
     setError("");
     setNotice("");
     if (!file) {
@@ -74,6 +94,8 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
         throw new Error(data.error || t("en", "submit.error"));
       }
       setSubmission(data.submission);
+      onHasPhoto?.(true);
+      pickFile(null, false);
       setNotice(data.outcome === "replaced" ? t("en", "submit.replaced") : t("en", "submit.in"));
       setPreviewBust((value) => value + 1);
       if (fileRef.current) fileRef.current.value = "";
@@ -84,41 +106,43 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
     }
   }
 
+  const previewSrc = localPreview
+    ? localPreview
+    : loaded && submission?.hasPhoto
+      ? `/api/games/${encodeURIComponent(slug)}/submissions/image?v=${previewBust}`
+      : "";
+
   return (
     <section className="card">
       <h2>{t("en", "submit.title")}</h2>
-      <p>{t("en", "submit.intro")}</p>
       <p className="notice">{t("en", "submit.safety")}</p>
 
-      {loaded && submission?.hasPhoto ? (
+      {previewSrc ? (
         <figure className="entry-preview">
           {/* Owner-only derivative preview; plain img keeps the cookie flow simple. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/games/${encodeURIComponent(slug)}/submissions/image?v=${previewBust}`}
-            alt={t("en", "submit.current")}
-          />
-          <figcaption>{t("en", "submit.current")}</figcaption>
+          <img src={previewSrc} alt={t("en", "submit.current")} />
         </figure>
       ) : loaded ? (
         <p>{t("en", "submit.none")}</p>
       ) : null}
 
       <form onSubmit={onSubmit}>
-        <div className="field">
-          <label htmlFor="photo-file">{t("en", "submit.choose")}</label>
-          <input
-            id="photo-file"
-            ref={fileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={busy}
-            required
-          />
-        </div>
+        <label className="btn photo-pick" htmlFor="photo-file" aria-disabled={busy}>
+          {t("en", "submit.choose")}
+        </label>
+        <input
+          id="photo-file"
+          ref={fileRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
+        />
         {notice ? <p className="notice" role="status">{notice}</p> : null}
         {error ? <p className="error" role="alert">{error}</p> : null}
-        <button className="btn btn-primary" type="submit" disabled={busy}>
+        <button className="btn btn-primary" type="submit" disabled={busy || !file}>
           {busy
             ? t("en", "submit.sending")
             : submission

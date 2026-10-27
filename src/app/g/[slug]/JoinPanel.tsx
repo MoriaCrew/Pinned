@@ -5,6 +5,28 @@ import { t } from "../../../i18n";
 import type { RoastLevel } from "../../../domain/types";
 import { SubmitPanel } from "./SubmitPanel";
 
+function Steps({ current }: { current: 1 | 2 | 3 }) {
+  const steps = [
+    { n: 1, label: t("en", "steps.join") },
+    { n: 2, label: t("en", "steps.photo") },
+    { n: 3, label: t("en", "steps.done") },
+  ] as const;
+  return (
+    <ol className="progress-steps" aria-label="Progress">
+      {steps.map((step) => (
+        <li
+          key={step.n}
+          className={step.n < current ? "pstep done" : step.n === current ? "pstep now" : "pstep"}
+          aria-current={step.n === current ? "step" : undefined}
+        >
+          <span className="pstep-num">{step.n < current ? "✓" : step.n}</span>
+          {step.label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export interface JoinPlayerView {
   id: string;
   displayName: string;
@@ -30,6 +52,7 @@ export function JoinPanel({
   const [reclaimPin, setReclaimPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [photoDone, setPhotoDone] = useState(false);
 
   if (!canJoin && !player) {
     return (
@@ -42,6 +65,7 @@ export function JoinPanel({
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -73,35 +97,30 @@ export function JoinPanel({
   if (player && !editing) {
     return (
       <>
-      <section className="card" aria-live="polite">
-        <p className="eyebrow">{t("en", "join.ready")}</p>
-        <h2>{player.displayName}</h2>
-        <p>{t("en", "join.readyBody")}</p>
-        <dl className="facts">
-          <div>
-            <dt>{t("en", "join.roastChosen")}</dt>
-            <dd>{t("en", `join.${player.roastLevel}`)}</dd>
-          </div>
-          <div>
-            <dt>Poster</dt>
-            <dd>{player.posterOptIn ? t("en", "join.posterChosen") : t("en", "join.posterSkipped")}</dd>
-          </div>
-        </dl>
-        {canJoin ? (
-          <button type="button" className="btn" onClick={() => setEditing(true)}>
-            {t("en", "join.edit")}
-          </button>
-        ) : null}
-      </section>
-      <SubmitPanel slug={slug} canSubmit={canJoin} />
+        <Steps current={photoDone ? 3 : 2} />
+        <section className="card" aria-live="polite">
+          <h2>{t("en", "join.ready")}</h2>
+          <p className="fact-chips">
+            <span className="fact-chip">👤 {player.displayName}</span>
+            <span className="fact-chip">{t("en", `join.${player.roastLevel}`)}</span>
+            <span className="fact-chip">{player.posterOptIn ? "🖼 ✓" : "🖼 ✗"}</span>
+            {canJoin ? (
+              <button type="button" className="btn btn-small" onClick={() => setEditing(true)}>
+                {t("en", "join.edit")}
+              </button>
+            ) : null}
+          </p>
+        </section>
+        <SubmitPanel slug={slug} canSubmit={canJoin} onHasPhoto={setPhotoDone} />
       </>
     );
   }
 
   return (
+    <>
+    <Steps current={1} />
     <form className="card" onSubmit={onSubmit}>
       <h2>{t("en", "join.title")}</h2>
-      <p>{t("en", "join.intro")}</p>
       <div className="field">
         <label htmlFor="join-name">{t("en", "join.name")}</label>
         <input
@@ -117,18 +136,20 @@ export function JoinPanel({
 
       <fieldset className="field">
         <legend>{t("en", "join.roast")}</legend>
-        {(["gentle", "spicy", "feral"] as const).map((level) => (
-          <label className="choice" key={level}>
-            <input
-              type="radio"
-              name="roast-level"
-              value={level}
-              checked={roastLevel === level}
-              onChange={() => setRoastLevel(level)}
-            />
-            <span>{t("en", `join.${level}`)}</span>
-          </label>
-        ))}
+        <div className="choice-cards">
+          {(["gentle", "spicy", "feral"] as const).map((level) => (
+            <label className="choice-card" key={level}>
+              <input
+                type="radio"
+                name="roast-level"
+                value={level}
+                checked={roastLevel === level}
+                onChange={() => setRoastLevel(level)}
+              />
+              <span>{t("en", `join.${level}`)}</span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <label className="choice field">
@@ -140,7 +161,8 @@ export function JoinPanel({
         <span>{t("en", "join.poster")}</span>
       </label>
 
-      <div className="field">
+      <details className="field">
+        <summary>{t("en", "join.pinSummary")}</summary>
         <label htmlFor="reclaim-pin">{t("en", "join.pin")}</label>
         <input
           id="reclaim-pin"
@@ -151,12 +173,13 @@ export function JoinPanel({
           placeholder="1234"
         />
         <p className="field-help">{t("en", "join.pinHelp")}</p>
-      </div>
+      </details>
 
       {error ? <p className="error" role="alert">{error}</p> : null}
       <button className="btn btn-primary" type="submit" disabled={busy || !displayName.trim()}>
         {busy ? t("en", "join.saving") : player ? t("en", "join.update") : t("en", "join.submit")}
       </button>
     </form>
+    </>
   );
 }
