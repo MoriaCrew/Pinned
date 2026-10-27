@@ -5,7 +5,9 @@ import { t } from "../../../i18n";
 import { getGameRepository } from "../../../server/repository";
 import { getConfig } from "../../../config";
 import { playerCookieName, publicPlayer, resolvePlayerSession } from "../../../server/player-session";
+import type { CSSProperties } from "react";
 import { JoinPanel } from "./JoinPanel";
+import { LocalDeadline } from "./LocalDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +16,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function formatDeadline(value: number): string {
-  // Server-rendered for every player, so use one explicit timezone.
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(value);
+function themeVars(theme: { accent: string; accentInk: string; paper: string; line: string } | undefined): CSSProperties {
+  if (!theme) return {};
+  return {
+    "--accent": theme.accent,
+    "--accent-ink": theme.accentInk,
+    "--paper": theme.paper,
+    "--line": theme.line,
+  } as CSSProperties;
 }
 
 export default async function GamePage({
@@ -41,19 +44,18 @@ export default async function GamePage({
   const canJoin = game.state === "OPEN" && Date.now() < game.deadlineAt;
 
   return (
+    <div className="theme-bg" style={themeVars(game.theme)}>
     <main>
       <p className="eyebrow"><a href="/">📌 Pinned</a></p>
 
       <section className="card">
         <p className="eyebrow">{t("en", "game.challenge")}</p>
-        <p className="challenge">“{game.challenge}”</p>
+        <h1 className="challenge">“{game.challenge}”</h1>
         <p className="fact-chips">
-          <span className="fact-chip">🎭 {game.persona.name}</span>
+          <span className="fact-chip">{game.theme?.motif ?? "🎭"} {game.persona.name}</span>
           <span className="fact-chip">
             {t("en", "game.deadline")}{" "}
-            <time dateTime={new Date(game.deadlineAt).toISOString()}>
-              {formatDeadline(game.deadlineAt)} UTC
-            </time>
+            <LocalDeadline value={game.deadlineAt} />
           </span>
           <span className="fact-chip">{game.entryCount} {t("en", "game.entries")}</span>
         </p>
@@ -89,5 +91,6 @@ export default async function GamePage({
         ) : null}
       </details>
     </main>
+    </div>
   );
 }
