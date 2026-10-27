@@ -83,6 +83,45 @@ function findImageRef(value, depth = 0) {
   return null;
 }
 
+function imageFormatFromBase64(payload, preferred) {
+  if (payload.startsWith("/9j/")) return "jpeg";
+  if (payload.startsWith("iVBORw0KGgo")) return "png";
+  if (payload.startsWith("UklGR")) return "webp";
+  if (payload.startsWith("R0lGOD")) return "gif";
+  const normalized = String(preferred || "").toLowerCase().replace(/^\./, "");
+  if (normalized === "jpg") return "jpeg";
+  return ["png", "jpeg", "webp", "gif"].includes(normalized) ? normalized : "png";
+}
+
+function findBase64Payload(value, depth = 0) {
+  if (depth > 6 || value == null || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = findBase64Payload(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "string" && (key === "b64_json" || key === "base64")) return item;
+    const hit = findBase64Payload(item, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function usableGeneratedImage(json) {
+  const display = findImageRef(json);
+  if (display && /^https?:\/\//.test(display)) return { usable: display, display };
+  const payload = findBase64Payload(json);
+  if (!payload) return display ? { usable: null, display } : null;
+  const format = imageFormatFromBase64(payload, json.output_format);
+  return {
+    usable: `data:image/${format};base64,${payload}`,
+    display: `base64(${payload.length} chars, image/${format})`,
+  };
+}
+
 async function main() {
   if (!KEY) {
     const { res, json, ms } = await call("models-unauth", "/models");
@@ -130,9 +169,9 @@ async function main() {
       method: "POST",
       body: JSON.stringify({ model: IMAGE, prompt: "Photograph of a red stapler on a cluttered desk, daylight" }),
     });
-    const ref = findImageRef(json);
-    if (!imageUrl && ref && /^https?:\/\//.test(ref)) imageUrl = ref;
-    record("Muse Image generation", res.ok && !!ref, `${ms}ms ref=${ref} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
+    const generated = usableGeneratedImage(json);
+    if (!imageUrl && generated?.usable) imageUrl = generated.usable;
+    record("Muse Image generation", res.ok && !!generated?.usable, `${ms}ms ref=${generated?.display} output_format=${json.output_format || "?"} usage=${JSON.stringify(json.usage || {})} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
   } catch (e) {
     record("Muse Image generation", false, String(e));
   }
@@ -146,7 +185,7 @@ async function main() {
         body: JSON.stringify({
           model: SPARK,
           messages: [
-            { role: "system", content: "Return ONLY JSON {objectLabel,scores:{fit,effort,chaos},teaser} for this photo vs the challenge." },
+            { role: "system", content: "Return ONLY JSON {objectLabel,scores:{fit,effort,chaos},teaser} for this photo vs the challenge. Scores must be integers from 0 to 5." },
             {
               role: "user",
               content: [

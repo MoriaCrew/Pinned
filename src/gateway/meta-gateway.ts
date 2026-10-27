@@ -253,7 +253,7 @@ export class MetaGateway implements ModelGateway {
       model: this.options.imageModel,
       prompt: `Playful poster background, no text, no people, themed on: ${input.challenge}`,
     });
-    const found = findImageRef(json);
+    const found = findImageRef(json, 0, typeof json.output_format === "string" ? json.output_format : undefined);
     if (!found) throw new MetaApiError("Image response had no url/b64 field", undefined, "image_shape_unknown");
     return { imageRef: found };
   }
@@ -324,7 +324,22 @@ export function findSamText(value: unknown, depth = 0): string | null {
 }
 
 /** Depth-first search for an image URL or base64 payload. */
-export function findImageRef(value: unknown, depth = 0): string | null {
+function normalizeImageFormat(format?: string): string | null {
+  const normalized = format?.trim().toLowerCase().replace(/^\./, "");
+  if (normalized === "jpg") return "jpeg";
+  return normalized && ["png", "jpeg", "webp", "gif"].includes(normalized) ? normalized : null;
+}
+
+/** Infer an image MIME subtype from base64 magic prefixes. */
+export function imageFormatFromBase64(payload: string, preferredFormat?: string): string {
+  if (payload.startsWith("/9j/")) return "jpeg";
+  if (payload.startsWith("iVBORw0KGgo")) return "png";
+  if (payload.startsWith("UklGR")) return "webp";
+  if (payload.startsWith("R0lGOD")) return "gif";
+  return normalizeImageFormat(preferredFormat) ?? "png";
+}
+
+export function findImageRef(value: unknown, depth = 0, preferredFormat?: string): string | null {
   if (depth > 6 || value === null || value === undefined) return null;
   if (typeof value === "string") {
     if (/^https?:\/\//.test(value) && /\.(png|jpe?g|webp)(\?|$)/i.test(value)) return value;
@@ -333,7 +348,7 @@ export function findImageRef(value: unknown, depth = 0): string | null {
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const hit = findImageRef(item, depth + 1);
+      const hit = findImageRef(item, depth + 1, preferredFormat);
       if (hit) return hit;
     }
     return null;
@@ -342,16 +357,16 @@ export function findImageRef(value: unknown, depth = 0): string | null {
     for (const key of ["url", "image_url", "b64_json", "base64", "mask", "cutout", "image"]) {
       const v = value[key];
       if (typeof v === "string" && (key === "b64_json" || key === "base64")) {
-        return `data:image/png;base64,${v}`;
+        return `data:image/${imageFormatFromBase64(v, preferredFormat)};base64,${v}`;
       }
       if (typeof v === "string" && (key === "url" || key === "image_url") && /^https?:\/\//.test(v)) {
         return v; // signed URLs often have no file extension
       }
-      const hit = findImageRef(v, depth + 1);
+      const hit = findImageRef(v, depth + 1, preferredFormat);
       if (hit) return hit;
     }
     for (const v of Object.values(value)) {
-      const hit = findImageRef(v, depth + 1);
+      const hit = findImageRef(v, depth + 1, preferredFormat);
       if (hit) return hit;
     }
   }
