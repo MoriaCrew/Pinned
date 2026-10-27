@@ -10,6 +10,7 @@ import {
   InMemoryDerivativeStore,
   assertDerivativeRef,
   buildWorkingImageRef,
+  getDerivativeStore,
 } from "./derivative-store";
 
 async function makeImage(
@@ -120,5 +121,10 @@ describe("derivative refs and in-memory store", () => {
     expect((await store.get(ref))?.toString()).toBe("webp-bytes");
     await store.delete(ref);
     expect(await store.get(ref)).toBeNull();
+  });
+
+  it("getDerivativeStore returns one process-wide instance", () => {
+    expect(getDerivativeStore()).toBe(getDerivativeStore());
+    expect(getDerivativeStore()).toBeInstanceOf(InMemoryDerivativeStore);
   });
 });

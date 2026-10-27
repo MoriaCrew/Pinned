@@ -104,23 +104,28 @@ export class GcsDerivativeStore implements DerivativeStore {
   }
 }
 
-let cached: DerivativeStore | null = null;
+const globalStore = globalThis as typeof globalThis & {
+  __pinnedDerivativeStore?: DerivativeStore;
+};
 
 /**
  * Hosted (Firestore) environments use the Firebase default bucket via
  * ADC; local/memory environments stay in process so tests and the
  * judge demo need no cloud credentials.
  */
-export function getDerivativeStore(): DerivativeStore {
-  if (cached) return cached;
+export function createDerivativeStore(): DerivativeStore {
   const config = getConfig();
   if (config.dataBackend === "firestore") {
     if (!config.storageBucket) {
       throw new Error("STORAGE_BUCKET is required when DATA_BACKEND=firestore.");
     }
-    cached = new GcsDerivativeStore(config.storageBucket, config.firebaseProjectId);
-  } else {
-    cached = new InMemoryDerivativeStore();
+    return new GcsDerivativeStore(config.storageBucket, config.firebaseProjectId);
   }
-  return cached;
+  return new InMemoryDerivativeStore();
+}
+
+/** Process-wide store; globalThis keeps the memory backend coherent in dev. */
+export function getDerivativeStore(): DerivativeStore {
+  globalStore.__pinnedDerivativeStore ??= createDerivativeStore();
+  return globalStore.__pinnedDerivativeStore;
 }
