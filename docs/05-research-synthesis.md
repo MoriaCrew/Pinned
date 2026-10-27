@@ -93,7 +93,8 @@ ADR + issue amendments; this doc is the record):
   (first-writer-wins). Storage private; originals only in `tmp/` with
   1-day lifecycle delete + explicit delete after cut-out; EXIF strip
   and orientation fix in-function.
-- Cost/game (8 players, research estimates — verify in PIN-15):
+- Cost/game (8 players; Meta list prices verified in §8, token
+  counts still estimates until PIN-15):
   Firebase <$0.01 (effectively $0 inside free quotas at hackathon
   scale); AI ≈ $0.063 (4p $0.040 / 12p $0.085, +20% retry buffer).
   Hard ceilings: $0.15/game; $5/day global kill-switch to mock lines.
@@ -193,11 +194,46 @@ stock-photo cheating + third-party consent, display-name profanity on
 posters, cross-timezone deadlines, analytics/consent decision,
 AiCallLog retention/deletion story.
 
-## 8. Unverified — strike from external copy until closed
+## 8. Source closure (PIN-27, Oct 26 2026)
 
-$150 credit amount/terms as applied to this account, exact Firestore
-unit prices/quotas in-project, US Stripe net-of-fees example, any
-Meta-side no-retention/no-training claim, partner fallback pricing.
-Closure = source-closure issue (real-browser opens, Day 1–2) +
-PIN-3 measurements + PIN-15 golden-set token counts. Until then,
-demo/submission copy uses ranges and "measured in testing" language.
+Primary sources fetched and read this session. Anything not in the
+verified list stays out of demo/submission copy.
+
+**Verified:**
+
+- **Meta Standard mode does not train on content.** Pricing table
+  labels `muse-spark-1.3` "Not used to improve our products" vs
+  `muse-spark-1.3-contributor` "Used to improve our products";
+  models doc: "In Standard mode, your content is not used to train
+  Meta models." Sources: dev.meta.ai/products/meta-model-api and
+  dev.meta.ai/docs/models. We pin Standard IDs only.
+- **Meta list prices.** Spark 1.3: $1.25 input / $0.15 cached /
+  $4.25 output per 1M tokens. Muse Image: $0.01/image. SAM 3.1:
+  $2.50/1k images ($0.0025/image). Source as above. Indicative
+  8-player game at list: persona ~$0.003 + 8 judges ~$0.024 +
+  8 segments $0.02 + poster $0.01 = ~$0.06; PIN-15 replaces the
+  token assumptions with measurements.
+- **Meta transports.** Spark chat-completions + vision image_url
+  parts; Image single-shot /v1/images/generations; SAM via
+  POST /v1/responses returning box+base85-mask token text.
+  Sources: dev.meta.ai/docs (models, sam/segmenting,
+  sam/reading-segmentation, image-generation).
+- **Firebase no-cost quotas cover hackathon scale.** Firestore
+  50K reads/day + 20K writes/day no-cost, then Google Cloud
+  pricing; App Hosting bandwidth no-cost to 10 GiB/month, then
+  $0.20/GiB uncached; Functions 2M invocations/month no-cost.
+  Source: firebase.google.com/pricing (fetched Oct 26 2026).
+
+**Still unverified — struck from external copy:**
+
+- Hackathon credit amount/terms as applied to this account (operator
+  dashboard check).
+- Exact Firestore eur3 unit prices beyond no-cost quotas.
+- US Stripe net-of-fees example (pricing page locale-redirects;
+  also depends on account country). Pack copy stays designed-
+  not-live until PIN-25 gate.
+- Partner fallback pricing (Baseten/Modal/Fireworks).
+- Hackathon Official Rules exact licence wording beyond the
+  public-repo requirement (rules page needs a real browser).
+  The repo is public + AGPL-3.0, which satisfies the quoted
+  public-repo rule; confirm licence clauses before submission.

@@ -73,6 +73,23 @@ posterBackground(persona, challenge, winnerLabel) -> image
 writeDiary(gameSummary) -> DiaryEntryJSON
 ```
 
+**PIN-3 model pins (Oct 26, 2026):** base `https://api.meta.ai/v1`,
+Bearer auth; unauthenticated `GET /models` returns the OpenAI-style
+`401 invalid_api_key` envelope (verified live). Spark
+`muse-spark-1.3` via `/chat/completions` (text + vision), Muse Image
+`muse-image-1.0` via `/images/generations`, SAM `sam-3.1` via
+`/responses` (Responses-only; judge `objectLabel` becomes its
+`input_text`). Standard IDs only — `*-contributor` variants never
+touch player photos. Implementation: `src/gateway/meta-gateway.ts`
+(plain fetch, no SDK) + `npm run smoke:meta` for live validation.
+SAM output is geometry, not an image: special-token text carrying
+one box + one base85 mask per match (`sam/reading-segmentation`);
+the gateway parses records and the segment step decodes/composites.
+Still unverified until an authenticated smoke runs: SAM payload
+keys (adapter searches defensively, `sam_shape_unknown` otherwise),
+vision content-part acceptance, per-call cost/latency (PIN-15
+measures), and account credit terms (PIN-27 operator check).
+
 1. **Persona (Spark, text):** brief → constrained JSON. System prompt
    carries the roast policy; brief is treated as data, never instructions
    that can override policy (G6). One retry on schema failure, then a
@@ -147,11 +164,22 @@ Cloud Storage holds cut-outs/posters only (lifecycle-delete temp data);
 Cloud Tasks plus a scheduler sweeper own deadlines and poster jobs.
 Projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod` use
 Firestore in `eur3`; billing is enabled and `pinned-web` App Hosting
-backends exist in `europe-west4`. First rollout / GitHub connection
-and GitHub connection are the remaining PIN-2 deploy wiring; local and
+backends exist in `europe-west4`, GitHub-connected (PIN-28). Rollouts
+are live on both backends; local and
 CI verification do not depend on them. The boundaries above keep the
 vendor decision reversible at the data/gateway ports.
 
+
+**Branch → backend map (PIN-28):** the dev backend (environment
+name `dev`) auto-builds the `dev` branch; the prod backend
+(environment name `prod`) auto-builds `main`. Feature PRs merge
+into `dev` first, get a hosted smoke on dev, then promote via a
+`dev` → `main` PR. App Hosting merges `apphosting.dev.yaml` /
+`apphosting.prod.yaml` over base `apphosting.yaml` per backend, so
+both env files live on both branches. Secrets are added later as
+Secret Manager references by name in the env files — values never
+enter the repo; `AI_MOCK=1` stays on in both envs until the PIN-3
+Meta secret exists.
 
 **Environments:** Preview (per PR, `AI_MOCK=1` by default) → Production
 (real keys, budget alerts). **CI gates on every PR:** secret scan,
