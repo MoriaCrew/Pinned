@@ -51,7 +51,6 @@ describe("player sessions", () => {
     const { repository, deps } = await setup();
     const result = await joinGame("game-slug", {
       displayName: " Robin ",
-      roastLevel: "feral",
       posterOptIn: false,
       reclaimPin: "1234",
     }, null, deps);
@@ -74,7 +73,6 @@ describe("player sessions", () => {
     const first = await joinGame("game-slug", { displayName: "Robin" }, null, deps);
     const second = await joinGame("game-slug", {
       displayName: "Robin R",
-      roastLevel: "gentle",
       posterOptIn: true,
     }, first.cookieValue, deps);
 
@@ -83,7 +81,7 @@ describe("player sessions", () => {
     expect(second.cookieValue).not.toBe(first.cookieValue);
     expect(await resolvePlayerSession("game-slug", first.cookieValue, deps)).toBeNull();
     expect(await resolvePlayerSession("game-slug", second.cookieValue, deps))
-      .toMatchObject({ displayName: "Robin R", roastLevel: "gentle" });
+      .toMatchObject({ displayName: "Robin R" });
   });
 
   it("reclaims by display name plus PIN and keeps distinct players distinct", async () => {
@@ -96,7 +94,6 @@ describe("player sessions", () => {
     const reclaimed = await joinGame("game-slug", {
       displayName: "ana",
       reclaimPin: "9876",
-      roastLevel: "feral",
     }, null, deps);
 
     expect(other.player.id).not.toBe(first.player.id);
@@ -110,7 +107,7 @@ describe("player sessions", () => {
     const { deps } = await setup({ state: "REVEAL" });
     await expect(joinGame("game-slug", { displayName: "Robin" }, null, deps))
       .rejects.toMatchObject({ status: 409 });
-    expect(() => parseJoinGameInput({ displayName: "", roastLevel: "spicy" }))
+    expect(() => parseJoinGameInput({ displayName: "" }))
       .toThrow(PlayerJoinError);
     expect(() => parseJoinGameInput({ displayName: "x", reclaimPin: "12" }))
       .toThrow(PlayerJoinError);

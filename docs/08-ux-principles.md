@@ -12,8 +12,7 @@ hurry, with zero instructions read.
    Sentences only where a mistake is costly (admin-link secrecy,
    photo safety) — and then one short line, icon-led.
 3. **Show, don't explain.** Example hosts are tappable chips, not
-   help text. Roast level is three big cards (😊 🌶 🔥), not radio
-   dots. Deadlines are ⚡ 🌆 🐌 cards.
+   help text. Deadlines are ⚡ 🌆 🐌 cards.
 4. **Big targets.** Anything tappable is ≥44px, primary actions
    ≥48px and full-width where practical (.btn, .choice-card,
    .photo-pick).
