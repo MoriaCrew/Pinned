@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MetaApiError, MetaGateway, findImageRef, parseModelJson, parseSamOutput } from "./meta-gateway";
+import { MetaApiError, MetaGateway, findImageRef, imageFormatFromBase64, parseModelJson, parseSamOutput } from "./meta-gateway";
 
 function fakeFetch(handler: (url: string, init: RequestInit) => unknown) {
   return async (url: string | URL | Request, init?: RequestInit) => {
@@ -102,6 +102,9 @@ describe("MetaGateway (contract, fake fetch)", () => {
   it("extracts image URLs and base64 from nested shapes", () => {
     expect(findImageRef({ data: [{ url: "https://cdn.test/x?sig=1" }] })).toBe("https://cdn.test/x?sig=1");
     expect(findImageRef({ output: [{ b64_json: "AAA" }] })).toBe("data:image/png;base64,AAA");
+    expect(findImageRef({ data: [{ b64_json: "UklGRabc" }] })).toBe("data:image/webp;base64,UklGRabc");
+    expect(imageFormatFromBase64("iVBORw0KGgoAAA", "webp")).toBe("png");
+    expect(imageFormatFromBase64("unknown", "jpg")).toBe("jpeg");
     expect(findImageRef({ nothing: true })).toBeNull();
   });
 

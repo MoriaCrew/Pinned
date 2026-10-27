@@ -85,10 +85,16 @@ touch player photos. Implementation: `src/gateway/meta-gateway.ts`
 SAM output is geometry, not an image: special-token text carrying
 one box + one base85 mask per match (`sam/reading-segmentation`);
 the gateway parses records and the segment step decodes/composites.
-Still unverified until an authenticated smoke runs: SAM payload
-keys (adapter searches defensively, `sam_shape_unknown` otherwise),
-vision content-part acceptance, per-call cost/latency (PIN-15
-measures), and account credit terms (PIN-27 operator check).
+Authenticated validation passed Oct 27, 2026: `/models` listed all
+three pinned IDs, and the production gateway completed persona,
+vision judging, SAM segmentation, and poster generation against a
+synthetic desk photo. One measured gateway chain used persona
+164 in / 1,717 out tokens (6.9s), judge 2,414 in / 1,954 out
+(11.1s), SAM (4.6s), and Muse Image (10.6s); at published list
+prices that chain is about $0.031 before Firestore/Storage. SAM
+returned one box/mask for `red stapler`; mask decoding remains the
+segment step's job. PIN-15 still owns multi-photo cost/latency
+distributions, and account credit terms remain an operator check (PIN-27).
 
 1. **Persona (Spark, text):** brief → constrained JSON. System prompt
    carries the roast policy; brief is treated as data, never instructions
