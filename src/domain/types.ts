@@ -25,6 +25,7 @@ export interface Game {
   brief: string;
   challenge: string;
   persona: HostPersona; // embedded, immutable per game
+  personaPromptVersion?: string; // prompts/persona.v*.md contract used
   adminTokenHash: string; // sha256 hex, never the token itself
   creatorUid?: string;
   deadlineAt: number;
