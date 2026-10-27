@@ -32,6 +32,7 @@ export interface GameRepository {
   ): Promise<TransitionResult>;
   putPlayer(player: Player): Promise<void>;
   getPlayer(gameId: string, playerId: string): Promise<Player | null>;
+  listPlayers(gameId: string): Promise<Player[]>;
   putSubmission(submission: Submission): Promise<void>;
   listSubmissions(gameId: string): Promise<Submission[]>;
   appendAiCallLog(log: AiCallLog): Promise<void>;
@@ -94,6 +95,10 @@ export class InMemoryGameRepository implements GameRepository {
   async getPlayer(gameId: string, playerId: string): Promise<Player | null> {
     const player = this.players.get(`${gameId}/${playerId}`);
     return player ? clone(player) : null;
+  }
+
+  async listPlayers(gameId: string): Promise<Player[]> {
+    return [...this.players.values()].filter((p) => p.gameId === gameId).map(clone);
   }
 
   async putSubmission(submission: Submission): Promise<void> {

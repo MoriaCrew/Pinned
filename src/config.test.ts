@@ -52,6 +52,8 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.aiDailyBudgetUsd).toBe(0.5);
     expect(cfg.aiDailyCallLimit).toBe(25);
     expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1", AI_DAILY_CALL_LIMIT: "no" }).aiDailyCallLimit).toBe(200);
+    expect(parseConfig({}).sessionSecret).toBeNull();
+    expect(parseConfig({ SESSION_SECRET: " x " }).sessionSecret).toBe("x");
   });
 
   it("honours Meta env overrides and trims a trailing slash", () => {
