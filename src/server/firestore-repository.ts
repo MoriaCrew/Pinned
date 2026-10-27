@@ -119,6 +119,11 @@ export class FirestoreGameRepository implements GameRepository {
     return fromSnapshot<Player>(await this.playerRef(gameId, playerId).get());
   }
 
+  async listPlayers(gameId: string): Promise<Player[]> {
+    const snapshot = await this.gameRef(gameId).collection(PLAYERS).get();
+    return snapshot.docs.map((doc) => structuredClone(doc.data() as Player));
+  }
+
   async putSubmission(submission: Submission): Promise<void> {
     await this.gameRef(submission.gameId)
       .collection(SUBMISSIONS)

@@ -9,6 +9,10 @@ env:
     secret: META_API_KEY
     availability:
       - RUNTIME
+  - variable: SESSION_SECRET
+    secret: SESSION_SECRET
+    availability:
+      - RUNTIME
   - variable: AI_DAILY_BUDGET_USD
     value: "2"
   - variable: AI_DAILY_CALL_LIMIT

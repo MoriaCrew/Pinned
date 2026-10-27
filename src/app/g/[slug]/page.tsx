@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { t } from "../../../i18n";
 import { getGameRepository } from "../../../server/repository";
+import { getConfig } from "../../../config";
+import { playerCookieName, publicPlayer, resolvePlayerSession } from "../../../server/player-session";
+import { JoinPanel } from "./JoinPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +29,16 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const game = await getGameRepository().getGame(slug);
+  const repository = getGameRepository();
+  const game = await repository.getGame(slug);
   if (!game) notFound();
+  const cookieStore = await cookies();
+  const currentPlayer = await resolvePlayerSession(
+    slug,
+    cookieStore.get(playerCookieName(slug))?.value ?? null,
+    { repository, sessionSecret: getConfig().sessionSecret },
+  );
+  const canJoin = game.state === "OPEN" && Date.now() < game.deadlineAt;
 
   return (
     <main>
@@ -54,6 +66,12 @@ export default async function GamePage({
         </dl>
         <p className="notice">{t("en", "game.next")}</p>
       </section>
+
+      <JoinPanel
+        slug={slug}
+        initialPlayer={currentPlayer ? publicPlayer(currentPlayer) : null}
+        canJoin={canJoin}
+      />
 
       <section className="card">
         <h2>{t("en", "game.rubricTitle")}</h2>

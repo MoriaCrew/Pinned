@@ -29,6 +29,7 @@ export interface AppConfig {
   firestoreEmulatorHost: string | null;
   aiDailyBudgetUsd: number;
   aiDailyCallLimit: number;
+  sessionSecret: string | null;
   meta: MetaConfig;
 }
 
@@ -58,6 +59,7 @@ export function parseConfig(
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
     aiDailyBudgetUsd: positiveNumber(env.AI_DAILY_BUDGET_USD, 2),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
+    sessionSecret: nonEmpty(env.SESSION_SECRET),
     meta: {
       apiKey: nonEmpty(env.META_API_KEY),
       baseUrl: (nonEmpty(env.META_API_BASE_URL) ?? "https://api.meta.ai/v1").replace(/\/$/, ""),
