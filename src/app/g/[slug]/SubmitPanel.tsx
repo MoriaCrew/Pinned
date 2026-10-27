@@ -128,11 +128,9 @@ export function SubmitPanel({
       ) : null}
 
       <form onSubmit={onSubmit}>
-        <label className="btn photo-pick" htmlFor="photo-file" aria-disabled={busy}>
+        <label className="btn photo-pick" aria-disabled={busy}>
           {t("en", "submit.choose")}
-        </label>
         <input
-          id="photo-file"
           ref={fileRef}
           className="visually-hidden"
           type="file"
@@ -140,6 +138,7 @@ export function SubmitPanel({
           disabled={busy}
           onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
         />
+        </label>
         {notice ? <p className="notice" role="status">{notice}</p> : null}
         {error ? <p className="error" role="alert">{error}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={busy || !file}>

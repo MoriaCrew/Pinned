@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { t } from "../../../i18n";
 import { SubmitPanel } from "./SubmitPanel";
+import { PlayerCard } from "./PlayerCard";
 
 function Steps({ current }: { current: 1 | 2 | 3 }) {
   const steps = [
@@ -50,6 +51,7 @@ export function JoinPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [photoDone, setPhotoDone] = useState(false);
+  const [hintDismissed, setHintDismissed] = useState(false);
 
   if (!canJoin && !player) {
     return (
@@ -93,18 +95,13 @@ export function JoinPanel({
     return (
       <>
         <Steps current={photoDone ? 3 : 2} />
-        <section className="card" aria-live="polite">
-          <h2>{t("en", "join.ready")}</h2>
-          <p className="fact-chips">
-            <span className="fact-chip">👤 {player.displayName}</span>
-            <span className="fact-chip">{player.posterOptIn ? "🖼 ✓" : "🖼 ✗"}</span>
-            {canJoin ? (
-              <button type="button" className="btn btn-small" onClick={() => setEditing(true)}>
-                {t("en", "join.edit")}
-              </button>
-            ) : null}
+        <PlayerCard player={player} photoDone={photoDone} onEdit={canJoin ? () => setEditing(true) : undefined} />
+        {!photoDone && !hintDismissed ? (
+          <p className="hint" role="status">
+            {t("en", "hint.photo")}{" "}
+            <button type="button" className="btn btn-small" onClick={() => setHintDismissed(true)}>{t("en", "hint.dismiss")}</button>
           </p>
-        </section>
+        ) : null}
         <SubmitPanel slug={slug} canSubmit={canJoin} onHasPhoto={setPhotoDone} />
       </>
     );
@@ -116,6 +113,7 @@ export function JoinPanel({
     <form className="card" onSubmit={onSubmit}>
       <h2>{t("en", "join.title")}</h2>
       <div className="field">
+        {!hintDismissed ? <p className="hint" role="status">{t("en", "hint.name")}</p> : null}
         <label htmlFor="join-name">{t("en", "join.name")}</label>
         <input
           id="join-name"
