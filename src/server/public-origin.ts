@@ -48,7 +48,7 @@ export function getPublicOrigin(request: Request, fallbackBaseUrl?: string): str
   if (forwarded) return forwarded;
 
   const direct = originFromHost(
-    fallbackProtocol,
+    forwardedProtocol,
     firstHeaderValue(request.headers.get("host")),
   );
   if (direct) return direct;

@@ -23,6 +23,14 @@ describe("getPublicOrigin", () => {
     expect(getPublicOrigin(req)).toBe("http://first.example.com");
   });
 
+  it("pairs a public Host header with the forwarded protocol", () => {
+    const req = request("http://0.0.0.0:8080/api/games", {
+      "x-forwarded-proto": "https",
+      host: "pinned.example.com",
+    });
+    expect(getPublicOrigin(req, "https://fallback.example.com")).toBe("https://pinned.example.com");
+  });
+
   it("uses a normal Host header locally", () => {
     const req = request("http://localhost:3106/api/games", { host: "localhost:3106" });
     expect(getPublicOrigin(req, "http://localhost:3000")).toBe("http://localhost:3106");
