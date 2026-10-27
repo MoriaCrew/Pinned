@@ -1,4 +1,4 @@
-# Persona generation — v1 (scaffold contract, PIN-6 implements)
+# Persona generation — v1 (implemented by PIN-6)
 
 ## System intent
 
