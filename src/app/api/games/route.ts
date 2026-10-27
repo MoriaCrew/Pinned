@@ -10,6 +10,7 @@ import { getConfig } from "../../../config";
 import { getPublicOrigin } from "../../../server/public-origin";
 import { getGameRepository } from "../../../server/repository";
 import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../server/ai-usage";
+import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,10 @@ function errorResponse(message: string, status: number): NextResponse {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const gate = RATE_LIMITS.createGamePerIp;
+  if (!checkRateLimit(clientKey(request, "create"), gate.limit, gate.windowMs)) {
+    return errorResponse("Too many games from this connection. Try again in a few minutes.", 429);
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -52,7 +57,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     const adminUrl = `${origin}/g/${game.id}/admin#token=${encodeURIComponent(adminToken)}`;
     const deadline = new Intl.DateTimeFormat("en", {
       dateStyle: "medium",
-      timeStyle: "short",
+      // Date only, no clock time: the invite is read in other timezones
+      // and the game page shows each viewer their local deadline.
       timeZone: "UTC",
     }).format(game.deadlineAt);
 

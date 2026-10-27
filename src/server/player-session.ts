@@ -19,6 +19,7 @@ import {
 import type { Game, Player } from "../domain/types";
 
 const SESSION_TAIL_MS = 7 * 24 * 60 * 60 * 1000;
+export const MAX_PLAYERS_PER_GAME = 50;
 
 export class PlayerJoinError extends Error {
   constructor(
@@ -202,6 +203,11 @@ export async function joinGame(
     if (reclaimed) {
       return issueSession({ ...reclaimed, ...updates }, deps, game, now, "reclaimed");
     }
+  }
+
+  const roster = await deps.repository.listPlayers(slug);
+  if (roster.length >= MAX_PLAYERS_PER_GAME) {
+    throw new PlayerJoinError("This game is full.", 409);
   }
 
   const player: Player = {

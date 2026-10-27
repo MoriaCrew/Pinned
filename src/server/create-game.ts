@@ -106,8 +106,12 @@ async function generatePersonaWithRetry(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       return normalizePersonaResult(await gateway.generatePersona(brief));
-    } catch {
-      // One retry, then the documented safe default.
+    } catch (error) {
+      // Never retry timeout/network failures: the first request may
+      // already be billed (PIN-43). Other errors get one retry, then
+      // the documented safe default.
+      const code = (error as { code?: string } | null)?.code;
+      if (code === "timeout" || code === "network") break;
     }
   }
   return { persona: structuredClone(DEFAULT_PERSONA), challenge: DEFAULT_CHALLENGE };

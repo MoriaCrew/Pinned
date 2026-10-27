@@ -7,6 +7,7 @@ import {
   readCookieValue,
 } from "../../../../../server/player-session";
 import { getGameRepository } from "../../../../../server/repository";
+import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../../server/rate-limit";
 import {
   SubmitPhotoError,
   getOwnSubmission,
@@ -49,7 +50,19 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  const { slug } = await context.params;
+  const gate = RATE_LIMITS.submissionsPerIpGame;
+  if (!checkRateLimit(`${clientKey(request, "submit")}:${slug}`, gate.limit, gate.windowMs)) {
+    return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
+  }
+  const lengthHeader = request.headers.get("content-length");
+  const contentLength = Number(lengthHeader ?? NaN);
+  if (!lengthHeader || !Number.isFinite(contentLength) || contentLength <= 0) {
+    return NextResponse.json(
+      { error: "Send the photo with a content length." },
+      { status: 411, headers: JSON_HEADERS },
+    );
+  }
   if (Number.isFinite(contentLength) && contentLength > MAX_PHOTO_BYTES + 1024 * 1024) {
     return NextResponse.json(
       { error: "That photo is too large. Keep it under 10 MB." },
@@ -68,6 +81,12 @@ export async function POST(
       { status: 400, headers: JSON_HEADERS },
     );
   }
+  if (photo && photo.size > MAX_PHOTO_BYTES) {
+    return NextResponse.json(
+      { error: "That photo is too large. Keep it under 10 MB." },
+      { status: 413, headers: JSON_HEADERS },
+    );
+  }
   if (!photo || photo.size === 0) {
     return NextResponse.json(
       { error: "Choose a photo to upload." },
@@ -76,7 +95,6 @@ export async function POST(
   }
 
   try {
-    const { slug } = await context.params;
     const cookie = readCookieValue(request.headers.get("cookie"), playerCookieName(slug));
     const bytes = new Uint8Array(await photo.arrayBuffer());
     const result = await submitPhoto(slug, cookie, bytes, {

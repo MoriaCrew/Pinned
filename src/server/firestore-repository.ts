@@ -14,6 +14,8 @@ import { Firestore, type DocumentData, type DocumentSnapshot } from "@google-clo
 import {
   VersionConflictError,
   type GameRepository,
+  assertSubmissionAllowed,
+  type RecordSubmissionGuard,
 } from "../domain/repository";
 import { transitionGame, type GameState, type TransitionResult } from "../domain/game-state";
 import type { AiCallLog, Game, GameChain, Player, Submission } from "../domain/types";
@@ -124,7 +126,7 @@ export class FirestoreGameRepository implements GameRepository {
     return snapshot.docs.map((doc) => structuredClone(doc.data() as Player));
   }
 
-  async recordSubmission(submission: Submission, supersededAt: number) {
+  async recordSubmission(submission: Submission, supersededAt: number, guard?: RecordSubmissionGuard) {
     const gameRef = this.gameRef(submission.gameId);
     const submissionsRef = gameRef.collection(SUBMISSIONS);
     return this.db.runTransaction(async (transaction) => {
@@ -134,6 +136,7 @@ export class FirestoreGameRepository implements GameRepository {
       const existing = snapshot.docs.map(
         (doc) => structuredClone(doc.data() as Submission),
       );
+      if (guard) assertSubmissionAllowed(game, existing, submission, guard);
       const superseded = existing
         .filter(
           (entry) =>

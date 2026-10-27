@@ -8,7 +8,7 @@
  * segmentation happens here — PIN-8/PIN-9 pick up active entries.
  */
 import { randomUUID } from "node:crypto";
-import type { GameRepository } from "../domain/repository";
+import { SubmissionRejectedError, type GameRepository } from "../domain/repository";
 import type { Player, Submission } from "../domain/types";
 import {
   buildWorkingImageRef,
@@ -143,9 +143,24 @@ export async function submitPhoto(
   // actives + exact entry count, safe under concurrent submits.
   let recorded;
   try {
-    recorded = await deps.repository.recordSubmission(submission, now);
+    recorded = await deps.repository.recordSubmission(submission, now, {
+      now,
+      maxSubmissionsPerPlayer: limits.maxSubmissionsPerPlayer,
+      maxSubmissionsPerGame: limits.maxSubmissionsPerGame,
+      minIntervalMs: limits.minIntervalMs,
+    });
   } catch (error) {
-    await deps.store.delete(workingRef).catch(() => undefined);
+    if (error instanceof SubmissionRejectedError) {
+      await deps.store.delete(workingRef).catch(() => undefined);
+      if (error.code === "game_closed") throw new SubmitPhotoError("Submissions are closed for this game.", 409);
+      if (error.code === "player_cap") throw new SubmitPhotoError("You have replaced your entry too many times. Your current entry stands.", 429);
+      if (error.code === "game_cap") throw new SubmitPhotoError("This game has reached its entry limit.", 429);
+      throw new SubmitPhotoError("Give it a few seconds before submitting again.", 429);
+    }
+    // Ambiguous commit: only clean up if the record truly is absent.
+    const saved = await deps.repository.listSubmissions(slug).then((all) => all.some((s) => s.id === submissionId), () => null);
+    // Delete only on positive proof of absence; unknown state keeps the object.
+    if (saved === false) await deps.store.delete(workingRef).catch(() => undefined);
     throw error;
   }
 

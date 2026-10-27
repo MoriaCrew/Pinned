@@ -10,6 +10,7 @@ import {
   resolvePlayerSession,
 } from "../../../../../server/player-session";
 import { getGameRepository } from "../../../../../server/repository";
+import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../../server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,10 @@ export async function POST(
 
   try {
     const { slug } = await context.params;
+    const gate = RATE_LIMITS.playersPerIpGame;
+    if (!checkRateLimit(`${clientKey(request, "players")}:${slug}`, gate.limit, gate.windowMs)) {
+      return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
+    }
     const existingCookie = readCookieValue(
       request.headers.get("cookie"),
       playerCookieName(slug),
