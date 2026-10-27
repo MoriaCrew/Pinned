@@ -54,6 +54,15 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1", AI_DAILY_CALL_LIMIT: "no" }).aiDailyCallLimit).toBe(200);
     expect(parseConfig({}).sessionSecret).toBeNull();
     expect(parseConfig({ SESSION_SECRET: " x " }).sessionSecret).toBe("x");
+    expect(parseConfig({}).storageBucket).toBeNull();
+    expect(parseConfig({ FIREBASE_PROJECT_ID: "demo" }).storageBucket).toBe(
+      "demo.firebasestorage.app",
+    );
+    expect(
+      parseConfig({ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: " bkt ", FIREBASE_PROJECT_ID: "demo" })
+        .storageBucket,
+    ).toBe("bkt");
+    expect(parseConfig({ STORAGE_BUCKET: "explicit" }).storageBucket).toBe("explicit");
   });
 
   it("honours Meta env overrides and trims a trailing slash", () => {
