@@ -27,7 +27,14 @@ export interface AppConfig {
   dataBackend: DataBackend;
   firebaseProjectId: string | null;
   firestoreEmulatorHost: string | null;
+  aiDailyBudgetUsd: number;
+  aiDailyCallLimit: number;
   meta: MetaConfig;
+}
+
+function positiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function nonEmpty(value: string | undefined): string | null {
@@ -49,6 +56,8 @@ export function parseConfig(
       nonEmpty(env.GOOGLE_CLOUD_PROJECT) ??
       nonEmpty(env.GCLOUD_PROJECT),
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
+    aiDailyBudgetUsd: positiveNumber(env.AI_DAILY_BUDGET_USD, 2),
+    aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
     meta: {
       apiKey: nonEmpty(env.META_API_KEY),
       baseUrl: (nonEmpty(env.META_API_BASE_URL) ?? "https://api.meta.ai/v1").replace(/\/$/, ""),

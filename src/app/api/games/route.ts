@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getModelGateway } from "../../../gateway";
+import { mockGateway } from "../../../gateway/mock-gateway";
 import {
   CreateGameValidationError,
   createGame,
@@ -8,6 +9,7 @@ import {
 import { getConfig } from "../../../config";
 import { getPublicOrigin } from "../../../server/public-origin";
 import { getGameRepository } from "../../../server/repository";
+import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../server/ai-usage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,12 +30,24 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     const input = parseCreateGameInput(body);
+    const repository = getGameRepository();
+    const config = getConfig();
+    let gateway = getModelGateway({
+      onLog: config.aiMock ? undefined : createMetaLogSink(repository),
+    });
+    if (!config.aiMock) {
+      const usage = await getTodayAiUsage(repository);
+      if (isAiBudgetExhausted(usage, config)) {
+        console.warn("AI daily guard reached; using mock persona fallback", usage);
+        gateway = mockGateway;
+      }
+    }
     const { game, adminToken } = await createGame(input, {
-      repository: getGameRepository(),
-      gateway: getModelGateway(),
+      repository,
+      gateway,
     });
 
-    const origin = getPublicOrigin(request, getConfig().appBaseUrl);
+    const origin = getPublicOrigin(request, config.appBaseUrl);
     const playerUrl = `${origin}/g/${game.id}`;
     const adminUrl = `${origin}/g/${game.id}/admin#token=${encodeURIComponent(adminToken)}`;
     const deadline = new Intl.DateTimeFormat("en", {

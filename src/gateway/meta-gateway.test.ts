@@ -24,7 +24,9 @@ function gateway(fetchFn: typeof fetch, logs: unknown[] = []) {
     samModel: "sam-3.1",
     imageModel: "muse-image-1.0",
     fetchFn,
-    onLog: (e) => logs.push(e),
+    onLog: (e) => {
+      logs.push(e);
+    },
   });
 }
 

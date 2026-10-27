@@ -45,6 +45,15 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ DATA_BACKEND: "Firestore" }).dataBackend).toBe("memory");
   });
 
+  it("defaults and overrides AI daily guardrails safely", () => {
+    expect(parseConfig({}).aiDailyBudgetUsd).toBe(2);
+    expect(parseConfig({}).aiDailyCallLimit).toBe(200);
+    const cfg = parseConfig({ AI_DAILY_BUDGET_USD: "0.5", AI_DAILY_CALL_LIMIT: "25.9" });
+    expect(cfg.aiDailyBudgetUsd).toBe(0.5);
+    expect(cfg.aiDailyCallLimit).toBe(25);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1", AI_DAILY_CALL_LIMIT: "no" }).aiDailyCallLimit).toBe(200);
+  });
+
   it("honours Meta env overrides and trims a trailing slash", () => {
     const cfg = parseConfig({
       META_API_KEY: " k ",
