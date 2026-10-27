@@ -214,7 +214,9 @@ export async function runSamLab(
               id: 1,
               prompts: [
                 {
-                  ...(input.box
+                  // Mode-scoped: leftover geometry from another tab
+                  // must never leak into this run's prompt.
+                  ...(input.mode === "box" && input.box
                     ? {
                         box: {
                           left: Math.round(input.box.x1 * width),
@@ -224,7 +226,7 @@ export async function runSamLab(
                         },
                       }
                     : {}),
-                  ...(input.points?.length
+                  ...(input.mode === "points" && input.points?.length
                     ? {
                         points: input.points.map((p) => ({
                           x: Math.round(p.x * width),

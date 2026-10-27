@@ -75,6 +75,27 @@ describe("runSamLab", () => {
     expect(result.segments[0].box).toEqual({ x1: 211, y1: 228, x2: 270, y2: 254 });
   });
 
+  it("prompt geometry is scoped to the selected mode", async () => {
+    const seen: (string | undefined)[] = [];
+    const gateway: ModelGateway = {
+      ...mockGateway,
+      async segmentObject(input) {
+        seen.push(input.promptText);
+        return { segments: [] };
+      },
+    };
+    const stray = {
+      points: [{ x: 0.5, y: 0.5, label: "positive" as const }],
+      box: { x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9 },
+    };
+    await runSamLab(await makePhoto(), { mode: "points", ...stray }, { gateway, mock: false });
+    await runSamLab(await makePhoto(), { mode: "box", ...stray }, { gateway, mock: false });
+    expect(seen[0]).toContain("<|point;");
+    expect(seen[0]).not.toContain("<|box;");
+    expect(seen[1]).toContain("<|box;");
+    expect(seen[1]).not.toContain("<|point;");
+  });
+
   it("auto-label uses the judge objectLabel as the concept", async () => {
     let concept = "";
     const gateway: ModelGateway = {

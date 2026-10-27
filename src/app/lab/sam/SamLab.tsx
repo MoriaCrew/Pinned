@@ -88,13 +88,14 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
       const label = event.shiftKey || event.altKey ? "negative" : "positive";
       setPoints((prev) => [...prev.slice(-19), { ...at, label }]);
     } else if (mode === "box") {
+      stageRef.current?.setPointerCapture(event.pointerId);
       setDragStart(at);
       setBox({ x1: at.x, y1: at.y, x2: at.x, y2: at.y });
     }
   }
 
   function onStagePointerMove(event: ReactPointerEvent) {
-    if (mode !== "box" || !dragStart) return;
+    if (mode !== "box" || !dragStart || (event.buttons & 1) === 0) return;
     const at = fractions(event);
     if (!at) return;
     setBox({
@@ -118,8 +119,8 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
       form.set("autoLabel", autoLabel ? "1" : "0");
       form.set("maskEncoding", oneBit ? "one_bit" : "lossless");
       form.set("includeConfidence", confidence ? "1" : "0");
-      if (points.length) form.set("points", JSON.stringify(points));
-      if (box) form.set("box", JSON.stringify(box));
+      if (mode === "points" && points.length) form.set("points", JSON.stringify(points));
+      if (mode === "box" && box) form.set("box", JSON.stringify(box));
       const response = await fetch("/api/lab/sam", { method: "POST", body: form });
       const data = (await response.json()) as LabResult & { error?: string };
       if (!response.ok) throw new Error(data.error || "Run failed.");
@@ -213,6 +214,7 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
           onPointerDown={onStagePointerDown}
           onPointerMove={onStagePointerMove}
           onPointerUp={() => setDragStart(null)}
+          onPointerCancel={() => setDragStart(null)}
         >
           {stageImage ? (
             // eslint-disable-next-line @next/next/no-img-element
