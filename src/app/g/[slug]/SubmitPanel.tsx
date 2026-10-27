@@ -45,6 +45,7 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const file = fileRef.current?.files?.[0];
     setError("");
     setNotice("");
@@ -111,6 +112,7 @@ export function SubmitPanel({ slug, canSubmit }: { slug: string; canSubmit: bool
             ref={fileRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            disabled={busy}
             required
           />
         </div>

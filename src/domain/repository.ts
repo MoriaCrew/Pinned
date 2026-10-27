@@ -18,6 +18,12 @@ export class VersionConflictError extends Error {
   }
 }
 
+export interface RecordSubmissionResult {
+  /** Previous active entries of this player, now superseded. */
+  superseded: Submission[];
+  entryCount: number;
+}
+
 export interface GameRepository {
   createChain(chain: GameChain): Promise<void>;
   getChain(chainId: string): Promise<GameChain | null>;
@@ -34,10 +40,17 @@ export interface GameRepository {
   getPlayer(gameId: string, playerId: string): Promise<Player | null>;
   listPlayers(gameId: string): Promise<Player[]>;
   /**
-   * Refresh the derived active-entry count (PIN-35). Display data
-   * only: deliberately does not bump the state-transition version.
+   * Atomically record a player's new active entry (PIN-35): store
+   * the submission, supersede every other active entry of that
+   * player, and refresh Game.entryCount from the post-write set —
+   * one unit, so concurrent submits can neither leave two actives
+   * nor lose entries from the count. Does not bump the game's
+   * state-transition version.
    */
-  setEntryCount(slug: string, entryCount: number): Promise<void>;
+  recordSubmission(
+    submission: Submission,
+    supersededAt: number,
+  ): Promise<RecordSubmissionResult>;
   putSubmission(submission: Submission): Promise<void>;
   listSubmissions(gameId: string): Promise<Submission[]>;
   appendAiCallLog(log: AiCallLog): Promise<void>;
@@ -106,10 +119,42 @@ export class InMemoryGameRepository implements GameRepository {
     return [...this.players.values()].filter((p) => p.gameId === gameId).map(clone);
   }
 
-  async setEntryCount(slug: string, entryCount: number): Promise<void> {
-    const game = this.games.get(slug);
-    if (!game) throw new RangeError(`Game ${slug} not found`);
-    this.games.set(slug, { ...clone(game), entryCount });
+  // No awaits between reads and writes: the body runs to completion
+  // synchronously, which is what makes this atomic in-process.
+  async recordSubmission(
+    submission: Submission,
+    supersededAt: number,
+  ): Promise<RecordSubmissionResult> {
+    const game = this.games.get(submission.gameId);
+    if (!game) throw new RangeError(`Game ${submission.gameId} not found`);
+    const superseded: Submission[] = [];
+    for (const existing of this.submissions.values()) {
+      if (
+        existing.gameId === submission.gameId &&
+        existing.playerId === submission.playerId &&
+        existing.id !== submission.id &&
+        existing.status === "active"
+      ) {
+        const replaced: Submission = {
+          ...clone(existing),
+          status: "superseded",
+          supersededAt,
+          version: existing.version + 1,
+        };
+        this.submissions.set(`${replaced.gameId}/${replaced.id}`, replaced);
+        superseded.push(clone(replaced));
+      }
+    }
+    this.submissions.set(`${submission.gameId}/${submission.id}`, clone(submission));
+    const activePlayers = new Set<string>();
+    for (const entry of this.submissions.values()) {
+      if (entry.gameId === submission.gameId && entry.status === "active") {
+        activePlayers.add(entry.playerId);
+      }
+    }
+    const entryCount = activePlayers.size;
+    this.games.set(submission.gameId, { ...clone(game), entryCount });
+    return { superseded, entryCount };
   }
 
   async putSubmission(submission: Submission): Promise<void> {

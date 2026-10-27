@@ -144,6 +144,46 @@ describe("submitPhoto (PIN-35)", () => {
     });
   });
 
+  it("concurrent same-player submits leave exactly one active entry", async () => {
+    const { repository, store, deps, cookie } = await setup();
+    const results = await Promise.all([
+      submitPhoto(SLUG, cookie, await makeJpeg(11), deps),
+      submitPhoto(SLUG, cookie, await makeJpeg(22), deps),
+      submitPhoto(SLUG, cookie, await makeJpeg(33), deps),
+    ]);
+    const all = await repository.listSubmissions(SLUG);
+    const actives = all.filter((s) => s.status === "active");
+    expect(actives).toHaveLength(1);
+    expect(results.map((r) => r.outcome).sort()).toEqual(["created", "replaced", "replaced"]);
+    expect((await repository.getGame(SLUG))?.entryCount).toBe(1);
+    // Only the surviving derivative remains in storage.
+    const remaining = (
+      await Promise.all(all.map(async (s) => (await store.get(s.workingRef as string)) !== null))
+    ).filter(Boolean);
+    expect(remaining).toHaveLength(1);
+    expect(await store.get(actives[0].workingRef as string)).not.toBeNull();
+  });
+
+  it("concurrent first submits from different players are all counted", async () => {
+    const { repository, deps, cookie } = await setup();
+    const cookies: string[] = [cookie];
+    for (const name of ["Bo", "Cy"]) {
+      const joined = await joinGame(
+        SLUG,
+        { displayName: name, roastLevel: "gentle", posterOptIn: true },
+        null,
+        { repository, sessionSecret: SECRET, now: () => NOW },
+      );
+      cookies.push(joined.cookieValue);
+    }
+    await Promise.all(
+      cookies.map(async (c, index) => submitPhoto(SLUG, c, await makeJpeg(index + 1), deps)),
+    );
+    const all = await repository.listSubmissions(SLUG);
+    expect(all.filter((s) => s.status === "active")).toHaveLength(3);
+    expect((await repository.getGame(SLUG))?.entryCount).toBe(3);
+  });
+
   it("two players produce two active entries", async () => {
     const { repository, deps, cookie } = await setup();
     const second = await joinGame(

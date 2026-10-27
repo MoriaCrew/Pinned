@@ -139,44 +139,29 @@ export async function submitPhoto(
     version: 1,
   };
 
+  // One atomic repository unit: new active + supersede previous
+  // actives + exact entry count, safe under concurrent submits.
+  let recorded;
   try {
-    await deps.repository.putSubmission(submission);
+    recorded = await deps.repository.recordSubmission(submission, now);
   } catch (error) {
     await deps.store.delete(workingRef).catch(() => undefined);
     throw error;
   }
 
-  const superseded = mine.filter((s) => s.status === "active");
+  const superseded = recorded.superseded;
   for (const old of superseded) {
+    if (!old.workingRef) continue;
     try {
-      await deps.repository.putSubmission({
-        ...old,
-        status: "superseded",
-        supersededAt: now,
-        version: old.version + 1,
-      });
-      if (old.workingRef) await deps.store.delete(old.workingRef);
+      await deps.store.delete(old.workingRef);
     } catch (error) {
-      // The new entry is already active and findActiveSubmission picks
-      // the latest; leftover assets expire via the tmp/ lifecycle.
-      console.warn("supersede previous entry failed", {
+      // Record is already superseded; the tmp/ lifecycle is the backstop.
+      console.warn("superseded derivative delete failed", {
         gameId: slug,
         submissionId: old.id,
         error,
       });
     }
-  }
-
-  try {
-    const all = await deps.repository.listSubmissions(slug);
-    const entryCount = new Set(
-      all.filter((s) => s.status === "active").map((s) => s.playerId),
-    ).size;
-    if (entryCount !== game.entryCount) {
-      await deps.repository.setEntryCount(slug, entryCount);
-    }
-  } catch (error) {
-    console.warn("entry count refresh failed", { gameId: slug, error });
   }
 
   return {
