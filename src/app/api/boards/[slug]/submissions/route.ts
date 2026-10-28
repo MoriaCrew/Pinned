@@ -15,7 +15,6 @@ import {
   submitPhoto,
 } from "../../../../../server/submit-photo";
 import { getModelGateway } from "../../../../../gateway";
-import { mockGateway } from "../../../../../gateway/mock-gateway";
 import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../../../server/ai-usage";
 import { labelSubmission } from "../../../../../server/label-submission";
 import { segmentSubmission } from "../../../../../server/segment-submission";
@@ -59,6 +58,11 @@ export async function POST(
   const gate = RATE_LIMITS.submissionsPerIpGame;
   if (!checkRateLimit(`${clientKey(request, "submit")}:${slug}`, gate.limit, gate.windowMs)) {
     return NextResponse.json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429, headers: JSON_HEADERS });
+  }
+  // Global per-IP upload brake across boards (PIN-61).
+  const uploadGate = RATE_LIMITS.uploadsPerIp;
+  if (!checkRateLimit(clientKey(request, "upload"), uploadGate.limit, uploadGate.windowMs)) {
+    return NextResponse.json({ error: "Too many uploads. Try again later." }, { status: 429, headers: JSON_HEADERS });
   }
   const lengthHeader = request.headers.get("content-length");
   const contentLength = Number(lengthHeader ?? NaN);
@@ -112,8 +116,13 @@ export async function POST(
     try {
       const config = getConfig();
       const repository = getGameRepository();
-      let gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
-      if (!config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config)) gateway = mockGateway;
+      // PIN-61: over budget (or budget 0 = off) skips AI entirely —
+      // the entry stands unlabelled and retryable. Never silently
+      // swap in the mock gateway and present fake results as real.
+      const budgetOff =
+        !config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config);
+      if (budgetOff) throw new Error("AI budget exhausted; labelling skipped");
+      const gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
       const labelled = await labelSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
       labelledSubmission = labelled.submission;
       // Cut out inline too (PIN-46); failure keeps the whole photo.

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../../config";
 import { getModelGateway } from "../../../../gateway";
-import { mockGateway } from "../../../../gateway/mock-gateway";
 import {
   createMetaLogSink,
   getTodayAiUsage,
@@ -76,10 +75,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     const cfg = getConfig();
     const repository = getGameRepository();
-    let gateway = getModelGateway({
+    // getModelGateway already selects the mock under AI_MOCK=1
+    // (explicit config, reported via `mock`); over budget the lab
+    // pauses with a 429 instead of swapping silently (PIN-61).
+    const gateway = getModelGateway({
       onLog: cfg.aiMock ? undefined : createMetaLogSink(repository),
     });
-    let mock = cfg.aiMock;
+    const mock = cfg.aiMock;
     if (!cfg.aiMock) {
       const usage = await getTodayAiUsage(repository);
       if (isAiBudgetExhausted(usage, cfg)) {
@@ -88,9 +90,6 @@ export async function POST(request: Request): Promise<NextResponse> {
           { status: 429, headers: JSON_HEADERS },
         );
       }
-    } else {
-      gateway = mockGateway;
-      mock = true;
     }
     const bytes = new Uint8Array(await photo.arrayBuffer());
     const result = await runSamLab(bytes, input, { gateway, mock });

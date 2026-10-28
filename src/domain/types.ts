@@ -83,7 +83,8 @@ export interface AiCallLog {
   images?: number;
   latencyMs: number;
   costEstimateUsd?: number;
-  outcome: "ok" | "error";
+  /** "refused" added by PIN-61: a provider refusal is a normal outcome. */
+  outcome: "ok" | "error" | "refused";
   dayBucket: string; // YYYY-MM-DD, powers the daily kill-switch
   createdAt: number;
 }

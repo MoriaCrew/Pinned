@@ -35,6 +35,8 @@ export const PolicySchema = z
       })
       .default({ spark: 30_000, sam: 20_000, scene: 120_000 }),
     retries: z.number().int().min(0).default(1),
+    /** Backoff before the single 429/5xx retry (PIN-61). */
+    retryBackoffMs: z.number().int().min(0).default(500),
     samConcurrency: z.number().int().min(1).default(4),
     maxTokens: z
       .object({
@@ -114,6 +116,7 @@ export const PolicyOverridesSchema = z.object({
     })
     .optional(),
   retries: z.number().int().min(0).optional(),
+  retryBackoffMs: z.number().int().min(0).optional(),
   samConcurrency: z.number().int().min(1).optional(),
   maxTokens: z
     .object({ sparkElements: z.number().int().positive().optional() })

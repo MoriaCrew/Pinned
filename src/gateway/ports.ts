@@ -14,7 +14,13 @@ import type { SamSegment } from "./model-gateway";
 /** Normal outcome of every port call. Refusal is data, never a 500. */
 export type PortOutcome<T> =
   | { status: "ready"; value: T }
-  | { status: "failed" | "refused"; errorCode?: string; message?: string };
+  | {
+      status: "failed" | "refused";
+      errorCode?: string;
+      message?: string;
+      /** Provider HTTP status when known; drives 429/5xx retry (PIN-61). */
+      httpStatus?: number;
+    };
 
 export interface NamedElement {
   label: string;
@@ -40,6 +46,9 @@ export interface NameElementsInput {
   promptVersion: string;
   /** Recorded-fixture adapter only: fixtures.json photo id. */
   fixturePhotoId?: string;
+  /** Budget attribution for the PIN-61 decorator caps (optional). */
+  boardId?: string;
+  participantId?: string;
 }
 
 export interface ElementNamer {
@@ -69,6 +78,9 @@ export interface SegmentInput {
   timeoutMs: number;
   maskEncoding?: "lossless" | "one_bit";
   includeConfidence?: boolean;
+  /** Budget attribution for the PIN-61 decorator caps (optional). */
+  boardId?: string;
+  participantId?: string;
 }
 
 export interface Segmenter {
@@ -89,6 +101,9 @@ export interface ComposeSceneInput {
   store: boolean;
   timeoutMs: number;
   promptVersion: string;
+  /** Budget attribution for the PIN-61 decorator caps (optional). */
+  boardId?: string;
+  participantId?: string;
 }
 
 export interface SceneComposer {
@@ -255,20 +270,57 @@ export function buildSegmentPromptText(
 }
 
 /**
- * Basic refusal classifier; PIN-61 wires the full mapping in the
- * decorator chain. Duck-typed on the gateway error shape so this
+ * Refusal classifier (PIN-61): provider refusal/content-policy
+ * codes map to the typed `refused` outcome; everything else is
+ * `failed`. The HTTP status passes through so the decorator chain
+ * can retry 429/5xx. Duck-typed on the gateway error shape so this
  * module stays free of provider imports.
  */
 export function classifyPortError(cause: unknown): {
   status: "failed" | "refused";
   errorCode?: string;
   message?: string;
+  httpStatus?: number;
 } {
   const err = (cause ?? {}) as { code?: unknown; status?: unknown; message?: unknown };
   const code = typeof err.code === "string" ? err.code : undefined;
   const message = typeof err.message === "string" ? err.message : undefined;
+  const httpStatus = typeof err.status === "number" ? err.status : undefined;
   const refused =
     /refus|content_policy|moderation|safety/i.test(code ?? "") ||
     /refus|content policy|moderation/i.test(message ?? "");
-  return { status: refused ? "refused" : "failed", errorCode: code, message };
+  return {
+    status: refused ? "refused" : "failed",
+    errorCode: code,
+    message,
+    ...(httpStatus !== undefined ? { httpStatus } : {}),
+  };
+}
+
+/**
+ * Scene refusal mapping (PIN-61, docs/11 section 3): a compose call
+ * that returns HTTP 200 with no populated image_generation_call
+ * item is a provider refusal, not an error. The PIN-54 SceneComposer
+ * Meta adapter feeds `response.output` through this.
+ */
+export function sceneImageOutcome(
+  output: unknown,
+): PortOutcome<{ imageBase64: string }> {
+  const items = Array.isArray(output) ? output : [];
+  for (const item of items) {
+    if (typeof item !== "object" || item === null) continue;
+    const it = item as { type?: unknown; result?: unknown };
+    if (
+      it.type === "image_generation_call" &&
+      typeof it.result === "string" &&
+      it.result.length > 0
+    ) {
+      return { status: "ready", value: { imageBase64: it.result } };
+    }
+  }
+  return {
+    status: "refused",
+    errorCode: "no_image",
+    message: "The image model returned no image for this prompt.",
+  };
 }
