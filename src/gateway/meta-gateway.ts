@@ -15,6 +15,7 @@ import type {
   ObjectLabel,
   SamSegment,
 } from "./model-gateway";
+import { elementsSystemPrompt, normalizeElements, type NameElementsInput, type NamedElement } from "./ports";
 
 export interface MetaGatewayOptions {
   apiKey: string;
@@ -100,9 +101,9 @@ export class MetaGateway implements ModelGateway {
     }
   }
 
-  private async request(operation: string, model: string, path: string, body: Json): Promise<Json> {
+  private async request(operation: string, model: string, path: string, body: Json, timeoutOverrideMs?: number): Promise<Json> {
     const started = Date.now();
-    const timeoutMs = this.options.timeoutMs ?? 25_000;
+    const timeoutMs = timeoutOverrideMs ?? this.options.timeoutMs ?? 25_000;
     let response: Response;
     try {
       response = await this.fetchFn(`${this.options.baseUrl}${path}`, {
@@ -155,7 +156,7 @@ export class MetaGateway implements ModelGateway {
     return json;
   }
 
-  private async chatJson(operation: string, system: string, user: unknown, maxTokens = 1200): Promise<Json> {
+  private async chatJson(operation: string, system: string, user: unknown, maxTokens = 1200, timeoutMs?: number): Promise<Json> {
     const json = await this.request(operation, this.options.sparkModel, "/chat/completions", {
       model: this.options.sparkModel,
       max_tokens: maxTokens,
@@ -163,7 +164,7 @@ export class MetaGateway implements ModelGateway {
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-    });
+    }, timeoutMs);
     const choices = Array.isArray(json.choices) ? json.choices : [];
     const first = isRecord(choices[0]) ? choices[0] : {};
     const message = isRecord(first.message) ? first.message : {};
@@ -188,6 +189,25 @@ export class MetaGateway implements ModelGateway {
   }
 
   /**
+   * Spark elements naming (prompts/elements.v1.md, PIN-60): one
+   * vision call naming every pin-worthy element. Limits and the
+   * token budget arrive from Policy via the port input.
+   */
+  async nameElements(input: NameElementsInput): Promise<NamedElement[]> {
+    const out = await this.chatJson(
+      "nameElements",
+      elementsSystemPrompt(input),
+      [
+        { type: "text", text: "Name the pin-worthy elements in this photo." },
+        { type: "image_url", image_url: { url: input.imageRef } },
+      ],
+      input.maxTokens,
+      input.timeoutMs,
+    );
+    return normalizeElements(out.elements, input);
+  }
+
+  /**
    * SAM 3.1 is Responses-only. It returns box+mask geometry as
    * special-token output_text, NOT an image (Meta docs:
    * sam/segmenting, sam/reading-segmentation). One concept per
@@ -200,6 +220,7 @@ export class MetaGateway implements ModelGateway {
     promptText?: string;
     maskEncoding?: "lossless" | "one_bit";
     includeConfidence?: boolean;
+    timeoutMs?: number;
   }): Promise<{ segments: SamSegment[] }> {
     const metadata: Record<string, string> = {};
     if (input.maskEncoding) metadata.mask_encoding = input.maskEncoding;
@@ -216,7 +237,7 @@ export class MetaGateway implements ModelGateway {
           ],
         },
       ],
-    });
+    }, input.timeoutMs);
     const text = findSamText(json);
     if (text === null) {
       throw new MetaApiError(
