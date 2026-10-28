@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Firestore GameRepository (PIN-29). Server-only: client Firestore
  * access remains deny-all in firestore.rules.

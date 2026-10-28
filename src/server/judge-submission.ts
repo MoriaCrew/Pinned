@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Judging service (PIN-44 / PIN-9A).
  *

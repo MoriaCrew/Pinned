@@ -5,6 +5,7 @@ import {
   hashToken,
   signPlayerCookie,
   verifyPlayerCookie,
+  isValidSlug,
   verifyToken,
 } from "./tokens";
 
@@ -44,6 +45,16 @@ describe("tokens", () => {
     const cookie = signPlayerCookie({ gameId: "g1", playerId: "p1", issuedAt: 0 }, "secret");
     expect(verifyPlayerCookie(cookie, "secret", { now: 50, maxAgeMs: 100 })).not.toBeNull();
     expect(verifyPlayerCookie(cookie, "secret", { now: 200, maxAgeMs: 100 })).toBeNull();
+  });
+
+  it("validates canonical slugs and rejects paths (PIN-59)", () => {
+    expect(isValidSlug(generateSlug())).toBe(true);
+    expect(isValidSlug("a".repeat(22))).toBe(true);
+    expect(isValidSlug("a".repeat(21))).toBe(false);
+    expect(isValidSlug("a".repeat(23))).toBe(false);
+    expect(isValidSlug("abc/def" + "x".repeat(15))).toBe(false);
+    expect(isValidSlug("..%2F..%2Fetcxxxxxxxxx")).toBe(false);
+    expect(isValidSlug("")).toBe(false);
   });
 
   it("refuses to sign with an empty secret", () => {

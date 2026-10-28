@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Cut-out confirmation actions (PIN-47 / PIN-8C).
  * accept: no-op confirm. whole: drop the cut-out (record + object).

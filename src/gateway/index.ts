@@ -1,3 +1,4 @@
+import "server-only";
 import { getConfig } from "../config";
 import { MetaGateway, type MetaGatewayOptions } from "./meta-gateway";
 import { mockGateway } from "./mock-gateway";

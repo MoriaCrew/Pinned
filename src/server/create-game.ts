@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Create-game use case (PIN-6, FR1). Keeps API/UI code thin and
  * makes the persona policy, retry and persistence flow unit-testable.

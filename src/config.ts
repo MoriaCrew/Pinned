@@ -29,6 +29,8 @@ export interface AppConfig {
   firestoreEmulatorHost: string | null;
   aiDailyBudgetUsd: number;
   aiDailyCallLimit: number;
+  /** Raw POLICY_OVERRIDES_JSON; parsed/validated by src/policy (PIN-59). */
+  policyOverridesJson: string | null;
   sessionSecret: string | null;
   storageBucket: string | null;
   labEnabled: boolean;
@@ -38,6 +40,26 @@ export interface AppConfig {
 function positiveNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Budget: explicit 0 means OFF (PIN-59); junk/negative fall back. */
+function budgetNumber(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** Unknown DATA_BACKEND fails closed in production (PIN-59). */
+function parseDataBackend(
+  env: Readonly<Record<string, string | undefined>>,
+): DataBackend {
+  const raw = env.DATA_BACKEND;
+  if (raw === undefined || raw === "" || raw === "memory") return "memory";
+  if (raw === "firestore") return "firestore";
+  if (env.NODE_ENV === "production") {
+    throw new Error("Unknown DATA_BACKEND in production: " + raw);
+  }
+  return "memory";
 }
 
 function nonEmpty(value: string | undefined): string | null {
@@ -53,13 +75,14 @@ export function parseConfig(
     authMode: env.AUTH_MODE === "optional" ? "optional" : "link-only",
     aiMock: env.AI_MOCK !== "0",
     appBaseUrl: env.APP_BASE_URL ?? "http://localhost:3000",
-    dataBackend: env.DATA_BACKEND === "firestore" ? "firestore" : "memory",
+    dataBackend: parseDataBackend(env),
     firebaseProjectId:
       nonEmpty(env.FIREBASE_PROJECT_ID) ??
       nonEmpty(env.GOOGLE_CLOUD_PROJECT) ??
       nonEmpty(env.GCLOUD_PROJECT),
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
-    aiDailyBudgetUsd: positiveNumber(env.AI_DAILY_BUDGET_USD, 2),
+    aiDailyBudgetUsd: budgetNumber(env.AI_DAILY_BUDGET_USD, 2),
+    policyOverridesJson: nonEmpty(env.POLICY_OVERRIDES_JSON),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
     labEnabled: env.PINNED_LAB === "1",
     sessionSecret: nonEmpty(env.SESSION_SECRET),

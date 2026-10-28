@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Photo intake (PIN-34 / PIN-7B).
  *

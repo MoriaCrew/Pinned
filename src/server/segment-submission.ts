@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Segmentation service (PIN-46 / PIN-8B).
  *

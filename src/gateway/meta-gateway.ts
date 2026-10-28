@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Live Meta Model API gateway (PIN-3). Transport facts from the
  * official docs as researched Oct 26, 2026 (docs/02 §3 pin table):

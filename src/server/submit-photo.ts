@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Photo submission use case (PIN-35 / PIN-7C).
  *
