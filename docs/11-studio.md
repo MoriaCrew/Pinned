@@ -367,17 +367,22 @@ become a fixed list → the Discord board.
   the morning review. Only PIN-49 edits this file; the Findings
   table below stays empty in this PR.
 
-### Findings (filled after PIN-50; A1)
+### Findings (PIN-50, Oct 28; detail in eval/studio-findings.md)
 
 | # | Test | Result | Decision taken |
 | --- | --- | --- | --- |
-| T1 | Fidelity | | |
-| T2 | Input mode | | |
-| T2b | Label binding | | |
-| T3 | Naming | | |
-| T4 | Speed | | |
-| T5 | Cost | | |
-| T6 | Refusals | | |
+| T1 | Fidelity | **PASS** - mean 4.86/5 over 14 elements in 5 flattened scenes (bar >= 3.5); every element >= 3 in 5/5 scenes (bar 4/5). Spark judge is a proxy; contact sheets in eval/contact-sheets/. | Compose from cut-outs is viable; slice 2 proceeds. |
+| T2 | Input mode | Flattened 5.00 > transparent 4.89 = whole+pointer 4.89 (same 3 compositions). | sceneInputMode = flattened. |
+| T2b | Label binding | Rotated labels still scored 5/4/5 vs 5/5/5 - the image dominates its label. | Keep Element N labels for attribution; do not rely on them for binding. |
+| T3 | Naming | **PASS** - >= 2 usable pins on 13/14 photos (bar 80%); 43 named, 40 usable; faceFlag exactly on the 2 synthetic-people photos. | elements.v1 + SAM per concept ships as slice 1 pipeline. |
+| T4 | Speed | **PASS on mean** - photo->pins mean 10.6 s, max 17.2 s (bar <= 15 s; slowest photo breached a per-photo reading); scene mean 14.4 s, max 27.2 s (bar <= 30 s). | Timeouts: Spark 30 s, SAM 20 s, scene 120 s. Show pins incrementally. |
+| T5 | Cost | **PASS (estimates)** - 0.020 USD/photo (bar <= 0.05), 0.022 USD/scene (bar <= 0.10); spike total est. 0.879 USD of 25 USD cap, 14/60 Higgsfield images, 116 logged calls. SAM bills 1 image per concept call (usage.images_processed=1). Muse Image USD use Spark rates as labelled proxy; dashboard authoritative. | Policy caps as proposed; verify USD on dashboard before PIN-55. |
+| T6 | Refusals | **PASS** - 0/10 harmless prompts refused (3 with synthetic people). | faces: note holds; refusal stays friendly outcome. |
+
+Transport facts locked: portrait 1024x1536 accepted (returns
+1280x1920) -> sceneSize = 1024x1536; store: false accepted on
+every compose call -> stateless remix; Spark element calls need
+max_tokens 4000 (1500 starved reasoning).
 
 ## 9. Open questions (grilled Oct 28; defaults hold until overridden)
 
@@ -395,7 +400,7 @@ owning issue in brackets decides or verifies.
    ($0.0025), or per matched instance? A photo with 6 elements is
    6 concept calls either way, but multi-instance matches could
    multiply.
-   **Default:** budget as one billable image per concept call;
+   **RESOLVED (PIN-50):** one billable image per concept call (wire usage.images_processed=1). **Default:** budget as one billable image per concept call;
    PIN-50 confirms from `AiCallLog`/account usage before PIN-53 sets
    `elementsPerPhoto.max`. [PIN-50]
 3. **Portrait size:** which portrait `size` values does the image
