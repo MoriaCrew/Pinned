@@ -10,6 +10,7 @@ interface OwnSubmission {
   hasPhoto: boolean;
   judged?: boolean;
   privateJudgement?: string | null;
+  hasCutout?: boolean;
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -32,6 +33,31 @@ export function SubmitPanel({
   const [notice, setNotice] = useState("");
   const [previewBust, setPreviewBust] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const [cutBusy, setCutBusy] = useState(false);
+  const [cutNotice, setCutNotice] = useState("");
+
+  async function cutoutAction(payload: Record<string, unknown>) {
+    if (cutBusy) return;
+    setCutBusy(true);
+    setCutNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions/cutout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json()) as { submission?: OwnSubmission; outcome?: string; error?: string };
+      if (!response.ok || !data.submission) throw new Error(data.error || t("en", "submit.error"));
+      setSubmission(data.submission);
+      setPreviewBust((value) => value + 1);
+      setCutNotice(data.outcome === "whole" ? t("en", "cutout.wholeDone") : t("en", "cutout.done"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("en", "submit.error"));
+    } finally {
+      setCutBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -133,10 +159,38 @@ export function SubmitPanel({
         <figure className="entry-preview">
           {/* Owner-only derivative preview; plain img keeps the cookie flow simple. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewSrc} alt={t("en", "submit.current")} />
+          <img
+            src={previewSrc}
+            alt={t("en", "submit.current")}
+            onClick={(event) => {
+              if (!submission?.hasPhoto || localPreview) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = (event.clientX - rect.left) / rect.width;
+              const y = (event.clientY - rect.top) / rect.height;
+              void cutoutAction({ action: "point", point: { x, y } });
+            }}
+          />
         </figure>
       ) : loaded ? (
         <p>{t("en", "submit.none")}</p>
+      ) : null}
+
+      {loaded && submission?.hasPhoto ? (
+        <div className="cutout-box">
+          <p className="eyebrow">{t("en", "cutout.title")}</p>
+          {submission.hasCutout ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="cutout-preview" src={`/api/games/${encodeURIComponent(slug)}/submissions/image?kind=cutout&v=${previewBust}`} alt={t("en", "cutout.title")} />
+              <div className="actions">
+                <button type="button" className="btn btn-primary" disabled={cutBusy} onClick={() => void cutoutAction({ action: "accept" })}>{cutBusy ? t("en", "cutout.working") : t("en", "cutout.accept")}</button>
+                <button type="button" className="btn" disabled={cutBusy} onClick={() => void cutoutAction({ action: "whole" })}>{t("en", "cutout.whole")}</button>
+              </div>
+              <p className="notice">{t("en", "cutout.tap")}</p>
+            </>
+          ) : <p className="notice">{t("en", "cutout.none")}</p>}
+          {cutNotice ? <p className="notice" role="status">{cutNotice}</p> : null}
+        </div>
       ) : null}
 
       <form onSubmit={onSubmit}>

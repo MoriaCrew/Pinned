@@ -107,5 +107,13 @@
   "game.teasersEmpty": "No entries yet. Be the first whisper.",
   "admin.nudge": "Nudge your players",
   "admin.nudgeCopy": "Copy nudge",
-  "admin.nudgeText": "Reminder: our Pinned game is waiting for your photo."
+  "admin.nudgeText": "Reminder: our Pinned game is waiting for your photo.",
+  "cutout.title": "Your cut-out",
+  "cutout.accept": "Looks good",
+  "cutout.whole": "Use whole photo",
+  "cutout.tap": "Wrong object? Tap the right one in your photo above.",
+  "cutout.working": "Cutting…",
+  "cutout.done": "Cut-out saved.",
+  "cutout.wholeDone": "Whole photo it is.",
+  "cutout.none": "Cut-out not available — your whole photo counts."
 }
