@@ -31,13 +31,15 @@ export class JudgeSubmissionError extends Error {
   }
 }
 
+function fold(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 function teaserLeaks(teaser: string, objectLabel: string, displayName: string): boolean {
-  const haystack = teaser.toLowerCase();
-  const needles = [displayName, objectLabel]
-    .join(" ")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 3);
+  const haystack = fold(teaser);
+  const phrases = [displayName, objectLabel].map(fold).filter((value) => value.length >= 3);
+  if (phrases.some((phrase) => haystack.includes(phrase))) return true;
+  const needles = phrases.join(" ").split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 3);
   return needles.some((word) => haystack.includes(word));
 }
 
@@ -71,6 +73,10 @@ export async function judgeSubmission(
   // Claim the attempt first: a failed call still counts, so a
   // retry storm cannot bill repeatedly.
   const claimed: Submission = { ...submission, judgeCount: submission.judgeCount + 1 };
+  const freshClaim = (await deps.repository.listSubmissions(slug)).find((entry) => entry.id === submissionId);
+  if (!freshClaim || freshClaim.status !== "active" || freshClaim.judgeCount !== submission.judgeCount || freshClaim.scores) {
+    throw new JudgeSubmissionError("This entry changed while it was being judged.", 409);
+  }
   await deps.repository.putSubmission(claimed);
 
   const bytes = await deps.store.get(submission.workingRef);
@@ -100,6 +106,14 @@ export async function judgeSubmission(
     teaser,
     safetyFlags: judged.safetyFlags ?? {},
   };
-  await deps.repository.putSubmission(updated);
-  return { submission: updated, outcome: "judged" };
+  // Re-read before the final write: a replace during the gateway
+  // call supersedes this entry, and a stale full-document write
+  // must never revive it (or overwrite a newer judgement).
+  const fresh = (await deps.repository.listSubmissions(slug)).find((entry) => entry.id === submissionId);
+  if (!fresh || fresh.status !== "active" || fresh.judgeCount !== claimed.judgeCount) {
+    throw new JudgeSubmissionError("This entry changed while it was being judged.", 409);
+  }
+  const finalSubmission: Submission = { ...updated, status: fresh.status, supersededAt: fresh.supersededAt };
+  await deps.repository.putSubmission(finalSubmission);
+  return { submission: finalSubmission, outcome: "judged" };
 }

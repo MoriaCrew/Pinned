@@ -105,6 +105,23 @@ describe("judgeSubmission (PIN-44)", () => {
     expect(out.submission.teaser).toBe(GENERIC_TEASER);
   });
 
+  it("aborts when the entry was superseded during the gateway call", async () => {
+    const { repository, deps } = await setup();
+    const inner = deps.gateway.judgePhoto.bind(deps.gateway);
+    deps.gateway = {
+      ...deps.gateway,
+      judgePhoto: async (input) => {
+        const current = (await repository.listSubmissions(SLUG))[0];
+        await repository.putSubmission({ ...current, status: "superseded", supersededAt: NOW });
+        return inner(input);
+      },
+    };
+    await expect(judgeSubmission(SLUG, "sub-1", deps)).rejects.toMatchObject({ status: 409 });
+    const stored = (await repository.listSubmissions(SLUG))[0];
+    expect(stored.status).toBe("superseded");
+    expect(stored.scores).toBeNull();
+  });
+
   it("claims the attempt before calling, so failures still count toward the cap", async () => {
     const { repository, deps, counter } = await setup();
     deps.gateway = { ...deps.gateway, judgePhoto: async () => { counter.calls += 1; throw new Error("down"); } };
