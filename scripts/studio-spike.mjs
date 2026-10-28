@@ -45,7 +45,13 @@ const META_KEY = process.env.META_API_KEY || "";
 const SPARK = process.env.META_MODEL_SPARK || "muse-spark-1.3";
 const SAM = process.env.META_MODEL_SAM || "sam-3.1";
 const IMAGE = process.env.META_MODEL_IMAGE || "muse-image-1.0";
-const HIGGS_KEY = process.env.HIGGSFIELD_API_KEY || process.env.HIGGSFIELD_API_KEI || "";
+// Higgsfield auth is `Key <id>:<secret>`: accept the repo pair
+// (HF_API_KEY_ID/HF_API_KEY_SECRET, as in bake-presets.mjs) or a
+// single combined value (HIGGSFIELD_API_KEY / legacy KEI spelling).
+const HIGGS_KEY =
+  (process.env.HF_API_KEY_ID && process.env.HF_API_KEY_SECRET
+    ? `${process.env.HF_API_KEY_ID}:${process.env.HF_API_KEY_SECRET}`
+    : "") || process.env.HIGGSFIELD_API_KEY || process.env.HIGGSFIELD_API_KEI || "";
 const LIVE = process.env.STUDIO_SPIKE_LIVE === "1" && process.env.AI_MOCK !== "1";
 
 // Policy constants for the spike (docs/11 s5.1 proposed defaults).
@@ -334,7 +340,11 @@ async function phaseDecompose() {
       return rec;
     });
     state.elements.push(...results);
-    photo.decomposed = true;
+    // Only mark decomposed when naming actually produced elements;
+    // a zero-name result (unparseable Spark reply) stays pending so
+    // the next decompose run retries it instead of skipping forever.
+    photo.decomposed = named.length > 0;
+    if (!photo.decomposed) console.log(`WARNING ${photo.id}: 0 elements named; left pending for the next run`);
     photo.decomposeMs = Date.now() - t0;
     photo.namedCount = named.length;
     photo.usableCount = results.filter((r) => r.usable).length;
