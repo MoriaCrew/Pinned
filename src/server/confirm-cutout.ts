@@ -78,8 +78,12 @@ export async function confirmCutout(
   }
 
   if (action.action === "whole") {
-    if (own.cutoutRef) await deps.store.delete(own.cutoutRef).catch(() => undefined);
-    const updated: Submission = { ...own, cutoutRef: undefined };
+    const fresh = (await deps.repository.listSubmissions(slug)).find((entry) => entry.id === own.id);
+    if (!fresh || fresh.status !== "active") {
+      throw new CutoutConfirmError("This entry changed just now. Refresh and try again.", 409);
+    }
+    if (fresh.cutoutRef) await deps.store.delete(fresh.cutoutRef).catch(() => undefined);
+    const updated: Submission = { ...fresh, cutoutRef: undefined };
     await deps.repository.putSubmission(updated);
     return { submission: updated, outcome: "whole" };
   }

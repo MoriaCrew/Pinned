@@ -51,7 +51,7 @@ export function SubmitPanel({
       if (!response.ok || !data.submission) throw new Error(data.error || t("en", "submit.error"));
       setSubmission(data.submission);
       setPreviewBust((value) => value + 1);
-      setCutNotice(data.outcome === "whole" ? t("en", "cutout.wholeDone") : t("en", "cutout.done"));
+      setCutNotice(data.outcome === "whole" ? t("en", "cutout.wholeDone") : data.outcome === "fallback" ? t("en", "cutout.none") : t("en", "cutout.done"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("en", "submit.error"));
     } finally {
