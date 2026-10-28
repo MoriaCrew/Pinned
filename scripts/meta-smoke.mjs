@@ -8,8 +8,8 @@
  *
  * Without a key it verifies endpoint reachability only (expects the
  * OpenAI-style 401 invalid_api_key envelope) and exits 2.
- * With a key it runs, in order: GET /models, persona chat, Muse
- * Image generation, Spark vision judging on the generated (or given)
+ * With a key it runs, in order: GET /models, Spark chat, Muse
+ * Image generation, Spark vision labelling on the generated (or given)
  * image, then SAM 3.1 segmentation via /responses. It prints shapes,
  * latencies and usage — never the key, never full image payloads.
  */
@@ -148,20 +148,20 @@ async function main() {
   }
 
   try {
-    const { res, json, ms } = await call("persona", "/chat/completions", {
+    const { res, json, ms } = await call("spark-chat", "/chat/completions", {
       method: "POST",
       body: JSON.stringify({
         model: SPARK,
         messages: [
-          { role: "system", content: "Return ONLY JSON {persona:{name,language,voiceRules,catchphrases,judgingStyle},challenge} for a photo game host. Roast photos, never people." },
-          { role: "user", content: JSON.stringify({ brief: "a passive-aggressive IT helpdesk" }) },
+          { role: "system", content: "Return ONLY JSON {ok:true}." },
+          { role: "user", content: "ping" },
         ],
       }),
     });
     const content = json?.choices?.[0]?.message?.content || "";
-    record("Spark persona chat", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} content[0:120]=${content.slice(0, 120)}`);
+    record("Spark chat", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} content[0:120]=${content.slice(0, 120)}`);
   } catch (e) {
-    record("Spark persona chat", false, String(e));
+    record("Spark chat", false, String(e));
   }
 
   try {
@@ -180,12 +180,12 @@ async function main() {
     record("Spark vision + SAM", false, "no image URL available (pass --image-url)");
   } else {
     try {
-      const { res, json, ms } = await call("judge", "/chat/completions", {
+      const { res, json, ms } = await call("label", "/chat/completions", {
         method: "POST",
         body: JSON.stringify({
           model: SPARK,
           messages: [
-            { role: "system", content: "Return ONLY JSON {objectLabel,scores:{fit,effort,chaos},teaser} for this photo vs the challenge. Scores must be integers from 0 to 5." },
+            { role: "system", content: "Return ONLY JSON {objectLabel,altLabel,safetyFlags} naming the main object in this photo." },
             {
               role: "user",
               content: [
@@ -203,9 +203,9 @@ async function main() {
       } catch {
         /* keep default concept */
       }
-      record("Spark vision judge", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} concept=${concept} content[0:120]=${content.slice(0, 120)}`);
+      record("Spark vision label", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} concept=${concept} content[0:120]=${content.slice(0, 120)}`);
     } catch (e) {
-      record("Spark vision judge", false, String(e));
+      record("Spark vision label", false, String(e));
     }
 
     try {

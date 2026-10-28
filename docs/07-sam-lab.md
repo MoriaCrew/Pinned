@@ -34,7 +34,7 @@ ellipse mask so the UI and compositing stay exercisable offline.
    PIN-34 intake, so what you see is the working derivative SAM
    would get in-game.
 2. ✏️ Name it: type a noun phrase, or ✨ Auto-name to run the
-   Spark judge first (the PIN-9 → PIN-8 hand-off).
+   Spark label first (the PIN-9 → PIN-8 hand-off).
 3. 👆 Tap it: tap = on the object, Shift+tap = not the object.
 4. ⬚ Box it: drag a box.
 5. Read the result: segment chips by colour, % of photo covered,
@@ -52,4 +52,4 @@ when to offer tap-reselect, and fallback thresholds.
 | 2026-10-27 | Muse Image desk scene, 1600×1067 derivative | `red stapler` | 1 segment, conf 0.98, 7.7% of frame, 69.7% of box | 3,070 | Overlay pixel-accurate; cut-out alpha verified (69.7% opaque). |
 | 2026-10-27 | same | tap at stapler centre | IoU 0.993 vs concept box | — | Tap-reselect is viable for PIN-8 confirm UI. |
 | 2026-10-27 | same | `purple elephant` | 0 segments, HTTP 200 | — | Absent concept = empty, game must fall back gracefully. |
-| 2026-10-27 | same | ✨ auto-name | judge said `red stapler` → 1 segment | — | Spark label → SAM hand-off works as designed. |
+| 2026-10-27 | same | ✨ auto-name | label said `red stapler` → 1 segment | — | Spark label → SAM hand-off works as designed. |
