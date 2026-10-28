@@ -11,6 +11,7 @@
  * illustrated characters only, never photoreal people.
  */
 import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 
