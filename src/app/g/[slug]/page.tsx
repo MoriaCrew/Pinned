@@ -42,6 +42,12 @@ export default async function GamePage({
     { repository, sessionSecret: getConfig().sessionSecret },
   );
   const canJoin = game.state === "OPEN" && Date.now() < game.deadlineAt;
+  const submissions = await repository.listSubmissions(slug);
+  const teasers = submissions
+    .filter((entry) => entry.status === "active" && entry.teaser)
+    .sort((a, b) => b.submittedAt - a.submittedAt)
+    .slice(0, 5)
+    .map((entry) => entry.teaser);
 
   return (
     <div className="theme-bg" style={themeVars(game.theme)}>
@@ -63,6 +69,15 @@ export default async function GamePage({
           </span>
           <span className="fact-chip">{game.entryCount} {t("en", "game.entries")}</span>
         </p>
+      </section>
+
+      <section className="card" aria-label={t("en", "game.teasers")}>
+        <h2>{t("en", "game.teasers")}</h2>
+        {teasers.length > 0 ? (
+          <ul className="teaser-feed">
+            {teasers.map((teaser, index) => <li key={index}>{teaser}</li>)}
+          </ul>
+        ) : <p>{t("en", "game.teasersEmpty")}</p>}
       </section>
 
       <JoinPanel

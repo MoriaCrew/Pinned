@@ -99,5 +99,13 @@
   "notFound.title": "That game is not here.",
   "notFound.body": "The link may be mistyped, or the game never existed. Check the link, or start a fresh game below.",
   "notFound.start": "Start a game",
-  "notFound.home": "Home"
+  "notFound.home": "Home",
+  "submit.hostSays": "Your host says",
+  "submit.judging": "The host is judging…",
+  "submit.judgedWait": "Judged. Scores stay secret until the reveal.",
+  "game.teasers": "Latest whispers",
+  "game.teasersEmpty": "No entries yet. Be the first whisper.",
+  "admin.nudge": "Nudge your players",
+  "admin.nudgeCopy": "Copy nudge",
+  "admin.nudgeText": "Reminder: our Pinned game is waiting for your photo."
 }

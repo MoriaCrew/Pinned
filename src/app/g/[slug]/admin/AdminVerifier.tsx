@@ -48,6 +48,7 @@ function forgetAdminToken(slug: string): void {
 
 export function AdminVerifier({ slug }: { slug: string }) {
   const [game, setGame] = useState<AdminGame | null>(null);
+  const [copied, setCopied] = useState(false);
   const [failure, setFailure] = useState<"invalid" | "unavailable" | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -112,6 +113,22 @@ export function AdminVerifier({ slug }: { slug: string }) {
         </div>
       </dl>
       <p className="notice">{t("en", "admin.ready")}</p>
+      <h3>{t("en", "admin.nudge")}</h3>
+      <button
+        type="button"
+        className="btn"
+        onClick={async () => {
+          const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(game.deadlineAt);
+          const link = `${window.location.origin}/g/${slug}`;
+          try {
+            await navigator.clipboard.writeText(`${t("en", "admin.nudgeText")} ${game.challenge} Ends ${when}: ${link}`);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          } catch { /* clipboard unavailable; the open-game link below still works */ }
+        }}
+      >
+        {copied ? t("en", "create.copied") : t("en", "admin.nudgeCopy")}
+      </button>
       <a className="btn btn-primary" href={`/g/${slug}`}>{t("en", "admin.openPlayer")}</a>
     </section>
   );
