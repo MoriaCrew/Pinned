@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pinned — one link, one game, hosted by an AI",
+  title: "Pinneds — one link, one game, hosted by an AI",
   description:
     "Describe a host in one line, drop the link in your group chat, and play an async photo game. Nothing to install.",
 };

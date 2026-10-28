@@ -153,7 +153,7 @@ export function CreateGameForm() {
         </div>
         <CopyField label={t("en", "create.playerLink")} value={result.playerUrl} rows={2} />
         <CopyField label={t("en", "create.adminLink")} value={result.adminUrl} rows={3} />
-        <CopyField label={t("en", "create.invite")} value={`Pinned: ${game.persona.name} is hosting a photo game. Challenge: ${game.challenge} Join before ${formatDeadline(game.deadlineAt)}: ${result.playerUrl}`} rows={4} />
+        <CopyField label={t("en", "create.invite")} value={`Pinneds: ${game.persona.name} is hosting a photo game. Challenge: ${game.challenge} Join before ${formatDeadline(game.deadlineAt)}: ${result.playerUrl}`} rows={4} />
         <div className="actions">
           <a className="btn btn-primary" href={result.playerUrl}>{t("en", "create.openPlayer")}</a>
           <button type="button" className="btn" onClick={() => setResult(null)}>

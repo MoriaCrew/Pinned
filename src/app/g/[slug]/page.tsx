@@ -12,7 +12,7 @@ import { LocalDeadline } from "./LocalDeadline";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Pinned game",
+  title: "Pinneds game",
   robots: { index: false, follow: false },
 };
 
@@ -52,7 +52,7 @@ export default async function GamePage({
   return (
     <div className="theme-bg" style={themeVars(game.theme)}>
     <main>
-      <p className="eyebrow"><a href="/">📌 Pinned</a></p>
+      <p className="eyebrow"><a href="/">📌 Pinneds</a></p>
 
       <section className="card">
         <p className="eyebrow">{t("en", "game.challenge")}</p>
