@@ -79,7 +79,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         adminUrl,
         adminToken,
         inviteText:
-          `Pinned: ${game.persona.name} is hosting a photo game. ` +
+          `Pinneds: ${game.persona.name} is hosting a photo game. ` +
           `Challenge: ${game.challenge} Join before ${deadline} UTC: ${playerUrl}`,
       },
       { status: 201, headers: JSON_HEADERS },

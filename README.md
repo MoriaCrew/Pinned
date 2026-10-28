@@ -1,7 +1,7 @@
-# Pinned — one link, one game, hosted by an AI
+# Pinneds - one link, one game, hosted by an AI
 
 > Group chats already run on random photos, memes, and roasting each other.
-> Pinned turns that into a game anyone can start in seconds: create a link,
+> Pinneds turns that into a game anyone can start in seconds: create a link,
 > drop it in the chat, play. Nothing to install. When the game ends, the
 > link becomes a read-only scoreboard. Want another round? Rematch — new
 > link, same host, longer memory.
