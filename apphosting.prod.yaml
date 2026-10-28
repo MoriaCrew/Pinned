@@ -1,14 +1,26 @@
 # App Hosting environment overrides: PROD backend (PIN-28).
 # Merged over apphosting.yaml when the prod backend builds `main`.
-# AI_MOCK stays on until the PIN-3 Meta secret exists in Secret
-# Manager and is referenced here by name (never by value).
+# Live Meta AI on prod approved Oct 28 for the Oct 31-Nov 1
+# weekend promotion. This file only takes effect when `main`
+# is promoted; merging it to `dev` changes nothing live.
+# Secrets are referenced by name (never by value) and already
+# exist in the prod project's Secret Manager with accessor
+# grants for the App Hosting compute service account.
 env:
   - variable: AI_MOCK
-    value: "1"
+    value: "0"
+  - variable: META_API_KEY
+    secret: META_API_KEY
+    availability:
+      - RUNTIME
   - variable: SESSION_SECRET
     secret: SESSION_SECRET
     availability:
       - RUNTIME
+  - variable: AI_DAILY_BUDGET_USD
+    value: "2"
+  - variable: AI_DAILY_CALL_LIMIT
+    value: "200"
   - variable: APP_BASE_URL
     value: https://pinned-web--moriacrew-pinned-prod.europe-west4.hosted.app
   - variable: DATA_BACKEND
