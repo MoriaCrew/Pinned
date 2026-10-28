@@ -14,6 +14,10 @@ import {
   publicOwnSubmission,
   submitPhoto,
 } from "../../../../../server/submit-photo";
+import { getModelGateway } from "../../../../../gateway";
+import { mockGateway } from "../../../../../gateway/mock-gateway";
+import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../../../server/ai-usage";
+import { judgeSubmission } from "../../../../../server/judge-submission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,9 +105,22 @@ export async function POST(
       ...sessionDeps(),
       store: getDerivativeStore(),
     });
+    // Judge inline, best-effort (PIN-44): the entry stands even
+    // when judging fails; it stays retryable within the attempt cap.
+    let judgedSubmission = result.submission;
+    try {
+      const config = getConfig();
+      const repository = getGameRepository();
+      let gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
+      if (!config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config)) gateway = mockGateway;
+      const judged = await judgeSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
+      judgedSubmission = judged.submission;
+    } catch (judgeError) {
+      console.warn("judging failed; entry kept", { slug, error: String(judgeError) });
+    }
     return NextResponse.json(
       {
-        submission: publicOwnSubmission(result.submission),
+        submission: publicOwnSubmission(judgedSubmission),
         outcome: result.outcome,
         width: result.width,
         height: result.height,

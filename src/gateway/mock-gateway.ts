@@ -60,13 +60,13 @@ export const mockGateway: ModelGateway = {
   async generatePersona(brief) {
     return mockPersona(brief);
   },
-  async judgePhoto() {
+  async judgePhoto({ persona }) {
     return {
       objectLabel: "desk object",
       altLabel: "A cut-out of the submitted object",
       scores: { fit: 3, effort: 3, chaos: 3 },
       reason: "Mock judgement (AI_MOCK=1).",
-      privateJudgement: "Mock host: a bold choice. Scores at reveal.",
+      privateJudgement: `${persona.name} (mock): a bold choice. Scores at reveal.`, 
       teaser: "Someone has entered the arena…",
       safetyFlags: {},
     };

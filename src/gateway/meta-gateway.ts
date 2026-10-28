@@ -207,9 +207,9 @@ export class MetaGateway implements ModelGateway {
     return { persona, challenge: str(out.challenge, "Find the most suspicious object on your desk.") };
   }
 
-  async judgePhoto(input: { imageRef: string; challenge: string }): Promise<Judgement> {
+  async judgePhoto(input: { imageRef: string; challenge: string; persona: Pick<HostPersona, "name" | "voiceRules" | "catchphrases" | "judgingStyle"> }): Promise<Judgement> {
     const out = await this.chatJson("judgePhoto", JUDGE_SYSTEM, [
-      { type: "text", text: JSON.stringify({ challenge: input.challenge }) },
+      { type: "text", text: JSON.stringify({ challenge: input.challenge, host: input.persona }) },
       { type: "image_url", image_url: { url: input.imageRef } },
     ]);
     const s = isRecord(out.scores) ? out.scores : {};

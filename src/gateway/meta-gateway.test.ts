@@ -107,7 +107,7 @@ describe("MetaGateway (contract, fake fetch)", () => {
         safetyFlags: { screens: true },
       }),
     ) as typeof fetch);
-    const out = await gw.judgePhoto({ imageRef: "https://x.test/a.jpg", challenge: "c" });
+    const out = await gw.judgePhoto({ imageRef: "https://x.test/a.jpg", challenge: "c", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." } });
     expect(out.scores).toEqual({ fit: 4, effort: 3, chaos: 5 });
     expect(out.safetyFlags.screens).toBe(true);
     expect(out.safetyFlags.faces).toBe(false);
@@ -115,7 +115,7 @@ describe("MetaGateway (contract, fake fetch)", () => {
 
   it("rejects out-of-range model scores", async () => {
     const gw = gateway(fakeFetch(() => chat({ scores: { fit: 9, effort: 0, chaos: 0 } })) as typeof fetch);
-    await expect(gw.judgePhoto({ imageRef: "https://x/a.jpg", challenge: "c" })).rejects.toThrow(RangeError);
+    await expect(gw.judgePhoto({ imageRef: "https://x/a.jpg", challenge: "c", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." } })).rejects.toThrow(RangeError);
   });
 
   it("surfaces API errors with status and code, never the key", async () => {

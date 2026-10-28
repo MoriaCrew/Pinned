@@ -248,7 +248,7 @@ export async function runSamLab(
     } else if (input.autoLabel) {
       const judged = await deps.gateway.judgePhoto({
         imageRef: imageDataUrl,
-        challenge: "Name the main object in this photo.",
+        challenge: "Name the main object in this photo.", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." },
       });
       judge = { objectLabel: judged.objectLabel, altLabel: judged.altLabel };
       promptUsed = judged.objectLabel || promptUsed;
