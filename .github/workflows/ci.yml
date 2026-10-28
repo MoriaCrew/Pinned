@@ -20,8 +20,8 @@ jobs:
         run: |
           test -f README.md
           test -f AGENTS.md
-          test -f docs/01-requirements.md
-          test -f docs/02-architecture.md
+          test -f docs/11-studio.md
+          test -f docs/adr/003-studio-architecture.md
           test -f .env.example
           echo "Docs sanity OK"
 
