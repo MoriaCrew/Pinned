@@ -27,7 +27,7 @@ export function validateScores(scores: RubricScores): RubricScores {
  */
 export function normalizeScores(raw: RubricScores): RubricScores {
   const values = [raw.fit, raw.effort, raw.chaos];
-  const scale = values.every((v) => Number.isFinite(v) && v >= 0 && v <= 1) ? 5 : 1;
+  const scale = values.every((v) => Number.isFinite(v) && v >= 0 && v <= 1) && values.some((v) => !Number.isInteger(v)) ? 5 : 1;
   const fix = (v: number) => Math.min(5, Math.max(0, Math.round((Number.isFinite(v) ? v : 0) * scale)));
   return validateScores({ fit: fix(raw.fit), effort: fix(raw.effort), chaos: fix(raw.chaos) });
 }

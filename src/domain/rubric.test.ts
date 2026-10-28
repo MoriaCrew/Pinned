@@ -21,7 +21,7 @@ describe("rubric", () => {
 
   it("normalizes model score scales onto 0-5 integers", () => {
     expect(normalizeScores({ fit: 0.95, effort: 0.2, chaos: 0.85 })).toEqual({ fit: 5, effort: 1, chaos: 4 });
-    expect(normalizeScores({ fit: 9, effort: 2, chaos: 4 })).toEqual({ fit: 5, effort: 2, chaos: 4 });
+    expect(normalizeScores({ fit: 1, effort: 0, chaos: 1 })).toEqual({ fit: 1, effort: 0, chaos: 1 }); expect(normalizeScores({ fit: 9, effort: 2, chaos: 4 })).toEqual({ fit: 5, effort: 2, chaos: 4 });
     expect(normalizeScores({ fit: 3, effort: 3, chaos: 3 })).toEqual({ fit: 3, effort: 3, chaos: 3 });
   });
 
