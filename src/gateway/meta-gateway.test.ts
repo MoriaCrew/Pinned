@@ -113,9 +113,9 @@ describe("MetaGateway (contract, fake fetch)", () => {
     expect(out.safetyFlags.faces).toBe(false);
   });
 
-  it("rejects out-of-range model scores", async () => {
+  it("normalizes out-of-range model scores onto the rubric", async () => {
     const gw = gateway(fakeFetch(() => chat({ scores: { fit: 9, effort: 0, chaos: 0 } })) as typeof fetch);
-    await expect(gw.judgePhoto({ imageRef: "https://x/a.jpg", challenge: "c", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." } })).rejects.toThrow(RangeError);
+    const out2 = await gw.judgePhoto({ imageRef: "https://x/a.jpg", challenge: "c", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." } }); expect(out2.scores).toEqual({ fit: 5, effort: 0, chaos: 0 });
   });
 
   it("surfaces API errors with status and code, never the key", async () => {

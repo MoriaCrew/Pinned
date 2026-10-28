@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickWinner, rankSubmissions, totalScore, validateScores } from "./rubric";
+import { normalizeScores, pickWinner, rankSubmissions, totalScore, validateScores } from "./rubric";
 
 const sub = (
   id: string,
@@ -17,6 +17,12 @@ describe("rubric", () => {
     expect(() => validateScores({ fit: 6, effort: 0, chaos: 0 })).toThrow(RangeError);
     expect(() => validateScores({ fit: 2.5, effort: 0, chaos: 0 })).toThrow(RangeError);
     expect(() => validateScores({ fit: -1, effort: 0, chaos: 0 })).toThrow(RangeError);
+  });
+
+  it("normalizes model score scales onto 0-5 integers", () => {
+    expect(normalizeScores({ fit: 0.95, effort: 0.2, chaos: 0.85 })).toEqual({ fit: 5, effort: 1, chaos: 4 });
+    expect(normalizeScores({ fit: 9, effort: 2, chaos: 4 })).toEqual({ fit: 5, effort: 2, chaos: 4 });
+    expect(normalizeScores({ fit: 3, effort: 3, chaos: 3 })).toEqual({ fit: 3, effort: 3, chaos: 3 });
   });
 
   it("picks the highest total", () => {
