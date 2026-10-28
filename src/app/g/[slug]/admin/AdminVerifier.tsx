@@ -116,7 +116,7 @@ export function AdminVerifier({ slug }: { slug: string }) {
       <h3>{t("en", "admin.nudge")}</h3>
       <button
         type="button"
-        className="btn"
+        className="btn btn-primary"
         onClick={async () => {
           const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(game.deadlineAt);
           const link = `${window.location.origin}/g/${slug}`;
