@@ -2,7 +2,7 @@ import "server-only";
 /**
  * SAM lab service (PIN-36). Dev-only exploration tool: run one
  * segmentation over an uploaded photo and get back everything a
- * human needs to judge it — overlay, cut-outs, masks, stats, and
+ * human needs to assess it — overlay, cut-outs, masks, stats, and
  * the exact prompt used. Reuses the real intake + gateway so lab
  * findings transfer directly to PIN-8. With AI_MOCK=1 it returns a
  * clearly-labelled synthetic ellipse mask so the UI works offline.
@@ -10,6 +10,7 @@ import "server-only";
 import { buildObjectPrompt, ObjectPromptError } from "@meta-sam/parser";
 import sharp from "sharp";
 import type { ModelGateway } from "../gateway/model-gateway";
+import { getPolicy } from "../policy/server";
 import { processPhoto } from "./photo-intake";
 import {
   decodeSegment,
@@ -69,7 +70,7 @@ export interface SamLabResult {
   mock: boolean;
   image: { width: number; height: number; dataUrl: string };
   promptUsed: string;
-  judge: { objectLabel: string; altLabel: string } | null;
+  label: { objectLabel: string; altLabel: string } | null;
   timingsMs: { intake: number; segment: number; total: number };
   segments: SamLabSegmentView[];
   overlayJpeg: string; // data URL
@@ -197,7 +198,7 @@ export async function runSamLab(
   const imageDataUrl = `data:image/webp;base64,${processed.derivative.toString("base64")}`;
 
   let promptUsed = input.concept ?? "";
-  let judge: SamLabResult["judge"] = null;
+  let label: SamLabResult["label"] = null;
   let decoded: DecodedSegment[] = [];
 
   const segmentStarted = Date.now();
@@ -247,12 +248,12 @@ export async function runSamLab(
       }
       promptUsed = promptText;
     } else if (input.autoLabel) {
-      const judged = await deps.gateway.judgePhoto({
+      const named = await deps.gateway.nameObject({
         imageRef: imageDataUrl,
-        challenge: "Name the main object in this photo.", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." },
+        maxConceptWords: getPolicy().conceptMaxWords,
       });
-      judge = { objectLabel: judged.objectLabel, altLabel: judged.altLabel };
-      promptUsed = judged.objectLabel || promptUsed;
+      label = { objectLabel: named.objectLabel, altLabel: named.altLabel };
+      promptUsed = named.objectLabel || promptUsed;
       if (!promptUsed) throw new SamLabError("Auto-name found no object label.", 502);
     }
 
@@ -302,7 +303,7 @@ export async function runSamLab(
     mock: deps.mock,
     image: { width, height, dataUrl: imageDataUrl },
     promptUsed,
-    judge,
+    label,
     timingsMs: { intake: intakeMs, segment: segmentMs, total: Date.now() - started },
     segments,
     overlayJpeg,

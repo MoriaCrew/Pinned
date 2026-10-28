@@ -2,7 +2,7 @@ import "server-only";
 /**
  * Segmentation service (PIN-46 / PIN-8B).
  *
- * Turns a judged submission's objectLabel into a transparent
+ * Turns a labelled submission's objectLabel into a transparent
  * cut-out via SAM 3.1 (gateway), decoded and composited with the
  * PIN-36 lab utilities. Claim-before-call on segmentCount (cap 2:
  * initial + one tap-reselect) so duplicates never double-bill.
@@ -61,7 +61,7 @@ export async function segmentSubmission(
   }
   if (submission.cutoutRef && !options.point) return { submission, outcome: "already" };
   if (!submission.objectLabel) {
-    throw new SegmentSubmissionError("Judge this entry before cutting it out.", 409);
+    throw new SegmentSubmissionError("Name this entry's object before cutting it out.", 409);
   }
   if (submission.segmentCount >= MAX_SEGMENT_ATTEMPTS) {
     throw new SegmentSubmissionError("No cut-out attempts left for this entry.", 429);

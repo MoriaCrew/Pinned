@@ -18,8 +18,8 @@ const DOCS_SEGMENT: SamSegment = {
 
 function makeGame(): Game {
   return {
-    id: SLUG, chainId: "chain-1", state: "OPEN", brief: "b", challenge: "Find it.",
-    persona: { name: "Host", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "Dry." },
+    id: SLUG, chainId: "chain-1", state: "OPEN", challenge: "Find it.",
+    
     adminTokenHash: "h", deadlineAt: NOW + 3_600_000, entryCount: 1, createdAt: NOW, version: 0,
   };
 }
@@ -28,9 +28,9 @@ function makeSubmission(overrides: Partial<Submission> = {}): Submission {
   return {
     id: "sub-1", gameId: SLUG, playerId: "player-1",
     workingRef: "tmp/games/game-slug/players/player-1/submissions/sub-1/working.webp",
-    objectLabel: "rubber duck", altLabel: "toy", scores: { fit: 3, effort: 3, chaos: 3 },
-    reason: "r", privateJudgement: "j", teaser: "t", safetyFlags: {}, status: "active",
-    judgeCount: 1, segmentCount: 0, submittedAt: NOW, version: 1, ...overrides,
+    objectLabel: "rubber duck", altLabel: "toy", 
+    safetyFlags: {}, status: "active",
+    labelCount: 1, segmentCount: 0, submittedAt: NOW, version: 1, ...overrides,
   };
 }
 
@@ -44,10 +44,7 @@ async function setup(segments: SamSegment[], counter = { calls: 0 }) {
   const image = await sharp({ create: { width: 320, height: 334, channels: 3, background: "#884422" } }).webp().toBuffer();
   await store.put(submission.workingRef as string, image, "image/webp");
   const gateway: ModelGateway = {
-    generatePersona: async () => { throw new Error("unused"); },
-    judgePhoto: async () => { throw new Error("unused"); },
-    posterBackground: async () => { throw new Error("unused"); },
-    writeDiary: async () => { throw new Error("unused"); },
+    nameObject: async () => { throw new Error("unused"); },
     segmentObject: async () => { counter.calls += 1; return { segments }; },
   };
   return { repository, store, deps: { repository, store, gateway }, counter };
@@ -77,7 +74,7 @@ describe("segmentSubmission (PIN-46)", () => {
     expect(out.submission.segmentCount).toBe(1);
   });
 
-  it("requires a judged label first", async () => {
+  it("requires a label first", async () => {
     const { repository, deps } = await setup([DOCS_SEGMENT]);
     const current = (await repository.listSubmissions(SLUG))[0];
     await repository.putSubmission({ ...current, objectLabel: "" });

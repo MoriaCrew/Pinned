@@ -7,7 +7,7 @@ import "server-only";
  * covers the segment's box (placed at x1,y1; wire coordinates are
  * inclusive, so the pixel box is x2-x1+1 by y2-y1+1). Compositing
  * turns a working derivative + raster into the three things a
- * human needs to judge quality: an overlay, a transparent cut-out,
+ * human needs to assess quality: an overlay, a transparent cut-out,
  * and the raw mask.
  */
 import { decodeMaskToRaster, type SegmentationMask } from "@meta-sam/parser";

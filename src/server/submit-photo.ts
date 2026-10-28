@@ -5,7 +5,7 @@ import "server-only";
  * One active entry per player while the game is open. A resubmit
  * stores the new derivative first, then supersedes every previous
  * active entry for that player and deletes their derivatives
- * (the bucket lifecycle on `tmp/` is the backstop). No judging or
+ * (the bucket lifecycle on `tmp/` is the backstop). No labelling or
  * segmentation happens here — PIN-8/PIN-9 pick up active entries.
  */
 import { randomUUID } from "node:crypto";
@@ -128,13 +128,9 @@ export async function submitPhoto(
     workingRef,
     objectLabel: "",
     altLabel: "",
-    scores: null,
-    reason: "",
-    privateJudgement: "",
-    teaser: "",
     safetyFlags: {},
     status: "active",
-    judgeCount: 0,
+    labelCount: 0,
     segmentCount: 0,
     submittedAt: now,
     version: 1,
@@ -195,10 +191,8 @@ export function publicOwnSubmission(submission: Submission) {
     status: submission.status,
     submittedAt: submission.submittedAt,
     hasPhoto: Boolean(submission.workingRef),
-    judged: Boolean(submission.scores),
     hasCutout: Boolean(submission.cutoutRef),
-    // Owner-only prose (PIN-44); numeric scores stay hidden until REVEAL.
-    privateJudgement: submission.privateJudgement || null,
+    objectLabel: submission.objectLabel || null,
   };
 }
 

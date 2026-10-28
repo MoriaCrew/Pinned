@@ -39,7 +39,6 @@ export function clientKey(request: Request, scope: string): string {
 }
 
 export const RATE_LIMITS = {
-  createGamePerIp: { limit: 10, windowMs: 10 * 60_000 },
   playersPerIpGame: { limit: 20, windowMs: 10 * 60_000 },
   submissionsPerIpGame: { limit: 30, windowMs: 10 * 60_000 },
   labPerIp: { limit: 20, windowMs: 10 * 60_000 },

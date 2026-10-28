@@ -12,13 +12,7 @@ import "server-only";
  * recursively because Firestore rejects undefined field values.
  */
 import { Firestore, type DocumentData, type DocumentSnapshot } from "@google-cloud/firestore";
-import {
-  VersionConflictError,
-  type GameRepository,
-  assertSubmissionAllowed,
-  type RecordSubmissionGuard,
-} from "../domain/repository";
-import { transitionGame, type GameState, type TransitionResult } from "../domain/game-state";
+import { type GameRepository, assertSubmissionAllowed, type RecordSubmissionGuard } from "../domain/repository";
 import type { AiCallLog, Game, GameChain, Player, Submission } from "../domain/types";
 
 const CHAINS = "chains";
@@ -87,27 +81,6 @@ export class FirestoreGameRepository implements GameRepository {
 
   async getGame(slug: string): Promise<Game | null> {
     return fromSnapshot<Game>(await this.gameRef(slug).get());
-  }
-
-  async compareAndSetGameState(
-    slug: string,
-    expectedVersion: number,
-    to: GameState,
-    now: number,
-  ): Promise<TransitionResult> {
-    const ref = this.gameRef(slug);
-    return this.db.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(ref);
-      const current = fromSnapshot<Game>(snapshot);
-      if (!current) throw new RangeError(`Game ${slug} not found`);
-      if (current.state === to) return { game: current, changed: false };
-      if (current.version !== expectedVersion) {
-        throw new VersionConflictError(expectedVersion, current.version);
-      }
-      const result = transitionGame(current, to, now);
-      transaction.set(ref, toFirestoreData(result.game));
-      return result;
-    });
   }
 
   private playerRef(gameId: string, playerId: string) {
