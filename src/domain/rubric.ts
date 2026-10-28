@@ -18,6 +18,20 @@ export function validateScores(scores: RubricScores): RubricScores {
   return scores;
 }
 
+/**
+ * Coerce raw model scores onto the rubric (live evidence: Spark
+ * sometimes answers 0-1 decimals or /10 values despite the
+ * prompt). All-three <= 1 means a 0-1 scale: multiply by 5.
+ * Everything is rounded and clamped to integers 0-5, then
+ * strictly validated. Domain code keeps using validateScores.
+ */
+export function normalizeScores(raw: RubricScores): RubricScores {
+  const values = [raw.fit, raw.effort, raw.chaos];
+  const scale = values.every((v) => Number.isFinite(v) && v >= 0 && v <= 1) ? 5 : 1;
+  const fix = (v: number) => Math.min(5, Math.max(0, Math.round((Number.isFinite(v) ? v : 0) * scale)));
+  return validateScores({ fit: fix(raw.fit), effort: fix(raw.effort), chaos: fix(raw.chaos) });
+}
+
 export function totalScore(scores: RubricScores): number {
   validateScores(scores);
   return scores.fit + scores.effort + scores.chaos;
