@@ -80,10 +80,16 @@ describe("normalizeElements", () => {
     expect(out[1].concept).toBe("teal mug");
   });
 
+  it("falls back to concept for empty label/description and caps at zero", () => {
+    const out = normalizeElements([{ label: "", concept: "teal mug", description: "" }], { maxElements: 6, conceptMaxWords: 3 });
+    expect(out[0]).toMatchObject({ label: "teal mug", description: "teal mug" });
+    expect(normalizeElements([{ concept: "teal mug" }], { maxElements: 0, conceptMaxWords: 3 })).toEqual([]);
+  });
+
   it("substitutes Policy numbers into the elements prompt", () => {
     const text = elementsSystemPrompt({ minElements: 1, maxElements: 6, conceptMaxWords: 3 });
     expect(text).toContain("Between 1 and 6 elements");
-    expect(text).toContain("at most 3 words");
+    expect(text).toContain("at most 3");
     expect(text).not.toContain("{{");
   });
 });
