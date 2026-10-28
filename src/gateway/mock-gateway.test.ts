@@ -23,7 +23,7 @@ describe("mockGateway", () => {
   });
 
   it("judges with in-range rubric scores", async () => {
-    const j = await mockGateway.judgePhoto({ imageRef: "x", challenge: "y" });
+    const j = await mockGateway.judgePhoto({ imageRef: "x", challenge: "y", persona: { name: "Test Host", voiceRules: ["Dry."], catchphrases: [], judgingStyle: "Rubric-first." } });
     for (const v of Object.values(j.scores)) {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(5);
