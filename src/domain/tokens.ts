@@ -10,6 +10,14 @@ function b64url(bytes: Buffer): string {
   return bytes.toString("base64url");
 }
 
+/** Canonical board slug shape: 128-bit base64url = 22 chars (PIN-59). */
+export const SLUG_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+
+/** Validate BEFORE any repository call; rejects %2F-decoded paths etc. */
+export function isValidSlug(value: string): boolean {
+  return SLUG_PATTERN.test(value);
+}
+
 /** 128-bit capability slug for /g/{slug}. */
 export function generateSlug(): string {
   return b64url(randomBytes(16));

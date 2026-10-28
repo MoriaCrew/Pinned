@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Best-effort in-process rate limiting (PIN-43).
  *

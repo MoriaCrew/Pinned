@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * SAM lab service (PIN-36). Dev-only exploration tool: run one
  * segmentation over an uploaded photo and get back everything a

@@ -1,3 +1,4 @@
+import "server-only";
 import type { HostPersona, ModelGateway } from "./model-gateway";
 
 function mockPersona(brief: string): { persona: HostPersona; challenge: string } {

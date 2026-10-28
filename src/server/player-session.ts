@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Player identity for one capability-link game (PIN-33 / PIN-7A).
  *

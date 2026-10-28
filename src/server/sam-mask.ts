@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * SAM mask decoding + compositing (PIN-36 lab, reused by PIN-8).
  *

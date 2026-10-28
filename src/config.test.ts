@@ -65,6 +65,25 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ STORAGE_BUCKET: "explicit" }).storageBucket).toBe("explicit");
   });
 
+  it("treats AI_DAILY_BUDGET_USD=0 as off, junk as fallback (PIN-59)", () => {
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "0" }).aiDailyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "0.0" }).aiDailyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1" }).aiDailyBudgetUsd).toBe(2);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "no" }).aiDailyBudgetUsd).toBe(2);
+    expect(parseConfig({}).policyOverridesJson).toBeNull();
+    expect(parseConfig({ POLICY_OVERRIDES_JSON: " {} " }).policyOverridesJson).toBe("{}");
+  });
+
+  it("throws on unknown DATA_BACKEND in production only (PIN-59)", () => {
+    expect(parseConfig({ DATA_BACKEND: "bogus" }).dataBackend).toBe("memory");
+    expect(() =>
+      parseConfig({ DATA_BACKEND: "bogus", NODE_ENV: "production" }),
+    ).toThrow(/Unknown DATA_BACKEND/);
+    expect(
+      parseConfig({ DATA_BACKEND: "firestore", NODE_ENV: "production" }).dataBackend,
+    ).toBe("firestore");
+  });
+
   it("honours Meta env overrides and trims a trailing slash", () => {
     const cfg = parseConfig({
       META_API_KEY: " k ",

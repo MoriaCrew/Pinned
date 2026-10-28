@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * AI usage accounting and daily guardrails (PIN-32).
  * Estimates use published Meta list prices; the provider dashboard

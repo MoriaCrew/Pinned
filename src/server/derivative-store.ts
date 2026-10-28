@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Ephemeral derivative storage (PIN-34 / PIN-7B).
  *

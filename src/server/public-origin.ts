@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Public origin for generated share links.
  *
