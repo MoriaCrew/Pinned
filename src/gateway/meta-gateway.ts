@@ -175,10 +175,10 @@ export class MetaGateway implements ModelGateway {
     return json;
   }
 
-  private async chatJson(operation: string, system: string, user: unknown): Promise<Json> {
+  private async chatJson(operation: string, system: string, user: unknown, maxTokens = 1200): Promise<Json> {
     const json = await this.request(operation, this.options.sparkModel, "/chat/completions", {
       model: this.options.sparkModel,
-      max_tokens: 1200,
+      max_tokens: maxTokens,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -211,7 +211,7 @@ export class MetaGateway implements ModelGateway {
     const out = await this.chatJson("judgePhoto", JUDGE_SYSTEM, [
       { type: "text", text: JSON.stringify({ challenge: input.challenge, host: input.persona }) },
       { type: "image_url", image_url: { url: input.imageRef } },
-    ]);
+    ], 4000);
     const s = isRecord(out.scores) ? out.scores : {};
     const scores = normalizeScores({
       fit: Number(s.fit),
