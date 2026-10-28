@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../../../../config";
 import { getModelGateway } from "../../../../../../gateway";
-import { mockGateway } from "../../../../../../gateway/mock-gateway";
 import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../../../../server/ai-usage";
 import { CutoutConfirmError, confirmCutout, parseCutoutAction } from "../../../../../../server/confirm-cutout";
 import { getDerivativeStore } from "../../../../../../server/derivative-store";
@@ -34,8 +33,20 @@ export async function POST(
     const action = parseCutoutAction(body);
     const config = getConfig();
     const repository = getGameRepository();
-    let gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
-    if (!config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config)) gateway = mockGateway;
+    // PIN-61: only the tap-reselect ("point") action calls AI. Over
+    // budget (or budget 0 = off) it gets a friendly 429 — never a
+    // silent mock swap presenting fake cut-outs as real.
+    if (
+      action.action === "point" &&
+      !config.aiMock &&
+      isAiBudgetExhausted(await getTodayAiUsage(repository), config)
+    ) {
+      return NextResponse.json(
+        { error: "Today's AI budget is used up. Your photo still counts." },
+        { status: 429, headers: JSON_HEADERS },
+      );
+    }
+    const gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
     const cookie = readCookieValue(request.headers.get("cookie"), playerCookieName(slug));
     const result = await confirmCutout(slug, cookie, action, {
       repository,

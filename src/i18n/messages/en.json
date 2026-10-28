@@ -70,5 +70,12 @@
   "cutout.working": "Cutting…",
   "cutout.done": "Cut-out saved.",
   "cutout.wholeDone": "Whole photo it is.",
-  "cutout.none": "Cut-out not available — your whole photo counts."
+  "cutout.none": "Cut-out not available — your whole photo counts.",
+  "ai.budgetOff": "AI is switched off right now. Try again later.",
+  "ai.budgetExhausted": "Today's AI budget is used up. Try again tomorrow.",
+  "ai.participantCap": "You've reached today's limit. Try again tomorrow.",
+  "ai.boardCap": "This board reached today's limit. Try again tomorrow.",
+  "ai.timeout": "That took too long. Please try again.",
+  "ai.failed": "Something went wrong. Please try again.",
+  "ai.refused": "The image model couldn't make that one. Try a different idea."
 }

@@ -26,7 +26,29 @@ export {
   classifyPortError,
   elementsSystemPrompt,
   normalizeElements,
+  sceneImageOutcome,
 } from "./ports";
+export {
+  collectMetaCallLog,
+  decoratePorts,
+} from "./decorators";
+export type { DecoratedPorts, PortDecoratorDeps } from "./decorators";
+export {
+  InMemoryBudgetStore,
+  applyReserve,
+  dayBucketFor,
+  emptyBudgetDay,
+  evaluateReserve,
+} from "./budget";
+export type {
+  BudgetDayState,
+  BudgetStore,
+  ReserveDenyReason,
+  ReserveRequest,
+  ReserveResult,
+} from "./budget";
+export { estimateMetaCostUsd, estimateReserveUsd } from "./costs";
+export type { PortOperation } from "./costs";
 export { metaElementNamer, metaSegmenter } from "./meta-ports";
 export { mockElementNamer, mockSegmenter } from "./mock-ports";
 export { fixtureElementNamer, fixtureSegmenter } from "./fixture-ports";
@@ -52,7 +74,12 @@ export function getModelGateway(options: { onLog?: MetaGatewayOptions["onLog"] }
   });
 }
 
-/** Capability ports (docs/11 section 5.2): mock under AI_MOCK=1, Meta otherwise. SceneComposer ships in PIN-54a1. */
+/**
+ * Raw capability ports (docs/11 section 5.2): mock under AI_MOCK=1,
+ * Meta otherwise. SceneComposer ships in PIN-54a1. Product code
+ * should use the decorated ports from src/server/ai-ports.ts
+ * (PIN-61); this stays for adapter-level tests and composition.
+ */
 export function getCapabilityPorts(options: { onLog?: MetaGatewayOptions["onLog"] } = {}): { elementNamer: ElementNamer; segmenter: Segmenter } {
   const cfg = getConfig();
   if (cfg.aiMock) return { elementNamer: mockElementNamer, segmenter: mockSegmenter };

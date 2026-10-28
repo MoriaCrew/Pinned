@@ -3,28 +3,21 @@ import "server-only";
  * AI usage accounting and daily guardrails (PIN-32).
  * Estimates use published Meta list prices; the provider dashboard
  * remains authoritative for billed amounts.
+ *
+ * PIN-61: pricing moved to src/gateway/costs.ts and the day bucket
+ * to src/gateway/budget.ts (re-exported here for existing callers).
+ * The scan-based guard below still serves the legacy ModelGateway
+ * routes until PIN-53 migrates them to the decorated ports, whose
+ * atomic counter (src/gateway/budget.ts) replaces it.
  */
 import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
 import type { AiCallLog } from "../domain/types";
+import { dayBucketFor } from "../gateway/budget";
+import { estimateMetaCostUsd } from "../gateway/costs";
 import type { MetaCallLog } from "../gateway/meta-gateway";
 
-const SPARK_INPUT_USD_PER_TOKEN = 1.25 / 1_000_000;
-const SPARK_OUTPUT_USD_PER_TOKEN = 4.25 / 1_000_000;
-const SAM_USD_PER_IMAGE = 2.5 / 1_000;
-
-export function estimateMetaCostUsd(entry: MetaCallLog): number {
-  if (entry.outcome !== "ok") return 0;
-  if (entry.operation === "segmentObject") return SAM_USD_PER_IMAGE * (entry.images ?? 1);
-  return (
-    (entry.inputTokens ?? 0) * SPARK_INPUT_USD_PER_TOKEN +
-    (entry.outputTokens ?? 0) * SPARK_OUTPUT_USD_PER_TOKEN
-  );
-}
-
-export function dayBucketFor(now: number): string {
-  return new Date(now).toISOString().slice(0, 10);
-}
+export { dayBucketFor, estimateMetaCostUsd };
 
 export interface AiUsageSummary {
   dayBucket: string;

@@ -17,6 +17,9 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     });
     expect(DEFAULT_POLICY.maxTokens.sparkElements).toBe(4000);
     expect(DEFAULT_POLICY.faces).toBe("note");
+    expect(DEFAULT_POLICY.retries).toBe(1);
+    expect(DEFAULT_POLICY.retryBackoffMs).toBe(500);
+    expect(resolvePolicy({ retryBackoffMs: 0 }).retryBackoffMs).toBe(0);
     expect(DEFAULT_POLICY.elementsPerPhoto).toEqual({ min: 1, max: 6 });
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
   });

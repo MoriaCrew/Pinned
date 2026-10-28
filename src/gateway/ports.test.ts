@@ -12,8 +12,10 @@ import { metaElementNamer, metaSegmenter } from "./meta-ports";
 import { mockElementNamer, mockSegmenter } from "./mock-ports";
 import {
   buildSegmentPromptText,
+  classifyPortError,
   elementsSystemPrompt,
   normalizeElements,
+  sceneImageOutcome,
   type NameElementsInput,
 } from "./ports";
 
@@ -234,6 +236,26 @@ describe("meta adapters (fake fetch)", () => {
     expect(texts[1]).not.toBe(texts[2]);
   });
 
+  it("passes the provider HTTP status through for retry decisions (PIN-61)", () => {
+    const rateLimited = Object.assign(new Error("slow down"), {
+      code: "http_429",
+      status: 429,
+    });
+    expect(classifyPortError(rateLimited)).toMatchObject({
+      status: "failed",
+      errorCode: "http_429",
+      httpStatus: 429,
+    });
+    const refused = Object.assign(new Error("nope"), {
+      code: "content_policy_violation",
+      status: 400,
+    });
+    expect(classifyPortError(refused)).toMatchObject({
+      status: "refused",
+      httpStatus: 400,
+    });
+  });
+
   it("rejects invalid geometry as failed/bad_prompt without calling SAM", async () => {
     const { calls, gateway } = metaGateway(() => ({ output_text: SAM_LINE }));
     const out = await metaSegmenter(gateway).segment({
@@ -244,5 +266,29 @@ describe("meta adapters (fake fetch)", () => {
     expect(out).toMatchObject({ status: "failed", errorCode: "bad_prompt" });
     expect(calls).toHaveLength(0);
     expect(buildSegmentPromptText({ kind: "concept", concept: "  " }).status).toBe("failed");
+  });
+});
+
+describe("sceneImageOutcome refusal mapping (PIN-61 fixtures)", () => {
+  it("extracts the image from an image_generation_call item", () => {
+    const out = sceneImageOutcome([
+      { type: "reasoning", summary: [] },
+      { type: "message", content: [{ type: "output_text", text: "done" }] },
+      { type: "image_generation_call", result: "aGVsbG8=" },
+    ]);
+    expect(out).toEqual({ status: "ready", value: { imageBase64: "aGVsbG8=" } });
+  });
+
+  it("HTTP 200 with no image item is a refusal, never an error", () => {
+    const out = sceneImageOutcome([
+      { type: "reasoning", summary: [] },
+      { type: "message", content: [{ type: "output_text", text: "I can't make that." }] },
+    ]);
+    expect(out).toMatchObject({ status: "refused", errorCode: "no_image" });
+    expect(sceneImageOutcome([])).toMatchObject({ status: "refused" });
+    expect(sceneImageOutcome(undefined)).toMatchObject({ status: "refused" });
+    expect(
+      sceneImageOutcome([{ type: "image_generation_call", result: "" }]),
+    ).toMatchObject({ status: "refused", errorCode: "no_image" });
   });
 });
