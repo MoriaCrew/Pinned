@@ -168,7 +168,7 @@ export async function submitPhoto(
   for (const old of superseded) {
     if (!old.workingRef && !old.cutoutRef) continue;
     try {
-      await deps.store.delete(old.workingRef);
+      if (old.workingRef) await deps.store.delete(old.workingRef);
       if (old.cutoutRef) await deps.store.delete(old.cutoutRef).catch(() => undefined);
     } catch (error) {
       // Record is already superseded; the tmp/ lifecycle is the backstop.
