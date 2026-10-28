@@ -1,10 +1,12 @@
-# Pinneds - one link, one game, hosted by an AI
+# Pinneds Studio — a shared pinboard of real things
 
-> Group chats already run on random photos, memes, and roasting each other.
-> Pinneds turns that into a game anyone can start in seconds: create a link,
-> drop it in the chat, play. Nothing to install. When the game ends, the
-> link becomes a read-only scoreboard. Want another round? Rematch — new
-> link, same host, longer memory.
+> Anyone with the board link uploads a photo. Muse Spark names the
+> things in it, SAM 3.1 cuts each one out, and the cut-outs are pinned
+> to the board with the owner's name. Anyone then picks a few pins
+> from anyone, writes or taps a scene prompt, and Muse Image composes
+> them into a new image in the board's gallery — credited to the
+> people whose things are in it. No accounts: the link is the
+> invitation.
 
 **Meta Global AI Developer Hackathon** · Indie Developer track · Theme:
 *Build for Your World* · Solo developer · Oct 26 – Nov 4, 2026
@@ -14,61 +16,71 @@
 - Org: https://github.com/MoriaCrew · Tracking: Linear team `PIN` (Pinned)
 - Repository: https://github.com/MoriaCrew/Pinned (public, AGPL-3.0 — see License below)
 
-## The game in 30 seconds
+## Studio in 30 seconds
 
-1. **Create.** Describe a host in one line — *"a passive-aggressive IT
-   helpdesk"*, *"a dramatic sports commentator"*, *"my unimpressed
-   grandmother"* — pick a deadline, get a shareable link.
-2. **Play async.** The host sets a photo challenge (*"Find the most
-   suspicious object on your desk"*). Players submit privately whenever
-   they get a minute. The host judges each entry as it arrives and drops
-   anonymous teasers to keep the group curious.
-3. **Reveal.** Submissions close; every object is revealed with its
-   background cut away. Everyone guesses whose is whose.
-4. **Poster.** The host announces the winner and turns the game into a
-   poster to share back into the chat. The link freezes as a scoreboard.
-5. **Rematch.** One tap creates a fresh link. The host quietly inherits a
-   short diary — who won, who's lazy, which jokes landed — so round two
-   opens with *"Three games. Zero wins. Bold of you to return."*
+1. **Share.** Create a board, get a link (`/g/{slug}`), drop it in the
+   group chat. Nothing to install, no accounts.
+2. **Pin.** Anyone uploads a photo; Spark names the things in it and
+   SAM cuts them out. The cut-outs land on the board as pins with the
+   owner's name.
+3. **Make a scene.** Pick a few pins from anyone, write or tap a scene
+   prompt, and Muse Image composes them into a new image in the
+   board's gallery — credited to whoever brought each thing.
+4. **Remix.** Any scene can be remixed into a new one. Solo works too:
+   a one-person board is also the judge demo.
 
-There is no preset character list. Every host is generated from the
-creator's one line, so no two groups get the same game. The game
-underneath never changes — the comedy comes from who is running it.
+> **Pivot note (Oct 28, PIN-48):** Pinneds started as an AI-hosted
+> photo game. The game (judging, personas, deadlines, guessing) is
+> dropped; Studio is the product now. The game docs are archived in
+> `docs/archive/`; the Studio spec is `docs/11-studio.md`.
 
 ## How Meta's models power it
 
-| Model | Role in Pinned |
+| Model | Role in Pinneds Studio |
 | --- | --- |
-| **Muse Spark** (Meta Model API) | Generates the host persona from one line; sets the challenge; judges photos against a published rubric; writes teasers, reveal and winner lines; writes the rematch diary. |
-| **SAM 3.1** (Meta Model API) | Cuts the submitted object out of each photo for a fair guessing round and a clean poster. Background removal also reduces photo exposure (see privacy notes in requirements). |
-| **Muse Image** (Meta Model API) | Generates the poster background/styling; SAM cut-outs are composited on top so every entry stays recognisable. |
+| **Muse Spark** (Meta Model API) | Names the elements in a photo (short noun phrases that feed SAM) and flags faces for the one-line consent note. |
+| **SAM 3.1** (Meta Model API) | Cuts each named thing out of the photo: concept prompts, plus tap/box prompts to add what naming missed. |
+| **Muse Image** (Meta Model API) | Composes selected pins into a new scene from reference images (`/v1/responses`); stateless remix re-attaches the parent scene image. |
 
-Fallback / scale path: Muse Spark Open (open weights) via a hosted
-inference partner (Baseten / Fireworks) behind the same gateway
-interface; Modal for GPU batch jobs (segmentation/poster) if needed.
-Partner status is tracked in Linear (PIN-4), not in this public repo.
+All model calls go through one gateway (capability ports
+`ElementNamer`, `Segmenter`, `SceneComposer` with timeout, retry,
+budget reservation and cost logging — `docs/11-studio.md` §5.2).
+Every limit (pins per scene, caps, timeouts, TTLs) lives in one
+typed Policy object; nothing is hard-coded.
 
-## Made to stay friendly
+## Privacy, in one paragraph
 
-Roasts target the photo, the effort and the timing — never the person.
-Each player sets their own roast level (Gentle / Spicy / Feral) and can
-keep their entry out of posters and share cards. Original photos are
-processed to cut-outs and not kept as originals; EXIF is stripped.
+Original photos are never stored: uploads are stripped (EXIF
+removed, re-encoded) into a short-lived working copy, and only the
+cut-outs and scenes persist. People are allowed in pins — when a
+face is detected the app asks "everyone in this photo OK with being
+remixed?" and never blocks; the provider's guardrails refuse what
+they refuse, and refusals show as a friendly message, not an error.
+Inputs go to Meta under Standard mode (not used for training).
 
 ## Status
 
-🚧 **Day 1 — scaffold.** The Next.js/Firebase foundation, requirements,
-architecture and work breakdown
-are in `docs/`; implementation is tracked as `PIN-*` issues in Linear and
-delivered as small PRs (see `docs/03-ai-sdlc.md`). Demo link and video
-will be added here before submission (deadline Nov 4, 9:00 PM ET).
+🚧 **Studio pivot in progress (Oct 28).** Spec in the repo
+(`docs/11-studio.md`, `docs/adr/003-studio-architecture.md`); slices
+(photo → pins, pins → scene, sharing, remix) land as small `PIN-*`
+PRs to `dev`. First family board targets Sat Oct 31; feature freeze
+Tue Nov 3; submission Wed Nov 4, 9:00 PM ET. Demo link and video
+will be added here before submission.
 
 ## Docs
 
-- `docs/01-requirements.md` — high-level requirements, scope, gaps & decisions
-- `docs/02-architecture.md` — conceptual design, data model, AI pipelines
+- `docs/11-studio.md` — Pinneds Studio spec: product, Policy, ports,
+  jobs, data model, UX, slices, test plan, open questions
+- `docs/adr/003-studio-architecture.md` — Policy as data, capability
+  ports + decorators, jobs, Element/Pin split, stateless remix
 - `docs/03-ai-sdlc.md` — Linear → coding agent → PR → review workflow (solo + Muse)
-- `docs/05-research-synthesis.md` — PIN-21 deep research: Firebase model, costs, decomposition, risks
+- `docs/06-photo-intake.md` — photo intake and ephemeral storage
+- `docs/07-sam-lab.md` — SAM 3.1 lab notes and measurements
+- `docs/08-ux-principles.md` — minimal, icon-first UX rules
+- `docs/09-design-system.md` — board themes (ex-presets; see docs/11 A5)
+- `docs/10-custom-domains.md` — pinneds.com domain setup
+- `docs/archive/` — game-era requirements, architecture and research
+  (01, 02, 05), archived Oct 28; history only
 - `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
 - `AGENTS.md` — instructions for coding agents working this repo
 

@@ -1,3 +1,5 @@
+> **Archived Oct 28, 2026 (PIN-49):** the game is dropped. Studio spec: [docs/11-studio.md](../11-studio.md).
+
 # Pinned — Deep Research Synthesis (PIN-21)
 
 _Status: Day 1 (Oct 26, 2026) · Method: 6 parallel research streams +

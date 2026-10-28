@@ -11,7 +11,7 @@ the step — and amend this doc in the same PR._
 | --- | --- | --- |
 | What to build & status | Linear team **PIN** (Pinned) | No Linear issue → no code (except typo/docs hotfixes, still PR'd) |
 | Code, prompts, docs | GitHub `MoriaCrew/Pinned` (public) | `main` is always deployable |
-| Requirements/architecture | `docs/01`, `docs/02` in repo | FR/NFR IDs cited in issues + PRs |
+| Spec/decisions | `docs/11`, `docs/adr/003` in repo | docs/11 sections cited in issues + PRs |
 | Secrets | Host env + GitHub Actions secrets | Never in repo, issues, or PRs |
 | Demo evidence | Issue comments + README links | Every milestone gate links proof |
 
