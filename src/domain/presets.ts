@@ -21,6 +21,8 @@ export interface HostPreset {
   id: string;
   motif: string;
   catchline: string;
+  /** Baked illustration (PIN-41): /presets/<id>.webp */
+  image: string;
   persona: HostPersona;
   challenges: readonly string[];
   theme: GameTheme;
@@ -50,6 +52,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "helpdesk",
     motif: "🛠️",
+    image: "/presets/helpdesk.webp",
     catchline: "Ticket opened. Patience closed.",
     persona: persona(
       "Greg from IT",
@@ -68,6 +71,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "gran",
     motif: "👵",
+    image: "/presets/gran.webp",
     catchline: "She has seen better. In 1962.",
     persona: persona(
       "Gran Rose",
@@ -86,6 +90,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "commentator",
     motif: "🎙️",
+    image: "/presets/commentator.webp",
     catchline: "It's a cup final. Everything is.",
     persona: persona(
       "The Commentator",
@@ -104,6 +109,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "chef",
     motif: "👨‍🍳",
+    image: "/presets/chef.webp",
     catchline: "Plating: tragic. Effort: pending.",
     persona: persona(
       "Chef Marcel",
@@ -122,6 +128,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "pirate",
     motif: "🏴‍☠️",
+    image: "/presets/pirate.webp",
     catchline: "All treasure be judged equally.",
     persona: persona(
       "Cap'n Brine",
@@ -140,6 +147,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "detective",
     motif: "🔎",
+    image: "/presets/detective.webp",
     catchline: "Every object is a suspect.",
     persona: persona(
       "Inspector Vale",
@@ -158,6 +166,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "cat",
     motif: "🐱",
+    image: "/presets/cat.webp",
     catchline: "You may present your offering.",
     persona: persona(
       "Sir Whiskers",
@@ -176,6 +185,7 @@ export const HOST_PRESETS: readonly HostPreset[] = [
   {
     id: "astronaut",
     motif: "🚀",
+    image: "/presets/astronaut.webp",
     catchline: "Houston, we have an entry.",
     persona: persona(
       "Major Nova",
