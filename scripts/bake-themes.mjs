@@ -1,7 +1,7 @@
 /**
- * PIN-41: regenerate preset illustrations with Higgsfield and bake
- * them into public/presets/<id>.webp (512px). Run manually, never
- * in CI: node scripts/bake-presets.mjs [presetId ...]
+ * PIN-41: regenerate board-theme illustrations with Higgsfield and bake
+ * them into public/themes/<id>.webp (512px). Run manually, never
+ * in CI: node scripts/bake-themes.mjs [themeId ...]
  *
  * Credentials (server-side only, never commit): HF_API_KEY_ID and
  * HF_API_KEY_SECRET, read from the environment or .env.local.
@@ -22,7 +22,7 @@ const SUBJECTS = {
   chef: "a dramatic chef in a tall white hat holding a tasting spoon with a disdainful expression, steam swirls",
   pirate: "a cheerful pirate captain with a tricorn hat and a parrot on the shoulder, treasure map rolled under one arm",
   detective: "a noir detective in a trench coat and fedora holding a magnifying glass, suspicious squint",
-  cat: "a smug orange cat sitting upright like royalty on a cushion, one paw raised, judging expression",
+  cat: "a smug orange cat sitting upright like royalty on a cushion, one paw raised, unimpressed expression",
   astronaut: "an astronaut in a white spacesuit with the helmet visor up, giving a thumbs up, stars and a small planet behind",
 };
 const STYLE =
@@ -72,10 +72,10 @@ async function generate(creds, id) {
 
 const creds = credentials();
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(SUBJECTS);
-const outDir = path.join(process.cwd(), "public", "presets");
+const outDir = path.join(process.cwd(), "public", "themes");
 mkdirSync(outDir, { recursive: true });
 for (const id of ids) {
-  if (!SUBJECTS[id]) throw new Error(`unknown preset ${id}`);
+  if (!SUBJECTS[id]) throw new Error(`unknown theme ${id}`);
   const png = await generate(creds, id);
   const out = path.join(outDir, `${id}.webp`);
   await sharp(png).resize(512, 512).webp({ quality: 82 }).toFile(out);

@@ -35,7 +35,7 @@ interface LabResult {
   mock: boolean;
   image: { width: number; height: number; dataUrl: string };
   promptUsed: string;
-  judge: { objectLabel: string; altLabel: string } | null;
+  label: { objectLabel: string; altLabel: string } | null;
   timingsMs: { intake: number; segment: number; total: number };
   segments: LabSegment[];
   overlayJpeg: string;
@@ -181,7 +181,7 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
             />
             <label className="choice">
               <input type="checkbox" checked={autoLabel} onChange={(e) => setAutoLabel(e.target.checked)} />
-              <span>✨ Auto-name (Spark judge)</span>
+              <span>✨ Auto-name (Spark)</span>
             </label>
           </div>
         ) : null}
@@ -306,7 +306,7 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
           <details>
             <summary>Prompt sent</summary>
             <pre className="lab-raw">{result.promptUsed}</pre>
-            {result.judge ? <p className="field-help">✨ {result.judge.objectLabel} — {result.judge.altLabel}</p> : null}
+            {result.label ? <p className="field-help">✨ {result.label.objectLabel} — {result.label.altLabel}</p> : null}
           </details>
           <button
             type="button"

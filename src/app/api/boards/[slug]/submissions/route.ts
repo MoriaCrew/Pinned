@@ -17,7 +17,7 @@ import {
 import { getModelGateway } from "../../../../../gateway";
 import { mockGateway } from "../../../../../gateway/mock-gateway";
 import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../../../server/ai-usage";
-import { judgeSubmission } from "../../../../../server/judge-submission";
+import { labelSubmission } from "../../../../../server/label-submission";
 import { segmentSubmission } from "../../../../../server/segment-submission";
 
 export const runtime = "nodejs";
@@ -106,29 +106,29 @@ export async function POST(
       ...sessionDeps(),
       store: getDerivativeStore(),
     });
-    // Judge inline, best-effort (PIN-44): the entry stands even
-    // when judging fails; it stays retryable within the attempt cap.
-    let judgedSubmission = result.submission;
+    // Label inline, best-effort (PIN-52): the entry stands even
+    // when labelling fails; it stays retryable within the attempt cap.
+    let labelledSubmission = result.submission;
     try {
       const config = getConfig();
       const repository = getGameRepository();
       let gateway = getModelGateway({ onLog: config.aiMock ? undefined : createMetaLogSink(repository) });
       if (!config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config)) gateway = mockGateway;
-      const judged = await judgeSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
-      judgedSubmission = judged.submission;
+      const labelled = await labelSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
+      labelledSubmission = labelled.submission;
       // Cut out inline too (PIN-46); failure keeps the whole photo.
       try {
         const segmented = await segmentSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
-        judgedSubmission = segmented.submission;
+        labelledSubmission = segmented.submission;
       } catch (segmentError) {
         console.warn("segmentation failed; whole photo kept", { slug, error: String(segmentError) });
       }
-    } catch (judgeError) {
-      console.warn("judging failed; entry kept", { slug, error: String(judgeError) });
+    } catch (labelError) {
+      console.warn("labelling failed; entry kept", { slug, error: String(labelError) });
     }
     return NextResponse.json(
       {
-        submission: publicOwnSubmission(judgedSubmission),
+        submission: publicOwnSubmission(labelledSubmission),
         outcome: result.outcome,
         width: result.width,
         height: result.height,

@@ -29,15 +29,8 @@ function makeGame(overrides: Partial<Game> = {}): Game {
     id: SLUG,
     chainId: "chain-1",
     state: "OPEN",
-    brief: "a lighthouse keeper",
+    
     challenge: "Find the most suspicious object.",
-    persona: {
-      name: "Keeper",
-      language: "en",
-      voiceRules: ["Roast the photo, effort and timing — never the person."],
-      catchphrases: [],
-      judgingStyle: "Rubric-first.",
-    },
     adminTokenHash: "hash",
     deadlineAt: NOW + 24 * 3600_000,
     entryCount: 0,
@@ -68,10 +61,10 @@ async function setup(now: () => number = () => NOW) {
 }
 
 describe("recordSubmission transactional guard (PIN-43)", () => {
-  it("rejects inside the transaction when the game closed after pre-checks", async () => {
-    const { repository, store, deps, cookie, player } = await setup();
-    const game = await repository.getGame(SLUG);
-    await repository.compareAndSetGameState(SLUG, (game as Game).version, "REVEAL", NOW);
+  it("rejects inside the transaction when the game is closed", async () => {
+    const { store, deps, cookie, player } = await setup();
+    const repository = new InMemoryGameRepository();
+    await repository.createGame(makeGame({ state: "REVEAL" }));
     // Simulate the race: call the repository directly with a guard,
     // as submitPhoto now does after its snapshot checks passed.
     await expect(
@@ -83,13 +76,13 @@ describe("recordSubmission transactional guard (PIN-43)", () => {
           workingRef: "tmp/games/x/working.webp",
           objectLabel: "",
           altLabel: "",
-          scores: null,
-          reason: "",
-          privateJudgement: "",
-          teaser: "",
+          
+          
+          
+          
           safetyFlags: {},
           status: "active",
-          judgeCount: 0,
+          labelCount: 0,
           segmentCount: 0,
           submittedAt: NOW,
           version: 1,
@@ -152,12 +145,11 @@ describe("submitPhoto (PIN-35)", () => {
       submitPhoto(SLUG, cookie, Buffer.from("definitely not a photo"), deps),
     ).rejects.toMatchObject({ status: 415 });
 
-    const game = await repository.getGame(SLUG);
-    await repository.compareAndSetGameState(SLUG, (game as Game).version, "REVEAL", NOW);
-    await expect(submitPhoto(SLUG, cookie, await makeJpeg(2), deps)).rejects.toBeInstanceOf(
+    const closedDeps = { ...deps, now: () => NOW + 25 * 3600_000 };
+    await expect(submitPhoto(SLUG, cookie, await makeJpeg(2), closedDeps)).rejects.toBeInstanceOf(
       SubmitPhotoError,
     );
-    await expect(submitPhoto(SLUG, cookie, await makeJpeg(2), deps)).rejects.toMatchObject({
+    await expect(submitPhoto(SLUG, cookie, await makeJpeg(2), closedDeps)).rejects.toMatchObject({
       status: 409,
     });
   });

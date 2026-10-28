@@ -8,9 +8,9 @@ import {
 } from "./ai-usage";
 
 describe("AI usage guardrails", () => {
-  it("estimates Spark, SAM, and Muse Image list-price costs", () => {
+  it("estimates Spark and SAM list-price costs", () => {
     expect(estimateMetaCostUsd({
-      operation: "judgePhoto",
+      operation: "nameObject",
       model: "muse-spark-1.3",
       latencyMs: 1,
       outcome: "ok",
@@ -25,7 +25,7 @@ describe("AI usage guardrails", () => {
       images: 1,
     })).toBe(0.0025);
     expect(estimateMetaCostUsd({
-      operation: "posterBackground",
+      operation: "segmentObject",
       model: "muse-image-1.0",
       latencyMs: 1,
       outcome: "error",
@@ -38,7 +38,7 @@ describe("AI usage guardrails", () => {
     const now = Date.UTC(2026, 9, 27, 12, 0, 0);
     const sink = createMetaLogSink(repository, () => now);
     await sink({
-      operation: "generatePersona",
+      operation: "nameObject",
       model: "muse-spark-1.3",
       latencyMs: 10,
       outcome: "ok",
@@ -50,7 +50,7 @@ describe("AI usage guardrails", () => {
     expect(usage.callCount).toBe(1);
     expect(usage.estimatedCostUsd).toBeCloseTo(0.007502, 6);
     expect(await repository.listAiCallLogs("2026-10-27")).toMatchObject([
-      { promptVersion: "persona.v1", outcome: "ok" },
+      { promptVersion: "label.v1", outcome: "ok" },
     ]);
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 0.007, aiDailyCallLimit: 200 })).toBe(true);
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 1 })).toBe(true);

@@ -8,8 +8,6 @@ interface OwnSubmission {
   status: string;
   submittedAt: number;
   hasPhoto: boolean;
-  judged?: boolean;
-  privateJudgement?: string | null;
   hasCutout?: boolean;
 }
 
@@ -42,7 +40,7 @@ export function SubmitPanel({
     setCutNotice("");
     setError("");
     try {
-      const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions/cutout`, {
+      const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/submissions/cutout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -63,7 +61,7 @@ export function SubmitPanel({
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions`);
+        const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/submissions`);
         if (response.ok) {
           const data = (await response.json()) as { submission: OwnSubmission | null };
           if (!cancelled) {
@@ -109,7 +107,7 @@ export function SubmitPanel({
     try {
       const form = new FormData();
       form.set("photo", file);
-      const response = await fetch(`/api/games/${encodeURIComponent(slug)}/submissions`, {
+      const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/submissions`, {
         method: "POST",
         body: form,
       });
@@ -137,7 +135,7 @@ export function SubmitPanel({
   const previewSrc = localPreview
     ? localPreview
     : loaded && submission?.hasPhoto
-      ? `/api/games/${encodeURIComponent(slug)}/submissions/image?v=${previewBust}`
+      ? `/api/boards/${encodeURIComponent(slug)}/submissions/image?v=${previewBust}`
       : "";
 
   return (
@@ -145,15 +143,6 @@ export function SubmitPanel({
       <h2>{t("en", "submit.title")}</h2>
       <p className="notice">{t("en", "submit.safety")}</p>
 
-      {submission?.privateJudgement ? (
-        <aside className="host-verdict" aria-live="polite">
-          <p className="eyebrow">{t("en", "submit.hostSays")}</p>
-          <p className="challenge">{submission.privateJudgement}</p>
-          <p className="notice">{t("en", "submit.judgedWait")}</p>
-        </aside>
-      ) : submission?.hasPhoto ? (
-        <p className="notice" role="status">{t("en", "submit.judging")}</p>
-      ) : null}
 
       {previewSrc ? (
         <figure className="entry-preview">
@@ -181,7 +170,7 @@ export function SubmitPanel({
           {submission.hasCutout ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="cutout-preview" src={`/api/games/${encodeURIComponent(slug)}/submissions/image?kind=cutout&v=${previewBust}`} alt={t("en", "cutout.title")} />
+              <img className="cutout-preview" src={`/api/boards/${encodeURIComponent(slug)}/submissions/image?kind=cutout&v=${previewBust}`} alt={t("en", "cutout.title")} />
               <div className="actions">
                 <button type="button" className="btn btn-primary" disabled={cutBusy} onClick={() => void cutoutAction({ action: "accept" })}>{cutBusy ? t("en", "cutout.working") : t("en", "cutout.accept")}</button>
                 <button type="button" className="btn" disabled={cutBusy} onClick={() => void cutoutAction({ action: "whole" })}>{t("en", "cutout.whole")}</button>
@@ -209,7 +198,7 @@ export function SubmitPanel({
         {error ? <p className="error" role="alert">{error}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={busy || !file}>
           {busy
-            ? t("en", "submit.judging")
+            ? t("en", "submit.sending")
             : submission
               ? t("en", "submit.replace")
               : t("en", "submit.send")}

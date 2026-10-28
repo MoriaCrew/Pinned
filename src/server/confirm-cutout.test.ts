@@ -18,8 +18,8 @@ const DOCS_SEGMENT: SamSegment = {
 
 function makeGame(): Game {
   return {
-    id: SLUG, chainId: "chain-1", state: "OPEN", brief: "b", challenge: "Find it.",
-    persona: { name: "Host", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "Dry." },
+    id: SLUG, chainId: "chain-1", state: "OPEN", challenge: "Find it.",
+    
     adminTokenHash: "h", deadlineAt: NOW + 3_600_000, entryCount: 1, createdAt: NOW, version: 0,
   };
 }
@@ -36,19 +36,16 @@ async function setup() {
     id: "sub-1", gameId: SLUG, playerId: "player-1",
     workingRef: "tmp/games/game-slug/players/player-1/submissions/sub-1/working.webp",
     cutoutRef: "tmp/games/game-slug/players/player-1/submissions/sub-1/cutout.png",
-    objectLabel: "rubber duck", altLabel: "toy", scores: { fit: 3, effort: 3, chaos: 3 },
-    reason: "r", privateJudgement: "j", teaser: "t", safetyFlags: {}, status: "active",
-    judgeCount: 1, segmentCount: 1, submittedAt: NOW, version: 1,
+    objectLabel: "rubber duck", altLabel: "toy", 
+    safetyFlags: {}, status: "active",
+    labelCount: 1, segmentCount: 1, submittedAt: NOW, version: 1,
   };
   await repository.putSubmission(submission);
   const image = await sharp({ create: { width: 320, height: 334, channels: 3, background: "#884422" } }).webp().toBuffer();
   await store.put(submission.workingRef as string, image, "image/webp");
   await store.put(submission.cutoutRef as string, new Uint8Array([9]), "image/png");
   const gateway: ModelGateway = {
-    generatePersona: async () => { throw new Error("unused"); },
-    judgePhoto: async () => { throw new Error("unused"); },
-    posterBackground: async () => { throw new Error("unused"); },
-    writeDiary: async () => { throw new Error("unused"); },
+    nameObject: async () => { throw new Error("unused"); },
     segmentObject: async () => ({ segments: [DOCS_SEGMENT] }),
   };
   const deps = { repository, store, gateway, sessionSecret: SECRET };

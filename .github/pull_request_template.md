@@ -27,7 +27,7 @@
 
 - [ ] No secrets, `.env`, or real player photos in this diff
 - [ ] Originals-never-persisted invariant intact (or N/A — say why)
-- [ ] Roast policy untouched, or eval pass noted above
+- [ ] Prompt safety rules untouched, or eval pass noted above
 
 ## Rollback
 

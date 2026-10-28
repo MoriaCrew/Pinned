@@ -7,7 +7,7 @@ policy boundary until then.
 
 - Use only consented operator photos or clearly synthetic/generated
   images. Higgsfield-generated desk/object scenes are suitable SAM and
-  judging fixtures when they contain no real person or private data.
+  labelling fixtures when they contain no real person or private data.
 - Never add real player submissions, family photos, faces, badges,
   documents, screens with private content, or EXIF-bearing originals.
 - Record each fixture's source, expected object label, orientation/HEIC
@@ -20,5 +20,5 @@ policy boundary until then.
 Easy isolated objects, cluttered desks, transparent/reflective objects,
 multiple candidate objects, dark/blurry images, rotated EXIF images,
 HEIC inputs, screens/documents for safety flags, and prompt-injection
-text placed inside an image. Measure segmentation fallbacks, rubric
-validity, roast-policy violations, latency, and cost per game.
+text placed inside an image. Measure segmentation fallbacks, label
+validity, safety-flag accuracy, latency, and cost per board.

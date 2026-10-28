@@ -20,9 +20,9 @@ function makeGame(overrides: Partial<Game> = {}): Game {
     id: "game-slug",
     chainId: "chain-1",
     state: "OPEN",
-    brief: "brief",
+    
     challenge: "Find an object.",
-    persona: { name: "Host", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "dry" },
+    
     adminTokenHash: "hash",
     deadlineAt: NOW + 3_600_000,
     entryCount: 0,

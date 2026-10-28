@@ -112,7 +112,7 @@ const globalStore = globalThis as typeof globalThis & {
 /**
  * Hosted (Firestore) environments use the Firebase default bucket via
  * ADC; local/memory environments stay in process so tests and the
- * judge demo need no cloud credentials.
+ * demo need no cloud credentials.
  */
 export function createDerivativeStore(): DerivativeStore {
   const config = getConfig();

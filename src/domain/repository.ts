@@ -1,22 +1,9 @@
 /**
  * GameRepository port (PIN-5). Firestore implementation arrives
  * with the data-layer issue; this in-memory version is the test
- * double and the contract. CAS encodes the deadline vs
- * force-close race: first writer wins, the loser sees the same
- * target state and gets { changed: false }, not an error.
+ * double and the contract.
  */
-import { transitionGame, type GameState, type TransitionResult } from "./game-state";
-import type { AiCallLog, Game, GameChain, Player, Submission } from "./types";
-
-export class VersionConflictError extends Error {
-  constructor(
-    public readonly expectedVersion: number,
-    public readonly actualVersion: number,
-  ) {
-    super(`Game version conflict: expected ${expectedVersion}, found ${actualVersion}`);
-    this.name = "VersionConflictError";
-  }
-}
+import type { AiCallLog, Game, GameChain, GameState, Player, Submission } from "./types";
 
 export interface RecordSubmissionResult {
   /** Previous active entries of this player, now superseded. */
@@ -62,13 +49,6 @@ export interface GameRepository {
   getChain(chainId: string): Promise<GameChain | null>;
   createGame(game: Game): Promise<void>;
   getGame(slug: string): Promise<Game | null>;
-  /** Optimistic transition; same-target no-op returns changed:false. */
-  compareAndSetGameState(
-    slug: string,
-    expectedVersion: number,
-    to: GameState,
-    now: number,
-  ): Promise<TransitionResult>;
   putPlayer(player: Player): Promise<void>;
   getPlayer(gameId: string, playerId: string): Promise<Player | null>;
   listPlayers(gameId: string): Promise<Player[]>;
@@ -77,8 +57,7 @@ export interface GameRepository {
    * the submission, supersede every other active entry of that
    * player, and refresh Game.entryCount from the post-write set —
    * one unit, so concurrent submits can neither leave two actives
-   * nor lose entries from the count. Does not bump the game's
-   * state-transition version.
+   * nor lose entries from the count.
    */
   recordSubmission(
     submission: Submission,
@@ -120,24 +99,6 @@ export class InMemoryGameRepository implements GameRepository {
   async getGame(slug: string): Promise<Game | null> {
     const game = this.games.get(slug);
     return game ? clone(game) : null;
-  }
-
-  async compareAndSetGameState(
-    slug: string,
-    expectedVersion: number,
-    to: GameState,
-    now: number,
-  ): Promise<TransitionResult> {
-    const current = this.games.get(slug);
-    if (!current) throw new RangeError(`Game ${slug} not found`);
-    // Race loser: someone else already moved to the target state.
-    if (current.state === to) return { game: clone(current), changed: false };
-    if (current.version !== expectedVersion) {
-      throw new VersionConflictError(expectedVersion, current.version);
-    }
-    const result = transitionGame(current, to, now);
-    this.games.set(slug, clone(result.game));
-    return { game: clone(result.game), changed: result.changed };
   }
 
   async putPlayer(player: Player): Promise<void> {

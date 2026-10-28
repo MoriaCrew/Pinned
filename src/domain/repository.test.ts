@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryGameRepository, VersionConflictError } from "./repository";
+import { InMemoryGameRepository } from "./repository";
 import type { Game } from "./types";
 
 function makeGame(overrides: Partial<Game> = {}): Game {
@@ -7,9 +7,9 @@ function makeGame(overrides: Partial<Game> = {}): Game {
     id: "slug-1",
     chainId: "chain-1",
     state: "OPEN",
-    brief: "brief",
+    
     challenge: "challenge",
-    persona: { name: "H", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "dry" },
+    
     adminTokenHash: "hash",
     deadlineAt: 1_000,
     entryCount: 0,
@@ -35,25 +35,6 @@ describe("InMemoryGameRepository", () => {
     await expect(repo.createGame(makeGame())).rejects.toThrow(RangeError);
   });
 
-  it("deadline vs force-close race: loser is an idempotent no-op", async () => {
-    const repo = new InMemoryGameRepository();
-    await repo.createGame(makeGame());
-    const first = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 10);
-    expect(first.changed).toBe(true);
-    const second = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 11);
-    expect(second.changed).toBe(false);
-    expect(second.game.version).toBe(1);
-  });
-
-  it("stale version to a different state throws VersionConflictError", async () => {
-    const repo = new InMemoryGameRepository();
-    await repo.createGame(makeGame());
-    await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 10);
-    await expect(repo.compareAndSetGameState("slug-1", 0, "CLOSED", 11)).rejects.toThrow(
-      VersionConflictError,
-    );
-  });
-
   it("stores chains and rejects duplicates", async () => {
     const repo = new InMemoryGameRepository();
     const chain = { id: "chain-1", gameCount: 1, createdAt: 0 };
@@ -75,7 +56,7 @@ describe("InMemoryGameRepository", () => {
     expect((await repo.getPlayer("slug-1", "p1"))?.displayName).toBe("Ana");
     await repo.appendAiCallLog({
       id: "l1",
-      operation: "judgePhoto",
+      operation: "nameObject",
       model: "m",
       latencyMs: 5,
       outcome: "ok",

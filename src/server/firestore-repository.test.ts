@@ -1,6 +1,5 @@
 import type { Firestore } from "@google-cloud/firestore";
 import { describe, expect, it } from "vitest";
-import { VersionConflictError } from "../domain/repository";
 import type { Game } from "../domain/types";
 import { FirestoreGameRepository } from "./firestore-repository";
 
@@ -121,9 +120,9 @@ function makeGame(overrides: Partial<Game> = {}): Game {
     id: "slug-1",
     chainId: "chain-1",
     state: "OPEN",
-    brief: "brief",
+    
     challenge: "challenge",
-    persona: { name: "H", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "dry" },
+    
     adminTokenHash: "hash",
     deadlineAt: 1_000,
     entryCount: 0,
@@ -148,19 +147,6 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
     await expect(repo.createGame(makeGame())).rejects.toThrow(RangeError);
   });
 
-  it("CAS: race loser no-ops, stale version to another state conflicts", async () => {
-    const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
-    await repo.createGame(makeGame());
-    const first = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 10);
-    const second = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 11);
-    expect(first.changed).toBe(true);
-    expect(second).toMatchObject({ changed: false, game: { version: 1 } });
-    await expect(repo.compareAndSetGameState("slug-1", 0, "CLOSED", 12))
-      .rejects.toThrow(VersionConflictError);
-    await expect(repo.compareAndSetGameState("missing", 0, "REVEAL", 12))
-      .rejects.toThrow(RangeError);
-  });
-
   it("stores players and submissions as game subcollections", async () => {
     const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
     await repo.createGame(makeGame());
@@ -179,13 +165,13 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
       cutoutRef: "cutouts/slug-1/submission-1.png",
       objectLabel: "red stapler",
       altLabel: "A red stapler",
-      scores: null,
-      reason: "",
-      privateJudgement: "",
-      teaser: "",
+      
+      
+      
+      
       safetyFlags: {},
       status: "active",
-      judgeCount: 0,
+      labelCount: 0,
       segmentCount: 0,
       submittedAt: 2,
       version: 0,
@@ -206,13 +192,13 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
       workingRef: `tmp/games/slug-1/players/${playerId}/submissions/${id}/working.webp`,
       objectLabel: "",
       altLabel: "",
-      scores: null,
-      reason: "",
-      privateJudgement: "",
-      teaser: "",
+      
+      
+      
+      
       safetyFlags: {},
       status: "active" as const,
-      judgeCount: 0,
+      labelCount: 0,
       segmentCount: 0,
       submittedAt,
       version: 1,
@@ -239,7 +225,7 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
   it("filters AI logs by day bucket", async () => {
     const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
     const base = {
-      operation: "generatePersona",
+      operation: "nameObject",
       model: "muse-spark-1.3",
       latencyMs: 12,
       outcome: "ok" as const,

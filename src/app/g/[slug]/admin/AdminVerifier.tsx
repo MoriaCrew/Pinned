@@ -8,7 +8,6 @@ interface AdminGame {
   deadlineAt: number;
   entryCount: number;
   state: string;
-  persona: { name: string };
 }
 
 const memoryTokens = new Map<string, string>();
@@ -62,7 +61,7 @@ export function AdminVerifier({ slug }: { slug: string }) {
     let cancelled = false;
     async function verify() {
       try {
-        const response = await fetch(`/api/games/${encodeURIComponent(slug)}/admin`, {
+        const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/admin`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ adminToken: token }),
@@ -100,7 +99,6 @@ export function AdminVerifier({ slug }: { slug: string }) {
   return (
     <section className="card">
       <p className="state-pill">{game.state}</p>
-      <h2>{game.persona.name}</h2>
       <p className="challenge">“{game.challenge}”</p>
       <dl className="facts">
         <div>
@@ -127,7 +125,7 @@ export function AdminVerifier({ slug }: { slug: string }) {
           } catch { /* clipboard unavailable; the open-game link below still works */ }
         }}
       >
-        {copied ? t("en", "create.copied") : t("en", "admin.nudgeCopy")}
+        {copied ? t("en", "common.copied") : t("en", "admin.nudgeCopy")}
       </button>
       <a className="btn btn-primary" href={`/g/${slug}`}>{t("en", "admin.openPlayer")}</a>
     </section>

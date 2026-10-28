@@ -12,12 +12,10 @@ import type { MetaCallLog } from "../gateway/meta-gateway";
 const SPARK_INPUT_USD_PER_TOKEN = 1.25 / 1_000_000;
 const SPARK_OUTPUT_USD_PER_TOKEN = 4.25 / 1_000_000;
 const SAM_USD_PER_IMAGE = 2.5 / 1_000;
-const IMAGE_USD_PER_IMAGE = 0.01;
 
 export function estimateMetaCostUsd(entry: MetaCallLog): number {
   if (entry.outcome !== "ok") return 0;
   if (entry.operation === "segmentObject") return SAM_USD_PER_IMAGE * (entry.images ?? 1);
-  if (entry.operation === "posterBackground") return IMAGE_USD_PER_IMAGE * (entry.images ?? 1);
   return (
     (entry.inputTokens ?? 0) * SPARK_INPUT_USD_PER_TOKEN +
     (entry.outputTokens ?? 0) * SPARK_OUTPUT_USD_PER_TOKEN
@@ -68,7 +66,7 @@ export function createMetaLogSink(
       id: randomUUID(),
       operation: entry.operation,
       model: entry.model,
-      promptVersion: entry.operation === "generatePersona" ? "persona.v1" : undefined,
+      promptVersion: entry.operation === "nameObject" ? "label.v1" : undefined,
       inputTokens: entry.inputTokens,
       outputTokens: entry.outputTokens,
       images: entry.images,

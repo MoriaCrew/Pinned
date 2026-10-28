@@ -68,7 +68,7 @@ export function JoinPanel({
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/games/${encodeURIComponent(slug)}/players`, {
+      const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/players`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -96,18 +96,14 @@ describe("runSamLab", () => {
     expect(seen[1]).not.toContain("<|point;");
   });
 
-  it("auto-label uses the judge objectLabel as the concept", async () => {
+  it("auto-label uses the named objectLabel as the concept", async () => {
     let concept = "";
     const gateway: ModelGateway = {
       ...mockGateway,
-      async judgePhoto() {
+      async nameObject() {
         return {
           objectLabel: "brass lamp",
           altLabel: "A brass lamp",
-          scores: { fit: 3, effort: 3, chaos: 3 },
-          reason: "",
-          privateJudgement: "",
-          teaser: "",
           safetyFlags: {},
         };
       },
@@ -122,7 +118,7 @@ describe("runSamLab", () => {
       { gateway, mock: false },
     );
     expect(concept).toBe("brass lamp");
-    expect(result.judge?.objectLabel).toBe("brass lamp");
+    expect(result.label?.objectLabel).toBe("brass lamp");
     expect(result.segments).toHaveLength(0);
   });
 });

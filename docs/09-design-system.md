@@ -3,6 +3,11 @@
 Status: **Accepted** — all five decisions settled by the owner
 (decisions 1–3 on Oct 27, decisions 4–5 accepted Oct 28).
 
+> PIN-52 seam (Oct 29): preset hosts are deleted with the game. The looks
+> below survive as board themes only (src/domain/board-themes.ts, art in
+> public/themes/); host identity, voice and challenge text in this
+> document are historical.
+
 ## What exists
 
 - One global palette in `globals.css` (`--ink --paper --muted
