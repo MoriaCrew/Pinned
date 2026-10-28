@@ -1,8 +1,10 @@
 # 10 — Custom domains (pinneds.com)
 
-Status: Firebase side **created 2026-10-28**; waiting on GoDaddy
-DNS, then certificate provisioning (automatic, can take up to
-24h). The `hosted.app` URLs keep working regardless.
+Status: Firebase domains created 2026-10-28; DNS applied at
+GoDaddy the same day. Ownership is ACTIVE for apex + dev;
+certificates provision automatically once Firebase re-checks
+(can take up to 24h). The `hosted.app` URLs keep working
+regardless.
 
 ## Mapping
 
@@ -13,40 +15,25 @@ DNS, then certificate provisioning (automatic, can take up to
 | `www.pinneds.com` | moriacrew-pinned-prod | 301 redirect to apex |
 
 Domains were created with the App Hosting REST API
-(`projects.locations.backends.domains.create`). Firebase
-reported `HOST_UNHOSTED/NON_FAH`, `OWNERSHIP_MISSING`,
-`CERT_VALIDATING` with the DNS updates below.
+(`projects.locations.backends.domains.create`).
 
-## GoDaddy DNS records to apply (owner step)
+## DNS shape (values intentionally not copied here)
 
-In GoDaddy: Domain → pinneds.com → DNS → Records.
-Hosts are relative to `pinneds.com` (`@` = apex). TTL default.
+DNS records are public — anyone can query them — but the repo
+does not need to duplicate the exact claim/challenge values.
+They go stale and Firebase can re-print them at any time:
+GET the domain resource and read
+`customDomainStatus.requiredDnsUpdates`.
 
-**Delete first**
+What each hostname needs at the registrar:
 
-| Type | Host | Value |
-|---|---|---|
-| A | @ | 15.197.148.33 |
-| A | @ | 3.33.130.190 |
-| CNAME | www | pinneds.com |
-
-**Add**
-
-| Type | Host | Value |
-|---|---|---|
-| A | @ | 35.219.200.109 |
-| A | www | 35.219.200.109 |
-| A | dev | 35.219.200.109 |
-| TXT | @ | fah-claim=016-02-d90e69bb-b003-4f1f-aaa8-a07eb421db28 |
-| TXT | www | fah-claim=016-02-124584ea-46db-48a7-bfef-ad7bf69b0468 |
-| TXT | dev | fah-claim=016-02-9c36fed3-19ca-4afe-99b5-7bc0d0d3d847 |
-| CNAME | _acme-challenge_ydwwebxhdyr3ykua | 4f425af2-0dca-4cca-b10e-7acee9633b6f.4.authorize.certificatemanager.goog |
-| CNAME | _acme-challenge_ydwwebxhdyr3ykua.dev | 4e47ba4a-cb15-42c5-a326-ea7cd9702ce7.15.authorize.certificatemanager.goog |
-
-Notes: do not add AAAA records for these hosts (App Hosting
-serves IPv4 here). Keep the `_acme-challenge` records after
-setup — certificates renew through them. The two prod domains
-share one challenge host/value, so it appears once.
+- An `A` record per hostname (@, www, dev) to the App Hosting
+  IP Firebase reports. No AAAA records on these hosts.
+- A `TXT` ownership record per hostname (`fah-claim=...`).
+- A `_acme-challenge_*` `CNAME` per zone for certificate
+  issuance/renewal — keep these after setup.
+- No other A/CNAME records on @, www, or dev (stale registrar
+  parking records block validation).
 
 ## After DNS
 
