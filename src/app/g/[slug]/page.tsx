@@ -50,6 +50,10 @@ export default async function GamePage({
 
       <section className="card">
         <p className="eyebrow">{t("en", "game.challenge")}</p>
+        {game.presetId ? (
+          // eslint-disable-next-line @next/next/no-img-element -- static baked asset
+          <img className="host-art" src={`/presets/${game.presetId}.webp`} alt="" aria-hidden="true" width={512} height={512} />
+        ) : null}
         <h1 className="challenge">“{game.challenge}”</h1>
         <p className="fact-chips">
           <span className="fact-chip">{game.theme?.motif ?? "🎭"} {game.persona.name}</span>

@@ -80,7 +80,8 @@ function PresetCard({
         borderColor: selected ? preset.theme.accent : undefined,
       }}
     >
-      <span className="preset-motif" aria-hidden="true">{preset.motif}</span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- static baked asset */}
+      <img className="preset-art" src={preset.image} alt="" aria-hidden="true" width={512} height={512} />
       <span className="preset-name">{preset.persona.name}</span>
       <span className="preset-catch">{preset.catchline}</span>
       {selected ? <span className="preset-check" aria-hidden="true">✓</span> : null}
