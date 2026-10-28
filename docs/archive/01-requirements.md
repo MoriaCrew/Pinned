@@ -1,3 +1,5 @@
+> **Archived Oct 28, 2026 (PIN-49):** the game is dropped. Studio spec: [docs/11-studio.md](../11-studio.md).
+
 # Pinned — High-Level Requirements
 
 _Status: v0.1 (Day 1, Oct 26, 2026) · Track: Indie (solo developer) ·

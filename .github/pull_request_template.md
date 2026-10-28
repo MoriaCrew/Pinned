@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- Satisfies: FR<!-- x.x -->, NFR<!-- x --> (see `docs/01-requirements.md`)
+- Satisfies: `docs/11-studio.md` section(s) <!-- e.g. 5.2 --> (see `docs/adr/003-studio-architecture.md`)
 
 ## What changed
 
