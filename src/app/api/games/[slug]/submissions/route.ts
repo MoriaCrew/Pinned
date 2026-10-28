@@ -18,6 +18,7 @@ import { getModelGateway } from "../../../../../gateway";
 import { mockGateway } from "../../../../../gateway/mock-gateway";
 import { createMetaLogSink, getTodayAiUsage, isAiBudgetExhausted } from "../../../../../server/ai-usage";
 import { judgeSubmission } from "../../../../../server/judge-submission";
+import { segmentSubmission } from "../../../../../server/segment-submission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,6 +116,13 @@ export async function POST(
       if (!config.aiMock && isAiBudgetExhausted(await getTodayAiUsage(repository), config)) gateway = mockGateway;
       const judged = await judgeSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
       judgedSubmission = judged.submission;
+      // Cut out inline too (PIN-46); failure keeps the whole photo.
+      try {
+        const segmented = await segmentSubmission(slug, result.submission.id, { repository, gateway, store: getDerivativeStore() });
+        judgedSubmission = segmented.submission;
+      } catch (segmentError) {
+        console.warn("segmentation failed; whole photo kept", { slug, error: String(segmentError) });
+      }
     } catch (judgeError) {
       console.warn("judging failed; entry kept", { slug, error: String(judgeError) });
     }

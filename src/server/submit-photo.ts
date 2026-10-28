@@ -166,9 +166,10 @@ export async function submitPhoto(
 
   const superseded = recorded.superseded;
   for (const old of superseded) {
-    if (!old.workingRef) continue;
+    if (!old.workingRef && !old.cutoutRef) continue;
     try {
-      await deps.store.delete(old.workingRef);
+      if (old.workingRef) await deps.store.delete(old.workingRef);
+      if (old.cutoutRef) await deps.store.delete(old.cutoutRef).catch(() => undefined);
     } catch (error) {
       // Record is already superseded; the tmp/ lifecycle is the backstop.
       console.warn("superseded derivative delete failed", {
@@ -194,6 +195,7 @@ export function publicOwnSubmission(submission: Submission) {
     submittedAt: submission.submittedAt,
     hasPhoto: Boolean(submission.workingRef),
     judged: Boolean(submission.scores),
+    hasCutout: Boolean(submission.cutoutRef),
     // Owner-only prose (PIN-44); numeric scores stay hidden until REVEAL.
     privateJudgement: submission.privateJudgement || null,
   };
