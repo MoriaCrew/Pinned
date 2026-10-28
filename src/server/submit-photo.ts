@@ -194,6 +194,7 @@ export function publicOwnSubmission(submission: Submission) {
     submittedAt: submission.submittedAt,
     hasPhoto: Boolean(submission.workingRef),
     judged: Boolean(submission.scores),
+    hasCutout: Boolean(submission.cutoutRef),
     // Owner-only prose (PIN-44); numeric scores stay hidden until REVEAL.
     privateJudgement: submission.privateJudgement || null,
   };
