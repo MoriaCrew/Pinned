@@ -8,6 +8,8 @@ interface OwnSubmission {
   status: string;
   submittedAt: number;
   hasPhoto: boolean;
+  judged?: boolean;
+  privateJudgement?: string | null;
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -117,6 +119,16 @@ export function SubmitPanel({
       <h2>{t("en", "submit.title")}</h2>
       <p className="notice">{t("en", "submit.safety")}</p>
 
+      {submission?.privateJudgement ? (
+        <aside className="host-verdict" aria-live="polite">
+          <p className="eyebrow">{t("en", "submit.hostSays")}</p>
+          <p className="challenge">{submission.privateJudgement}</p>
+          <p className="notice">{t("en", "submit.judgedWait")}</p>
+        </aside>
+      ) : submission?.hasPhoto ? (
+        <p className="notice" role="status">{t("en", "submit.judging")}</p>
+      ) : null}
+
       {previewSrc ? (
         <figure className="entry-preview">
           {/* Owner-only derivative preview; plain img keeps the cookie flow simple. */}
@@ -143,7 +155,7 @@ export function SubmitPanel({
         {error ? <p className="error" role="alert">{error}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={busy || !file}>
           {busy
-            ? t("en", "submit.sending")
+            ? t("en", "submit.judging")
             : submission
               ? t("en", "submit.replace")
               : t("en", "submit.send")}

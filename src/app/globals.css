@@ -155,6 +155,9 @@ details.card > summary { cursor: pointer; font-weight: 800; font-size: 1.15rem; 
 .preset-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; min-height: 132px; padding: 0.9rem; border: 2px solid var(--line); border-radius: 16px; font: inherit; text-align: left; color: var(--ink); cursor: pointer; }
 .preset-art { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 10px; margin-bottom: 0.35rem; }
 .host-art { width: 112px; height: 112px; object-fit: cover; border-radius: 16px; float: right; margin: 0 0 0.5rem 0.75rem; }
+.host-verdict { border-left: 4px solid var(--accent); padding: 0.25rem 0 0.25rem 0.85rem; margin: 0.75rem 0; }
+.teaser-feed { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.teaser-feed li { background: var(--paper); border: 1.5px solid var(--line); border-radius: 10px; padding: 0.55rem 0.8rem; font-style: italic; }
 .preset-card.selected { border-width: 3px; box-shadow: 0 4px 14px rgb(26 23 18 / 0.14); }
 .preset-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .preset-motif { font-size: 2rem; line-height: 1.1; }
