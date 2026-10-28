@@ -26,7 +26,9 @@ export async function GET(
   if (!own) {
     return NextResponse.json({ error: "Not joined." }, { status: 401 });
   }
-  const ref = own.submission?.workingRef;
+  const kind = new URL(request.url).searchParams.get("kind");
+  const isCutout = kind === "cutout";
+  const ref = isCutout ? own.submission?.cutoutRef : own.submission?.workingRef;
   if (!ref) {
     return NextResponse.json({ error: "No photo yet." }, { status: 404 });
   }
@@ -36,7 +38,7 @@ export async function GET(
   }
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
-      "Content-Type": WORKING_IMAGE_CONTENT_TYPE,
+      "Content-Type": isCutout ? "image/png" : WORKING_IMAGE_CONTENT_TYPE,
       "Content-Length": String(bytes.length),
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
