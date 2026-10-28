@@ -1,7 +1,8 @@
 import { t } from "../i18n";
 
-// Landing (FR7.2). Create is live (PIN-6); demo lands with PIN-12.
-// The demo button stays inert until then — no fake functionality.
+// Landing. Board creation arrives with the Studio slices (PIN-53);
+// until then both actions stay inert — no fake functionality.
+// Existing /g/{slug} links keep working.
 export default function HomePage() {
   return (
     <main>
@@ -10,7 +11,7 @@ export default function HomePage() {
       <p className="lede">{t("en", "landing.body")}</p>
 
       <div className="actions">
-        <a className="btn btn-primary" href="/create">
+        <a className="btn btn-primary" href="#soon" aria-disabled="true">
           {t("en", "landing.start")}
         </a>
         <a className="btn" href="#soon" aria-disabled="true">

@@ -1,9 +1,9 @@
-import { playerColorFor } from "../../../domain/presets";
+import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
 import type { JoinPlayerView } from "./JoinPanel";
 
 /**
- * Player name card (PIN-40): one card system with preset cards.
+ * Player name card (PIN-40): one card system with theme cards.
  * Avatar initial in the player's stable color, name, icon status,
  * poster consent in words (never icon-only).
  */

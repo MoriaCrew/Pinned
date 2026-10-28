@@ -31,7 +31,6 @@ export async function POST(
         id: game.id,
         state: game.state,
         challenge: game.challenge,
-        persona: game.persona,
         deadlineAt: game.deadlineAt,
         entryCount: game.entryCount,
         createdAt: game.createdAt,

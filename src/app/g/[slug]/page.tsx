@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { t } from "../../../i18n";
+import { getBoardTheme, storedThemeId } from "../../../domain/board-themes";
 import { getGameRepository } from "../../../server/repository";
 import { getConfig } from "../../../config";
 import { playerCookieName, publicPlayer, resolvePlayerSession } from "../../../server/player-session";
@@ -12,7 +13,7 @@ import { LocalDeadline } from "./LocalDeadline";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Pinneds game",
+  title: "Pinneds board",
   robots: { index: false, follow: false },
 };
 
@@ -26,6 +27,8 @@ function themeVars(theme: { accent: string; accentInk: string; paper: string; li
   } as CSSProperties;
 }
 
+// PIN-52 seam: existing games keep rendering here (read + join +
+// photo intake) until the Studio board page replaces this (PIN-66).
 export default async function GamePage({
   params,
 }: {
@@ -42,12 +45,7 @@ export default async function GamePage({
     { repository, sessionSecret: getConfig().sessionSecret },
   );
   const canJoin = game.state === "OPEN" && Date.now() < game.deadlineAt;
-  const submissions = await repository.listSubmissions(slug);
-  const teasers = submissions
-    .filter((entry) => entry.status === "active" && entry.teaser)
-    .sort((a, b) => b.submittedAt - a.submittedAt)
-    .slice(0, 5)
-    .map((entry) => entry.teaser);
+  const boardTheme = getBoardTheme(storedThemeId(game));
 
   return (
     <div className="theme-bg" style={themeVars(game.theme)}>
@@ -56,13 +54,15 @@ export default async function GamePage({
 
       <section className="card">
         <p className="eyebrow">{t("en", "game.challenge")}</p>
-        {game.presetId ? (
+        {boardTheme ? (
           // eslint-disable-next-line @next/next/no-img-element -- static baked asset
-          <img className="host-art" src={`/presets/${game.presetId}.webp`} alt="" aria-hidden="true" width={512} height={512} />
+          <img className="theme-art" src={boardTheme.image} alt="" aria-hidden="true" width={512} height={512} />
         ) : null}
         <h1 className="challenge">“{game.challenge}”</h1>
         <p className="fact-chips">
-          <span className="fact-chip">{game.theme?.motif ?? "🎭"} {game.persona.name}</span>
+          {boardTheme ? (
+            <span className="fact-chip">{boardTheme.motif} {boardTheme.label}</span>
+          ) : null}
           <span className="fact-chip">
             {t("en", "game.deadline")}{" "}
             <LocalDeadline value={game.deadlineAt} />
@@ -71,44 +71,11 @@ export default async function GamePage({
         </p>
       </section>
 
-      <section className="card" aria-label={t("en", "game.teasers")}>
-        <h2>{t("en", "game.teasers")}</h2>
-        {teasers.length > 0 ? (
-          <ul className="teaser-feed">
-            {teasers.map((teaser, index) => <li key={index}>{teaser}</li>)}
-          </ul>
-        ) : <p>{t("en", "game.teasersEmpty")}</p>}
-      </section>
-
       <JoinPanel
         slug={slug}
         initialPlayer={currentPlayer ? publicPlayer(currentPlayer) : null}
         canJoin={canJoin}
       />
-
-      <details className="card">
-        <summary>{t("en", "game.meetHost")}</summary>
-        <p>{game.persona.judgingStyle}</p>
-        <h3>{t("en", "game.rubricTitle")}</h3>
-        <ul className="plain-list">
-          <li>{t("en", "game.rubricFit")}</li>
-          <li>{t("en", "game.rubricEffort")}</li>
-          <li>{t("en", "game.rubricChaos")}</li>
-        </ul>
-        <p>{t("en", "game.rubricNote")}</p>
-        <h3>{t("en", "game.voice")}</h3>
-        <ul className="plain-list">
-          {game.persona.voiceRules.map((rule) => <li key={rule}>{rule}</li>)}
-        </ul>
-        {game.persona.catchphrases.length > 0 ? (
-          <>
-            <h3>{t("en", "game.catchphrases")}</h3>
-            <ul className="plain-list">
-              {game.persona.catchphrases.map((phrase) => <li key={phrase}>{phrase}</li>)}
-            </ul>
-          </>
-        ) : null}
-      </details>
     </main>
     </div>
   );

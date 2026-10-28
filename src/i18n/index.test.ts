@@ -3,7 +3,7 @@ import { t } from "./index";
 
 describe("i18n catalog (FR9)", () => {
   it("resolves English strings", () => {
-    expect(t("en", "landing.start")).toBe("Start a game");
+    expect(t("en", "landing.start")).toBe("Start a board");
   });
 
   it("falls back to English while fr is an empty stub", () => {
