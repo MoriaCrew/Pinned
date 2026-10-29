@@ -29,5 +29,11 @@ env:
     value: moriacrew-pinned-prod
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: moriacrew-pinned-prod
+  # PIN-83: stays empty + AUTH_MODE link-only on prod until the
+  # operator enables sign-in here (docs/13-auth.md).
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: ""
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: ""
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-prod.firebasestorage.app

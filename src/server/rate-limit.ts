@@ -49,4 +49,7 @@ export const RATE_LIMITS = {
   // above alone lets one IP rotate slugs), wired on the upload
   // entry points that exist today.
   uploadsPerIp: { limit: 60, windowMs: 60 * 60_000 },
+  // PIN-83: sign-in/claim brake (token guessing is pointless
+  // against Firebase verify, but keep the entry point gated).
+  authSessionPerIp: { limit: 20, windowMs: 10 * 60_000 },
 } as const;

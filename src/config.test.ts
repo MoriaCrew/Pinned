@@ -23,6 +23,20 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     ).toBeNull();
   });
 
+  it("passes Firebase web config through, empty fails to null (PIN-83)", () => {
+    expect(parseConfig({}).firebaseWebApiKey).toBeNull();
+    expect(parseConfig({}).firebaseWebAuthDomain).toBeNull();
+    expect(
+      parseConfig({ NEXT_PUBLIC_FIREBASE_API_KEY: "  " }).firebaseWebApiKey,
+    ).toBeNull();
+    const cfg = parseConfig({
+      NEXT_PUBLIC_FIREBASE_API_KEY: " public-web-key ",
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "demo.firebaseapp.com",
+    });
+    expect(cfg.firebaseWebApiKey).toBe("public-web-key");
+    expect(cfg.firebaseWebAuthDomain).toBe("demo.firebaseapp.com");
+  });
+
   it("honours optional + live AI only on exact values", () => {
     const cfg = parseConfig({ AUTH_MODE: "optional", AI_MOCK: "0" });
     expect(cfg.authMode).toBe("optional");

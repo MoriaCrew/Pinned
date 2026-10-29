@@ -12,5 +12,9 @@ runConfig:
 env:
   - variable: AI_MOCK
     value: "1"
+  # PIN-83: link-only everywhere until the operator enables the
+  # Google provider + sets the NEXT_PUBLIC_* web config per
+  # backend (docs/13-auth.md). Empty web config = sign-in UI
+  # hidden, honestly; never put invented key values here.
   - variable: AUTH_MODE
     value: link-only

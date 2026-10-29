@@ -29,6 +29,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.chipsMax).toBe(4);
     expect(DEFAULT_POLICY.maxTokens.sparkChips).toBe(1200);
     expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
+    // PIN-83 signed-in user cookie life.
+    expect(DEFAULT_POLICY.userSessionDays).toBe(30);
+    expect(resolvePolicy({ userSessionDays: 7 }).userSessionDays).toBe(7);
+    expect(() => resolvePolicy({ userSessionDays: 0 })).toThrow();
     expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);
     expect(resolvePolicy({ maxTokens: { sparkChips: 800 } }).maxTokens).toEqual({
       sparkElements: 4000,

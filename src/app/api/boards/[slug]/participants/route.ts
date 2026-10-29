@@ -7,6 +7,9 @@ import {
   readCookieValue,
 } from "../../../../../server/board-session";
 import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../../server/rate-limit";
+import { getConfig } from "../../../../../config";
+import { linkParticipantOnJoin } from "../../../../../server/user-session";
+import { claimDeps, currentUser } from "../../../auth-shared";
 import {
   JSON_HEADERS,
   errorResponse,
@@ -71,8 +74,23 @@ export async function POST(
       playerCookieName(slug),
     );
     const result = await joinBoard(slug, body, existingCookie, sessionDeps(policy));
+    // PIN-83: join-while-signed-in auto-links the participant to
+    // the user + board index. Optional-mode only and best-effort:
+    // link-only never runs this, and a link failure never fails
+    // the join (the explicit claim route surfaces real errors).
+    let participant = result.participant;
+    if (getConfig().authMode === "optional") {
+      try {
+        const user = await currentUser(request);
+        if (user) {
+          participant = await linkParticipantOnJoin(participant, user, claimDeps());
+        }
+      } catch (error) {
+        console.error("join auto-link failed", error);
+      }
+    }
     return NextResponse.json(
-      { participant: publicParticipant(result.participant), outcome: result.outcome },
+      { participant: publicParticipant(participant), outcome: result.outcome },
       {
         status: result.outcome === "created" ? 201 : 200,
         headers: {
