@@ -55,6 +55,21 @@ export function authInitials(displayName: string | null | undefined): string {
   return (first + second).toUpperCase();
 }
 
+/**
+ * Default join name from the signed-in profile (PIN-87): the
+ * Google display name, shaped to the server rules
+ * (`normalizeDisplayName`: trimmed, single spaces, no control
+ * characters, at most 30 characters) so the prefilled value is
+ * always submittable. Empty string when there is no usable name.
+ */
+export function defaultJoinName(profileName: string | null | undefined): string {
+  const cleaned = (profileName ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  return [...cleaned].slice(0, 30).join("").trim();
+}
+
 /** localStorage key for the once-only first-pin nudge. */
 export const SIGN_IN_NUDGE_STORAGE_KEY = "pinned.signInNudgeSeen";
 
