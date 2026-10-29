@@ -213,3 +213,49 @@ fixture (`desk-mug-duck`, `kitchen-cat-lamp`) and confirmed
   deployment, so their records carry no `kind`; the PIN-71 API
   reports them "ai" (all pre-PIN-71 scenes are AI composes).
   No prod or console steps were taken.
+
+## PIN-79 stateless remix (2026-10-29, hosted dev, Slice 2 demo board)
+
+One live remix on the existing Slice 2 demo board above (slug +
+scene ids preserved in PIN-79's Linear evidence only, capability
+link kept out of this file), run after PR #68 deployed to hosted
+dev. The remixer joined the board as a new participant (no
+PIN-71 cookies available; disclosed in Linear).
+
+| Scene | Parent | New pins (owners) | Prompt | s | Image |
+| --- | --- | --- | --- | --- | --- |
+| remix child | Demo scene 1 "on a sunny picnic blanket" (duck + succulent + cat) | Distressed Teal Mug (Aye) | "the same scene, now with the new guest joining in, golden hour light" | 27.9 | 200 image/webp, 475,752 B |
+
+- Request shape: parent scene image FIRST with the base-scene
+  label, then the 1 new flattened element + label, instruction
+  last; `store=false`, no `previous_response_id`, prompt version
+  `scene.v1` (final instruction template unchanged).
+- Result: `ready`, kind "ai", `parentSceneId` linked; the child
+  Scene's elementIds carry the credit union (new mug + the
+  parent's 3 pins, owners Aye + Robin); scenes 3 -> 4, parent
+  record unchanged (verified by re-read).
+- Fidelity eyeball (parent vs child, both viewed): the child
+  preserves the parent's composition almost exactly — same cat
+  pose, succulent, sunglasses duck, blanket and framing — adds
+  the distressed teal mug at the right, and warms the light to
+  golden hour as instructed. It is a model re-render, not a
+  pixel composite (fine fur/light detail shifts), but every
+  parent element stays unmistakably itself. Remix fidelity is
+  NOT worse than a fresh scene (a fresh compose would re-stage
+  everything freely), so the parent stop-rule does not trigger:
+  shipped as true remix, not "new scene from these pins".
+- Negative probe: bogus `parentSceneId` -> HTTP 404
+  (`parent_not_found`) before any spend.
+- Cost (labelled estimate at PIN-50/69 unit rates, gateway
+  Spark-token proxy; provider dashboard authoritative): 1 remix
+  compose ~ $0.017-0.022 est., same as one fresh scene; total
+  wall-clock 42.4s incl. join + probes. Far under the
+  $0.30/scene stop line.
+- Caps: `pinsPerScene` counts NEW pins only (parent excluded) —
+  enforced and unit-tested at max and max+1. Delete cascade:
+  the child carries the credit union, so deleting any
+  contributing element (including via the parent only) hides
+  the child (Bugbot finding on PR #68, fixed + regression
+  test). Mock/over-budget remix composites cut-outs OVER the
+  parent image, labelled kind "collage" (unit-tested; not
+  probed live — hosted dev runs live AI).
