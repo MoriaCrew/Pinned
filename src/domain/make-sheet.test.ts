@@ -72,6 +72,11 @@ describe("make sheet logic (PIN-70)", () => {
   it("chips fill, swap, extend, and never duplicate or bust the cap", () => {
     expect(applyChip("", CHIPS[0], CHIPS, 500)).toBe("on a sunny picnic blanket");
     expect(applyChip("on a sunny picnic blanket", CHIPS[1], CHIPS, 500)).toBe("floating in space");
+    // PIN-75 swap: with fixed + generated chips both known, a
+    // prompt that is just a fixed chip still swaps, not appends.
+    expect(
+      applyChip("on a sunny picnic blanket", "napping in a sunbeam", [...CHIPS, "napping in a sunbeam"], 500),
+    ).toBe("napping in a sunbeam");
     expect(applyChip("a tiny picnic", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic floating in space");
     expect(applyChip("a tiny picnic floating in space", CHIPS[1], CHIPS, 500)).toBe(
       "a tiny picnic floating in space",
