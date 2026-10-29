@@ -58,6 +58,27 @@ describe("reclaim lockout math (PIN-90)", () => {
     expect(restarted.firstFailureAt).toBe(T0 + 10 + 100_000);
   });
 
+  it("a lock longer than the window does not reset escalation (idle runs from lock end)", () => {
+    const params: ReclaimLockoutParams = {
+      maxFailures: 2,
+      failureWindowMs: 10_000,
+      lockoutBaseMs: 20_000,
+      lockoutMaxMs: 80_000,
+    };
+    let state = recordReclaimFailure("b", "k", null, T0, params);
+    state = recordReclaimFailure("b", "k", state, T0, params); // lock 20s (> window)
+    expect(state.lockedUntil).toBe(T0 + 20_000);
+    // Right at lock expiry the counter must NOT be fresh: the next
+    // failure escalates to a 40s lock instead of restarting at 1.
+    expect(freshReclaimState(state, T0 + 20_000, params)).not.toBeNull();
+    state = recordReclaimFailure("b", "k", state, T0 + 20_000, params);
+    expect(state.failures).toBe(3);
+    expect(state.lockedUntil).toBe(T0 + 20_000 + 40_000);
+    // Only a full idle window AFTER the lock ends decays it.
+    expect(freshReclaimState(state, T0 + 60_000 + 9_999, params)).not.toBeNull();
+    expect(freshReclaimState(state, T0 + 60_000 + 10_000, params)).toBeNull();
+  });
+
   it("a running lock never decays early", () => {
     let state = recordReclaimFailure("b", "k", null, T0, PARAMS);
     state = recordReclaimFailure("b", "k", state, T0, PARAMS);

@@ -37,8 +37,11 @@ export function isReclaimLocked(
 }
 
 /**
- * Drop stale state: once a lock has expired AND the failure window
- * has passed since the last failure, the counter starts fresh.
+ * Drop stale state: once the counter has sat UNLOCKED and idle for
+ * the failure window, it starts fresh. Idle time runs from the end
+ * of the last lock (or the last failure, if later) — never from a
+ * failure that a still-running lock followed, or a lock longer
+ * than the window would silently reset the escalation.
  */
 export function freshReclaimState(
   state: ReclaimAttemptState | null,
@@ -47,7 +50,8 @@ export function freshReclaimState(
 ): ReclaimAttemptState | null {
   if (!state) return null;
   if (isReclaimLocked(state, now)) return state;
-  if (now - state.lastFailureAt >= params.failureWindowMs) return null;
+  const idleSince = Math.max(state.lastFailureAt, state.lockedUntil);
+  if (now - idleSince >= params.failureWindowMs) return null;
   return state;
 }
 
