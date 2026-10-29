@@ -27,6 +27,17 @@ export interface BoardViewPin {
   createdAt: number;
 }
 
+export interface BoardViewScene {
+  id: string;
+  createdBy: string;
+  elementIds: string[];
+  prompt: string;
+  status: "pending" | "running" | "ready" | "failed" | "refused";
+  refusalReason?: string;
+  imageUrl: string | null;
+  createdAt: number;
+}
+
 export interface BoardViewLike {
   participants: BoardViewParticipant[];
   elements: BoardViewElement[];

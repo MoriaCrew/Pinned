@@ -1,16 +1,37 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { needsEmptyPrompt, pinCards, type BoardViewLike } from "../../../domain/board-view";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  needsEmptyPrompt,
+  pinCards,
+  type BoardViewLike,
+  type BoardViewScene,
+} from "../../../domain/board-view";
+import {
+  isTerminalScene,
+  pruneSelection,
+  sceneCreditParts,
+  scenesNewestFirst,
+  selectableCards,
+  selectedCards,
+  togglePinSelection,
+} from "../../../domain/make-sheet";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
 import { AddSheet, boardQueryKey } from "./AddSheet";
+import { MakeSheet } from "./MakeSheet";
 
 export interface BoardClientView extends BoardViewLike {
   board: { slug: string; title: string };
   me: { id: string; displayName: string } | null;
-  scenes: { id: string }[];
+  scenes: BoardViewScene[];
 }
 
 export interface BoardClientPolicy {
@@ -18,14 +39,32 @@ export interface BoardClientPolicy {
   jobPollIntervalMs: number;
   uploadMaxPx: number;
   uploadJpegQuality: number;
+  pinsPerScene: { min: number; max: number };
+  sceneChips: string[];
+  scenePromptMaxChars: number;
+}
+
+interface SceneAttempt {
+  sceneId: string;
+  elementIds: string[];
+  prompt: string;
+  pinIds: string[];
+}
+
+function newSceneId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `scene-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 /**
- * Studio board (PIN-66/67, docs/11 sections 5.8 + 6): scenes
- * placeholder on top, pins grid with owner names, fixed bottom
- * bar. TanStack Query polls the board view (Policy cadence,
- * refetch on focus) so a second phone sees new pins; the Add
- * sheet owns uploads and optimistic pins.
+ * Studio board (PIN-66/67/70, docs/11 section 6): scenes first,
+ * pins grid with owner names, fixed bottom bar. TanStack Query
+ * polls the board view (Policy cadence) so a second phone sees
+ * new pins and scenes. Picking up to Policy.pinsPerScene.max pins
+ * (count in the bottom bar) opens the Make sheet; "Make it ✨"
+ * closes it and a cooking card polls the scene in the gallery.
  */
 export function BoardClient({
   slug,
@@ -59,7 +98,11 @@ function BoardBody({
   policy: BoardClientPolicy;
 }) {
   const queryClient = useQueryClient();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [makeOpen, setMakeOpen] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [attempt, setAttempt] = useState<SceneAttempt | null>(null);
+  const [attemptError, setAttemptError] = useState("");
   const boardQuery = useQuery({
     queryKey: boardQueryKey(slug),
     queryFn: async (): Promise<BoardClientView> => {
@@ -95,13 +138,180 @@ function BoardBody({
   };
 
   const cards = pinCards(view);
+  const selectableIds = selectableCards(cards).map((card) => card.pinId);
+
+  useEffect(() => {
+    setSelected((current) => {
+      const pruned = pruneSelection(current, selectableIds);
+      return pruned.size === current.size ? current : pruned;
+    });
+    // selectableIds identity changes per render; key on its content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectableIds.join(",")]);
+
+  const makeScene = useMutation({
+    mutationFn: async (sceneAttempt: SceneAttempt) => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/scenes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            elementIds: sceneAttempt.elementIds,
+            prompt: sceneAttempt.prompt,
+            sceneId: sceneAttempt.sceneId,
+          }),
+        },
+      );
+      const data = (await response.json()) as {
+        scene?: BoardViewScene;
+        error?: string;
+      };
+      if (!response.ok || !data.scene) {
+        throw new Error(data.error || t("en", "make.failed"));
+      }
+      return data.scene;
+    },
+    onSuccess: () => {
+      // The picks are spent; the board poll brings the scene in.
+      setSelected(new Set());
+      void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+    },
+    onError: (cause) =>
+      setAttemptError(cause instanceof Error ? cause.message : t("en", "make.failed")),
+  });
+
+  // Poll my in-flight scene at job cadence so the gallery card
+  // lands faster than the board poll; both share the TanStack
+  // cache and the poll stops at a terminal status.
+  const attemptInView = attempt
+    ? view.scenes.find((scene) => scene.id === attempt.sceneId)
+    : undefined;
+  const scenePoll = useQuery({
+    queryKey: ["board-scene", slug, attempt?.sceneId],
+    queryFn: async (): Promise<{ scene: BoardViewScene }> => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(attempt?.sceneId ?? "")}`,
+        { cache: "no-store" },
+      );
+      const data = (await response.json()) as { scene?: BoardViewScene; error?: string };
+      if (!response.ok || !data.scene) throw new Error(data.error || t("en", "make.failed"));
+      return { scene: data.scene };
+    },
+    enabled:
+      attempt !== null &&
+      !makeScene.isPending &&
+      !(attemptInView && isTerminalScene(attemptInView.status)),
+    refetchInterval: (query) =>
+      query.state.data && isTerminalScene(query.state.data.scene.status)
+        ? false
+        : policy.jobPollIntervalMs,
+  });
+  const polledScene = scenePoll.data?.scene;
+  const polledStatus = polledScene?.status;
+  useEffect(() => {
+    if (polledStatus && isTerminalScene(polledStatus)) {
+      void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+    }
+  }, [polledStatus, queryClient, slug]);
+
+  const scenes = scenesNewestFirst(
+    polledScene
+      ? [polledScene, ...view.scenes.filter((scene) => scene.id !== polledScene.id)]
+      : view.scenes,
+  );
+  const showCooking =
+    makeScene.isPending &&
+    !(attempt && scenes.some((scene) => scene.id === attempt.sceneId));
+  const picked = selectedCards(cards, selected);
   const empty = needsEmptyPrompt(view);
+
+  function togglePin(pinId: string) {
+    // Functional update: fast successive taps must each see the
+    // previous pick, not the render-time snapshot.
+    setSelected(
+      (current) => togglePinSelection(current, pinId, policy.pinsPerScene.max).next,
+    );
+  }
+
+  function submitScene(input: { elementIds: string[]; prompt: string; pinIds: string[] }) {
+    // A fresh sceneId per Make-it press; the network retry below
+    // reuses it, which the server treats idempotently (PIN-69).
+    const sceneAttempt: SceneAttempt = { ...input, sceneId: newSceneId() };
+    setAttempt(sceneAttempt);
+    setAttemptError("");
+    setMakeOpen(false);
+    makeScene.mutate(sceneAttempt);
+  }
+
+  function retryScene() {
+    if (!attempt) return;
+    setAttemptError("");
+    makeScene.mutate(attempt);
+  }
+
+  function changeIdea() {
+    if (!attempt) return;
+    setSelected(pruneSelection(new Set(attempt.pinIds), selectableIds));
+    setMakeOpen(true);
+  }
+
+  function renderScene(scene: BoardViewScene) {
+    const parts = sceneCreditParts(scene, view.elements, view.participants);
+    const mine = attempt !== null && scene.id === attempt.sceneId;
+    return (
+      <li key={scene.id} className="scene-card">
+        {scene.status === "ready" && scene.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image
+          <img src={scene.imageUrl} alt={scene.prompt} loading="lazy" />
+        ) : scene.status === "refused" ? (
+          <p role="status">{scene.refusalReason ?? t("en", "ai.refused")}</p>
+        ) : scene.status === "failed" ? (
+          <p role="status">{t("en", "make.failed")}</p>
+        ) : (
+          <p role="status">{t("en", "make.cooking")}</p>
+        )}
+        <p className="scene-prompt">{scene.prompt}</p>
+        {parts.length > 0 ? (
+          <p className="scene-credit">
+            {t("en", "make.from")}{" "}
+            {parts
+              .map((part) => (part.ownerName ? `${part.ownerName}'s ${part.label}` : part.label))
+              .join(" + ")}
+          </p>
+        ) : null}
+        {mine && (scene.status === "refused" || scene.status === "failed") ? (
+          <button type="button" className="btn btn-small" onClick={changeIdea}>
+            {t("en", "make.changeIdea")}
+          </button>
+        ) : null}
+      </li>
+    );
+  }
 
   return (
     <>
       <section className="card" aria-label={t("en", "board.scenes")}>
         <h2>{t("en", "board.scenes")}</h2>
-        <p className="board-placeholder">{t("en", "board.scenesEmpty")}</p>
+        {showCooking ? (
+          <p className="scene-card" role="status">
+            {t("en", "make.cooking")}
+            {attempt ? <span className="scene-prompt"> {attempt.prompt}</span> : null}
+          </p>
+        ) : null}
+        {attemptError ? (
+          <p className="error" role="alert">
+            {attemptError}{" "}
+            <button type="button" className="btn btn-small" onClick={retryScene}>
+              {t("en", "admin.retry")}
+            </button>
+          </p>
+        ) : null}
+        {scenes.length > 0 ? (
+          <ul className="scene-list">{scenes.map(renderScene)}</ul>
+        ) : !showCooking ? (
+          <p className="board-placeholder">{t("en", "board.scenesEmpty")}</p>
+        ) : null}
       </section>
 
       <JoinSection slug={slug} me={view.me} onJoined={handleJoined} />
@@ -114,26 +324,56 @@ function BoardBody({
             <p>{t("en", "board.emptyBody")}</p>
           </div>
         ) : null}
+        {selectableIds.length > 0 && selected.size === 0 ? (
+          <p className="hint" role="status">{t("en", "make.pickHint")}</p>
+        ) : null}
+        {selected.size >= policy.pinsPerScene.max ? (
+          <p className="hint" role="status">
+            {policy.pinsPerScene.max} {t("en", "make.max")}
+          </p>
+        ) : null}
         {cards.length > 0 ? (
           <ul className="pins-grid">
-            {cards.map((card) => (
-              <li key={card.pinId} className="pin-card">
-                {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
-                <img src={card.element.imageUrl} alt={card.element.label} loading="lazy" />
-                <p className="pin-label">{card.element.label}</p>
-                <p className="pin-owner">
+            {cards.map((card) => {
+              const owner = (
+                <>
                   <span
                     className="chip-dot"
                     style={{ background: playerColorFor(card.ownerId) }}
                     aria-hidden="true"
                   />{" "}
                   {card.ownerName ?? t("en", "board.someone")}
-                </p>
-                {card.status === "candidate" ? (
-                  <p className="state-pill">{t("en", "board.candidate")}</p>
-                ) : null}
-              </li>
-            ))}
+                </>
+              );
+              if (card.status !== "pinned") {
+                return (
+                  <li key={card.pinId} className="pin-card">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
+                    <img src={card.element.imageUrl} alt={card.element.label} loading="lazy" />
+                    <p className="pin-label">{card.element.label}</p>
+                    <p className="pin-owner">{owner}</p>
+                    <p className="state-pill">{t("en", "board.candidate")}</p>
+                  </li>
+                );
+              }
+              const picking = selected.has(card.pinId);
+              return (
+                <li key={card.pinId}>
+                  <button
+                    type="button"
+                    className={`pin-card pin-toggle${picking ? " pin-selected" : ""}`}
+                    aria-pressed={picking}
+                    onClick={() => togglePin(card.pinId)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
+                    <img src={card.element.imageUrl} alt={card.element.label} loading="lazy" />
+                    <span className="pin-label">{card.element.label}</span>
+                    <span className="pin-owner">{owner}</span>
+                    {picking ? <span className="state-pill">{t("en", "make.picked")}</span> : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
         {boardQuery.isError ? (
@@ -148,7 +388,7 @@ function BoardBody({
 
       <nav className="bottom-bar" aria-label={t("en", "board.pins")}>
         {view.me ? (
-          <button type="button" className="btn btn-primary" onClick={() => setSheetOpen(true)}>
+          <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
             {t("en", "board.add")}
           </button>
         ) : (
@@ -156,12 +396,23 @@ function BoardBody({
             {t("en", "board.add")}
           </a>
         )}
-        <button type="button" className="btn" disabled title={t("en", "board.soon")}>
-          {t("en", "board.make")}
-        </button>
+        {view.me ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={selected.size < policy.pinsPerScene.min}
+            onClick={() => setMakeOpen(true)}
+          >
+            {`${t("en", "board.make")} ${selected.size}/${policy.pinsPerScene.max}`}
+          </button>
+        ) : (
+          <a className="btn" href="#join">
+            {`${t("en", "board.make")} ${selected.size}/${policy.pinsPerScene.max}`}
+          </a>
+        )}
       </nav>
 
-      {sheetOpen && view.me ? (
+      {addOpen && view.me ? (
         <AddSheet
           slug={slug}
           meId={view.me.id}
@@ -169,7 +420,19 @@ function BoardBody({
           uploadMaxPx={policy.uploadMaxPx}
           uploadJpegQuality={policy.uploadJpegQuality}
           jobPollIntervalMs={policy.jobPollIntervalMs}
-          onClose={() => setSheetOpen(false)}
+          onClose={() => setAddOpen(false)}
+        />
+      ) : null}
+
+      {makeOpen && view.me ? (
+        <MakeSheet
+          cards={picked}
+          chips={policy.sceneChips}
+          pinsPerScene={policy.pinsPerScene}
+          promptMaxChars={policy.scenePromptMaxChars}
+          initialPrompt={attempt?.prompt ?? ""}
+          onMake={submitScene}
+          onClose={() => setMakeOpen(false)}
         />
       ) : null}
     </>
