@@ -33,6 +33,10 @@ export const PolicySchema = z
     participantsPerBoard: z.number().int().min(1).default(50),
     boardTitleMaxChars: z.number().int().min(1).default(80),
     participantCookieDays: z.number().int().min(1).default(30),
+    /** Signed-in user cookie life (PIN-83). Retention note: the
+     * users/{uid} profile + board index persist until account
+     * deletion lands (PIN-57c) — this TTL bounds the cookie only. */
+    userSessionDays: z.number().int().min(1).default(30),
     /** Activity strip: latest BoardEvent lines shown (PIN-74). */
     activityStripMax: z.number().int().min(0).default(5),
     /** Generated-chips cache: hours a label-set entry stays fresh (PIN-75). */
@@ -155,6 +159,7 @@ export const PolicyOverridesSchema = z.object({
   chipsMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
+  userSessionDays: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
   jobPollIntervalMs: z.number().int().min(250).optional(),
   uploadMaxPx: z.number().int().positive().optional(),

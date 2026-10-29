@@ -4,6 +4,8 @@ import {
   generateSlug,
   hashToken,
   signPlayerCookie,
+  signUserCookie,
+  verifyUserCookie,
   verifyPlayerCookie,
   isValidSlug,
   verifyToken,
@@ -55,6 +57,34 @@ describe("tokens", () => {
     expect(isValidSlug("abc/def" + "x".repeat(15))).toBe(false);
     expect(isValidSlug("..%2F..%2Fetcxxxxxxxxx")).toBe(false);
     expect(isValidSlug("")).toBe(false);
+  });
+
+  it("round-trips a signed user cookie (PIN-83)", () => {
+    const payload = { v: 1 as const, uid: "synthetic-user-1", issuedAt: 100 };
+    const cookie = signUserCookie(payload, "secret");
+    expect(verifyUserCookie(cookie, "secret")).toEqual(payload);
+  });
+
+  it("user and player cookies never cross-verify (domain separation, PIN-83)", () => {
+    const userCookie = signUserCookie({ v: 1, uid: "u1", issuedAt: 100 }, "secret");
+    const playerCookie = signPlayerCookie(
+      { gameId: "g1", playerId: "p1", issuedAt: 100 },
+      "secret",
+    );
+    expect(verifyPlayerCookie(userCookie, "secret")).toBeNull();
+    expect(verifyUserCookie(playerCookie, "secret")).toBeNull();
+  });
+
+  it("rejects tampered, wrong-secret, garbage and expired user cookies (PIN-83)", () => {
+    const cookie = signUserCookie({ v: 1, uid: "u1", issuedAt: 0 }, "secret");
+    const tampered = cookie.slice(0, -1) + (cookie.endsWith("A") ? "B" : "A");
+    expect(verifyUserCookie(tampered, "secret")).toBeNull();
+    expect(verifyUserCookie(cookie, "other")).toBeNull();
+    expect(verifyUserCookie("garbage", "secret")).toBeNull();
+    expect(verifyUserCookie("", "secret")).toBeNull();
+    expect(verifyUserCookie(cookie, "secret", { now: 50, maxAgeMs: 100 })).not.toBeNull();
+    expect(verifyUserCookie(cookie, "secret", { now: 200, maxAgeMs: 100 })).toBeNull();
+    expect(() => signUserCookie({ v: 1, uid: "u1", issuedAt: 0 }, "")).toThrow(RangeError);
   });
 
   it("refuses to sign with an empty secret", () => {

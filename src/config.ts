@@ -33,6 +33,15 @@ export interface AppConfig {
   policyOverridesJson: string | null;
   sessionSecret: string | null;
   /**
+   * Firebase web (client) config passthrough (PIN-83). These
+   * NEXT_PUBLIC_* values are public identifiers, not secrets, and
+   * are build-time inlined for the browser. Null when unset/empty:
+   * the sign-in UI (PIN-84) then stays hidden, honestly, even if
+   * AUTH_MODE=optional. Never invent values here.
+   */
+  firebaseWebApiKey: string | null;
+  firebaseWebAuthDomain: string | null;
+  /**
    * Seeded judge demo board slug (PIN-73). A capability secret:
    * set only via env (DEMO_BOARD_SLUG), never committed. Null =
    * the landing demo link stays hidden/inert.
@@ -101,6 +110,8 @@ export function parseConfig(
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
     labEnabled: env.PINNED_LAB === "1",
     sessionSecret: nonEmpty(env.SESSION_SECRET),
+    firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
+    firebaseWebAuthDomain: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??

@@ -64,6 +64,59 @@ export function signPlayerCookie(payload: PlayerCookiePayload, secret: string): 
   return `${body}.${sig}`;
 }
 
+/**
+ * Signed-in user cookie payload (PIN-83, docs/11 section 5.4).
+ * Domain-separated from the player cookie: the HMAC covers a
+ * `pinned-user-v1:` prefix, so a player cookie can never verify
+ * as a user cookie (or vice versa) under the same secret.
+ */
+export interface UserCookiePayload {
+  v: 1;
+  uid: string;
+  issuedAt: number;
+}
+
+const USER_COOKIE_DOMAIN = "pinned-user-v1:";
+
+export function signUserCookie(payload: UserCookiePayload, secret: string): string {
+  requireSecret(secret);
+  const body = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
+  const sig = createHmac("sha256", secret)
+    .update(USER_COOKIE_DOMAIN + body)
+    .digest("base64url");
+  return `${body}.${sig}`;
+}
+
+export function verifyUserCookie(
+  value: string,
+  secret: string,
+  options: { now?: number; maxAgeMs?: number } = {},
+): UserCookiePayload | null {
+  if (!secret || !value) return null;
+  const dot = value.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const body = value.slice(0, dot);
+  const sig = value.slice(dot + 1);
+  const expected = createHmac("sha256", secret)
+    .update(USER_COOKIE_DOMAIN + body)
+    .digest("base64url");
+  if (!safeEqual(Buffer.from(sig, "utf8"), Buffer.from(expected, "utf8"))) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(body, "base64url").toString("utf8"),
+    ) as UserCookiePayload;
+    if (payload.v !== 1 || typeof payload.uid !== "string" || !payload.uid) return null;
+    if (typeof payload.issuedAt !== "number") return null;
+    if (options.maxAgeMs !== undefined) {
+      const now = options.now ?? Date.now();
+      if (now - payload.issuedAt > options.maxAgeMs) return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export function verifyPlayerCookie(
   value: string,
   secret: string,
