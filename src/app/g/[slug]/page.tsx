@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { buildBoardPreview } from "../../../domain/board-preview";
 import { getBoardTheme } from "../../../domain/board-themes";
 import { isValidSlug } from "../../../domain/tokens";
+import { t } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
 import { getBoardView } from "../../../server/board-api";
 import { getBoardRepository } from "../../../server/board-repository";
@@ -11,16 +13,75 @@ import {
   playerCookieName,
   resolveParticipantSession,
 } from "../../../server/board-session";
+import { getPublicOriginFromHeaders } from "../../../server/public-origin";
 import { getConfig } from "../../../config";
 import { boardApiDeps, policyForBoard } from "../../api/boards/shared";
 import { BoardClient, type BoardClientView } from "./BoardClient";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Pinneds board",
-  robots: { index: false, follow: false },
-};
+/**
+ * Link preview (PIN-72, docs/11 section 6): OG/Twitter image is
+ * the latest ready non-hidden scene via the board-link-checked
+ * image route (absolute URL via the public-origin helper), or
+ * the branded public/og-card.png when there is none. The slug
+ * capability link is what a chat crawler already holds when it
+ * fetches this page, so the image route leaks nothing beyond
+ * board-visible scenes — never candidate elements or tmp/ refs
+ * (pickLatestPreviewScene + resolveSceneImage both enforce
+ * scenes/). noindex is preserved. Any failure degrades to the
+ * branded fallback instead of breaking the page.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const fallback: Metadata = {
+    title: "Pinneds board",
+    description: t("en", "board.previewDescription"),
+    robots: { index: false, follow: false },
+  };
+  try {
+    const { slug } = await params;
+    if (!isValidSlug(slug)) return fallback;
+    const boards = getBoardRepository();
+    const board = await boards.getBoard(slug);
+    if (!board) return fallback;
+    const scenes = await boards.listScenes(slug);
+    const origin = getPublicOriginFromHeaders(
+      await headers(),
+      getConfig().appBaseUrl,
+    );
+    const preview = buildBoardPreview({
+      boardTitle: board.title,
+      slug,
+      origin,
+      scenes,
+      fallbackDescription: t("en", "board.previewDescription"),
+    });
+    return {
+      title: preview.title,
+      description: preview.description,
+      robots: { index: false, follow: false },
+      openGraph: {
+        title: preview.title,
+        description: preview.description,
+        url: preview.pageUrl,
+        type: "website",
+        images: [{ url: preview.imageUrl, alt: preview.description }],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: preview.title,
+        description: preview.description,
+        images: [preview.imageUrl],
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 function themeVars(
   theme: { accent: string; accentInk: string; paper: string; line: string } | null | undefined,

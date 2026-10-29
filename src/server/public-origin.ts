@@ -48,11 +48,37 @@ function cleanFallback(value: string | undefined): string | null {
 
 export function getPublicOrigin(request: Request, fallbackBaseUrl?: string): string {
   const requestUrl = new URL(request.url);
-  const fallbackProtocol = requestUrl.protocol.replace(/:$/, "");
-  const forwardedProtocol = validProtocol(
-    firstHeaderValue(request.headers.get("x-forwarded-proto")),
-    fallbackProtocol,
+  return getPublicOriginFromHeaders(
+    request.headers,
+    fallbackBaseUrl,
+    requestUrl.protocol.replace(/:$/, ""),
+    requestUrl.origin,
   );
+}
+
+/**
+ * Headers-only twin for `generateMetadata` (PIN-72), where Next
+ * gives `headers()` but no Request. Same trust rules: a configured
+ * non-loopback APP_BASE_URL beats request-controlled headers.
+ * Without a forwarded proto, loopback hosts stay http (local dev)
+ * and public hosts default to https.
+ */
+export function getPublicOriginFromHeaders(
+  headers: { get(name: string): string | null },
+  fallbackBaseUrl?: string,
+  fallbackProtocol = "https",
+  lastResortOrigin?: string,
+): string {
+  const forwardedProtoRaw = firstHeaderValue(headers.get("x-forwarded-proto"));
+  const hasForwardedProto = forwardedProtoRaw === "http" || forwardedProtoRaw === "https";
+  const hostForProto =
+    firstHeaderValue(headers.get("x-forwarded-host")) || firstHeaderValue(headers.get("host"));
+  const inferredProtocol = hasForwardedProto
+    ? forwardedProtoRaw
+    : isLoopbackHost(hostForProto.split(":")[0] ?? "")
+      ? "http"
+      : fallbackProtocol;
+  const forwardedProtocol = validProtocol(forwardedProtoRaw, inferredProtocol);
 
   const configured = cleanFallback(fallbackBaseUrl);
   if (configured && !isLoopbackHost(new URL(configured).hostname)) {
@@ -61,15 +87,15 @@ export function getPublicOrigin(request: Request, fallbackBaseUrl?: string): str
 
   const forwarded = originFromHost(
     forwardedProtocol,
-    firstHeaderValue(request.headers.get("x-forwarded-host")),
+    firstHeaderValue(headers.get("x-forwarded-host")),
   );
   if (forwarded) return forwarded;
 
   const direct = originFromHost(
     forwardedProtocol,
-    firstHeaderValue(request.headers.get("host")),
+    firstHeaderValue(headers.get("host")),
   );
   if (direct) return direct;
 
-  return configured ?? requestUrl.origin;
+  return configured ?? cleanFallback(lastResortOrigin) ?? "http://localhost:3000";
 }
