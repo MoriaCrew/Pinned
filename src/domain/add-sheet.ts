@@ -102,6 +102,52 @@ export function shouldShowFaceNote(
 
 export type JobStatusLike = "pending" | "running" | "ready" | "failed" | "refused";
 
+/**
+ * Tap-to-add geometry (PIN-78): a tap on the photo preview
+ * (rendered at natural aspect, so the element box IS the image
+ * area) becomes a point normalized 0..1 — the Segmenter point
+ * prompt convention (gateway ports). Outside / degenerate
+ * boxes are null, never a guessed point.
+ */
+export function normalizedTapPoint(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+): { x: number; y: number } | null {
+  if (!(rect.width > 0 && rect.height > 0)) return null;
+  const x = (clientX - rect.left) / rect.width;
+  const y = (clientY - rect.top) / rect.height;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+    return null;
+  }
+  return { x, y };
+}
+
+/**
+ * When the Add sheet shows the tap surface (PIN-78): the job
+ * landed (ready), its working copy is still alive (pre-confirm,
+ * pre-TTL — hidden the moment the copy is gone), a photo
+ * preview exists to tap on, the photo is not already at the
+ * Policy elementsPerPhoto.max (tap-adds count), and no tap or
+ * confirm is already in flight.
+ */
+export function canTapAdd(input: {
+  jobStatus: JobStatusLike | null;
+  workingCopyGone: boolean;
+  hasPreview: boolean;
+  elementCount: number;
+  maxElements: number;
+  busy: boolean;
+}): boolean {
+  return (
+    input.jobStatus === "ready" &&
+    !input.workingCopyGone &&
+    input.hasPreview &&
+    input.elementCount < input.maxElements &&
+    !input.busy
+  );
+}
+
 export function isTerminalJob(status: JobStatusLike): boolean {
   return status === "ready" || status === "failed" || status === "refused";
 }

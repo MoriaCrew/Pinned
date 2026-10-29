@@ -49,6 +49,8 @@ export interface BoardClientPolicy {
   pinsPerScene: { min: number; max: number };
   sceneChips: string[];
   scenePromptMaxChars: number;
+  /** Policy elementsPerPhoto.max, tap-adds included (PIN-78). */
+  elementsPerPhotoMax: number;
 }
 
 interface SceneAttempt {
@@ -674,6 +676,7 @@ function BoardBody({
           uploadMaxPx={policy.uploadMaxPx}
           uploadJpegQuality={policy.uploadJpegQuality}
           jobPollIntervalMs={policy.jobPollIntervalMs}
+          elementsPerPhotoMax={policy.elementsPerPhotoMax}
           onClose={() => setAddOpen(false)}
         />
       ) : null}

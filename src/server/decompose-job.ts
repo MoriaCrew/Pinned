@@ -427,3 +427,193 @@ export async function runDecomposeJob(
     return finish(deps, job, "failed", "decompose_failed");
   }
 }
+
+export interface TapPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Tap-to-add outcome (PIN-78). Every refusal/failure is typed data
+ * for the API layer to map to a friendly line — never a throw and
+ * never a 500 for a provider outcome.
+ */
+export type TapAddOutcome =
+  | { status: "ready"; job: DecomposeJob; element: Element; pin: Pin }
+  | { status: "not_found" }
+  | { status: "job_not_ready" }
+  | { status: "working_copy_gone" }
+  | { status: "cap_reached" }
+  | { status: "no_usable_mask" }
+  | { status: "failed" | "refused"; errorCode?: string };
+
+/**
+ * Tap-to-add (PIN-78, docs/11 sections 5.7/6): one normalized
+ * point on the job's still-live working copy -> Segmenter point
+ * prompt (PIN-60 buildObjectPrompt via the decorated port) ->
+ * the same Policy usable-mask gate as concepts -> cut-out +
+ * flattened -> one candidate pin appended to the SAME job, so
+ * "Pin N" confirms tap-adds with the rest and A6a still deletes
+ * the working copy at confirm.
+ *
+ * Pre-confirm only: a deleted or TTL-expired working copy is
+ * `working_copy_gone` (an expired copy is deleted + marked here,
+ * mirroring the board-api sweep). Only a `ready` job accepts
+ * taps — a running job's in-flight persist chain owns
+ * elementIds/pinIds, so taps wait for it to land. The
+ * elementsPerPhoto.max cap counts every element already on the
+ * job (concept + tap) and is checked BEFORE any SAM spend, then
+ * re-checked against a fresh read before appending; a lost
+ * late race cleans up its just-created element/pin/storage.
+ *
+ * Label: caller-supplied generic i18n label (PIN-78 decision).
+ * A second ElementNamer pass on the crop was rejected: the
+ * elements.v1 prompt names things in a whole photo, the mock
+ * namer would return canned wrong names, and the decorated
+ * namer would count the crop against photosPerParticipantPerDay.
+ * No namer pass also means faceFlag is unknown -> false (v1
+ * limitation, noted in the PR).
+ */
+export async function addTapElement(
+  jobId: string,
+  point: TapPoint,
+  genericLabel: string,
+  deps: DecomposeDeps,
+): Promise<TapAddOutcome> {
+  const now = deps.now ?? Date.now;
+  const { policy } = deps;
+  const job = await deps.jobs.get(jobId);
+  if (!job) return { status: "not_found" };
+  if (job.status !== "ready") return { status: "job_not_ready" };
+  if (job.workingDeletedAt !== undefined) return { status: "working_copy_gone" };
+  const at = now();
+  if (at - job.createdAt >= policy.workingCopyTtlHours * 60 * 60 * 1000) {
+    await deps.store.delete(job.workingRef).catch(() => undefined);
+    await deps.jobs
+      .update({ ...job, workingDeletedAt: at, updatedAt: at })
+      .catch(() => undefined);
+    return { status: "working_copy_gone" };
+  }
+  if (job.elementIds.length >= policy.elementsPerPhoto.max) {
+    return { status: "cap_reached" };
+  }
+
+  const working = await deps.store.get(job.workingRef);
+  if (!working) return { status: "working_copy_gone" };
+  let frame: { width: number; height: number };
+  try {
+    const meta = await sharp(Buffer.from(working)).metadata();
+    frame = { width: meta.width ?? 0, height: meta.height ?? 0 };
+  } catch {
+    return { status: "failed", errorCode: "working_copy_unreadable" };
+  }
+  if (!(frame.width > 0 && frame.height > 0)) {
+    return { status: "failed", errorCode: "working_copy_unreadable" };
+  }
+  const imageRef = `data:image/webp;base64,${Buffer.from(working).toString("base64")}`;
+
+  const outcome = await deps.segmenter.segment({
+    imageRef,
+    prompt: {
+      kind: "point",
+      points: [{ x: point.x, y: point.y, label: "positive" }],
+      frame,
+    },
+    timeoutMs: policy.timeoutsMs.sam,
+    boardId: job.boardId,
+    participantId: job.participantId,
+  });
+  if (outcome.status !== "ready") {
+    return {
+      status: outcome.status,
+      ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
+    };
+  }
+  const usable = outcome.value.segments
+    .map((segment) => {
+      try {
+        return decodeSegment(segment, frame);
+      } catch {
+        return null;
+      }
+    })
+    .filter((d): d is DecodedSegment => d !== null)
+    .filter((d) => d.maskPixels > 0 && isUsableMask(d.coverageFrame, policy))
+    .sort((a, b) => b.maskPixels - a.maskPixels)[0];
+  if (!usable) return { status: "no_usable_mask" };
+
+  let tapIndex = job.elementIds.filter((id) => id.includes("-tap")).length;
+  let elementId = `${job.id}-tap${tapIndex}`;
+  while (await deps.boards.getElement(elementId)) {
+    tapIndex += 1;
+    elementId = `${job.id}-tap${tapIndex}`;
+  }
+  const cutoutRef = buildElementCutoutRef(job.boardId, elementId);
+  const flattenedRef = buildElementFlattenedRef(job.boardId, elementId);
+  let element: Element;
+  let pin: Pin;
+  try {
+    const cutout = await renderCutout(working, usable);
+    const flattened = await renderFlattened(cutout, {
+      maxPx: policy.flattenedMaxPx,
+      paddingFraction: policy.flattenedPaddingFraction,
+    });
+    await deps.store.put(cutoutRef, cutout, "image/png");
+    await deps.store.put(flattenedRef, flattened, "image/jpeg");
+    const label = genericLabel.trim() || "My thing";
+    element = {
+      id: elementId,
+      boardId: job.boardId,
+      ownerId: job.participantId,
+      label,
+      description: label,
+      maskBox: toMaskBox(usable.box, frame),
+      cutoutRef,
+      flattenedRef,
+      sourcePhotoId: job.id,
+      faceFlag: false,
+      createdAt: at,
+    };
+    await deps.boards.createElement(element);
+    pin = {
+      id: `${job.id}-tappin${tapIndex}`,
+      boardId: job.boardId,
+      elementId,
+      pinnedBy: job.participantId,
+      status: "candidate",
+      createdAt: at,
+    };
+    await deps.boards.createPin(pin);
+  } catch {
+    return { status: "failed", errorCode: "tap_add_failed" };
+  }
+
+  // Fresh re-read before appending: confirm (A6a delete) or a
+  // parallel tap may have landed while SAM ran.
+  const fresh = await deps.jobs.get(jobId);
+  const cleanup = async (result: TapAddOutcome): Promise<TapAddOutcome> => {
+    await deps.boards.deleteElement(elementId).catch(() => undefined);
+    await deps.store.delete(cutoutRef).catch(() => undefined);
+    await deps.store.delete(flattenedRef).catch(() => undefined);
+    return result;
+  };
+  if (!fresh) return cleanup({ status: "not_found" });
+  if (fresh.workingDeletedAt !== undefined) {
+    return cleanup({ status: "working_copy_gone" });
+  }
+  if (fresh.elementIds.length >= policy.elementsPerPhoto.max) {
+    return cleanup({ status: "cap_reached" });
+  }
+  const updated: DecomposeJob = {
+    ...fresh,
+    elementIds: fresh.elementIds.includes(elementId)
+      ? fresh.elementIds
+      : [...fresh.elementIds, elementId],
+    pinIds: fresh.pinIds.includes(pin.id)
+      ? fresh.pinIds
+      : [...fresh.pinIds, pin.id],
+    updatedAt: now(),
+  };
+  await deps.jobs.update(updated);
+  return { status: "ready", job: cloneJob(updated), element, pin };
+}

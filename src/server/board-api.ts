@@ -22,7 +22,13 @@ import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
-import { startDecomposeJob, type DecomposeJobStore } from "./decompose-job";
+import { t } from "../i18n";
+import {
+  addTapElement,
+  startDecomposeJob,
+  type DecomposeJobStore,
+  type TapPoint,
+} from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
 import {
   SceneJobRequestError,
@@ -147,6 +153,9 @@ export function publicJob(job: DecomposeJob) {
     status: job.status,
     faceNote: job.faceNote,
     failedConceptCount: job.failedConceptCount,
+    // Tap-to-add window (PIN-78): the Add sheet hides the tap
+    // surface once the A6a working copy is deleted (confirm/TTL).
+    workingCopyGone: job.workingDeletedAt !== undefined,
     elementIds: job.elementIds,
     pinIds: job.pinIds,
     ...(job.errorCode ? { errorCode: job.errorCode } : {}),
@@ -359,6 +368,84 @@ export async function getJobView(
     pins: pins.map(publicPin),
     elements: elements.map((element) => publicElement(slug, element)),
   };
+}
+
+export function parseTapAddInput(value: unknown): TapPoint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError("Tap a spot in the photo.");
+  }
+  const body = value as Record<string, unknown>;
+  const { x, y } = body;
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < 0 ||
+    x > 1 ||
+    y < 0 ||
+    y > 1
+  ) {
+    throw new BoardApiError("Tap a spot in the photo.");
+  }
+  return { x, y };
+}
+
+/**
+ * Tap-to-add (PIN-78): uploader-only, like the job poll and
+ * confirm — a missing job, another board's job, a non-uploader
+ * and no participant at all are the same 404 (no existence
+ * leak). The generic label comes from i18n (add.tapLabel); the
+ * service enforces the working-copy lifetime, the usable-mask
+ * gate and elementsPerPhoto.max. Typed service outcomes map to
+ * friendly lines — an expired/deleted working copy is a 409
+ * the sheet shows as "photo copy gone", never a 500.
+ */
+export async function tapAddPin(
+  slug: string,
+  participant: Participant | null,
+  jobId: string,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+) {
+  if (!participant) throw new BoardApiError("Job not found.", 404);
+  const point = parseTapAddInput(rawInput);
+  const job = await deps.jobs.get(jobId);
+  if (!job || job.boardId !== slug || job.participantId !== participant.id) {
+    throw new BoardApiError("Job not found.", 404);
+  }
+  const outcome = await addTapElement(jobId, point, t("en", "add.tapLabel"), {
+    boards: deps.boards,
+    jobs: deps.jobs,
+    store: deps.store,
+    namer: deps.namer,
+    segmenter: deps.segmenter,
+    policy: deps.policy,
+    now: deps.now,
+    newId: deps.newId,
+  });
+  switch (outcome.status) {
+    case "ready":
+      return {
+        job: publicJob(outcome.job),
+        pin: publicPin(outcome.pin),
+        element: publicElement(slug, outcome.element),
+      };
+    case "not_found":
+      throw new BoardApiError("Job not found.", 404);
+    case "working_copy_gone":
+      throw new BoardApiError(t("en", "add.tapGone"), 409, "working_copy_gone");
+    case "cap_reached":
+      throw new BoardApiError(t("en", "add.tapCap"), 409, "elements_per_photo_max");
+    case "job_not_ready":
+      throw new BoardApiError(t("en", "add.finding"), 409, "job_not_ready");
+    case "no_usable_mask":
+      throw new BoardApiError(t("en", "add.tapNone"), 400, "no_usable_mask");
+    case "refused":
+      throw new BoardApiError(t("en", "add.refused"), 400, "refused");
+    case "failed":
+      throw new BoardApiError(t("en", "add.failed"), 503, outcome.errorCode ?? "tap_add_failed");
+  }
 }
 
 export interface ConfirmPinsInput {

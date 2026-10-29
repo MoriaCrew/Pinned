@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyOptimisticConfirm,
+  canTapAdd,
+  normalizedTapPoint,
   confirmPayload,
   downscaleTarget,
   isTerminalJob,
@@ -68,6 +70,34 @@ describe("add sheet logic (PIN-67)", () => {
     expect(shouldShowFaceNote(true, "job2", "job1")).toBe(true);
     expect(shouldShowFaceNote(false, "job1", null)).toBe(false);
     expect(shouldShowFaceNote(true, null, null)).toBe(false);
+  });
+
+  it("normalizes tap points against the preview box and rejects outsides (PIN-78)", () => {
+    const rect = { left: 100, top: 200, width: 400, height: 200 };
+    expect(normalizedTapPoint(100, 200, rect)).toEqual({ x: 0, y: 0 });
+    expect(normalizedTapPoint(300, 300, rect)).toEqual({ x: 0.5, y: 0.5 });
+    expect(normalizedTapPoint(500, 400, rect)).toEqual({ x: 1, y: 1 });
+    expect(normalizedTapPoint(99, 300, rect)).toBeNull();
+    expect(normalizedTapPoint(300, 401, rect)).toBeNull();
+    expect(normalizedTapPoint(300, 300, { ...rect, width: 0 })).toBeNull();
+  });
+
+  it("shows tap-add only on a ready job with a live copy, preview and cap room (PIN-78)", () => {
+    const base = {
+      jobStatus: "ready" as const,
+      workingCopyGone: false,
+      hasPreview: true,
+      elementCount: 3,
+      maxElements: 6,
+      busy: false,
+    };
+    expect(canTapAdd(base)).toBe(true);
+    expect(canTapAdd({ ...base, jobStatus: "running" })).toBe(false);
+    expect(canTapAdd({ ...base, jobStatus: null })).toBe(false);
+    expect(canTapAdd({ ...base, workingCopyGone: true })).toBe(false);
+    expect(canTapAdd({ ...base, hasPreview: false })).toBe(false);
+    expect(canTapAdd({ ...base, elementCount: 6 })).toBe(false);
+    expect(canTapAdd({ ...base, busy: true })).toBe(false);
   });
 
   it("treats ready/failed/refused as terminal", () => {
