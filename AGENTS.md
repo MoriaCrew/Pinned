@@ -91,9 +91,11 @@ decisions: `docs/adr/003-studio-architecture.md`. Full workflow:
   `moriacrew-pinned-prod` in `.firebaserc`; project IDs are public,
   credentials are never committed. Branch → backend: `dev` builds
   the dev backend, `main` builds prod (`docs/archive/02` §6).
-- **Modes:** default `AUTH_MODE=link-only` and `AI_MOCK=1`. Board
-  participants never authenticate; sign-in comes later behind
-  `AUTH_MODE` (PIN-57). Do not add Firebase Auth or live model calls
+- **Modes:** default `AUTH_MODE=link-only` and `AI_MOCK=1`.
+  Optional Google sign-in shipped behind `AUTH_MODE=optional`
+  (PIN-57, `docs/13-auth.md`; live on the dev backend, prod stays
+  link-only until promotion). Link-only behaviour must stay
+  byte-identical (flag-off tests). Do not make live model calls
   unless the assigned issue explicitly says so and its gate passed.
 - **Commands:** `npm run dev`, `npm run typecheck`, `npm test`,
   `npm run build`, `npm start`. Health check: `GET /api/health`.
