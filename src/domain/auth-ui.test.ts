@@ -58,6 +58,7 @@ describe("authInitials", () => {
 describe("shouldShowSignInNudge", () => {
   const base = {
     authEnabled: true,
+    authLoading: false,
     policyNudge: true,
     signedIn: false,
     joined: true,
@@ -71,6 +72,7 @@ describe("shouldShowSignInNudge", () => {
 
   it("each gate independently hides it", () => {
     expect(shouldShowSignInNudge({ ...base, authEnabled: false })).toBe(false);
+    expect(shouldShowSignInNudge({ ...base, authLoading: true })).toBe(false);
     expect(shouldShowSignInNudge({ ...base, policyNudge: false })).toBe(false);
     expect(shouldShowSignInNudge({ ...base, signedIn: true })).toBe(false);
     expect(shouldShowSignInNudge({ ...base, joined: false })).toBe(false);

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { FirebaseWebConfig } from "../../domain/auth-ui";
 import {
   completeRedirectSignIn,
@@ -59,6 +60,53 @@ async function postSession(idToken: string): Promise<AuthUser | null> {
   return data.user ?? null;
 }
 
+interface HydrateResult {
+  user: AuthUser | null;
+  /** True when this run wrote the session cookie (redirect
+   * completion) after the page was server-rendered. */
+  viaRedirect: boolean;
+}
+
+let hydrateInFlight: Promise<HydrateResult> | null = null;
+
+/**
+ * One shared in-flight hydrate (PIN-86). `getRedirectResult` is
+ * consumed once, so overlapping effect runs (Strict Mode,
+ * remounts) must await the same promise instead of competing:
+ * a cancelled run could otherwise take the redirect token while
+ * the surviving run reads /api/me before the cookie exists.
+ * Cleared once settled, so a later remount re-reads fresh state.
+ */
+function hydrateSession(config: FirebaseWebConfig): Promise<HydrateResult> {
+  if (!hydrateInFlight) {
+    const run = (async (): Promise<HydrateResult> => {
+      try {
+        const redirectToken = await completeRedirectSignIn(config).catch(
+          () => null,
+        );
+        let viaRedirect = false;
+        if (redirectToken) {
+          await postSession(redirectToken).catch(() => null);
+          viaRedirect = true;
+        }
+        const response = await fetch("/api/me", { cache: "no-store" });
+        if (response.ok) {
+          const data = (await response.json()) as { user?: AuthUser };
+          if (data.user) return { user: data.user, viaRedirect };
+        }
+        return { user: null, viaRedirect };
+      } catch {
+        return { user: null, viaRedirect: false };
+      }
+    })();
+    hydrateInFlight = run;
+    void run.finally(() => {
+      if (hydrateInFlight === run) hydrateInFlight = null;
+    });
+  }
+  return hydrateInFlight;
+}
+
 /**
  * Sign-in state (PIN-84). Rendered by the layout only when
  * resolveAuthUi enables it; with `config: null` it is a pure
@@ -79,37 +127,37 @@ export function AuthProvider({
     config ? "loading" : "signedOut",
   );
   const [signInError, setSignInError] = useState(false);
-  const started = useRef(false);
+  const router = useRouter();
+  // PIN-86: bumped by every explicit sign-in/out. A hydrate run
+  // only applies its result while the epoch it started in is
+  // still current, so a slow hydrate can never resurrect a
+  // session the user explicitly ended (or clobber a fresh one).
+  const authEpoch = useRef(0);
 
+  // PIN-86: every effect run awaits the shared hydrate (no
+  // "started" latch to strand status at "loading", no competing
+  // runs to drop the consume-once redirect result). Each run
+  // still guards its own setState with `cancelled`.
   useEffect(() => {
-    if (!config || started.current) return;
-    started.current = true;
+    if (!config) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const redirectToken = await completeRedirectSignIn(config).catch(
-          () => null,
-        );
-        if (redirectToken) await postSession(redirectToken).catch(() => null);
-        const response = await fetch("/api/me", { cache: "no-store" });
-        if (cancelled) return;
-        if (response.ok) {
-          const data = (await response.json()) as { user?: AuthUser };
-          if (data.user) {
-            setUser(data.user);
-            setStatus("signedIn");
-            return;
-          }
-        }
+    const runEpoch = authEpoch.current;
+    void hydrateSession(config).then((result) => {
+      if (cancelled || authEpoch.current !== runEpoch) return;
+      if (result.user) {
+        setUser(result.user);
+        setStatus("signedIn");
+        // Redirect completion wrote the cookie after SSR, so
+        // server pages still show the signed-out render.
+        if (result.viaRedirect) router.refresh();
+      } else {
         setStatus("signedOut");
-      } catch {
-        if (!cancelled) setStatus("signedOut");
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
-  }, [config]);
+  }, [config, router]);
 
   const signIn = useCallback(async () => {
     if (!config) return;
@@ -118,8 +166,12 @@ export function AuthProvider({
       const idToken = await signInWithGoogle(config);
       const signedIn = await postSession(idToken);
       if (!signedIn) throw new Error("session failed");
+      authEpoch.current += 1;
       setUser(signedIn);
       setStatus("signedIn");
+      // PIN-86: server pages (/me/*) read the cookie server-side;
+      // refresh so they reflect the new session immediately.
+      router.refresh();
     } catch (error) {
       // Redirect fallback: the browser is leaving for Google;
       // popup-closed is a user cancel, not an error to report.
@@ -134,7 +186,7 @@ export function AuthProvider({
       }
       setSignInError(true);
     }
-  }, [config]);
+  }, [config, router]);
 
   const signOut = useCallback(async () => {
     if (!config) return;
@@ -144,9 +196,11 @@ export function AuthProvider({
       // Cookie clear is idempotent server-side; still sign out locally.
     }
     await signOutFirebase(config).catch(() => {});
+    authEpoch.current += 1;
     setUser(null);
     setStatus("signedOut");
-  }, [config]);
+    router.refresh();
+  }, [config, router]);
 
   if (!config) return <>{children}</>;
   return (
