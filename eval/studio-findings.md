@@ -133,3 +133,17 @@ First end-to-end live run of the real board flow on hosted dev
   --project moriacrew-pinned-dev`; queries work once the jobs/id
   index reports READY. Prod needs the same deploy before board
   traffic (PIN-63/65 operator note).
+- Operator note closed 2026-10-29: the same deploy was run for
+  prod (`--project moriacrew-pinned-prod`, dry-run first); all 6
+  fieldOverrides (elements/id, pins/id, pins/elementId, scenes/id,
+  scenes/elementIds, jobs/id; 25 single-field indexes incl.
+  __default__) report READY via `gcloud firestore indexes fields
+  list`, and the 3 pre-existing composites stay READY. Fresh
+  hosted dev board smoke (no AI): POST /api/boards 201 ->
+  GET /api/boards/{slug} 200 against DATA_BACKEND=firestore.
+  Prod board read/write smoke still rides with the dev->main
+  promotion (prod serves main, which has no boards API yet); the
+  indexes are inert until then. No Firestore emulator test was
+  added: none runs in CI and there is no Java locally; the
+  fake-Firestore contract suite stays the repo pattern, now
+  backed by the real-Firestore dev runs above.
