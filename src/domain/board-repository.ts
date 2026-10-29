@@ -58,6 +58,19 @@ export interface BoardRepository {
   getElement(elementId: string): Promise<Element | null>;
   listElements(boardId: string): Promise<Element[]>;
   listElementsByOwner(boardId: string, ownerId: string): Promise<Element[]>;
+  /**
+   * Library copies made from a source element (PIN-85), across
+   * all boards, createdAt-ascending. Empty for a native element
+   * nobody copied. Backs the shared-asset delete guard.
+   */
+  listElementsBySource(sourceElementId: string): Promise<Element[]>;
+  /**
+   * Elements referencing a cutout object, across all boards
+   * (PIN-85). Library copies share their source's refs verbatim,
+   * so this is the exact "who still needs these bytes" set the
+   * delete guard consults — immune to copy-chain shape.
+   */
+  listElementsByCutoutRef(cutoutRef: string): Promise<Element[]>;
   /** Cascade delete; see the contract notes above. */
   deleteElement(elementId: string): Promise<DeleteElementResult>;
 
@@ -197,6 +210,22 @@ export class InMemoryBoardRepository implements BoardRepository {
   }
 
   // No awaits between reads and writes: atomic in-process.
+  async listElementsByCutoutRef(cutoutRef: string): Promise<Element[]> {
+    return byCreatedAt(
+      [...this.elements.values()]
+        .filter((e) => e.cutoutRef === cutoutRef)
+        .map(clone),
+    );
+  }
+
+  async listElementsBySource(sourceElementId: string): Promise<Element[]> {
+    return byCreatedAt(
+      [...this.elements.values()]
+        .filter((e) => e.sourceElementId === sourceElementId)
+        .map(clone),
+    );
+  }
+
   async deleteElement(elementId: string): Promise<DeleteElementResult> {
     const element = this.elements.get(elementId);
     if (!element) return { deleted: false, removedPinIds: [], hiddenSceneIds: [] };

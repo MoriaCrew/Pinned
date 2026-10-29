@@ -27,6 +27,13 @@ let joinRoute: SlugHandler;
 let claimRoute: SlugHandler;
 let boardGetRoute: SlugHandler;
 let myBoardsRoute: Handler;
+let myElementsRoute: Handler;
+let myElementImageRoute: (
+  request: Request,
+  context: { params: Promise<{ elementId: string }> },
+) => Promise<Response>;
+let fromLibraryRoute: SlugHandler;
+let seedElement: (boardId: string, ownerId: string) => Promise<void>;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
@@ -48,6 +55,35 @@ beforeAll(async () => {
   ({ POST: claimRoute } = await import("../boards/[slug]/claim/route"));
   ({ GET: boardGetRoute } = await import("../boards/[slug]/route"));
   ({ GET: myBoardsRoute } = await import("../me/boards/route"));
+  ({ GET: myElementsRoute } = await import("../me/elements/route"));
+  ({ GET: myElementImageRoute } = await import(
+    "../me/elements/[elementId]/image/route"
+  ));
+  ({ POST: fromLibraryRoute } = await import(
+    "../boards/[slug]/pins/from-library/route"
+  ));
+  const { getBoardRepository } = await import("../../../server/board-repository");
+  const { getDerivativeStore } = await import("../../../server/derivative-store");
+  seedElement = async (boardId, ownerId) => {
+    await getBoardRepository().createElement({
+      id: "route-el-1",
+      boardId,
+      ownerId,
+      label: "Route Lamp",
+      description: "",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: "elements/route-el-1/cutout.png",
+      flattenedRef: "elements/route-el-1/flattened.jpg",
+      sourcePhotoId: "photo-1",
+      faceFlag: false,
+      createdAt: 1,
+    });
+    await getDerivativeStore().put(
+      "elements/route-el-1/cutout.png",
+      Buffer.from("png-bytes"),
+      "image/png",
+    );
+  };
 });
 
 function req(url: string, init: RequestInit = {}): Request {
@@ -343,6 +379,82 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     expect(mine.map((b) => b.slug).sort()).toEqual([first, second].sort());
     expect(mine[0]).toMatchObject({ myPinCount: 0 });
     expect(body.boards.every((b) => typeof b.title === "string")).toBe(true);
+  });
+
+  it("My pins (PIN-85): library list, owner thumbnail, pin-from-library + repeat", async () => {
+    const aliceCookie = await signIn("token-alice");
+    const bobCookie = await signIn("token-bob");
+    const boardA = await makeBoard("Library source");
+    const boardB = await makeBoard("Library target");
+
+    const aliceA = await join(boardA, "Aye", aliceCookie);
+    const aliceAId = ((await aliceA.res.clone().json()) as {
+      participant: { id: string };
+    }).participant.id;
+    const aliceB = await join(boardB, "Aye", aliceCookie);
+    const bobB = await join(boardB, "Bee", bobCookie);
+    await seedElement(boardA, aliceAId);
+
+    // Signed out -> 401; signed in -> the element with a title
+    // label and no board slug anywhere in the payload.
+    expect((await myElementsRoute(req("http://t/api/me/elements"))).status).toBe(401);
+    const list = await myElementsRoute(
+      req("http://t/api/me/elements", { headers: { cookie: aliceCookie } }),
+    );
+    expect(list.status).toBe(200);
+    const listBody = (await list.json()) as {
+      elements: { elementId: string; sourceBoardTitle: string }[];
+      total: number;
+    };
+    expect(listBody.total).toBe(1);
+    expect(listBody.elements[0]).toMatchObject({
+      elementId: "route-el-1",
+      sourceBoardTitle: "Library source",
+    });
+    expect(JSON.stringify(listBody)).not.toContain(boardA);
+
+    // Owner thumbnail ok; the other user and signed-out get 404.
+    const imageParams = { params: Promise.resolve({ elementId: "route-el-1" }) };
+    const own = await myElementImageRoute(
+      req("http://t/x?kind=cutout", { headers: { cookie: aliceCookie } }),
+      imageParams,
+    );
+    expect(own.status).toBe(200);
+    expect(await own.text()).toBe("png-bytes");
+    const other = await myElementImageRoute(
+      req("http://t/x?kind=cutout", { headers: { cookie: bobCookie } }),
+      imageParams,
+    );
+    expect(other.status).toBe(404);
+    expect((await myElementImageRoute(req("http://t/x?kind=cutout"), imageParams)).status).toBe(404);
+
+    // Pin onto board B as alice's B participant; repeat is friendly.
+    const pinReq = (cookie: string) =>
+      req("http://t/x", {
+        method: "POST",
+        headers: { cookie },
+        body: JSON.stringify({ elementId: "route-el-1" }),
+      });
+    const aliceOnB = `${aliceB.participantCookie}; ${aliceCookie}`;
+    const pinned = await fromLibraryRoute(pinReq(aliceOnB), slugParams(boardB));
+    expect(pinned.status).toBe(200);
+    const pinnedBody = (await pinned.json()) as {
+      alreadyPinned: boolean;
+      elementId: string;
+    };
+    expect(pinnedBody.alreadyPinned).toBe(false);
+    expect(pinnedBody.elementId).not.toBe("route-el-1"); // provenance copy
+    const repeat = await fromLibraryRoute(pinReq(aliceOnB), slugParams(boardB));
+    expect(((await repeat.json()) as { alreadyPinned: boolean }).alreadyPinned).toBe(true);
+
+    // Bob cannot pin alice's element (uniform 404); no participant
+    // cookie -> 401; no user session -> 401.
+    const bobOnB = `${bobB.participantCookie}; ${bobCookie}`;
+    expect((await fromLibraryRoute(pinReq(bobOnB), slugParams(boardB))).status).toBe(404);
+    expect((await fromLibraryRoute(pinReq(aliceCookie), slugParams(boardB))).status).toBe(401);
+    expect(
+      (await fromLibraryRoute(pinReq(aliceB.participantCookie), slugParams(boardB))).status,
+    ).toBe(401);
   });
 
   it("DELETE /api/auth/session clears the cookie; /api/me is then 401", async () => {

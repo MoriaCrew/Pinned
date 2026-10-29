@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { POST as claimRoute } from "../boards/[slug]/claim/route";
 import { GET as meRoute } from "../me/route";
 import { GET as myBoardsRoute } from "../me/boards/route";
+import { GET as myElementsRoute } from "../me/elements/route";
+import { GET as myElementImageRoute } from "../me/elements/[elementId]/image/route";
+import { POST as fromLibraryRoute } from "../boards/[slug]/pins/from-library/route";
 import { DELETE as deleteSessionRoute, POST as postSessionRoute } from "./session/route";
 
 /**
@@ -43,6 +46,36 @@ describe("AUTH_MODE=link-only (default): every PIN-83 route 404s", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not found." });
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("GET /api/me/elements -> uniform 404 (PIN-85)", async () => {
+    const res = await myElementsRoute(req("http://t/api/me/elements"));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found." });
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("GET /api/me/elements/{id}/image -> uniform 404 (PIN-85)", async () => {
+    const res = await myElementImageRoute(
+      req("http://t/api/me/elements/el-1/image?kind=cutout"),
+      { params: Promise.resolve({ elementId: "el-1" }) },
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found." });
+  });
+
+  it("POST /api/boards/{slug}/pins/from-library -> uniform 404 (PIN-85)", async () => {
+    for (const slug of [VALID_SLUG, "a/b", "short"]) {
+      const res = await fromLibraryRoute(
+        req("http://t/x", {
+          method: "POST",
+          body: JSON.stringify({ elementId: "el-1" }),
+        }),
+        { params: Promise.resolve({ slug }) },
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Not found." });
+    }
   });
 
   it("GET /api/me -> uniform 404", async () => {

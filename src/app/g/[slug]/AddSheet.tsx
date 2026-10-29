@@ -19,6 +19,8 @@ import {
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { t } from "../../../i18n";
 import type { BoardClientView } from "./BoardClient";
+import { useAuth } from "../../auth/AuthProvider";
+import { LibraryTab } from "./LibraryTab";
 
 interface PublicJob {
   id: string;
@@ -96,6 +98,11 @@ export function AddSheet({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  // PIN-85: "From my pins" library tab. Disabled auth (link-only
+  // or signed out) keeps the pre-PIN-85 sheet byte-identical.
+  const auth = useAuth();
+  const [tab, setTab] = useState<"photo" | "library">("photo");
+  const showLibraryTab = auth.enabled && auth.status === "signedIn";
   const [jobId, setJobId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -342,6 +349,33 @@ export function AddSheet({
           </button>
         </div>
 
+        {showLibraryTab ? (
+          <div className="sheet-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "photo"}
+              className={`btn btn-small${tab === "photo" ? " btn-primary" : ""}`}
+              onClick={() => setTab("photo")}
+            >
+              {t("en", "add.photoTab")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "library"}
+              className={`btn btn-small${tab === "library" ? " btn-primary" : ""}`}
+              onClick={() => setTab("library")}
+            >
+              {t("en", "add.fromMyPins")}
+            </button>
+          </div>
+        ) : null}
+
+        {showLibraryTab && tab === "library" ? <LibraryTab slug={slug} /> : null}
+
+        {!showLibraryTab || tab === "photo" ? (
+          <>
         {jobId === null && !upload.isPending ? (
           <label className="btn btn-primary sheet-pick">
             {t("en", "add.pick")}
@@ -469,6 +503,8 @@ export function AddSheet({
             </button>
           ) : null}
         </div>
+          </>
+        ) : null}
       </section>
     </div>
   );

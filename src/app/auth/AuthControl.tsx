@@ -10,7 +10,7 @@ import { useAuth } from "./AuthProvider";
  * 44px targets). Renders null whenever sign-in is disabled, so
  * link-only pages carry zero auth DOM. Signed in: avatar (photo
  * or initials) opening a small menu — who you are, My boards,
- * Sign out. "My pins" is PIN-57c and intentionally absent.
+ * My pins (PIN-85), Sign out.
  */
 export function AuthControl() {
   const { enabled, status, user, signInError, signIn, signOut } = useAuth();
@@ -67,6 +67,9 @@ export function AuthControl() {
           </span>
           <a className="btn" href="/me/boards" role="menuitem">
             📌 {t("en", "auth.myBoards")}
+          </a>
+          <a className="btn" href="/me/pins" role="menuitem">
+            📌 {t("en", "auth.myPins")}
           </a>
           <button
             type="button"

@@ -630,8 +630,20 @@ export async function deleteMyElement(
     return { deleted: false, unpinnedOnly: false, removedPinIds: [], hiddenSceneIds: [], storageDeleted: false };
   }
 
+  // Shared-asset guard (PIN-85): a library copy shares its
+  // source's cutout/flattened objects (sourceElementId). Deleting
+  // either record must leave storage alone while a live element
+  // on the other side still points at the same refs — the copy
+  // (and its scenes on its board) keeps working, and the last
+  // record out deletes the objects.
+  const othersSharingRefs = (
+    await deps.boards.listElementsByCutoutRef(element.cutoutRef)
+  ).filter((other) => other.id !== elementId);
+  const sharedRefs: string[] =
+    othersSharingRefs.length > 0 ? [] : [element.cutoutRef, element.flattenedRef];
+
   let storageDeleted = false;
-  for (const ref of [element.cutoutRef, element.flattenedRef]) {
+  for (const ref of sharedRefs) {
     if (!ref.startsWith("elements/")) continue;
     try {
       await deps.store.delete(ref);
