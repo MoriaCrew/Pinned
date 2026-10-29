@@ -145,14 +145,17 @@ export function AddSheet({
   // While the upload runs, candidates already persist server-side
   // per SAM call, so the board poll shows them pop in here too.
   const popInPins = useMemo(
-    () => (jobId === null ? newCandidatePins(boardView, meId, knownPinIds.current) : []),
-    [boardView, meId, jobId],
+    () => newCandidatePins(boardView, meId, knownPinIds.current),
+    [boardView, meId],
   );
   const boardElements = useMemo(
     () => new Map(boardView.elements.map((e) => [e.id, e])),
     [boardView],
   );
-  const candidatePins: BoardViewPin[] = jobId === null ? popInPins : jobPins;
+  // Keep the board-poll pop-ins on screen until the job view
+  // actually lands; switching on jobId alone would blank the
+  // sheet (and the selection) for one fetch.
+  const candidatePins: BoardViewPin[] = jobQuery.data ? jobPins : popInPins;
   const elementFor = (pin: BoardViewPin) =>
     jobElements.get(pin.elementId) ?? boardElements.get(pin.elementId);
   const candidateIds = candidatePins.map((p) => p.id);
@@ -196,7 +199,10 @@ export function AddSheet({
     onSettled: () => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) }),
   });
 
-  const finding = upload.isPending || (job !== null && !isTerminalJob(job.status));
+  const finding =
+    upload.isPending ||
+    (jobId !== null && !jobQuery.data) ||
+    (job !== null && !isTerminalJob(job.status));
   const payload = jobId ? confirmPayload(jobId, selected) : null;
   const canPin =
     payload !== null && job?.status === "ready" && !confirm.isPending;
