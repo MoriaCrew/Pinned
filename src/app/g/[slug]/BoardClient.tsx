@@ -31,24 +31,43 @@ export function BoardClient({
 }) {
   const [view, setView] = useState(initialView);
   const [loadFailed, setLoadFailed] = useState(false);
-  const inFlight = useRef(false);
+  // Sequence guard, not an in-flight lock: overlapping polls are
+  // allowed but only the latest-started response may land, so a
+  // GET that started before a join cookie was set can never
+  // overwrite the joined state with a stale `me: null`.
+  const refreshSeq = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    const seq = ++refreshSeq.current;
     try {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}`, {
         cache: "no-store",
       });
       if (!response.ok) throw new Error("load failed");
-      setView((await response.json()) as BoardClientView);
+      const next = (await response.json()) as BoardClientView;
+      if (seq !== refreshSeq.current) return;
+      setView(next);
       setLoadFailed(false);
     } catch {
-      setLoadFailed(true);
-    } finally {
-      inFlight.current = false;
+      if (seq === refreshSeq.current) setLoadFailed(true);
     }
   }, [slug]);
+
+  const handleJoined = useCallback(
+    (participant: { id: string; displayName: string }) => {
+      // Apply the join response immediately; the refresh below
+      // (newest sequence) then reconciles with the server view.
+      setView((current) => ({
+        ...current,
+        me: participant,
+        participants: current.participants.some((p) => p.id === participant.id)
+          ? current.participants.map((p) => (p.id === participant.id ? { ...p, ...participant } : p))
+          : [...current.participants, participant],
+      }));
+      void refresh();
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -72,7 +91,7 @@ export function BoardClient({
         <p className="board-placeholder">{t("en", "board.scenesEmpty")}</p>
       </section>
 
-      <JoinSection slug={slug} me={view.me} onJoined={() => void refresh()} />
+      <JoinSection slug={slug} me={view.me} onJoined={handleJoined} />
 
       <section aria-label={t("en", "board.pins")}>
         <h2>{t("en", "board.pins")}</h2>
@@ -139,7 +158,7 @@ function JoinSection({
 }: {
   slug: string;
   me: { id: string; displayName: string } | null;
-  onJoined: () => void;
+  onJoined: (participant: { id: string; displayName: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(me?.displayName ?? "");
@@ -155,7 +174,7 @@ function JoinSection({
     return (
       <section className="card player-card" id="join">
         <span className="player-avatar" style={{ background: playerColorFor(me.id) }} aria-hidden="true">
-          {me.displayName.slice(0, 1).toUpperCase()}
+          {([...me.displayName][0] ?? "").toUpperCase()}
         </span>
         <p className="who">
           <strong>{me.displayName}</strong>
@@ -179,11 +198,14 @@ function JoinSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName, reclaimPin: reclaimPin || undefined }),
       });
-      const data = (await response.json()) as { participant?: unknown; error?: string };
+      const data = (await response.json()) as {
+        participant?: { id: string; displayName: string };
+        error?: string;
+      };
       if (!response.ok || !data.participant) throw new Error(data.error || t("en", "join.error"));
       setReclaimPin("");
       setEditing(false);
-      onJoined();
+      onJoined(data.participant);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("en", "join.error"));
     } finally {
