@@ -6,6 +6,7 @@ import {
   applyOptimisticConfirm,
   canTapAdd,
   isAwaitingTapPin,
+  type PendingTapPin,
   normalizedTapPoint,
   confirmPayload,
   downscaleTarget,
@@ -110,7 +111,7 @@ export function AddSheet({
   const previewRef = useRef<string | null>(null);
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
-  const [pendingTapPinId, setPendingTapPinId] = useState<string | null>(null);
+  const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
 
   function showPreview(file: File) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -154,6 +155,7 @@ export function AddSheet({
       setUploadError("");
       setSelected(new Set());
       setDropped(new Set());
+      setPendingTapPin(null);
     },
     onSuccess: (job) => setJobId(job.id),
     onError: (cause) =>
@@ -258,7 +260,9 @@ export function AddSheet({
       setTapError("");
     },
     onSuccess: (data) => {
-      if (data.pin?.id) setPendingTapPinId(data.pin.id);
+      if (data.pin?.id && jobId) {
+        setPendingTapPin({ pinId: data.pin.id, jobId, at: Date.now() });
+      }
     },
     onError: (cause) =>
       setTapError(cause instanceof Error ? cause.message : t("en", "add.tapFailed")),
@@ -284,7 +288,7 @@ export function AddSheet({
     job?.status === "ready" &&
     !confirm.isPending &&
     !tapAdd.isPending &&
-    !isAwaitingTapPin(pendingTapPinId, candidateIds, jobQuery.isError);
+    !isAwaitingTapPin(pendingTapPin, jobId, candidateIds, jobQuery.errorUpdatedAt);
   const showFaceNote = shouldShowFaceNote(job?.faceNote ?? false, jobId, dismissedFaceJobId);
   // Visibility excludes `busy` so the preview stays up (disabled)
   // while a tap is cutting; canTapAdd's busy gate is unit-tested.
@@ -314,6 +318,7 @@ export function AddSheet({
     setDropped(new Set());
     setUploadError("");
     setTapError("");
+    setPendingTapPin(null);
     clearPreview();
     upload.reset();
   }

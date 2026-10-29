@@ -101,11 +101,18 @@ describe("add sheet logic (PIN-67)", () => {
     expect(canTapAdd({ ...base, busy: true })).toBe(false);
   });
 
-  it("waits only for the just-tapped pin, and gives up on a failed refetch (PIN-78)", () => {
-    expect(isAwaitingTapPin("tap1", ["c1"], false)).toBe(true);
-    expect(isAwaitingTapPin("tap1", ["c1", "tap1"], false)).toBe(false);
-    expect(isAwaitingTapPin(null, ["c1"], false)).toBe(false);
-    expect(isAwaitingTapPin("tap1", ["c1"], true)).toBe(false);
+  it("waits only for the just-tapped pin on its own job (PIN-78)", () => {
+    const pending = { pinId: "tap1", jobId: "job1", at: 100 };
+    expect(isAwaitingTapPin(pending, "job1", ["c1"], 0)).toBe(true);
+    expect(isAwaitingTapPin(pending, "job1", ["c1", "tap1"], 0)).toBe(false);
+    expect(isAwaitingTapPin(null, "job1", ["c1"], 0)).toBe(false);
+    // Previous photo's pending tap never gates the new job.
+    expect(isAwaitingTapPin(pending, "job2", ["c9"], 0)).toBe(false);
+    expect(isAwaitingTapPin(pending, null, ["c9"], 0)).toBe(false);
+    // A refetch failure after the tap releases; a stale pre-tap
+    // error does not.
+    expect(isAwaitingTapPin(pending, "job1", ["c1"], 101)).toBe(false);
+    expect(isAwaitingTapPin(pending, "job1", ["c1"], 99)).toBe(true);
   });
 
   it("treats ready/failed/refused as terminal", () => {

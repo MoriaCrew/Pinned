@@ -152,20 +152,33 @@ export function canTapAdd(input: {
  * True while a successful tap's candidate has not appeared in
  * the job view yet (PIN-78): Pin N must wait for it, because
  * confirm drops job pins missing from the payload — but ONLY
- * for that pin. A failed job refetch releases the wait (the
- * pin is not visible to select anyway) instead of wedging Pin
- * disabled on every background refetch.
+ * for that pin, on that job. A job refetch that fails after
+ * the tap releases the wait (the pin is not visible to select
+ * anyway) instead of wedging Pin disabled; background
+ * refetches and stale pre-tap errors never affect it.
  */
+/** A tap whose candidate has not landed in the job view yet. */
+export interface PendingTapPin {
+  pinId: string;
+  jobId: string;
+  /** Epoch-ms the tap succeeded (client clock). */
+  at: number;
+}
+
 export function isAwaitingTapPin(
-  pendingTapPinId: string | null,
+  pending: PendingTapPin | null,
+  currentJobId: string | null,
   candidateIds: readonly string[],
-  jobQueryFailed: boolean,
+  jobErrorUpdatedAt: number,
 ): boolean {
-  return (
-    pendingTapPinId !== null &&
-    !candidateIds.includes(pendingTapPinId) &&
-    !jobQueryFailed
-  );
+  if (!pending) return false;
+  // A previous photo's pending tap never gates a new job.
+  if (pending.jobId !== currentJobId) return false;
+  if (candidateIds.includes(pending.pinId)) return false;
+  // Only a refetch failure AFTER this tap releases the wait; a
+  // stale error from before the tap must not skip it.
+  if (jobErrorUpdatedAt > pending.at) return false;
+  return true;
 }
 
 export function isTerminalJob(status: JobStatusLike): boolean {
