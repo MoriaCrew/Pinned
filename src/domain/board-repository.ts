@@ -23,6 +23,10 @@
  *   not an error (idempotent for the PIN-56 endpoint).
  * - One pin per (boardId, elementId): the board grid is a set of
  *   elements. Re-pinning after deletePin works.
+ * - Reclaim-attempt counters (PIN-90) are keyed by an opaque caller
+ *   hash; `mutateReclaimAttempt` applies the transform atomically
+ *   (transactional in Firestore) so concurrent failures across
+ *   instances cannot lose increments. Returning null clears.
  */
 import type {
   Board,
@@ -34,6 +38,7 @@ import type {
   PinStatus,
   Scene,
 } from "./board";
+import type { ReclaimAttemptState } from "./reclaim-lockout";
 
 export interface DeleteElementResult {
   deleted: boolean;
@@ -52,6 +57,19 @@ export interface BoardRepository {
   putParticipant(participant: Participant): Promise<void>;
   getParticipant(boardId: string, participantId: string): Promise<Participant | null>;
   listParticipants(boardId: string): Promise<Participant[]>;
+
+  /** Reclaim-PIN failure counter for an opaque key (PIN-90). */
+  getReclaimAttempt(boardId: string, key: string): Promise<ReclaimAttemptState | null>;
+  /**
+   * Atomically transform the counter for `key`: fn receives an
+   * isolated copy (or null) and returns the next state, or null to
+   * clear it. Returns the stored state (isolated copy) or null.
+   */
+  mutateReclaimAttempt(
+    boardId: string,
+    key: string,
+    fn: (current: ReclaimAttemptState | null) => ReclaimAttemptState | null,
+  ): Promise<ReclaimAttemptState | null>;
 
   /** Stores the element and appends `element_added` (actor = ownerId). */
   createElement(element: Element): Promise<void>;
@@ -114,6 +132,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   private pins = new Map<string, Pin>();
   private scenes = new Map<string, Scene>();
   private events = new Map<string, BoardEvent[]>();
+  private reclaimAttempts = new Map<string, ReclaimAttemptState>();
   private eventSeq = 0;
 
   private requireBoard(slug: string): Board {
@@ -172,6 +191,35 @@ export class InMemoryBoardRepository implements BoardRepository {
     return byCreatedAt(
       [...this.participants.values()].filter((p) => p.boardId === boardId).map(clone),
     );
+  }
+
+  async getReclaimAttempt(
+    boardId: string,
+    key: string,
+  ): Promise<ReclaimAttemptState | null> {
+    const state = this.reclaimAttempts.get(`${boardId}/${key}`);
+    return state ? clone(state) : null;
+  }
+
+  // No awaits between read and write: atomic in-process.
+  async mutateReclaimAttempt(
+    boardId: string,
+    key: string,
+    fn: (current: ReclaimAttemptState | null) => ReclaimAttemptState | null,
+  ): Promise<ReclaimAttemptState | null> {
+    this.requireBoard(boardId);
+    const mapKey = `${boardId}/${key}`;
+    const current = this.reclaimAttempts.get(mapKey) ?? null;
+    const next = fn(current ? clone(current) : null);
+    if (next === null) {
+      this.reclaimAttempts.delete(mapKey);
+      return null;
+    }
+    if (next.boardId !== boardId || next.key !== key) {
+      throw new RangeError(`Reclaim attempt key mismatch for board ${boardId}`);
+    }
+    this.reclaimAttempts.set(mapKey, clone(next));
+    return clone(next);
   }
 
   async createElement(element: Element): Promise<void> {

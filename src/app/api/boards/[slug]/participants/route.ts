@@ -6,7 +6,12 @@ import {
   publicParticipant,
   readCookieValue,
 } from "../../../../../server/board-session";
-import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../../server/rate-limit";
+import {
+  RATE_LIMITS,
+  checkRateLimit,
+  clientIp,
+  clientKey,
+} from "../../../../../server/rate-limit";
 import { getConfig } from "../../../../../config";
 import { linkParticipantOnJoin } from "../../../../../server/user-session";
 import { claimDeps, currentUser } from "../../../auth-shared";
@@ -73,7 +78,9 @@ export async function POST(
       request.headers.get("cookie"),
       playerCookieName(slug),
     );
-    const result = await joinBoard(slug, body, existingCookie, sessionDeps(policy));
+    const result = await joinBoard(slug, body, existingCookie, sessionDeps(policy), {
+      clientIp: clientIp(request),
+    });
     // PIN-83: join-while-signed-in auto-links the participant to
     // the user + board index. Optional-mode only and best-effort:
     // link-only never runs this, and a link failure never fails

@@ -5,6 +5,8 @@ import "server-only";
  * App Hosting runs a small number of instances, so this is a soft
  * brake against scripts and PIN brute-force, not a distributed
  * guarantee. Game-level caps in the domain remain the hard limits.
+ * The distributed reclaim-PIN lockout lives in the BoardRepository
+ * attempt counters (PIN-90, board-session.ts).
  */
 const globalBuckets = globalThis as typeof globalThis & {
   __pinnedRateLimits?: Map<string, { count: number; resetAt: number }>;
@@ -32,10 +34,14 @@ export function checkRateLimit(
   return existing.count <= limit;
 }
 
-export function clientKey(request: Request, scope: string): string {
+/** First forwarded IP, or "unknown" (PIN-90 hashes before storage). */
+export function clientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = forwarded || request.headers.get("x-real-ip") || "unknown";
-  return `${scope}:${ip}`;
+  return forwarded || request.headers.get("x-real-ip") || "unknown";
+}
+
+export function clientKey(request: Request, scope: string): string {
+  return `${scope}:${clientIp(request)}`;
 }
 
 export const RATE_LIMITS = {

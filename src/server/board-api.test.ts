@@ -159,6 +159,158 @@ describe("joinBoard / participant sessions", () => {
   });
 });
 
+describe("reclaim hardening (PIN-90)", () => {
+  async function failureOf(promise: Promise<unknown>) {
+    const error = await promise.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BoardApiError);
+    const apiError = error as BoardApiError;
+    return { status: apiError.status, code: apiError.code, message: apiError.message };
+  }
+
+  it("wrong PIN, no-PIN-on-file and locked-out failures are indistinguishable", async () => {
+    const h = makeHarness({
+      reclaimMaxFailuresPerName: 2,
+      reclaimLockoutBaseMs: 60_000,
+      reclaimLockoutMaxMs: 60_000,
+    });
+    const board = await createBoard({ title: "B" }, h.deps);
+    await joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session);
+    await joinBoard(board.slug, { displayName: "Aye" }, null, h.session);
+
+    const wrongPin = await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "9999" }, null, h.session),
+    );
+    const noPinOnFile = await failureOf(
+      joinBoard(board.slug, { displayName: "Aye", reclaimPin: "9999" }, null, h.session),
+    );
+    expect(noPinOnFile).toEqual(wrongPin);
+    expect(wrongPin).toMatchObject({ status: 401, code: "reclaim_failed" });
+
+    // Second wrong try hits the Policy threshold and locks Robin;
+    // even the correct PIN then fails with the identical shape.
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "9999" }, null, h.session),
+    );
+    const locked = await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session),
+    );
+    expect(locked).toEqual(wrongPin);
+
+    // Failed reclaims never mint a duplicate participant.
+    expect(await h.boards.listParticipants(board.slug)).toHaveLength(2);
+  });
+
+  it("first-try reclaim still works, and success clears the failure counters", async () => {
+    const h = makeHarness({ reclaimMaxFailuresPerName: 3 });
+    const board = await createBoard({ title: "B" }, h.deps);
+    const first = await joinBoard(
+      board.slug,
+      { displayName: "Robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    );
+    const reclaimed = await joinBoard(
+      board.slug,
+      { displayName: "robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    expect(reclaimed.outcome).toBe("reclaimed");
+    expect(reclaimed.participant.id).toBe(first.participant.id);
+    // Counter cleared: two more wrong tries stay under the threshold.
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    );
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    );
+    const again = await joinBoard(
+      board.slug,
+      { displayName: "Robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    expect(again.outcome).toBe("reclaimed");
+  });
+
+  it("locks at the Policy name threshold and frees after the lock expires", async () => {
+    const h = makeHarness({
+      reclaimMaxFailuresPerName: 2,
+      reclaimLockoutBaseMs: 5_000,
+      reclaimLockoutMaxMs: 5_000,
+    });
+    const board = await createBoard({ title: "B" }, h.deps);
+    await joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session);
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    );
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    );
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session),
+    );
+    h.setNow(T0 + 5_000);
+    const reclaimed = await joinBoard(
+      board.slug,
+      { displayName: "Robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    expect(reclaimed.outcome).toBe("reclaimed");
+  });
+
+  it("counts failures per IP across names; a fresh IP is unaffected", async () => {
+    const h = makeHarness({
+      reclaimMaxFailuresPerName: 50,
+      reclaimMaxFailuresPerIp: 2,
+      reclaimLockoutBaseMs: 60_000,
+      reclaimLockoutMaxMs: 60_000,
+    });
+    const board = await createBoard({ title: "B" }, h.deps);
+    await joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session);
+    await joinBoard(board.slug, { displayName: "Aye", reclaimPin: "5678" }, null, h.session);
+    const attacker = { clientIp: "203.0.113.7" };
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session, attacker),
+    );
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Aye", reclaimPin: "0000" }, null, h.session, attacker),
+    );
+    // IP locked at its Policy threshold even though no name is.
+    await failureOf(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "1234" }, null, h.session, attacker),
+    );
+    const reclaimed = await joinBoard(
+      board.slug,
+      { displayName: "Robin", reclaimPin: "1234" },
+      null,
+      h.session,
+      { clientIp: "198.51.100.9" },
+    );
+    expect(reclaimed.outcome).toBe("reclaimed");
+  });
+
+  it("normal join parity: no-PIN join and first join with a fresh name + PIN still create", async () => {
+    const h = makeHarness();
+    const board = await createBoard({ title: "B" }, h.deps);
+    const plain = await joinBoard(board.slug, { displayName: "Robin" }, null, h.session);
+    expect(plain.outcome).toBe("created");
+    const withPin = await joinBoard(
+      board.slug,
+      { displayName: "Aye", reclaimPin: "4321" },
+      null,
+      h.session,
+    );
+    expect(withPin.outcome).toBe("created");
+    expect(withPin.participant.reclaimPinHash).toBeTruthy();
+    expect(withPin.participant.reclaimPinHash).not.toContain("4321");
+  });
+});
+
 describe("uploadPhoto -> job -> confirmPins (A6a)", () => {
   it("runs the mock decompose to ready, confirms a subset, drops the rest and deletes the working copy", async () => {
     const h = makeHarness();

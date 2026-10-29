@@ -8,6 +8,7 @@ import "server-only";
  * Layout (coexists with games/; nothing here reads or writes it):
  * - boards/{slug}
  * - boards/{slug}/participants|elements|pins|scenes|events/{id}
+ * - boards/{slug}/reclaimAttempts/{keyHash} (PIN-90 lockout counters)
  * - boards/{slug}/jobs/{jobId} is RESERVED for DecomposeJob /
  *   SceneJob docs (§5.3); the BoardRepository port has no job
  *   methods yet, so nothing writes it in this slice.
@@ -54,6 +55,7 @@ import type {
   BoardRepository,
   DeleteElementResult,
 } from "../domain/board-repository";
+import type { ReclaimAttemptState } from "../domain/reclaim-lockout";
 
 const BOARDS = "boards";
 const PARTICIPANTS = "participants";
@@ -61,6 +63,7 @@ const ELEMENTS = "elements";
 const PINS = "pins";
 const SCENES = "scenes";
 const EVENTS = "events";
+const RECLAIM_ATTEMPTS = "reclaimAttempts";
 
 function toFirestoreData<T extends object>(value: T): DocumentData {
   return JSON.parse(JSON.stringify(value)) as DocumentData;
@@ -221,6 +224,37 @@ export class FirestoreBoardRepository implements BoardRepository {
 
   async listParticipants(boardId: string): Promise<Participant[]> {
     return sortedValues(rowsFrom<Participant>(await this.col(boardId, PARTICIPANTS).get()));
+  }
+
+  async getReclaimAttempt(
+    boardId: string,
+    key: string,
+  ): Promise<ReclaimAttemptState | null> {
+    return fromSnapshot<ReclaimAttemptState>(
+      await this.col(boardId, RECLAIM_ATTEMPTS).doc(key).get(),
+    );
+  }
+
+  async mutateReclaimAttempt(
+    boardId: string,
+    key: string,
+    fn: (current: ReclaimAttemptState | null) => ReclaimAttemptState | null,
+  ): Promise<ReclaimAttemptState | null> {
+    const ref = this.col(boardId, RECLAIM_ATTEMPTS).doc(key);
+    return this.db.runTransaction(async (tx) => {
+      await this.requireBoardTx(tx, boardId);
+      const current = fromSnapshot<ReclaimAttemptState>(await tx.get(ref));
+      const next = fn(current ? structuredClone(current) : null);
+      if (next === null) {
+        tx.delete(ref);
+        return null;
+      }
+      if (next.boardId !== boardId || next.key !== key) {
+        throw new RangeError(`Reclaim attempt key mismatch for board ${boardId}`);
+      }
+      tx.set(ref, toFirestoreData(next));
+      return structuredClone(next);
+    });
   }
 
   async createElement(element: Element): Promise<void> {
