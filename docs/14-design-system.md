@@ -38,6 +38,27 @@ Principles:
   on `<html>`. Any element with `data-theme="<skin>"` re-declares
   every token, so skins nest (the skin picker shows several at once).
 
+## UI kit
+
+- `src/ui/` holds the components (`import { … } from "../ui"`):
+  Icon (20 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
+  CreditLine, SceneCard, Developing, BoardHeader, SectionHead, Dock,
+  Sheet, EmptyState, Menu, SkinPicker, TryOnBar, PlusSheet.
+- `src/ui/pinneds.css` (loaded by the root layout) styles them. Each
+  skin's look (display face, sticker keyline/shadow/tilt, name-tag
+  style, button and print shape, ground pattern, band) is a set of
+  CSS variables declared on the `[data-theme]` element itself, so a
+  nested skin always wins over an outer one.
+- Give a rebuilt screen its own `data-theme` + `pn-skin-root`
+  wrapper: until PIN-104 removes the first-generation stylesheet,
+  its `:root` variables still win on `<html>`.
+- Strings go through `src/i18n` (`ui.*`, `meta.*`, `skin.*`); `tf`
+  fills `{placeholders}` and `tCount` picks singular/plural.
+- `/lab/ui` (same gate as `/lab/sam`) shows every component in every
+  skin with synthetic samples from `public/lab/`; use it for QA and
+  PR screenshots.
+
 ## Skins
 
 A board stores its skin id in `Board.themeId`
