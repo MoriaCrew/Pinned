@@ -8,6 +8,21 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.aiMock).toBe(true);
   });
 
+  it("demo board slug: valid slug kept, anything else fails closed to null (PIN-73)", () => {
+    expect(parseConfig({}).demoBoardSlug).toBeNull();
+    expect(parseConfig({ DEMO_BOARD_SLUG: "" }).demoBoardSlug).toBeNull();
+    expect(
+      parseConfig({ DEMO_BOARD_SLUG: "AAAAAAAAAAAAAAAAAAAAAA" }).demoBoardSlug,
+    ).toBe("AAAAAAAAAAAAAAAAAAAAAA");
+    expect(
+      parseConfig({ DEMO_BOARD_SLUG: " AAAAAAAAAAAAAAAAAAAAAA " }).demoBoardSlug,
+    ).toBe("AAAAAAAAAAAAAAAAAAAAAA");
+    expect(parseConfig({ DEMO_BOARD_SLUG: "short" }).demoBoardSlug).toBeNull();
+    expect(
+      parseConfig({ DEMO_BOARD_SLUG: "../../etc/passwd-padding" }).demoBoardSlug,
+    ).toBeNull();
+  });
+
   it("honours optional + live AI only on exact values", () => {
     const cfg = parseConfig({ AUTH_MODE: "optional", AI_MOCK: "0" });
     expect(cfg.authMode).toBe("optional");

@@ -32,6 +32,12 @@ export interface AppConfig {
   /** Raw POLICY_OVERRIDES_JSON; parsed/validated by src/policy (PIN-59). */
   policyOverridesJson: string | null;
   sessionSecret: string | null;
+  /**
+   * Seeded judge demo board slug (PIN-73). A capability secret:
+   * set only via env (DEMO_BOARD_SLUG), never committed. Null =
+   * the landing demo link stays hidden/inert.
+   */
+  demoBoardSlug: string | null;
   storageBucket: string | null;
   labEnabled: boolean;
   meta: MetaConfig;
@@ -62,6 +68,15 @@ function parseDataBackend(
   return "memory";
 }
 
+/** Mirrors SLUG_PATTERN (domain/tokens): 22-char base64url slug. */
+const DEMO_SLUG_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+
+/** Invalid DEMO_BOARD_SLUG fails closed to "no demo link". */
+function parseDemoBoardSlug(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && DEMO_SLUG_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 function nonEmpty(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -86,6 +101,7 @@ export function parseConfig(
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 200)),
     labEnabled: env.PINNED_LAB === "1",
     sessionSecret: nonEmpty(env.SESSION_SECRET),
+    demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??
       nonEmpty(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) ??
