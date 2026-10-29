@@ -233,6 +233,7 @@ function BoardBody({
         queryClient.removeQueries({ queryKey: ["board-scene", slug, liveSceneId] });
         setAttempt(null);
         setLiveSceneId(null);
+        setAttemptError("");
       }
       setConfirmDeleteElementId(null);
       setDeleteErrorElementId(null);
