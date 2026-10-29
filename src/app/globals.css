@@ -211,6 +211,8 @@ details.card > summary { cursor: pointer; font-weight: 800; font-size: 1.15rem; 
 .sheet-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .sheet-actions .btn { flex: 1 1 10rem; justify-content: center; min-height: 52px; }
 .pin-toggle { width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.pin-delete { margin-top: 0.5rem; }
+.pin-delete-confirm { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.5rem; }
 .pin-toggle .pin-label { display: block; }
 .pin-dropped { opacity: 0.45; }
 .pin-dropped img { filter: grayscale(1); }

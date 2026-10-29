@@ -80,6 +80,19 @@ export function pinCards(view: BoardViewLike): PinCard[] {
   return cards.map(({ createdAt: _createdAt, ...card }) => card);
 }
 
+/**
+ * Own pins only (PIN-77): the delete affordance renders only
+ * when the viewer is the element's owner — Element.ownerId,
+ * not Pin.pinnedBy, matching the server's owner-only check.
+ * The server still enforces it; this only hides the button.
+ */
+export function canDeleteCard(
+  card: Pick<PinCard, "ownerId">,
+  meId: string | null | undefined,
+): boolean {
+  return meId !== null && meId !== undefined && card.ownerId === meId;
+}
+
 /** Never-empty rule (docs/11 section 6): prompt until a real pin lands. */
 export function needsEmptyPrompt(view: BoardViewLike): boolean {
   return !view.pins.some((pin) => pin.status === "pinned");

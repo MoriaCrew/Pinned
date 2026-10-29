@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBoardPayload, needsEmptyPrompt, pinCards, type BoardViewLike } from "./board-view";
+import { canDeleteCard, createBoardPayload, needsEmptyPrompt, pinCards, type BoardViewLike } from "./board-view";
 
 function view(over: Partial<BoardViewLike> = {}): BoardViewLike {
   return {
@@ -27,6 +27,15 @@ describe("board view model (PIN-66)", () => {
       ["mug", "Robin"],
       ["cat", "Aye"],
     ]);
+  });
+
+  it("shows delete only on own pins (PIN-77: element owner, not pinnedBy)", () => {
+    const cards = pinCards(view());
+    expect(canDeleteCard(cards[0], "p1")).toBe(true);
+    expect(canDeleteCard(cards[0], "p2")).toBe(false);
+    expect(canDeleteCard(cards[1], "p2")).toBe(true);
+    expect(canDeleteCard(cards[0], null)).toBe(false);
+    expect(canDeleteCard(cards[0], undefined)).toBe(false);
   });
 
   it("leaves ownerName null for an unknown owner so the UI can fall back", () => {

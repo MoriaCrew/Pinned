@@ -9,10 +9,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  canDeleteCard,
   needsEmptyPrompt,
   pinCards,
   type BoardViewLike,
   type BoardViewScene,
+  type PinCard,
 } from "../../../domain/board-view";
 import {
   isTerminalScene,
@@ -116,6 +118,8 @@ function BoardBody({
   const [sheetPrompt, setSheetPrompt] = useState("");
   // PIN-75: generated chips, keyed by the selection they were made for.
   const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
+  const [confirmDeleteElementId, setConfirmDeleteElementId] = useState<string | null>(null);
+  const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   const boardQuery = useQuery({
@@ -208,6 +212,79 @@ function BoardBody({
     onError: (cause) =>
       setAttemptError(cause instanceof Error ? cause.message : t("en", "make.failed")),
   });
+
+  // PIN-77: delete my element (owner-only server-side; the
+  // button only renders on own pins). The board poll reconciles
+  // pins, hidden scenes and counters after invalidation.
+  const deleteElement = useMutation({
+    mutationFn: async (elementId: string) => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error(t("en", "board.deleteFailed"));
+      return elementId;
+    },
+    onSuccess: (_data, elementId) => {
+      // If my attempt scene used this element it is now hidden: drop
+      // the attempt + poll cache, else the poll re-enables and merges
+      // the stale polled scene back into the gallery.
+      if (attempt && attempt.elementIds.includes(elementId)) {
+        queryClient.removeQueries({ queryKey: ["board-scene", slug, liveSceneId] });
+        setAttempt(null);
+        setLiveSceneId(null);
+        setAttemptError("");
+      }
+      setConfirmDeleteElementId(null);
+      setDeleteErrorElementId(null);
+      void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+    },
+    onError: (_cause, elementId) => setDeleteErrorElementId(elementId),
+  });
+
+  const renderDeleteControl = (card: PinCard) => {
+    if (!canDeleteCard(card, view.me?.id)) return null;
+    const elementId = card.element.id;
+    const deleting = deleteElement.isPending && deleteElement.variables === elementId;
+    if (confirmDeleteElementId !== elementId) {
+      return (
+        <button
+          type="button"
+          className="btn btn-small pin-delete"
+          onClick={() => {
+            setDeleteErrorElementId(null);
+            setConfirmDeleteElementId(elementId);
+          }}
+        >
+          {t("en", "board.delete")}
+        </button>
+      );
+    }
+    return (
+      <span className="pin-delete-confirm">
+        <span role="status">{t("en", "board.deleteConfirm")}</span>
+        <button
+          type="button"
+          className="btn btn-small"
+          disabled={deleting}
+          onClick={() => deleteElement.mutate(elementId)}
+        >
+          {deleting ? t("en", "board.deleting") : t("en", "board.deleteYes")}
+        </button>
+        <button
+          type="button"
+          className="btn btn-small"
+          disabled={deleting}
+          onClick={() => setConfirmDeleteElementId(null)}
+        >
+          {t("en", "board.deleteKeep")}
+        </button>
+        {deleteErrorElementId === elementId ? (
+          <span className="error" role="alert">{t("en", "board.deleteFailed")}</span>
+        ) : null}
+      </span>
+    );
+  };
 
   // Poll my in-flight scene at job cadence so the gallery card
   // lands faster than the board poll; both share the TanStack
@@ -528,6 +605,7 @@ function BoardBody({
                     <p className="pin-label">{card.element.label}</p>
                     <p className="pin-owner">{owner}</p>
                     <p className="state-pill">{t("en", "board.candidate")}</p>
+                    {renderDeleteControl(card)}
                   </li>
                 );
               }
@@ -546,6 +624,7 @@ function BoardBody({
                     <span className="pin-owner">{owner}</span>
                     {picking ? <span className="state-pill">{t("en", "make.picked")}</span> : null}
                   </button>
+                  {renderDeleteControl(card)}
                 </li>
               );
             })}

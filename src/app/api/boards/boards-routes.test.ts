@@ -10,6 +10,7 @@ import { POST as uploadRoute } from "./[slug]/photos/route";
 import { GET as getJobRoute } from "./[slug]/jobs/[jobId]/route";
 import { POST as confirmRoute } from "./[slug]/pins/confirm/route";
 import { GET as imageRoute } from "./[slug]/elements/[elementId]/image/route";
+import { DELETE as deleteElementRoute } from "./[slug]/elements/[elementId]/route";
 import { GET as getScenesRoute, POST as postSceneRoute } from "./[slug]/scenes/route";
 import { GET as getSceneRoute } from "./[slug]/scenes/[sceneId]/route";
 import { GET as sceneImageRoute } from "./[slug]/scenes/[sceneId]/image/route";
@@ -77,6 +78,11 @@ describe("slug gate: malformed slug -> uniform 404 on every board route", () => 
         params: Promise.resolve({ slug, elementId: "el-1" }),
       }),
     ];
+    calls.push(
+      deleteElementRoute(req("http://t/x", { method: "DELETE" }), {
+        params: Promise.resolve({ slug, elementId: "el-1" }),
+      }),
+    );
     for (const call of calls) {
       const res = await call;
       expect(res.status).toBe(404);
@@ -106,6 +112,12 @@ describe("uniform 404: unknown board / element / job are indistinguishable", () 
     expect(okRes.status).toBe(200);
 
     const misses: Promise<Response>[] = [
+      deleteElementRoute(req("http://t/x", { method: "DELETE" }), {
+        params: Promise.resolve({ slug: realSlug, elementId: "missing" }),
+      }),
+      deleteElementRoute(req("http://t/x", { method: "DELETE" }), {
+        params: Promise.resolve({ slug: unknownSlug, elementId: "missing" }),
+      }),
       getBoardRoute(req("http://t/x"), slugParams(unknownSlug)),
       getScenesRoute(req("http://t/x"), slugParams(unknownSlug)),
       getSceneRoute(req("http://t/x"), {
