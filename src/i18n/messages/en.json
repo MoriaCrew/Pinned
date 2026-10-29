@@ -133,5 +133,11 @@
   "board.activity": "🕓 Latest",
   "activity.joined": "👋 joined",
   "activity.pinned": "📌 pinned",
-  "activity.sceneReady": "✨ made a scene"
+  "activity.sceneReady": "✨ made a scene",
+  "board.delete": "🗑 Delete",
+  "board.deleteConfirm": "Delete for everyone? Scenes hide.",
+  "board.deleteYes": "Yes, delete",
+  "board.deleteKeep": "Keep",
+  "board.deleting": "⏳ Deleting…",
+  "board.deleteFailed": "❌ Delete failed. Try again."
 }

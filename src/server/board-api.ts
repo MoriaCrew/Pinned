@@ -443,6 +443,104 @@ export async function confirmPins(
   };
 }
 
+export interface DeleteMyElementResult {
+  deleted: boolean;
+  unpinnedOnly: boolean;
+  removedPinIds: string[];
+  hiddenSceneIds: string[];
+  storageDeleted: boolean;
+}
+
+/**
+ * Delete my element (PIN-77, docs/11 section 5.4 Deletes):
+ * owner-only. Missing board/element, an element from another
+ * board, a non-owner participant and no participant at all all
+ * throw the same 404 BoardApiError, which the route renders as
+ * the one uniform body — no existence leak (candidate elements
+ * are private pre-confirm, so a non-owner must not learn one
+ * exists). The repository cascade (PIN-62) removes the element
+ * and its pins, hides scenes that used it and fixes counters.
+ *
+ * Cross-board guard (PIN-77 stop rule): createPin enforces
+ * same-board pins today, but if pins on OTHER boards ever
+ * reference this element the element record and its stored
+ * objects must survive for them — delete only this board's
+ * pins, hide only this board's scenes, leave storage alone.
+ *
+ * Storage cleanup is best-effort AFTER the cascade: only the
+ * element's own persistent `elements/` refs (cutout/flattened)
+ * are deleted, each in its own try/catch so one missing object
+ * cannot block the other or fail the request (the records are
+ * already gone; an orphaned object is unreachable through any
+ * route). Forged refs outside `elements/` are never touched —
+ * never a `tmp/` working copy, never a `scenes/` image.
+ *
+ * No BoardEvent is written and no activity line added (PIN-77
+ * decision): docs/11 section 5.4 fixes the event vocabulary
+ * (only PIN-49 edits docs/11), and activityLines resolves a
+ * pin's label from live elements, so a deleted pin's
+ * "pinned" line already drops out of the strip honestly
+ * instead of showing a snapshotted label the owner removed.
+ * Suggestion chips are cached by label SET (PIN-75), never by
+ * element id, so a delete cannot poison the cache: a future
+ * selection with the same labels gets still-apt chips.
+ */
+export async function deleteMyElement(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  deps: BoardApiDeps,
+): Promise<DeleteMyElementResult> {
+  if (!participant) throw new BoardApiError("Element not found.", 404);
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Element not found.", 404);
+  const element = await deps.boards.getElement(elementId);
+  if (!element || element.boardId !== slug || element.ownerId !== participant.id) {
+    throw new BoardApiError("Element not found.", 404);
+  }
+
+  const pins = await deps.boards.listPinsForElement(elementId);
+  const pinsElsewhere = pins.filter((pin) => pin.boardId !== slug);
+  if (pinsElsewhere.length > 0) {
+    const removedPinIds: string[] = [];
+    for (const pin of pins.filter((p) => p.boardId === slug)) {
+      if (await deps.boards.deletePin(pin.id)) removedPinIds.push(pin.id);
+    }
+    const hiddenSceneIds: string[] = [];
+    for (const scene of await deps.boards.listScenes(slug)) {
+      if (!scene.elementIds.includes(elementId)) continue;
+      await deps.boards.putScene({ ...scene, hidden: true });
+      hiddenSceneIds.push(scene.id);
+    }
+    return { deleted: false, unpinnedOnly: true, removedPinIds, hiddenSceneIds, storageDeleted: false };
+  }
+
+  const result = await deps.boards.deleteElement(elementId);
+  if (!result.deleted) {
+    // Deleted concurrently after the ownership check: the end
+    // state is the requested one, so report a no-op success.
+    return { deleted: false, unpinnedOnly: false, removedPinIds: [], hiddenSceneIds: [], storageDeleted: false };
+  }
+
+  let storageDeleted = false;
+  for (const ref of [element.cutoutRef, element.flattenedRef]) {
+    if (!ref.startsWith("elements/")) continue;
+    try {
+      await deps.store.delete(ref);
+      storageDeleted = true;
+    } catch {
+      // Best-effort: records are gone, object is unreachable.
+    }
+  }
+  return {
+    deleted: true,
+    unpinnedOnly: false,
+    removedPinIds: result.removedPinIds,
+    hiddenSceneIds: result.hiddenSceneIds,
+    storageDeleted,
+  };
+}
+
 export type ElementImageKind = "cutout" | "flattened";
 
 /**
