@@ -225,7 +225,15 @@ function BoardBody({
       if (!response.ok) throw new Error(t("en", "board.deleteFailed"));
       return elementId;
     },
-    onSuccess: () => {
+    onSuccess: (_data, elementId) => {
+      // If my attempt scene used this element it is now hidden: drop
+      // the attempt + poll cache, else the poll re-enables and merges
+      // the stale polled scene back into the gallery.
+      if (attempt && attempt.elementIds.includes(elementId)) {
+        queryClient.removeQueries({ queryKey: ["board-scene", slug, liveSceneId] });
+        setAttempt(null);
+        setLiveSceneId(null);
+      }
       setConfirmDeleteElementId(null);
       setDeleteErrorElementId(null);
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
