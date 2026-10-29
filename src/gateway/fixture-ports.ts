@@ -16,6 +16,8 @@ import {
   normalizeElements,
   type ElementNamer,
   type SceneComposer,
+  type ChipSuggester,
+  templateChips,
   type Segmenter,
 } from "./ports";
 
@@ -114,6 +116,25 @@ export function fixtureSegmenter(fixtures: StudioFixtures): Segmenter {
  * recorded no raw /v1/responses body; the wire-level replay fixture
  * is eval/fixtures/studio/compose-response.fixture.json.
  */
+/**
+ * No chips were recorded by PIN-50, so the fixture suggester
+ * replays the deterministic template chips: same labels in, same
+ * chips out, zero provider calls (PIN-75).
+ */
+export function fixtureChipSuggester(): ChipSuggester {
+  return {
+    async suggestChips(input) {
+      return {
+        status: "ready",
+        value: {
+          chips: templateChips(input.labels, input),
+          promptVersion: input.promptVersion,
+        },
+      };
+    },
+  };
+}
+
 export function fixtureSceneComposer(fixtures: StudioFixtures): SceneComposer {
   return {
     async composeScene(input) {

@@ -3,18 +3,22 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY } from "../policy/policy";
 import {
+  fixtureChipSuggester,
   fixtureElementNamer,
   fixtureSegmenter,
   type StudioFixtures,
 } from "./fixture-ports";
 import { MetaGateway } from "./meta-gateway";
-import { metaElementNamer, metaSegmenter } from "./meta-ports";
-import { mockElementNamer, mockSegmenter } from "./mock-ports";
+import { metaChipSuggester, metaElementNamer, metaSegmenter } from "./meta-ports";
+import { mockChipSuggester, mockElementNamer, mockSegmenter } from "./mock-ports";
 import {
   buildSegmentPromptText,
   classifyPortError,
   elementsSystemPrompt,
+  chipsSystemPrompt,
+  normalizeChips,
   normalizeElements,
+  type SuggestChipsInput,
   sceneImageOutcome,
   type NameElementsInput,
 } from "./ports";
@@ -266,6 +270,85 @@ describe("meta adapters (fake fetch)", () => {
     expect(out).toMatchObject({ status: "failed", errorCode: "bad_prompt" });
     expect(calls).toHaveLength(0);
     expect(buildSegmentPromptText({ kind: "concept", concept: "  " }).status).toBe("failed");
+  });
+});
+
+describe("ChipSuggester port (PIN-75)", () => {
+  function chipsInput(over: Partial<SuggestChipsInput> = {}): SuggestChipsInput {
+    const p = DEFAULT_POLICY;
+    return {
+      labels: ["Teal Mug", "Orange Tabby Cat"],
+      maxChips: p.chipsMax,
+      maxChipChars: p.scenePromptMaxChars,
+      maxTokens: p.maxTokens.sparkChips,
+      timeoutMs: p.timeoutsMs.spark,
+      promptVersion: p.promptVersions.chips,
+      ...over,
+    };
+  }
+
+  it("system prompt is prompts/chips.v1.md above the rule, Policy count in the slot", () => {
+    const file = readFileSync(
+      path.join(process.cwd(), "prompts/chips.v1.md"),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    const aboveRule = file.split("\n---\n")[0].trimEnd();
+    expect(chipsSystemPrompt({ maxChips: 4 })).toBe(
+      aboveRule.replaceAll("{{MAX_CHIPS}}", "4"),
+    );
+  });
+
+  it("normalizeChips dedupes, caps count/chars and drops junk", () => {
+    expect(
+      normalizeChips(
+        [" in space. ", "In Space", 42, "", "at the beach!", "x".repeat(600), "in a treehouse"],
+        { maxChips: 3, maxChipChars: 500 },
+      ),
+    ).toEqual(["in space", "at the beach", "in a treehouse"]);
+    expect(normalizeChips("nope", { maxChips: 4, maxChipChars: 500 })).toEqual([]);
+  });
+
+  it("meta suggester sends labels as JSON data with the chips token budget", async () => {
+    const { calls, gateway } = metaGateway(() => ({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              chips: ["sharing a tiny espresso bar", "Sharing A Tiny Espresso Bar", "napping in a sunbeam"],
+            }),
+          },
+        },
+      ],
+      usage: { prompt_tokens: 40, completion_tokens: 30 },
+    }));
+    const out = await metaChipSuggester(gateway).suggestChips(chipsInput());
+    expect(out).toEqual({
+      status: "ready",
+      value: {
+        chips: ["sharing a tiny espresso bar", "napping in a sunbeam"],
+        promptVersion: "chips.v1",
+      },
+    });
+    expect(calls[0].url).toBe("https://api.meta.ai/v1/chat/completions");
+    expect(calls[0].body.max_tokens).toBe(DEFAULT_POLICY.maxTokens.sparkChips);
+    const messages = calls[0].body.messages as { role: string; content: unknown }[];
+    expect(JSON.parse(String(messages[1].content))).toEqual({
+      labels: ["Teal Mug", "Orange Tabby Cat"],
+    });
+  });
+
+  it("mock and fixture suggesters are deterministic, capped and mock-word-free", async () => {
+    for (const suggester of [mockChipSuggester, fixtureChipSuggester()]) {
+      const first = await suggester.suggestChips(chipsInput());
+      const second = await suggester.suggestChips(chipsInput());
+      expect(first.status).toBe("ready");
+      expect(first).toEqual(second);
+      if (first.status === "ready") {
+        expect(first.value.chips).toHaveLength(DEFAULT_POLICY.chipsMax);
+        expect(first.value.chips.join(" ")).not.toMatch(/mock/i);
+        expect(first.value.promptVersion).toBe("chips.v1");
+      }
+    }
   });
 });
 

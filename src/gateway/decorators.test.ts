@@ -12,6 +12,7 @@ import type {
   NameElementsInput,
   PortOutcome,
   SceneComposer,
+  ChipSuggester,
   Segmenter,
 } from "./ports";
 
@@ -45,6 +46,7 @@ function setup(
     appendLog?: (log: AiCallLog) => Promise<void>;
     onLogError?: (cause: unknown) => void;
     composer?: SceneComposer;
+    suggester?: ChipSuggester;
   } = {},
 ) {
   const logs: AiCallLog[] = [];
@@ -55,7 +57,7 @@ function setup(
     },
   };
   const ports = decoratePorts(
-    { elementNamer: namer, segmenter, sceneComposer: opts.composer },
+    { elementNamer: namer, segmenter, sceneComposer: opts.composer, chipSuggester: opts.suggester },
     {
       policy: opts.policy ?? resolvePolicy(),
       budget: opts.budget ?? new InMemoryBudgetStore(),
@@ -257,6 +259,75 @@ describe("decorator chain: timeout + retry (PIN-61)", () => {
     });
     const out = await ports.elementNamer.nameElements(namerInput());
     expect(out).toMatchObject({ status: "refused", errorCode: "content_policy" });
+  });
+});
+
+describe("decorator chain: ChipSuggester (PIN-75)", () => {
+  const chipsInput = {
+    labels: ["Teal Mug"],
+    maxChips: 4,
+    maxChipChars: 500,
+    maxTokens: 1200,
+    timeoutMs: 30_000,
+    promptVersion: "chips.v1",
+    boardId: "b1",
+    participantId: "p1",
+  };
+
+  it("budget off denies before the provider; ready calls log suggestChips + chips.v1", async () => {
+    let calls = 0;
+    const suggester: ChipSuggester = {
+      async suggestChips(input) {
+        calls += 1;
+        return {
+          status: "ready",
+          value: { chips: ["in space"], promptVersion: input.promptVersion },
+        };
+      },
+    };
+    const off = setup(
+      { async nameElements() { return READY; } },
+      { suggester, policy: resolvePolicy({ dailyBudgetUsd: 0 }) },
+    );
+    expect(await off.ports.chipSuggester!.suggestChips(chipsInput)).toMatchObject({
+      status: "failed",
+      errorCode: "budget_off",
+    });
+    expect(calls).toBe(0);
+
+    const on = setup(
+      { async nameElements() { return READY; } },
+      { suggester },
+    );
+    expect((await on.ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
+    expect(calls).toBe(1);
+    expect(on.logs).toMatchObject([
+      { operation: "suggestChips", promptVersion: "chips.v1", outcome: "ok" },
+    ]);
+  });
+
+  it("reserve is priced from the small chips token budget", async () => {
+    const seen: ReserveRequest[] = [];
+    const spy: BudgetStore = {
+      async reserve(request) {
+        seen.push(request);
+        return { ok: true, estimatedMicroUsd: 1 };
+      },
+    };
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        budget: spy,
+        suggester: {
+          async suggestChips(input) {
+            return { status: "ready", value: { chips: ["x"], promptVersion: input.promptVersion } };
+          },
+        },
+      },
+    );
+    await ports.chipSuggester!.suggestChips(chipsInput);
+    // 1200 output tokens at the Spark list rate: $0.0051 < $0.01.
+    expect(seen[0].estimatedCostUsd).toBeCloseTo(0.0051, 6);
   });
 });
 

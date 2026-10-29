@@ -33,6 +33,7 @@ import {
   type ElementNamer,
   type PortOutcome,
   type SceneComposer,
+  type ChipSuggester,
   type Segmenter,
 } from "./ports";
 
@@ -158,6 +159,7 @@ async function runDecorated<T>(
       dayBucket,
       estimatedCostUsd: estimateReserveUsd(meta.operation, {
         sparkElementsMaxTokens: policy.maxTokens.sparkElements,
+        sparkChipsMaxTokens: policy.maxTokens.sparkChips,
       }),
       budgetUsd: policy.dailyBudgetUsd,
       callLimit: policy.dailyCallLimit,
@@ -219,6 +221,7 @@ export interface DecoratedPorts {
   elementNamer: ElementNamer;
   segmenter: Segmenter;
   sceneComposer?: SceneComposer;
+  chipSuggester?: ChipSuggester;
 }
 
 /** Wrap base ports (Meta/mock/fixture) in the PIN-61 chain. */
@@ -287,6 +290,24 @@ export function decoratePorts(
             boardCap: policy.scenesPerBoardPerDay,
           },
           () => composer.composeScene(input),
+        ),
+    };
+  }
+  if (base.chipSuggester) {
+    const suggester = base.chipSuggester;
+    ports.chipSuggester = {
+      suggestChips: (input) =>
+        runDecorated(
+          full,
+          {
+            operation: "suggestChips",
+            model: policy.models.spark,
+            promptVersion: input.promptVersion,
+            timeoutMs: input.timeoutMs,
+            boardId: input.boardId,
+            participantId: input.participantId,
+          },
+          () => suggester.suggestChips(input),
         ),
     };
   }

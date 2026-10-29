@@ -11,6 +11,7 @@ import {
   classifyPortError,
   type ElementNamer,
   type SceneComposer,
+  type ChipSuggester,
   type Segmenter,
 } from "./ports";
 
@@ -46,6 +47,22 @@ export function metaSegmenter(gateway: MetaGateway): Segmenter {
           timeoutMs: input.timeoutMs,
         });
         return { status: "ready", value: { segments } };
+      } catch (cause) {
+        return classifyPortError(cause);
+      }
+    },
+  };
+}
+
+export function metaChipSuggester(gateway: MetaGateway): ChipSuggester {
+  return {
+    async suggestChips(input) {
+      try {
+        const chips = await gateway.suggestChips(input);
+        return {
+          status: "ready",
+          value: { chips, promptVersion: input.promptVersion },
+        };
       } catch (cause) {
         return classifyPortError(cause);
       }

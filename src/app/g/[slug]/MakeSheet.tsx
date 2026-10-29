@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PinCard } from "../../../domain/board-view";
 import { applyChip, scenePayload } from "../../../domain/make-sheet";
 import { playerColorFor } from "../../../domain/board-themes";
@@ -8,7 +8,8 @@ import { t } from "../../../i18n";
 
 /**
  * Make-a-scene sheet (PIN-70, docs/11 section 6): the picked pins,
- * a prompt box and the fixed Policy suggestion chips. "Make it ✨"
+ * a prompt box and suggestion chips (fixed Policy list instantly;
+ * generated chips for these picks swap in when ready, PIN-75). "Make it ✨"
  * hands a validated payload to the board (which owns the cooking
  * card and polling) and closes the sheet.
  */
@@ -30,6 +31,17 @@ export function MakeSheet({
   onClose: () => void;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
+  // Generated chips can replace the fixed list mid-session
+  // (PIN-75). Every chip ever shown stays "known" so a prompt
+  // that is just an earlier fixed chip still swaps (not appends)
+  // when a generated chip is tapped.
+  const [knownChips, setKnownChips] = useState<readonly string[]>(chips);
+  useEffect(() => {
+    setKnownChips((current) => {
+      const extra = chips.filter((chip) => !current.includes(chip));
+      return extra.length > 0 ? [...current, ...extra] : current;
+    });
+  }, [chips]);
   // Validation only — the board assigns the client sceneId per
   // attempt so a network retry can reuse it (idempotent, PIN-69).
   const valid = scenePayload(cards, prompt, "pending", pinsPerScene, promptMaxChars);
@@ -91,7 +103,7 @@ export function MakeSheet({
                 type="button"
                 className="chip-btn"
                 aria-pressed={prompt.trim() === chip}
-                onClick={() => setPrompt((current) => applyChip(current, chip, chips, promptMaxChars))}
+                onClick={() => setPrompt((current) => applyChip(current, chip, knownChips, promptMaxChars))}
               >
                 {chip}
               </button>

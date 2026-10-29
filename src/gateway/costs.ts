@@ -20,7 +20,11 @@ export function estimateMetaCostUsd(entry: MetaCallLog): number {
   );
 }
 
-export type PortOperation = "nameElements" | "segment" | "composeScene";
+export type PortOperation =
+  | "nameElements"
+  | "segment"
+  | "composeScene"
+  | "suggestChips";
 
 /**
  * Conservative pre-call reserve estimate: Spark is priced at its
@@ -30,8 +34,12 @@ export type PortOperation = "nameElements" | "segment" | "composeScene";
  */
 export function estimateReserveUsd(
   operation: PortOperation,
-  limits: { sparkElementsMaxTokens: number },
+  limits: { sparkElementsMaxTokens: number; sparkChipsMaxTokens?: number },
 ): number {
   if (operation === "segment") return SAM_USD_PER_IMAGE;
+  if (operation === "suggestChips") {
+    // PIN-75: priced at the small chips token budget, not elements.
+    return (limits.sparkChipsMaxTokens ?? limits.sparkElementsMaxTokens) * SPARK_OUTPUT_USD_PER_TOKEN;
+  }
   return limits.sparkElementsMaxTokens * SPARK_OUTPUT_USD_PER_TOKEN;
 }

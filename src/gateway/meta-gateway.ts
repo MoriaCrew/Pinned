@@ -18,10 +18,13 @@ import type {
 import {
   buildSceneResponsesBody,
   elementsSystemPrompt,
+  chipsSystemPrompt,
   normalizeElements,
+  normalizeChips,
   sceneImageOutcome,
   type ComposeSceneInput,
   type NameElementsInput,
+  type SuggestChipsInput,
   type NamedElement,
   type PortOutcome,
 } from "./ports";
@@ -280,6 +283,22 @@ export class MetaGateway implements ModelGateway {
       input.timeoutMs,
     );
     return sceneImageOutcome(json.output);
+  }
+
+  /**
+   * Spark suggestion chips (prompts/chips.v1.md, PIN-75): one
+   * small text-only chat call. Labels travel as JSON data, never
+   * instructions; limits arrive from Policy via the port input.
+   */
+  async suggestChips(input: SuggestChipsInput): Promise<string[]> {
+    const out = await this.chatJson(
+      "suggestChips",
+      chipsSystemPrompt(input),
+      JSON.stringify({ labels: input.labels }),
+      input.maxTokens,
+      input.timeoutMs,
+    );
+    return normalizeChips(out.chips, input);
   }
 }
 

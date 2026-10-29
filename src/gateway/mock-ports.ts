@@ -12,6 +12,8 @@ import {
   type ElementNamer,
   type NamedElement,
   type SceneComposer,
+  type ChipSuggester,
+  templateChips,
   type Segmenter,
 } from "./ports";
 
@@ -63,6 +65,18 @@ export const mockSegmenter: Segmenter = {
 /** Deterministic 1x1 PNG returned as the composed scene (PIN-68). */
 export const MOCK_SCENE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+
+export const mockChipSuggester: ChipSuggester = {
+  async suggestChips(input) {
+    return {
+      status: "ready",
+      value: {
+        chips: templateChips(input.labels, input),
+        promptVersion: input.promptVersion,
+      },
+    };
+  },
+};
 
 export const mockSceneComposer: SceneComposer = {
   async composeScene(input) {

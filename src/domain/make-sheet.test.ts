@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyChip,
+  chipsForSelection,
+  chipsSelectionKey,
   isTerminalScene,
   pruneSelection,
   sceneCreditParts,
@@ -23,6 +25,25 @@ function card(pinId: string, elementId: string, status: "pinned" | "candidate" =
     ownerId: "me",
   };
 }
+
+describe("generated chips selection guard (PIN-75)", () => {
+  it("selection key ignores pick order and duplicates", () => {
+    expect(chipsSelectionKey(["e2", "e1", "e2"])).toBe(chipsSelectionKey(["e1", "e2"]));
+    expect(chipsSelectionKey(["e1"])).not.toBe(chipsSelectionKey(["e1", "e2"]));
+  });
+
+  it("generated chips render only for the exact selection they were made for", () => {
+    const fallback = ["on a sunny picnic blanket"];
+    const generated = { key: chipsSelectionKey(["e1", "e2"]), chips: ["in space"] };
+    expect(chipsForSelection(generated, chipsSelectionKey(["e2", "e1"]), fallback)).toEqual(["in space"]);
+    // A stale response for earlier picks must not swap in.
+    expect(chipsForSelection(generated, chipsSelectionKey(["e1"]), fallback)).toEqual(fallback);
+    expect(chipsForSelection(null, chipsSelectionKey(["e1"]), fallback)).toEqual(fallback);
+    expect(
+      chipsForSelection({ key: chipsSelectionKey(["e1"]), chips: [] }, chipsSelectionKey(["e1"]), fallback),
+    ).toEqual(fallback);
+  });
+});
 
 describe("make sheet logic (PIN-70)", () => {
   it("only pinned pins are selectable, never candidates", () => {
@@ -51,6 +72,11 @@ describe("make sheet logic (PIN-70)", () => {
   it("chips fill, swap, extend, and never duplicate or bust the cap", () => {
     expect(applyChip("", CHIPS[0], CHIPS, 500)).toBe("on a sunny picnic blanket");
     expect(applyChip("on a sunny picnic blanket", CHIPS[1], CHIPS, 500)).toBe("floating in space");
+    // PIN-75 swap: with fixed + generated chips both known, a
+    // prompt that is just a fixed chip still swaps, not appends.
+    expect(
+      applyChip("on a sunny picnic blanket", "napping in a sunbeam", [...CHIPS, "napping in a sunbeam"], 500),
+    ).toBe("napping in a sunbeam");
     expect(applyChip("a tiny picnic", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic floating in space");
     expect(applyChip("a tiny picnic floating in space", CHIPS[1], CHIPS, 500)).toBe(
       "a tiny picnic floating in space",

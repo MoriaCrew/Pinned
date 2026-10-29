@@ -22,6 +22,8 @@ call log once live calls land).
   (PIN-52 seam; feeds the SAM concept prompt until elements land).
 - `scene.v1.md` — elements + prompt → composed scene, the final
   `input_text` of the Muse Image compose request (PIN-68).
+- `chips.v1.md` — selected pin labels → scene-idea suggestion chips
+  for the Make sheet, cached per label set (PIN-75).
 
 Segmentation uses the plain-noun `objectLabel` as the SAM concept
 prompt; it is not a chat prompt and has no template file.

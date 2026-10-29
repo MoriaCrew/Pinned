@@ -24,6 +24,16 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
     expect(DEFAULT_POLICY.boardPollIntervalMs).toBe(5_000);
     expect(DEFAULT_POLICY.activityStripMax).toBe(5);
+    // PIN-75 generated chips: TTL/cap/token budget/prompt version.
+    expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
+    expect(DEFAULT_POLICY.chipsMax).toBe(4);
+    expect(DEFAULT_POLICY.maxTokens.sparkChips).toBe(1200);
+    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
+    expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);
+    expect(resolvePolicy({ maxTokens: { sparkChips: 800 } }).maxTokens).toEqual({
+      sparkElements: 4000,
+      sparkChips: 800,
+    });
     expect(resolvePolicy({ boardPollIntervalMs: 1_000 }).boardPollIntervalMs).toBe(1_000);
     expect(() => resolvePolicy({ boardPollIntervalMs: 10 })).toThrow();
     // PIN-50 usable-mask window + flattened bounds (PIN-64).
