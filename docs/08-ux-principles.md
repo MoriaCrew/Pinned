@@ -34,5 +34,9 @@ hurry, with zero instructions read.
   roast cards + PIN behind "📱 Switching phone later?"; submit
   with one-line safety icon row, big photo picker with instant
   preview; create with example chips + deadline cards.
+- **Make a scene (PIN-70):** pins themselves are the picker —
+  tap to pick (✅ Picked + count in the bottom bar), fixed
+  suggestion chips are tappable example prompts (§3), refused and
+  failed scenes are one friendly line + "✏️ Change idea" (§8).
 - Next candidates: reveal/guessing flow (PIN-10), poster share
   (PIN-11), creator admin (PIN-12), FR pass with family testers.
