@@ -181,6 +181,10 @@ describe("scene builder (PIN-68, docs/11 sections 3 + 5.6)", () => {
     expect(scenePromptText("  on a boat  ")).toBe(
       "Compose these exact elements into one new photorealistic scene, keeping each element recognisable: on a boat",
     );
+    // Dollar-sign sequences must survive verbatim (Bugbot, PR #57).
+    expect(scenePromptText("worth $$5 $& $` $' total")).toBe(
+      "Compose these exact elements into one new photorealistic scene, keeping each element recognisable: worth $$5 $& $` $' total",
+    );
   });
 
   it("rejects bad caller input as failed/bad_prompt without throwing", () => {

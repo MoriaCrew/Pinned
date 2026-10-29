@@ -353,7 +353,9 @@ const SCENE_TEMPLATE =
   "Compose these exact elements into one new photorealistic scene, keeping each element recognisable: {{PROMPT}}";
 
 export function scenePromptText(prompt: string): string {
-  return SCENE_TEMPLATE.replace("{{PROMPT}}", prompt.trim());
+  // Replacer function: a string replacement would interpret $$/$&
+  // sequences in the user's prompt as substitution patterns.
+  return SCENE_TEMPLATE.replace("{{PROMPT}}", () => prompt.trim());
 }
 
 const FROM_MAX = 40;
