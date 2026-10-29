@@ -28,7 +28,9 @@ gallery — credited to the people whose things are in it. Any
 scene can be remixed statelessly (parent scene image plus new
 pins as references, `store: false`). A pin's owner can delete
 their element; its pins go and scenes that used it are hidden.
-No accounts: the link is the invitation. Solo works too.
+No sign-up needed: the link is the invitation. Optional
+Google sign-in adds a personal library (My boards, My pins)
+without ever gating the loop. Solo works too.
 
 Why it matters (*Build for Your World*): group chats are full
 of photos of real things — a mug, a cat, a weird lamp. Pinneds
@@ -122,8 +124,8 @@ synthetic images.
 | Cost per photo (T5, **estimate**) | **≈ $0.020**/photo (bar ≤ $0.05). SAM bills one image per concept call (`usage.images_processed=1`); provider dashboard is authoritative | `eval/studio-findings.md` (T5); `docs/11` §8 |
 | Cost per scene (T5, **estimate**) | **≈ $0.022**/scene (bar ≤ $0.10). Muse Image dollars used Spark token rates as a labelled proxy — order-of-magnitude only | `eval/studio-findings.md` (T5); `README.md` "Known v1 limits" |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
-| Automated tests | **340 passed / 1 skipped** (49 files), `AI_MOCK=1`, live run Oct 29, 2026 at `dev` tip `7e9a0ab` (the PIN-80 merge; code identical to `a620630` for test purposes — PIN-80 touched only `README.md`). Re-run at freeze; CI never makes paid calls | Oct 29 live run of `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
-| Pull requests | **70 total / 67 merged** as counted Oct 29, 2026 — a moving number; recount at freeze (command below) | `gh pr list --state all --limit 200` (Oct 29 live count) |
+| Automated tests | **408 passed / 1 skipped** (56 files), `AI_MOCK=1`, live run Oct 29, 2026 at `dev` tip `fc406c9` (the PIN-87 merge). Re-run at freeze; CI never makes paid calls | Oct 29 live run of `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
+| Pull requests | **78 total / 74 merged** as counted Oct 29, 2026 — a moving number; recount at freeze (command below) | `gh pr list --state all --limit 200` (Oct 29 live count) |
 | Repo public | `MoriaCrew/Pinned`, visibility PUBLIC, AGPL-3.0 | `gh repo view` (Oct 29); `LICENSE`, `README.md` |
 | Usage (people / pins / scenes) | Not a fixed number — captured fresh per §4 on record and submit days | `scripts/usage-report.mjs` (`npm run usage:report`) |
 
@@ -204,7 +206,7 @@ approves.
 | F4 | Demo board seeded on the submit host (`npm run seed:demo`; slug recorded privately, `DEMO_BOARD_SLUG` set in host env if the landing demo link is wanted) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board |
 | F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2 proposed $10/day + per-board caps; the committed yaml only names the variables, so verify the live values — do not assume) | Robin | Live values checked in the hosting env; budget not the $2 local default unless intended |
 | F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners | Agent | Packet matches freeze-commit reality |
-| F7 | Known-v1-limits honesty pass on `README.md` + this file (tap-add "My thing" label, 14-day `tmp/` lifecycle vs 24 h Policy TTL, cost-estimate labelling, link-only auth) | Agent | No claim in the packet or README that the code doesn't back |
+| F7 | Known-v1-limits honesty pass on `README.md` + this file (tap-add "My thing" label, 14-day `tmp/` lifecycle vs 24 h Policy TTL, cost-estimate labelling, optional sign-in scope) | Agent | No claim in the packet or README that the code doesn't back |
 
 ### Video (Nov 3–4)
 
@@ -247,9 +249,12 @@ Only people with the link. Slugs are 128-bit base64url
 (`^[A-Za-z0-9_-]{22}$`) validated at every board route before
 any data path is built; there is no board directory and no
 listing API — even our own usage report must be handed the
-slugs (§4). Identity in v1 is a signed participant cookie per
-board (`AUTH_MODE=link-only`, `.env.example`); sign-in behind
-`AUTH_MODE` is planned (PIN-57). Board pages are `noindex`.
+slugs (§4). Identity on a board is a signed participant
+cookie. Optional Google sign-in (`AUTH_MODE=optional`, live
+on dev; PIN-57, `docs/13-auth.md`) links a participant to a
+user library but never replaces the link: the slug is still
+required to reach any board, and My boards lists only boards
+the user already joined by link. Board pages are `noindex`.
 
 **"People in photos?"**
 Allowed, never blocked. When Spark flags a face, the app
@@ -301,7 +306,7 @@ themselves (T1 fidelity 4.86/5, §3) — and `store: false`
 makes remix stateless. The gateway hides all three behind
 capability ports (`ElementNamer`, `Segmenter`,
 `SceneComposer`) with mock and recorded-fixture adapters, so
-the 340-test suite runs offline and a model swap is an
+the 408-test suite runs offline and a model swap is an
 adapter, not a rewrite (`docs/adr/003-studio-architecture.md`).
 
 **"How was fidelity measured?"**
@@ -312,10 +317,10 @@ proxy, not ground truth (`eval/studio-findings.md`, T1/T2).
 
 **"What breaks / what's next?"**
 SAM returns no match for some named things (those simply
-don't become pins; tap-to-add is the workaround). Link-only
-auth, the tap-add label/faceFlag limit, and the 14-day
-lifecycle gap above are the stated v1 limits. Next: sign-in
-behind `AUTH_MODE` (PIN-57) so elements can follow their
-owner across boards — the owned `Element` / board `Pin`
-split in the data model already anticipates it (`docs/11`
-§5.4).
+don't become pins; tap-to-add is the workaround). The
+tap-add label/faceFlag limit and the 14-day lifecycle gap
+above are the stated v1 limits. Optional sign-in (PIN-57)
+already shipped on dev — elements follow their owner via
+the My pins library, as the owned `Element` / board `Pin`
+split anticipated (`docs/11` §5.4). Next: prod promotion,
+then UI/UX iteration on real family feedback.

@@ -5,8 +5,9 @@
 > to the board with the owner's name. Anyone then picks a few pins
 > from anyone, writes or taps a scene prompt, and Muse Image composes
 > them into a new image in the board's gallery — credited to the
-> people whose things are in it. No accounts: the link is the
-> invitation.
+> people whose things are in it. No sign-up needed: the link is
+> the invitation. Signing in with Google is optional and adds a
+> personal library (your boards and pins, on every device).
 
 **Meta Global AI Developer Hackathon** · Indie Developer track · Theme:
 *Build for Your World* · Solo developer · Oct 26 – Nov 4, 2026
@@ -18,7 +19,7 @@
 ## Studio in 30 seconds
 
 1. **Share.** Create a board, get a link (`/g/{slug}`), drop it in the
-   group chat. Nothing to install, no accounts.
+   group chat. Nothing to install, no sign-up.
 2. **Pin.** Anyone uploads a photo; Spark names the things in it and
    SAM cuts them out. The cut-outs land on the board as pins with the
    owner's name. Tap the photo in the Add sheet to cut out something
@@ -32,6 +33,12 @@
    (`store: false`; PIN-79). Credits carry the full contributor set.
 5. **Delete.** A pin's owner can delete their own element; its pins
    go and scenes that used it are hidden (PIN-77).
+6. **Your library (optional).** Sign in with Google and the boards
+   you join and the cut-outs you pinned follow you: *My boards*
+   lists them, *My pins* is your cut-out library, and any of your
+   pins can be pinned onto another board you belong to (PIN-57).
+   Signing in never gates the loop above — the board link is
+   still the only key to a board.
 
 ## Try it
 
@@ -116,17 +123,23 @@ them directly:
   `src/server/scene-job.ts`). The request does the work; the board
   page polls with TanStack Query. There is no queue in v1.
 - **Routes** — pages: `/` (landing), `/new` (create a board),
-  `/g/{slug}` (the board). API under `src/app/api/boards/`: board
-  create/view, `photos` (upload → decompose), `pins/confirm`,
-  `jobs/{jobId}` + `jobs/{jobId}/tap-add`, `scenes` (+ scene image),
-  `elements/{elementId}` (`DELETE` = delete my element), `chips`,
-  plus `/api/health`. Every board route validates the slug
+  `/g/{slug}` (the board), `/me/boards` + `/me/pins` (signed-in
+  library). API under `src/app/api/boards/`: board create/view,
+  `photos` (upload → decompose), `pins/confirm`,
+  `pins/from-library`, `claim`, `jobs/{jobId}` +
+  `jobs/{jobId}/tap-add`, `scenes` (+ scene image),
+  `elements/{elementId}` (`DELETE` = delete my element), `chips`;
+  sign-in under `/api/auth/session` + `/api/me*`; plus
+  `/api/health`. Every board route validates the slug
   (`^[A-Za-z0-9_-]{22}$`, 128-bit base64url) before any data path
   is built.
 - **Data model** — an owned `Element` (cut-out), a `Pin` placing it
   on a `Board`, and a `Scene` crediting its `elementIds`
-  (`docs/11` §5.4). Hosted data is Firestore; local dev defaults to
-  the in-memory backend (`DATA_BACKEND=memory`).
+  (`docs/11` §5.4). Optional sign-in adds a minimal user profile
+  (`users/{uid}`: display name + photo, never email) and a
+  per-user board index (`docs/13-auth.md`). Hosted data is
+  Firestore; local dev defaults to the in-memory backend
+  (`DATA_BACKEND=memory`).
 
 ### Storage and privacy
 
@@ -158,8 +171,8 @@ npm test
 npm run build
 ```
 
-Live on Oct 29, 2026 at `dev` commit `a620630`: `npm test` under
-`AI_MOCK=1` reports **340 passed / 1 skipped** (49 files). Live-model
+Live on Oct 29, 2026 at `dev` commit `fc406c9`: `npm test` under
+`AI_MOCK=1` reports **408 passed / 1 skipped** (56 files). Live-model
 checks run on demand only, with cost logged (`docs/11` §5.9, §8).
 
 Operator scripts (also in `package.json`): `npm run seed:demo`
@@ -180,11 +193,14 @@ never committed).
   and $0.02 per scene are estimates from `docs/11` §8 (T5); Muse
   Image dollars used Spark rates as a labelled proxy. The provider
   dashboard is authoritative.
-- **Link-only auth.** There are no accounts yet: identity is a
-  signed participant cookie per board (`AUTH_MODE=link-only`).
-  Anyone with the board link can join; anyone without it cannot
-  find the board. Sign-in behind `AUTH_MODE` is planned later
-  (PIN-57).
+- **Optional sign-in, link-first.** Identity on a board is a
+  signed participant cookie; anyone with the board link can join,
+  anyone without it cannot find the board. Google sign-in
+  (`AUTH_MODE=optional`, live on dev since Oct 29; PIN-57) only
+  *adds* the My boards / My pins library and cross-device
+  restore — it never gates pinning or scene-making, and
+  `AUTH_MODE=link-only` remains the default. Prod stays
+  link-only until promotion.
 - **Prod promotion pending.** Dev (https://dev.pinneds.com) is the
   live, model-backed demo. Firebase projects
   `moriacrew-pinned-dev` / `moriacrew-pinned-prod` exist (Firestore
@@ -216,6 +232,8 @@ Studio on Oct 28; the game design is kept for history in
 - `docs/08-ux-principles.md` — minimal, icon-first UX rules
 - `docs/09-design-system.md` — board themes (see docs/11 A5)
 - `docs/10-custom-domains.md` — pinneds.com domain setup
+- `docs/12-submission.md` — hackathon submission packet + video plan
+- `docs/13-auth.md` — optional Google sign-in (`AUTH_MODE`), claim flow, user library
 - `docs/archive/` — game-era requirements and research; history only
 - `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
 - `AGENTS.md` — instructions for coding agents working this repo

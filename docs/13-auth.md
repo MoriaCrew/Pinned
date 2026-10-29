@@ -7,7 +7,7 @@ and the cross-board library (PIN-85) build on it. Spec:
 
 ## Modes
 
-- `AUTH_MODE=link-only` (default, everywhere today): board
+- `AUTH_MODE=link-only` (the default; prod today): board
   participants never authenticate. Every route below returns the
   uniform 404 and no user code runs on the board flow — the
   flag-off parity tests in `src/server/user-session.test.ts` and
@@ -50,19 +50,32 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
 from the token, and timestamps. **Email is never stored** —
 nothing sends mail or keys identity off an address; the token's
 email claim is not even read. The profile and board index
-persist until account deletion lands (PIN-85 scope);
-`userSessionDays` bounds the cookie only.
+persist until a future account-deletion flow lands (not yet
+built); `userSessionDays` bounds the cookie only.
 
 ## Operator steps to enable (per backend)
 
+Status Oct 29, 2026: done for both projects. The Google
+provider + authorized domains are enabled in dev and prod;
+the web config lives in Secret Manager under the
+`NEXT_PUBLIC_FIREBASE_*` names (referenced from
+`apphosting.yaml`, never literals in git — gitleaks enforces
+this). Dev runs `AUTH_MODE=optional` (PR #76); prod flips at
+promotion (PIN-76). The original runbook, for a new backend:
+
 1. Firebase console → Authentication → enable the Google
-   provider for the backend's project.
-2. Register/copy the web app config; set
+   provider for the backend's project, and add the backend's
+   custom domain under Authentication → Settings →
+   Authorized domains.
+2. Register/copy the web app config; store
    `NEXT_PUBLIC_FIREBASE_API_KEY` and
-   `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in that backend's
-   `apphosting.*.yaml` (declared empty by PIN-83; they are
-   public identifiers, inlined at build time — a rebuild is
-   required) and set `AUTH_MODE=optional` for the backend.
+   `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in Secret Manager
+   (`firebase apphosting:secrets:set` + `grantaccess` for the
+   backend) and set `AUTH_MODE=optional` in that backend's
+   `apphosting.*.yaml`. The root layout reads the values
+   server-side and may prerender at build, so the shared
+   config grants BUILD + RUNTIME availability — a rebuild is
+   required either way.
 3. Make sure the runtime service account can verify tokens
    (Application Default Credentials; App Hosting's compute
    service account works by default) and that `SESSION_SECRET`
@@ -70,9 +83,9 @@ persist until account deletion lands (PIN-85 scope);
 4. Redeploy, then smoke: `GET /api/health` shows
    `authMode: "optional"`, `GET /api/me` answers 401 (not 404).
 
-Until step 2 lands, the `NEXT_PUBLIC_*` values are empty and
-the sign-in UI stays hidden even in optional mode — no dead
-buttons.
+Until step 2 lands for a backend, the `NEXT_PUBLIC_*`
+values resolve empty and the sign-in UI stays hidden even in
+optional mode — no dead buttons.
 
 ## Sign-in UI + My boards + restore (PIN-84)
 
