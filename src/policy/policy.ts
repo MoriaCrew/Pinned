@@ -71,6 +71,27 @@ export const PolicySchema = z
       .min(1)
       .default(["google.com"]),
     authFreshWindowMs: z.number().int().min(1).default(3_600_000),
+    /**
+     * Board Plus (PIN-103, docs/15-board-plus.md). Price labels
+     * are display-only placeholders until Stripe lands — nothing
+     * is ever charged from them. hostCookieDays bounds the host
+     * cookie set on board creation (browsers cap cookie life at
+     * about 400 days regardless).
+     */
+    plus: z
+      .object({
+        priceLabels: z
+          .object({
+            board: z.string().min(1).default("$3.99"),
+            host: z.string().min(1).default("$4.99/month"),
+          })
+          .default({ board: "$3.99", host: "$4.99/month" }),
+        hostCookieDays: z.number().int().min(1).default(365),
+      })
+      .default({
+        priceLabels: { board: "$3.99", host: "$4.99/month" },
+        hostCookieDays: 365,
+      }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
     signInNudge: z.boolean().default(true),
@@ -218,6 +239,17 @@ export const PolicyOverridesSchema = z.object({
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
   signInNudge: z.boolean().optional(),
+  plus: z
+    .object({
+      priceLabels: z
+        .object({
+          board: z.string().min(1).optional(),
+          host: z.string().min(1).optional(),
+        })
+        .optional(),
+      hostCookieDays: z.number().int().min(1).optional(),
+    })
+    .optional(),
   libraryPageSize: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
   jobPollIntervalMs: z.number().int().min(250).optional(),

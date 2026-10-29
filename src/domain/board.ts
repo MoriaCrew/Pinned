@@ -12,6 +12,7 @@
  */
 import type { PolicyOverrides } from "../policy/policy";
 import type { BoardThemeTokens } from "./board-themes";
+import type { BoardPlus } from "./plus";
 
 /** Mask bounding box, normalized 0..1 against the source frame
  * (the gateway port convention, ports.ts SegmentPrompt). The
@@ -47,6 +48,8 @@ export interface Board {
   theme?: BoardThemeTokens;
   /** Per-board Policy layer (docs/11 §5.1); validated by resolvePolicy. */
   policyOverrides?: PolicyOverrides;
+  /** Board Plus entitlement (PIN-103); absent = free board. */
+  plus?: BoardPlus;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter

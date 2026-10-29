@@ -105,6 +105,45 @@ export function describeBoardRepositoryContract(
       await expect(repo.createBoard(makeBoard())).rejects.toThrow(RangeError);
     });
 
+    it("updateBoardSettings: skin + Plus, version +1 per write, counters kept (PIN-103)", async () => {
+      const repo = makeRepo();
+      const oldTokens = { accent: "#111111", accentInk: "#ffffff", paper: "#eeeeee", line: "#cccccc", motif: "o" };
+      const newTokens = { accent: "#222222", accentInk: "#000000", paper: "#fafafa", line: "#dddddd", motif: "n" };
+      await repo.createBoard(makeBoard({ themeId: "old-skin", theme: oldTokens }));
+      await repo.putParticipant(makeParticipant());
+
+      const patch = { skin: { themeId: "new-skin", theme: newTokens } };
+      const skinned = await repo.updateBoardSettings(SLUG, patch);
+      expect(skinned).toMatchObject({ themeId: "new-skin", theme: newTokens, version: 1 });
+      expect(skinned?.counters.participantCount).toBe(1);
+      expect(await repo.getBoard(SLUG)).toEqual(skinned);
+      patch.skin.theme.accent = "#mutated";
+      expect((await repo.getBoard(SLUG))?.theme?.accent).toBe("#222222");
+
+      // A skin without tokens drops the previous palette entirely.
+      const bare = await repo.updateBoardSettings(SLUG, { skin: { themeId: "bare-skin" } });
+      expect(bare?.version).toBe(2);
+      expect(bare).not.toHaveProperty("theme");
+      expect(await repo.getBoard(SLUG)).not.toHaveProperty("theme");
+
+      const plus = { plan: "board" as const, source: "mock" as const, grantedAt: 2_000 };
+      const granted = await repo.updateBoardSettings(SLUG, { plus });
+      expect(granted).toMatchObject({ title: "Kitchen finds", themeId: "bare-skin", plus, version: 3 });
+      granted!.plus!.plan = "host";
+      expect((await repo.getBoard(SLUG))?.plus).toEqual(plus);
+
+      // Counter-only writes after a settings write still keep the version.
+      await repo.putParticipant(makeParticipant({ id: "part-2", createdAt: 1_150 }));
+      expect(await repo.getBoard(SLUG)).toMatchObject({
+        version: 3,
+        counters: { participantCount: 2 },
+        plus,
+      });
+
+      expect(await repo.updateBoardSettings("nope", { plus })).toBeNull();
+      expect(await repo.getBoard("nope")).toBeNull();
+    });
+
     it("upserts participants and counts each once", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());

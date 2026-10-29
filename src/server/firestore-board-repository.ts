@@ -52,9 +52,11 @@ import type {
   PinStatus,
   Scene,
 } from "../domain/board";
-import type {
-  BoardRepository,
-  DeleteElementResult,
+import {
+  applyBoardSettings,
+  type BoardRepository,
+  type BoardSettingsPatch,
+  type DeleteElementResult,
 } from "../domain/board-repository";
 import {
   decideJoin,
@@ -188,6 +190,25 @@ export class FirestoreBoardRepository implements BoardRepository {
 
   async getBoard(slug: string): Promise<Board | null> {
     return fromSnapshot<Board>(await this.boardRef(slug).get());
+  }
+
+  /**
+   * PIN-103 settings write: same transaction discipline as the
+   * counter updates (read the board doc, set it whole), so a
+   * concurrent counter bump is never lost and the version moves
+   * by exactly one. The whole-doc set is what lets a skin change
+   * drop stale theme tokens (undefined is stripped on write).
+   */
+  async updateBoardSettings(slug: string, patch: BoardSettingsPatch): Promise<Board | null> {
+    const ref = this.boardRef(slug);
+    return this.db.runTransaction(async (tx) => {
+      const board = fromSnapshot<Board>(await tx.get(ref));
+      if (!board) return null;
+      const stored = toFirestoreData(applyBoardSettings(board, patch));
+      tx.set(ref, stored);
+      // A fresh JSON copy: exactly what a later getBoard returns.
+      return toFirestoreData(stored) as Board;
+    });
   }
 
   async putParticipant(participant: Participant): Promise<void> {
