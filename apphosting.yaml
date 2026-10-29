@@ -12,9 +12,20 @@ runConfig:
 env:
   - variable: AI_MOCK
     value: "1"
-  # PIN-83: link-only everywhere until the operator enables the
-  # Google provider + sets the NEXT_PUBLIC_* web config per
-  # backend (docs/13-auth.md). Empty web config = sign-in UI
-  # hidden, honestly; never put invented key values here.
+  # PIN-57: sign-in stays link-only by default; a backend opts in
+  # with AUTH_MODE=optional in its own env file. The Firebase web
+  # config (public identifiers) lives in Secret Manager under the
+  # same names in every project, referenced here - never literals
+  # in git (docs/13-auth.md).
   - variable: AUTH_MODE
     value: link-only
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    availability:
+      - BUILD
+      - RUNTIME
