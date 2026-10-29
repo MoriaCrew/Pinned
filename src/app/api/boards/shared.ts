@@ -16,6 +16,7 @@ import {
 } from "../../../server/board-session";
 import { getDecomposeJobStore } from "../../../server/decompose-job-store";
 import { getSceneJobStore } from "../../../server/scene-job-store";
+import { getChipsCacheStore } from "../../../server/chips-cache-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
 
@@ -59,6 +60,8 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     segmenter: ports.segmenter,
     sceneJobs: getSceneJobStore(),
     ...(ports.sceneComposer ? { composer: ports.sceneComposer } : {}),
+    ...(ports.chipSuggester ? { chipSuggester: ports.chipSuggester } : {}),
+    chipsCache: getChipsCacheStore(),
     // PIN-71: under AI_MOCK the sharp collage composes scenes
     // offline; live mode keeps the port (over-budget -> collage).
     collageMode: getConfig().aiMock,

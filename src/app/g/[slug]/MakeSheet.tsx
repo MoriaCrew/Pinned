@@ -8,7 +8,8 @@ import { t } from "../../../i18n";
 
 /**
  * Make-a-scene sheet (PIN-70, docs/11 section 6): the picked pins,
- * a prompt box and the fixed Policy suggestion chips. "Make it ✨"
+ * a prompt box and suggestion chips (fixed Policy list instantly;
+ * generated chips for these picks swap in when ready, PIN-75). "Make it ✨"
  * hands a validated payload to the board (which owns the cooking
  * card and polling) and closes the sheet.
  */

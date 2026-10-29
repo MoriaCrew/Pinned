@@ -22,7 +22,7 @@ decisions: `docs/adr/003-studio-architecture.md`. Full workflow:
    **Never merge to `main`** without Robin; promotion is a separate
    `dev` → `main` PR after a hosted dev smoke.
 3. **AI behind the gateway.** All model calls go through the gateway
-   capability ports (`ElementNamer`, `Segmenter`, `SceneComposer`;
+   capability ports (`ElementNamer`, `Segmenter`, `SceneComposer`, `ChipSuggester`;
    `docs/11` §5.2) with the decorator chain: timeout → retry →
    reserve budget (fail closed) → call → log cost → fall back. Never
    call a provider SDK from UI/domain code. Never make paid calls in

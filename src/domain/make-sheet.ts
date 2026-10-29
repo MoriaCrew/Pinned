@@ -76,6 +76,27 @@ export function applyChip(
   return charCount(joined) <= maxChars ? joined : prompt;
 }
 
+/** Stable identity of a pick set for generated chips (PIN-75). */
+export function chipsSelectionKey(elementIds: readonly string[]): string {
+  return [...new Set(elementIds)].sort().join(",");
+}
+
+/**
+ * Chips to render for the current picks: generated chips only
+ * when they were made for exactly this selection key — a slow
+ * response for earlier picks must never swap in (PIN-75). The
+ * fixed Policy list shows until then, so first paint is instant.
+ */
+export function chipsForSelection(
+  generated: { key: string; chips: readonly string[] } | null,
+  selectionKey: string,
+  fallback: readonly string[],
+): readonly string[] {
+  return generated && generated.key === selectionKey && generated.chips.length > 0
+    ? generated.chips
+    : fallback;
+}
+
 export interface ScenePayload {
   elementIds: string[];
   prompt: string;

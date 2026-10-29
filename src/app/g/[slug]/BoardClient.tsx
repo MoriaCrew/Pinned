@@ -22,6 +22,8 @@ import {
   selectableCards,
   selectedCards,
   togglePinSelection,
+  chipsForSelection,
+  chipsSelectionKey,
 } from "../../../domain/make-sheet";
 import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
 import type { ActivityLine } from "../../../domain/board-activity";
@@ -112,6 +114,8 @@ function BoardBody({
   // Sheet prompt seed: "" for a fresh scene; the refused/failed
   // attempt's prompt only via "Change idea".
   const [sheetPrompt, setSheetPrompt] = useState("");
+  // PIN-75: generated chips, keyed by the selection they were made for.
+  const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   const boardQuery = useQuery({
@@ -249,6 +253,41 @@ function BoardBody({
     makeScene.isPending &&
     !(attempt && scenes.some((scene) => scene.id === attempt.sceneId));
   const picked = selectedCards(cards, selected);
+  const pickedElementIds = [...new Set(picked.map((card) => card.element.id))];
+  const selectionKey = chipsSelectionKey(pickedElementIds);
+  // PIN-75: fixed Policy chips render instantly; generated chips
+  // for this exact selection swap in when they land. The key is
+  // captured with the result, so a slow response for a previous
+  // selection can never overwrite the current picks.
+  useEffect(() => {
+    if (!makeOpen || !view.me || pickedElementIds.length === 0) return;
+    let cancelled = false;
+    const key = selectionKey;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/chips`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ elementIds: pickedElementIds }),
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as { chips?: unknown; source?: unknown };
+        if (cancelled || data.source === "fallback") return;
+        const chips = Array.isArray(data.chips)
+          ? data.chips.filter((chip): chip is string => typeof chip === "string" && chip.length > 0)
+          : [];
+        if (chips.length > 0) setGeneratedChips({ key, chips });
+      } catch {
+        // Fixed chips stay; generation is best-effort.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // pickedElementIds' content is keyed by selectionKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [makeOpen, selectionKey, slug, view.me?.id]);
+  const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
   const empty = needsEmptyPrompt(view);
 
   function togglePin(pinId: string) {
@@ -563,7 +602,7 @@ function BoardBody({
       {makeOpen && view.me ? (
         <MakeSheet
           cards={picked}
-          chips={policy.sceneChips}
+          chips={sheetChips}
           pinsPerScene={policy.pinsPerScene}
           promptMaxChars={policy.scenePromptMaxChars}
           initialPrompt={sheetPrompt}

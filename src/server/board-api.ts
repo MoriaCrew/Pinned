@@ -19,7 +19,7 @@ import { activityLines } from "../domain/board-activity";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { generateSlug } from "../domain/tokens";
-import type { ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
+import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { startDecomposeJob, type DecomposeJobStore } from "./decompose-job";
@@ -29,6 +29,8 @@ import {
   startSceneJob,
   type SceneJobStore,
 } from "./scene-job";
+import { InMemoryChipsCacheStore, type ChipsCacheStore } from "./chips-cache";
+import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
 
 export interface BoardApiDeps {
   boards: BoardRepository;
@@ -39,6 +41,9 @@ export interface BoardApiDeps {
   /** Scene slice (PIN-69); scene functions 503 cleanly without them. */
   sceneJobs?: SceneJobStore;
   composer?: SceneComposer;
+  /** Generated chips (PIN-75); absent port/cache = fixed-list fallback. */
+  chipSuggester?: ChipSuggester;
+  chipsCache?: ChipsCacheStore;
   /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
   collageMode?: boolean;
   policy: Policy;
@@ -611,6 +616,27 @@ export async function getSceneView(
     scene: publicScene(slug, scene),
     job: job ? publicSceneJob(job) : null,
   };
+}
+
+/**
+ * Suggestion chips for the picked pins (PIN-75): generated via the
+ * decorated ChipSuggester, cached per label set, fixed Policy list
+ * on any non-ready outcome. Validation errors (missing board/pin)
+ * keep the API's uniform 404 discipline.
+ */
+export async function getSceneChips(
+  slug: string,
+  participant: Participant,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+): Promise<SceneChipsResult> {
+  return resolveSceneChips(slug, participant, rawInput, {
+    boards: deps.boards,
+    ...(deps.chipSuggester ? { suggester: deps.chipSuggester } : {}),
+    cache: deps.chipsCache ?? new InMemoryChipsCacheStore(),
+    policy: deps.policy,
+    now: deps.now,
+  });
 }
 
 const SCENE_IMAGE_TYPES: Record<string, string> = {

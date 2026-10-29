@@ -35,6 +35,10 @@ export const PolicySchema = z
     participantCookieDays: z.number().int().min(1).default(30),
     /** Activity strip: latest BoardEvent lines shown (PIN-74). */
     activityStripMax: z.number().int().min(0).default(5),
+    /** Generated-chips cache: hours a label-set entry stays fresh (PIN-75). */
+    chipsCacheTtlHours: z.number().positive().default(24),
+    /** Generated suggestion chips kept per label set (PIN-75). */
+    chipsMax: z.number().int().min(0).default(4),
     /** Board page poll cadence (docs/11 section 5.8, PIN-66). */
     boardPollIntervalMs: z.number().int().min(250).default(5_000),
     /** Add-sheet job poll cadence while SAM lands (PIN-67). */
@@ -69,8 +73,11 @@ export const PolicySchema = z
       .object({
         // Spike: 1500 starved Spark reasoning; 4000 required.
         sparkElements: z.number().int().positive().default(4000),
+        // PIN-75: text-only chips JSON is tiny; 1200 leaves Spark
+        // reasoning headroom while the reserve stays under $0.01.
+        sparkChips: z.number().int().positive().default(1200),
       })
-      .default({ sparkElements: 4000 }),
+      .default({ sparkElements: 4000, sparkChips: 1200 }),
     /** 0 means OFF (PIN-59); never a silent fallback. */
     dailyBudgetUsd: z.number().min(0).default(2),
     dailyCallLimit: z.number().int().min(0).default(200),
@@ -89,9 +96,10 @@ export const PolicySchema = z
       .object({
         elements: z.string().min(1).default("elements.v1"),
         scene: z.string().min(1).default("scene.v1"),
+        chips: z.string().min(1).default("chips.v1"),
       })
-      .default({ elements: "elements.v1", scene: "scene.v1" }),
-    /** Fixed suggestion chips for slice 2 (docs/11 Q10 default). */
+      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v1" }),
+    /** Fixed suggestion chips: instant fallback while generated chips load or fail (docs/11 Q10, PIN-75). */
     sceneChips: z
       .array(z.string().min(1))
       .default([
@@ -143,6 +151,8 @@ export const PolicyOverridesSchema = z.object({
   workingCopyTtlHours: z.number().positive().optional(),
   participantsPerBoard: z.number().int().min(1).optional(),
   activityStripMax: z.number().int().min(0).optional(),
+  chipsCacheTtlHours: z.number().positive().optional(),
+  chipsMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
@@ -167,7 +177,10 @@ export const PolicyOverridesSchema = z.object({
   flattenedMaxPx: z.number().int().positive().optional(),
   flattenedPaddingFraction: z.number().min(0).max(1).optional(),
   maxTokens: z
-    .object({ sparkElements: z.number().int().positive().optional() })
+    .object({
+      sparkElements: z.number().int().positive().optional(),
+      sparkChips: z.number().int().positive().optional(),
+    })
     .optional(),
   dailyBudgetUsd: z.number().min(0).optional(),
   dailyCallLimit: z.number().int().min(0).optional(),
@@ -182,6 +195,7 @@ export const PolicyOverridesSchema = z.object({
     .object({
       elements: z.string().min(1).optional(),
       scene: z.string().min(1).optional(),
+      chips: z.string().min(1).optional(),
     })
     .optional(),
   sceneChips: z.array(z.string().min(1)).optional(),
