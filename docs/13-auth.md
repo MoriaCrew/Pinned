@@ -73,3 +73,46 @@ persist until account deletion lands (PIN-85 scope);
 Until step 2 lands, the `NEXT_PUBLIC_*` values are empty and
 the sign-in UI stays hidden even in optional mode — no dead
 buttons.
+
+## Sign-in UI + My boards + restore (PIN-84)
+
+The client half of PIN-57b, still behind the same gates:
+
+1. Visibility: `resolveAuthUi` (src/domain/auth-ui.ts) enables
+   the UI only when `AUTH_MODE=optional` AND the public web
+   config is complete (`NEXT_PUBLIC_FIREBASE_API_KEY`,
+   `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, project id from
+   `FIREBASE_PROJECT_ID` or the authDomain prefix). The root
+   layout mounts the provider + header control only then;
+   link-only renders the pre-PIN-84 layout with zero auth DOM.
+2. Flow: the `firebase` web SDK (app/auth only) is dynamically
+   imported when sign-in starts, so link-only visitors never
+   download it. Google popup first; popup-blocked falls back
+   to `signInWithRedirect`, completed on return. The ID token
+   is exchanged once at `POST /api/auth/session`; the httpOnly
+   user cookie is the session from then on (`GET /api/me`
+   hydrates the header: avatar photo/initials, menu with My
+   boards + Sign out).
+3. My boards: `GET /api/me/boards` and the `/me/boards` page
+   list the user's claimed boards (title, theme, my pinned-pin
+   count, latest ready scene thumb, last activity), newest
+   activity first. Both 404 in link-only mode; the API 401s
+   signed out.
+4. Restore + auto-claim: in optional mode, `GET
+   /api/boards/{slug}` with a user session but no participant
+   cookie re-issues the participant cookie when the user holds
+   a claim on that board (the slug link is still required —
+   sign-in never substitutes for it), and an unclaimed
+   participant opening a board while signed in is claimed
+   silently. Restore rotates `cookieSecretHash` like the
+   reclaim-PIN path, so the previous device's cookie stops
+   working — the single-hash record cannot hold two live
+   cookies. Failures degrade to the plain link-only view.
+5. First-pin nudge: after the viewer's first pinned pin, a
+   one-time (localStorage) invite to sign in, gated by
+   Policy `signInNudge` (default true) and only ever shown
+   when sign-in is available.
+
+Live Google proof still depends on the operator steps above;
+until then the hosted dev backend stays link-only and none of
+this renders there.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { POST as claimRoute } from "../boards/[slug]/claim/route";
 import { GET as meRoute } from "../me/route";
+import { GET as myBoardsRoute } from "../me/boards/route";
 import { DELETE as deleteSessionRoute, POST as postSessionRoute } from "./session/route";
 
 /**
@@ -35,6 +36,13 @@ describe("AUTH_MODE=link-only (default): every PIN-83 route 404s", () => {
     );
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not found." });
+  });
+
+  it("GET /api/me/boards -> uniform 404 (PIN-84)", async () => {
+    const res = await myBoardsRoute(req("http://t/api/me/boards"));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found." });
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("GET /api/me -> uniform 404", async () => {

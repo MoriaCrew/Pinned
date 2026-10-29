@@ -32,6 +32,8 @@ import { chooseShareAction, sceneShareFilename } from "../../../domain/board-pre
 import type { ActivityLine } from "../../../domain/board-activity";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
+import { shouldShowSignInNudge, SIGN_IN_NUDGE_STORAGE_KEY } from "../../../domain/auth-ui";
+import { useAuth } from "../../auth/AuthProvider";
 import { AddSheet, boardQueryKey } from "./AddSheet";
 import { MakeSheet } from "./MakeSheet";
 
@@ -52,6 +54,8 @@ export interface BoardClientPolicy {
   scenePromptMaxChars: number;
   /** Policy elementsPerPhoto.max, tap-adds included (PIN-78). */
   elementsPerPhotoMax: number;
+  /** Policy signInNudge (PIN-84). */
+  signInNudge: boolean;
 }
 
 interface SceneAttempt {
@@ -143,6 +147,40 @@ function BoardBody({
     refetchIntervalInBackground: false,
   });
   const view = boardQuery.data;
+
+  // PIN-84: sign-in sync. Disabled (link-only) -> useAuth is the
+  // inert default and everything below renders/runs nothing.
+  const auth = useAuth();
+  const [nudgeSeen, setNudgeSeen] = useState<boolean>(() => {
+    try {
+      return (
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(SIGN_IN_NUDGE_STORAGE_KEY) === "1"
+      );
+    } catch {
+      return true;
+    }
+  });
+  const dismissNudge = () => {
+    setNudgeSeen(true);
+    try {
+      window.localStorage.setItem(SIGN_IN_NUDGE_STORAGE_KEY, "1");
+    } catch {
+      // Private mode: the in-memory dismissal still holds.
+    }
+  };
+  const authUid = auth.user?.uid ?? null;
+  const myParticipantId = view.me?.id ?? null;
+  useEffect(() => {
+    // Signed in on this board: link this participant right away
+    // (the board poll would auto-claim too). Silent by design —
+    // a 409 here means another account holds it; the header
+    // still truthfully shows who is signed in.
+    if (!authUid || !myParticipantId) return;
+    void fetch(`/api/boards/${encodeURIComponent(slug)}/claim`, {
+      method: "POST",
+    }).catch(() => {});
+  }, [authUid, myParticipantId, slug]);
 
   const handleJoined = (participant: { id: string; displayName: string }) => {
     // Apply the join response immediately, then let the next poll
@@ -601,6 +639,34 @@ function BoardBody({
       ) : null}
 
       <JoinSection slug={slug} me={view.me} onJoined={handleJoined} />
+
+      {shouldShowSignInNudge({
+        authEnabled: auth.enabled,
+        policyNudge: policy.signInNudge,
+        signedIn: auth.user !== null,
+        joined: view.me !== null,
+        myPinnedCount: cards.filter(
+          (card) => card.status === "pinned" && card.ownerId === view.me?.id,
+        ).length,
+        seenBefore: nudgeSeen,
+      }) ? (
+        <p className="card auth-nudge" role="status">
+          {t("en", "auth.nudge")}{" "}
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              dismissNudge();
+              void auth.signIn();
+            }}
+          >
+            🔐 {t("en", "auth.signIn")}
+          </button>{" "}
+          <button type="button" className="btn btn-small" onClick={dismissNudge}>
+            {t("en", "auth.nudgeDismiss")}
+          </button>
+        </p>
+      ) : null}
 
       <section aria-label={t("en", "board.pins")}>
         <h2>{t("en", "board.pins")}</h2>

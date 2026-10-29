@@ -188,6 +188,25 @@ export async function linkParticipantOnJoin(
   return claimParticipantForUser(participant, user, deps);
 }
 
+/**
+ * Restore lookup (PIN-84): the participant on `slug` claimed by
+ * this user, via the users/{uid}/boards/{slug} index. The index
+ * alone never suffices — the participant record must still carry
+ * userId === uid, so a stale or forged index entry restores
+ * nobody. Returns null when the user has no claim on the board.
+ */
+export async function findClaimedParticipant(
+  slug: string,
+  user: UserProfile,
+  deps: ClaimDeps,
+): Promise<Participant | null> {
+  const entry = await deps.users.getUserBoard(user.uid, slug);
+  if (!entry) return null;
+  const participant = await deps.boards.getParticipant(slug, entry.participantId);
+  if (!participant || participant.userId !== user.uid) return null;
+  return participant;
+}
+
 export function buildUserCookieHeader(
   value: string,
   expiresAt: number,

@@ -188,6 +188,21 @@ details.card > summary { cursor: pointer; font-weight: 800; font-size: 1.15rem; 
 
 /* Studio board (PIN-66) */
 .board-main { padding-bottom: 7.5rem; }
+
+/* Sign-in (PIN-84): only rendered when AUTH_MODE=optional + web config. */
+.site-header { display: flex; justify-content: flex-end; align-items: center; min-height: 52px; padding: 0.25rem 1rem; }
+.auth-control { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; }
+.auth-avatar { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1.5px solid var(--line); background: white; font: inherit; font-weight: 750; cursor: pointer; padding: 0; overflow: hidden; }
+.auth-avatar img { width: 44px; height: 44px; object-fit: cover; display: block; }
+.auth-menu { position: absolute; right: 0; top: calc(100% + 0.4rem); z-index: 30; display: grid; gap: 0.4rem; min-width: 12rem; padding: 0.6rem; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 8px 24px rgba(59, 42, 20, 0.18); }
+.auth-menu-who { font-weight: 700; overflow-wrap: anywhere; padding: 0 0.3rem; }
+.auth-skeleton { display: inline-block; width: 44px; height: 44px; border-radius: 999px; background: #f3ead7; }
+.auth-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.my-boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem; list-style: none; padding: 0; margin: 0; }
+.my-board-card a { display: grid; gap: 0.4rem; min-height: 44px; color: inherit; text-decoration: none; }
+.my-board-thumb { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 10px; background: #f3ead7; }
+.my-board-title { font-weight: 800; overflow-wrap: anywhere; }
+.my-board-meta { color: var(--muted); font-size: 0.9rem; }
 .board-placeholder { text-align: center; color: var(--muted); font-weight: 700; padding: 2rem 1rem; margin: 0; border: 1.5px dashed var(--line); border-radius: 12px; }
 .board-empty-prompt { font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; margin: 0 0 0.4rem; }
 .pins-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.75rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
