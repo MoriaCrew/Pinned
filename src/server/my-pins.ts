@@ -28,7 +28,7 @@ import "server-only";
  * miss is the uniform 404 / null: no source-board slug ever
  * appears in a response or URL (title label only).
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Element, Participant, Pin } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
 import {
@@ -150,6 +150,20 @@ export async function resolveOwnedElementImage(
   };
 }
 
+/**
+ * Deterministic library-copy id per (target board, source
+ * element): a double-submit or retry derives the SAME id, so a
+ * racing second create collides in the repository instead of
+ * minting a duplicate copy. Hashed, so neither the source id
+ * nor a board slug is readable from it.
+ */
+export function libraryCopyId(slug: string, sourceElementId: string): string {
+  const digest = createHash("sha256")
+    .update(`library-copy:${slug}:${sourceElementId}`)
+    .digest("hex");
+  return `lib-${digest.slice(0, 32)}`;
+}
+
 export function parsePinFromLibraryInput(value: unknown): { elementId: string } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new BoardApiError("Pick a pin from your library.");
@@ -211,7 +225,7 @@ export async function pinFromLibrary(
       target = existing;
     } else {
       target = {
-        id: newId(),
+        id: libraryCopyId(slug, source.id),
         boardId: slug,
         ownerId: participant.id,
         label: source.label,
@@ -224,7 +238,21 @@ export async function pinFromLibrary(
         sourceElementId: source.id,
         createdAt: now,
       };
-      await deps.boards.createElement(target);
+      try {
+        await deps.boards.createElement(target);
+      } catch (error) {
+        // Deterministic id: a racing pin created the copy first.
+        if (!(error instanceof RangeError)) throw error;
+        const winner = await deps.boards.getElement(target.id);
+        if (
+          !winner ||
+          winner.boardId !== slug ||
+          winner.sourceElementId !== source.id
+        ) {
+          throw error;
+        }
+        target = winner;
+      }
     }
   }
 

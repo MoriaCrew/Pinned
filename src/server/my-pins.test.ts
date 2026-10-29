@@ -12,6 +12,7 @@ import { BoardApiError } from "./board-session";
 import { InMemoryDecomposeJobStore } from "./decompose-job";
 import { InMemoryDerivativeStore } from "./derivative-store";
 import {
+  libraryCopyId,
   listMyElements,
   parsePinFromLibraryInput,
   pinFromLibrary,
@@ -332,6 +333,32 @@ describe("pinFromLibrary (PIN-85 copy semantics)", () => {
       pinFromLibrary("board-b-secret-slug-b", h.aliceOnA, ALICE, "el-lamp", h.pins),
     ).rejects.toSatisfy(is404);
     expect(await h.boards.listElementsBySource("el-lamp")).toHaveLength(0);
+  });
+
+  it("copy ids are deterministic per (board, source) and leak neither", async () => {
+    const h = await makeHarness();
+    const id = libraryCopyId("board-b-secret-slug-b", "el-lamp");
+    expect(id).toBe(libraryCopyId("board-b-secret-slug-b", "el-lamp"));
+    expect(id).not.toBe(libraryCopyId("board-a-secret-slug-a", "el-lamp"));
+    expect(id).not.toContain("secret-slug");
+    expect(id).not.toContain("el-lamp");
+    const result = await pinFromLibrary(
+      "board-b-secret-slug-b",
+      h.aliceOnB,
+      ALICE,
+      "el-lamp",
+      h.pins,
+    );
+    expect(result.elementId).toBe(id);
+    // Concurrent double-pin resolves to one copy + one pin.
+    const h2 = await makeHarness();
+    const [one, two] = await Promise.all([
+      pinFromLibrary("board-b-secret-slug-b", h2.aliceOnB, ALICE, "el-lamp", h2.pins),
+      pinFromLibrary("board-b-secret-slug-b", h2.aliceOnB, ALICE, "el-lamp", h2.pins),
+    ]);
+    expect(one.elementId).toBe(two.elementId);
+    expect(await h2.boards.listElementsBySource("el-lamp")).toHaveLength(1);
+    expect(await h2.boards.listPinsForElement(one.elementId)).toHaveLength(1);
   });
 
   it("parsePinFromLibraryInput rejects malformed bodies", () => {
