@@ -149,6 +149,35 @@ export interface DecomposeJob {
   updatedAt: number;
 }
 
+/**
+ * One scene-compose run (docs/11 section 5.3, PIN-69). The job id
+ * IS the Scene.id: the gallery polls the Scene, whose status is
+ * kept in step with this record by the SceneJob service. Jobs are
+ * idempotent by id with claim-before-call (only the caller that
+ * flips pending -> running may call the SceneComposer port), so a
+ * re-POST with the same id never double-bills. Persistence lives
+ * behind the SceneJobStore port in src/server/scene-job.ts
+ * (Firestore home boards/{slug}/sceneJobs/{id} — board-scoped doc
+ * refs only, no collection-group query, so no new index).
+ */
+export interface SceneJob {
+  id: string; // = Scene.id
+  boardId: string;
+  participantId: string; // Participant.id of the requester
+  elementIds: string[];
+  prompt: string;
+  status: SceneStatus; // pending -> running -> ready / failed / refused
+  promptVersion: string; // scene prompt actually used
+  /** Stored scene image under `scenes/` once ready. */
+  imageRef?: string;
+  /** Cost estimate (gateway reserve proxy; dashboard authoritative). */
+  costUsd?: number;
+  refusalReason?: string;
+  errorCode?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type BoardEventType =
   | "element_added"
   | "pin_added"

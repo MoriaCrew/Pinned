@@ -15,6 +15,7 @@ import {
   type BoardSessionDeps,
 } from "../../../server/board-session";
 import { getDecomposeJobStore } from "../../../server/decompose-job-store";
+import { getSceneJobStore } from "../../../server/scene-job-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
 
@@ -56,6 +57,8 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     store: getDerivativeStore(),
     namer: ports.elementNamer,
     segmenter: ports.segmenter,
+    sceneJobs: getSceneJobStore(),
+    ...(ports.sceneComposer ? { composer: ports.sceneComposer } : {}),
     policy,
   };
 }
