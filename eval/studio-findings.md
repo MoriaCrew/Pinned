@@ -103,3 +103,33 @@ Same 3 compositions (C1-C3) per mode. **Recommended `sceneInputMode`: `flattened
 - Whole+pointer mode sends the full working photo with a red ring at the SAM box centre plus a text hint. Transparent mode sends the alpha PNG cut-out as-is.
 - A refusal = HTTP 200 with no `image_generation_call` item, or an API error; both are recorded with redacted codes, never payloads.
 - Compositions pick usable elements by keyword with a first-usable fallback; the exact element ids used per scene are in fixtures.json (two picks fell back: check C4/C5 there). Requested sizes are returned scaled up at the same aspect (1536x1024 -> 1920x1280, 1024x1536 -> 1280x1920, 1024x1024 -> 1600x1600).
+
+## PIN-67 Slice 1 live run (2026-10-29, hosted dev)
+
+First end-to-end live run of the real board flow on hosted dev
+(create board -> join -> upload -> job -> confirm -> board pins),
+3 synthetic PIN-50 fixtures:
+
+| Photo | s (upload->ready) | Pins | faceNote |
+| --- | --- | --- | --- |
+| desk-mug-duck | 12.6 | 3 | false |
+| person-herb-kitchen | 11.0 | 2 | true |
+| kitchen-cat-lamp | 16.1 | 4 | false |
+
+- All 9 candidate pins confirmed pinned; workingCopyDeleted=true on
+  every confirm. Mean 13.2s/photo (demo target ~15s).
+- Cost: PIN-50 measured unit estimate $0.020/photo (Spark elements +
+  SAM at $0.0025/concept, 9 concepts here) -> ~$0.06 total, inside
+  the $0.05/photo target and far under the 3x stop line. Hosted
+  AiCallLog totals are not exposed via API; treat as estimate.
+- Local live repeat of the same 3 fixtures: 9.6s / 8.4s / 10.3s,
+  faceNote=true on the person photo.
+- Blocker found and fixed on the way: the Studio single-field
+  collection-group indexes (firestore.indexes.json fieldOverrides
+  for elements/pins/scenes/jobs `id`) had never been deployed to
+  the dev project, so hosted uploads failed FAILED_PRECONDITION
+  ("COLLECTION_GROUP_ASC index for collection jobs") in ~1s.
+  Deployed with `firebase deploy --only firestore:indexes
+  --project moriacrew-pinned-dev`; queries work once the jobs/id
+  index reports READY. Prod needs the same deploy before board
+  traffic (PIN-63/65 operator note).

@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { needsEmptyPrompt, pinCards, type BoardViewLike } from "../../../domain/board-view";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
+import { AddSheet, boardQueryKey } from "./AddSheet";
 
 export interface BoardClientView extends BoardViewLike {
   board: { slug: string; title: string };
@@ -11,75 +13,86 @@ export interface BoardClientView extends BoardViewLike {
   scenes: { id: string }[];
 }
 
+export interface BoardClientPolicy {
+  pollIntervalMs: number;
+  jobPollIntervalMs: number;
+  uploadMaxPx: number;
+  uploadJpegQuality: number;
+}
+
 /**
- * Studio board (PIN-66, docs/11 section 6): scenes placeholder on
- * top, pins grid with owner names, fixed bottom bar. Polls the
- * board view (Policy.boardPollIntervalMs, refetch on focus) so a
- * second phone sees new pins. The Add sheet and scene making
- * arrive in the next slices; until then Make stays disabled and
- * Add first points at the join form, then reads "soon" — never a
- * fake action.
+ * Studio board (PIN-66/67, docs/11 sections 5.8 + 6): scenes
+ * placeholder on top, pins grid with owner names, fixed bottom
+ * bar. TanStack Query polls the board view (Policy cadence,
+ * refetch on focus) so a second phone sees new pins; the Add
+ * sheet owns uploads and optimistic pins.
  */
 export function BoardClient({
   slug,
   initialView,
-  pollIntervalMs,
+  policy,
 }: {
   slug: string;
   initialView: BoardClientView;
-  pollIntervalMs: number;
+  policy: BoardClientPolicy;
 }) {
-  const [view, setView] = useState(initialView);
-  const [loadFailed, setLoadFailed] = useState(false);
-  // Sequence guard, not an in-flight lock: overlapping polls are
-  // allowed but only the latest-started response may land, so a
-  // GET that started before a join cookie was set can never
-  // overwrite the joined state with a stale `me: null`.
-  const refreshSeq = useRef(0);
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
+      }),
+  );
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BoardBody slug={slug} initialView={initialView} policy={policy} />
+    </QueryClientProvider>
+  );
+}
 
-  const refresh = useCallback(async () => {
-    const seq = ++refreshSeq.current;
-    try {
+function BoardBody({
+  slug,
+  initialView,
+  policy,
+}: {
+  slug: string;
+  initialView: BoardClientView;
+  policy: BoardClientPolicy;
+}) {
+  const queryClient = useQueryClient();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const boardQuery = useQuery({
+    queryKey: boardQueryKey(slug),
+    queryFn: async (): Promise<BoardClientView> => {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}`, {
         cache: "no-store",
       });
       if (!response.ok) throw new Error("load failed");
-      const next = (await response.json()) as BoardClientView;
-      if (seq !== refreshSeq.current) return;
-      setView(next);
-      setLoadFailed(false);
-    } catch {
-      if (seq === refreshSeq.current) setLoadFailed(true);
-    }
-  }, [slug]);
-
-  const handleJoined = useCallback(
-    (participant: { id: string; displayName: string }) => {
-      // Apply the join response immediately; the refresh below
-      // (newest sequence) then reconciles with the server view.
-      setView((current) => ({
-        ...current,
-        me: participant,
-        participants: current.participants.some((p) => p.id === participant.id)
-          ? current.participants.map((p) => (p.id === participant.id ? { ...p, ...participant } : p))
-          : [...current.participants, participant],
-      }));
-      void refresh();
+      return (await response.json()) as BoardClientView;
     },
-    [refresh],
-  );
+    initialData: initialView,
+    refetchInterval: policy.pollIntervalMs,
+    refetchIntervalInBackground: false,
+  });
+  const view = boardQuery.data;
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, pollIntervalMs);
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [pollIntervalMs, refresh]);
+  const handleJoined = (participant: { id: string; displayName: string }) => {
+    // Apply the join response immediately, then let the next poll
+    // reconcile with the server view.
+    queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
+      current
+        ? {
+            ...current,
+            me: participant,
+            participants: current.participants.some((p) => p.id === participant.id)
+              ? current.participants.map((p) =>
+                  p.id === participant.id ? { ...p, ...participant } : p,
+                )
+              : [...current.participants, participant],
+          }
+        : current,
+    );
+    void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+  };
 
   const cards = pinCards(view);
   const empty = needsEmptyPrompt(view);
@@ -123,10 +136,10 @@ export function BoardClient({
             ))}
           </ul>
         ) : null}
-        {loadFailed ? (
+        {boardQuery.isError ? (
           <p className="error" role="alert">
             {t("en", "board.loadError")}{" "}
-            <button type="button" className="btn btn-small" onClick={() => void refresh()}>
+            <button type="button" className="btn btn-small" onClick={() => void boardQuery.refetch()}>
               {t("en", "admin.retry")}
             </button>
           </p>
@@ -135,7 +148,7 @@ export function BoardClient({
 
       <nav className="bottom-bar" aria-label={t("en", "board.pins")}>
         {view.me ? (
-          <button type="button" className="btn btn-primary" disabled title={t("en", "board.soon")}>
+          <button type="button" className="btn btn-primary" onClick={() => setSheetOpen(true)}>
             {t("en", "board.add")}
           </button>
         ) : (
@@ -147,6 +160,18 @@ export function BoardClient({
           {t("en", "board.make")}
         </button>
       </nav>
+
+      {sheetOpen && view.me ? (
+        <AddSheet
+          slug={slug}
+          meId={view.me.id}
+          boardView={view}
+          uploadMaxPx={policy.uploadMaxPx}
+          uploadJpegQuality={policy.uploadJpegQuality}
+          jobPollIntervalMs={policy.jobPollIntervalMs}
+          onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
