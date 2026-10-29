@@ -59,6 +59,53 @@ async function postSession(idToken: string): Promise<AuthUser | null> {
   return data.user ?? null;
 }
 
+interface HydrateResult {
+  user: AuthUser | null;
+  /** True when this run wrote the session cookie (redirect
+   * completion) after the page was server-rendered. */
+  viaRedirect: boolean;
+}
+
+let hydrateInFlight: Promise<HydrateResult> | null = null;
+
+/**
+ * One shared in-flight hydrate (PIN-86). `getRedirectResult` is
+ * consumed once, so overlapping effect runs (Strict Mode,
+ * remounts) must await the same promise instead of competing:
+ * a cancelled run could otherwise take the redirect token while
+ * the surviving run reads /api/me before the cookie exists.
+ * Cleared once settled, so a later remount re-reads fresh state.
+ */
+function hydrateSession(config: FirebaseWebConfig): Promise<HydrateResult> {
+  if (!hydrateInFlight) {
+    const run = (async (): Promise<HydrateResult> => {
+      try {
+        const redirectToken = await completeRedirectSignIn(config).catch(
+          () => null,
+        );
+        let viaRedirect = false;
+        if (redirectToken) {
+          await postSession(redirectToken).catch(() => null);
+          viaRedirect = true;
+        }
+        const response = await fetch("/api/me", { cache: "no-store" });
+        if (response.ok) {
+          const data = (await response.json()) as { user?: AuthUser };
+          if (data.user) return { user: data.user, viaRedirect };
+        }
+        return { user: null, viaRedirect };
+      } catch {
+        return { user: null, viaRedirect: false };
+      }
+    })();
+    hydrateInFlight = run;
+    void run.finally(() => {
+      if (hydrateInFlight === run) hydrateInFlight = null;
+    });
+  }
+  return hydrateInFlight;
+}
+
 /**
  * Sign-in state (PIN-84). Rendered by the layout only when
  * resolveAuthUi enables it; with `config: null` it is a pure
@@ -81,38 +128,29 @@ export function AuthProvider({
   const [signInError, setSignInError] = useState(false);
   const router = useRouter();
 
-  // PIN-86: hydrate is idempotent across remounts. No "started"
-  // latch: Strict Mode setup-cleanup-setup would abandon the one
-  // allowed run and strand status at "loading". Each run owns a
-  // cancelled flag; a duplicate /api/me read is harmless.
+  // PIN-86: every effect run awaits the shared hydrate (no
+  // "started" latch to strand status at "loading", no competing
+  // runs to drop the consume-once redirect result). Each run
+  // still guards its own setState with `cancelled`.
   useEffect(() => {
     if (!config) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const redirectToken = await completeRedirectSignIn(config).catch(
-          () => null,
-        );
-        if (redirectToken) await postSession(redirectToken).catch(() => null);
-        const response = await fetch("/api/me", { cache: "no-store" });
-        if (cancelled) return;
-        if (response.ok) {
-          const data = (await response.json()) as { user?: AuthUser };
-          if (data.user) {
-            setUser(data.user);
-            setStatus("signedIn");
-            return;
-          }
-        }
+    void hydrateSession(config).then((result) => {
+      if (cancelled) return;
+      if (result.user) {
+        setUser(result.user);
+        setStatus("signedIn");
+        // Redirect completion wrote the cookie after SSR, so
+        // server pages still show the signed-out render.
+        if (result.viaRedirect) router.refresh();
+      } else {
         setStatus("signedOut");
-      } catch {
-        if (!cancelled) setStatus("signedOut");
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
-  }, [config]);
+  }, [config, router]);
 
   const signIn = useCallback(async () => {
     if (!config) return;
