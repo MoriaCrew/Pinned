@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "tokens": "node scripts/build-tokens.mjs",
     "test": "vitest run",
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "spike:studio": "node scripts/studio-spike.mjs",

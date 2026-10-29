@@ -1,10 +1,21 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { preload } from "react-dom";
 import { getConfig } from "../config";
 import { resolveAuthUi } from "../domain/auth-ui";
+import { DEFAULT_SKIN } from "../domain/skins";
 import { AuthControl } from "./auth/AuthControl";
 import { AuthProvider } from "./auth/AuthProvider";
+// Design tokens first (PIN-96); first-generation styles still load
+// after them until every screen is rebuilt (PIN-95 children).
+import "../ui/tokens.css";
 import "./globals.css";
+
+/** Faces every page uses: the reading face and the default display face. */
+const PRELOADED_FONTS = [
+  "/fonts/AtkinsonHyperlegibleNext-200-800.woff2",
+  "/fonts/BricolageGrotesque-200-800.woff2",
+];
 
 export const metadata: Metadata = {
   title: "Pinneds — one link, one game, hosted by an AI",
@@ -33,8 +44,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     authDomain: cfg.firebaseWebAuthDomain,
     projectId: cfg.firebaseProjectId,
   });
+  for (const href of PRELOADED_FONTS) {
+    preload(href, { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
+  }
   return (
-    <html lang="en">
+    <html lang="en" data-theme={DEFAULT_SKIN}>
       <body>
         {ui.enabled ? (
           <AuthProvider config={ui.config}>

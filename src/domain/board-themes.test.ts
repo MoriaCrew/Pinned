@@ -23,6 +23,13 @@ describe("board themes (PIN-52)", () => {
     expect(isBoardThemeId("nope")).toBe(false);
   });
 
+  it("accepts design-system skin ids as stored looks (PIN-96)", () => {
+    for (const id of ["paper", "cork", "fridge", "zine", "darkroom", "postcard", "marigold"]) {
+      expect(isBoardThemeId(id)).toBe(true);
+      expect(getBoardTheme(id)).toBeNull();
+    }
+  });
+
   it("reads the pre-pivot presetId as the theme id", () => {
     expect(storedThemeId({ presetId: "gran" })).toBe("gran");
     expect(storedThemeId({ themeId: "cat", presetId: "gran" })).toBe("cat");
