@@ -22,7 +22,7 @@
     "@google-cloud/storage": "^8.4.0",
     "@meta-sam/parser": "^0.1.0",
     "@tanstack/react-query": "^5.105.0",
-    "firebase-admin": "^14.5.0",
+    "firebase-admin": "^13.10.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
