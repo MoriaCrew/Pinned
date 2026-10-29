@@ -10,6 +10,9 @@ import { POST as uploadRoute } from "./[slug]/photos/route";
 import { GET as getJobRoute } from "./[slug]/jobs/[jobId]/route";
 import { POST as confirmRoute } from "./[slug]/pins/confirm/route";
 import { GET as imageRoute } from "./[slug]/elements/[elementId]/image/route";
+import { GET as getScenesRoute, POST as postSceneRoute } from "./[slug]/scenes/route";
+import { GET as getSceneRoute } from "./[slug]/scenes/[sceneId]/route";
+import { GET as sceneImageRoute } from "./[slug]/scenes/[sceneId]/image/route";
 
 /**
  * Route-guard tests (PIN-65 Checks): isValidSlug runs FIRST in
@@ -59,6 +62,17 @@ describe("slug gate: malformed slug -> uniform 404 on every board route", () => 
         }),
         slugParams(slug),
       ),
+      getScenesRoute(req("http://t/x"), slugParams(slug)),
+      postSceneRoute(
+        req("http://t/x", { method: "POST", body: JSON.stringify({ elementIds: ["el-1"], prompt: "x" }) }),
+        slugParams(slug),
+      ),
+      getSceneRoute(req("http://t/x"), {
+        params: Promise.resolve({ slug, sceneId: "scene-1" }),
+      }),
+      sceneImageRoute(req("http://t/x"), {
+        params: Promise.resolve({ slug, sceneId: "scene-1" }),
+      }),
       imageRoute(req("http://t/x?kind=cutout"), {
         params: Promise.resolve({ slug, elementId: "el-1" }),
       }),
@@ -93,6 +107,13 @@ describe("uniform 404: unknown board / element / job are indistinguishable", () 
 
     const misses: Promise<Response>[] = [
       getBoardRoute(req("http://t/x"), slugParams(unknownSlug)),
+      getScenesRoute(req("http://t/x"), slugParams(unknownSlug)),
+      getSceneRoute(req("http://t/x"), {
+        params: Promise.resolve({ slug: realSlug, sceneId: "missing" }),
+      }),
+      sceneImageRoute(req("http://t/x"), {
+        params: Promise.resolve({ slug: unknownSlug, sceneId: "missing" }),
+      }),
       imageRoute(req("http://t/x?kind=cutout"), {
         params: Promise.resolve({ slug: realSlug, elementId: "missing" }),
       }),

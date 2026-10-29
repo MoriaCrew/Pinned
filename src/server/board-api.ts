@@ -14,15 +14,20 @@ import "server-only";
  * (photo-intake, PIN-64). The bucket 1-day lifecycle backstop is
  * an operator step; until it lands no copy may claim 24h deletion.
  */
-import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin } from "../domain/board";
+import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { generateSlug } from "../domain/tokens";
-import type { ElementNamer, Segmenter } from "../gateway/ports";
+import type { ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { startDecomposeJob, type DecomposeJobStore } from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
+import {
+  SceneJobRequestError,
+  startSceneJob,
+  type SceneJobStore,
+} from "./scene-job";
 
 export interface BoardApiDeps {
   boards: BoardRepository;
@@ -30,6 +35,9 @@ export interface BoardApiDeps {
   store: DerivativeStore;
   namer: ElementNamer;
   segmenter: Segmenter;
+  /** Scene slice (PIN-69); scene functions 503 cleanly without them. */
+  sceneJobs?: SceneJobStore;
+  composer?: SceneComposer;
   policy: Policy;
   now?: () => number;
   createSlug?: () => string;
@@ -39,6 +47,46 @@ export interface BoardApiDeps {
 /** Element image route URL (board-link-checked; never a raw ref). */
 export function elementImageUrl(slug: string, elementId: string, kind: string): string {
   return `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}/image?kind=${kind}`;
+}
+
+/** Scene image route URL (board-link-checked; never a raw ref). */
+export function sceneImageUrl(slug: string, sceneId: string): string {
+  return `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(sceneId)}/image`;
+}
+
+export function publicScene(slug: string, scene: Scene) {
+  return {
+    id: scene.id,
+    boardId: scene.boardId,
+    createdBy: scene.createdBy,
+    elementIds: scene.elementIds,
+    prompt: scene.prompt,
+    status: scene.status,
+    promptVersion: scene.promptVersion,
+    ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
+    ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
+    imageUrl:
+      scene.status === "ready" && scene.imageRef
+        ? sceneImageUrl(slug, scene.id)
+        : null,
+    createdAt: scene.createdAt,
+  };
+}
+
+export function publicSceneJob(job: SceneJob) {
+  return {
+    id: job.id,
+    sceneId: job.id,
+    boardId: job.boardId,
+    status: job.status,
+    elementIds: job.elementIds,
+    prompt: job.prompt,
+    promptVersion: job.promptVersion,
+    ...(job.errorCode ? { errorCode: job.errorCode } : {}),
+    ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
 }
 
 export function publicBoard(board: Board) {
@@ -181,15 +229,7 @@ export async function getBoardView(
     elements: elements
       .filter((element) => visibleElementIds.has(element.id))
       .map((element) => publicElement(slug, element)),
-    scenes: scenes.map((scene) => ({
-      id: scene.id,
-      boardId: scene.boardId,
-      createdBy: scene.createdBy,
-      elementIds: scene.elementIds,
-      prompt: scene.prompt,
-      status: scene.status,
-      createdAt: scene.createdAt,
-    })),
+    scenes: scenes.map((scene) => publicScene(slug, scene)),
   };
 }
 
@@ -420,4 +460,182 @@ export async function resolveElementImage(
     bytes,
     contentType: kind === "cutout" ? "image/png" : "image/jpeg",
   };
+}
+
+export interface RequestSceneInput {
+  elementIds: string[];
+  prompt: string;
+  sceneId?: string;
+}
+
+export function parseRequestSceneInput(value: unknown): RequestSceneInput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError("Pick some pins and describe your scene.");
+  }
+  const body = value as Record<string, unknown>;
+  if (
+    !Array.isArray(body.elementIds) ||
+    body.elementIds.length === 0 ||
+    body.elementIds.some((id) => typeof id !== "string" || !id)
+  ) {
+    throw new BoardApiError("Pick at least one pin for your scene.");
+  }
+  if (typeof body.prompt !== "string" || !body.prompt.trim()) {
+    throw new BoardApiError("Describe your scene.");
+  }
+  let sceneId: string | undefined;
+  if (body.sceneId !== undefined && body.sceneId !== null && body.sceneId !== "") {
+    if (typeof body.sceneId !== "string") {
+      throw new BoardApiError("That scene id is not valid.");
+    }
+    sceneId = body.sceneId;
+  }
+  return {
+    elementIds: body.elementIds as string[],
+    prompt: body.prompt,
+    ...(sceneId ? { sceneId } : {}),
+  };
+}
+
+function requireSceneDeps(deps: BoardApiDeps): {
+  sceneJobs: SceneJobStore;
+  composer: SceneComposer;
+} {
+  if (!deps.sceneJobs || !deps.composer) {
+    throw new BoardApiError("Scenes are not available on this server.", 503);
+  }
+  return { sceneJobs: deps.sceneJobs, composer: deps.composer };
+}
+
+/**
+ * POST a scene (PIN-69): run its SceneJob in-request, client polls
+ * the scene. Friendly terminal states (ready/refused/failed) ride
+ * in the returned job+scene — a refused prompt is a 201 with
+ * status "refused", never a 500. Request-time cap/validation
+ * denies are BoardApiErrors (429/409/400) before any spend.
+ */
+export async function requestScene(
+  slug: string,
+  participant: Participant,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+): Promise<{ job: SceneJob; scene: Scene }> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Board not found.", 404);
+  const input = parseRequestSceneInput(rawInput);
+  const { sceneJobs, composer } = requireSceneDeps(deps);
+  let job: SceneJob;
+  try {
+    job = await startSceneJob(
+      {
+        boardId: slug,
+        participantId: participant.id,
+        elementIds: input.elementIds,
+        prompt: input.prompt,
+        ...(input.sceneId ? { sceneId: input.sceneId } : {}),
+      },
+      {
+        boards: deps.boards,
+        jobs: sceneJobs,
+        store: deps.store,
+        composer,
+        policy: deps.policy,
+        now: deps.now,
+        newId: deps.newId,
+      },
+    );
+  } catch (error) {
+    if (error instanceof SceneJobRequestError) {
+      const status =
+        error.code === "scenes_per_participant_day" ||
+        error.code === "scenes_per_board_day"
+          ? 429
+          : error.code === "scene_id_conflict"
+            ? 409
+            : error.code === "element_not_found"
+              ? 404
+              : 400;
+      throw new BoardApiError(error.message, status, error.code);
+    }
+    if (error instanceof RangeError) {
+      throw new BoardApiError("Board not found.", 404);
+    }
+    throw error;
+  }
+  const scene = await deps.boards.getScene(job.id);
+  if (!scene) throw new BoardApiError("Scene not found.", 404);
+  return { job, scene };
+}
+
+/**
+ * Gallery poll: every non-hidden scene on the board (hidden =
+ * a used element was deleted, section 5.4), link-public like the
+ * board view. Null when the board does not exist.
+ */
+export async function getScenesView(slug: string, deps: BoardApiDeps) {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scenes = await deps.boards.listScenes(slug);
+  return { scenes: scenes.map((scene) => publicScene(slug, scene)) };
+}
+
+/**
+ * One scene's status card. Missing board, missing scene, a scene
+ * from another board and a hidden scene all return null — one
+ * uniform 404 at the route.
+ */
+export async function getSceneView(
+  slug: string,
+  sceneId: string,
+  deps: BoardApiDeps,
+) {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scene = await deps.boards.getScene(sceneId);
+  if (!scene || scene.boardId !== slug || scene.hidden) return null;
+  const job = deps.sceneJobs
+    ? await deps.sceneJobs.get(slug, sceneId)
+    : null;
+  return {
+    scene: publicScene(slug, scene),
+    job: job ? publicSceneJob(job) : null,
+  };
+}
+
+const SCENE_IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  webp: "image/webp",
+};
+
+/**
+ * Board-link-checked scene image, same uniform-miss discipline as
+ * resolveElementImage: missing board/scene, another board's
+ * scene, a hidden (element-deleted) scene, a not-ready scene, a
+ * non-scenes/ ref and a missing object all return null -> 404.
+ */
+export async function resolveSceneImage(
+  slug: string,
+  sceneId: string,
+  deps: BoardApiDeps,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scene = await deps.boards.getScene(sceneId);
+  if (
+    !scene ||
+    scene.boardId !== slug ||
+    scene.hidden ||
+    scene.status !== "ready" ||
+    !scene.imageRef
+  ) {
+    return null;
+  }
+  if (!scene.imageRef.startsWith("scenes/")) return null;
+  const ext = scene.imageRef.split(".").at(-1) ?? "";
+  const contentType = SCENE_IMAGE_TYPES[ext.toLowerCase()];
+  if (!contentType) return null;
+  const bytes = await deps.store.get(scene.imageRef);
+  if (!bytes) return null;
+  return { bytes, contentType };
 }

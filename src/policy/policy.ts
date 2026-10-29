@@ -24,6 +24,8 @@ export const PolicySchema = z
     photosPerParticipantPerDay: z.number().int().min(0).default(20),
     scenesPerParticipantPerDay: z.number().int().min(0).default(10),
     scenesPerBoardPerDay: z.number().int().min(0).default(40),
+    /** Scene prompt length cap (PIN-69). */
+    scenePromptMaxChars: z.number().int().min(1).default(500),
     workingCopyTtlHours: z.number().positive().default(24),
     /** Board API caps (PIN-65): join roster, title length, cookie life. */
     participantsPerBoard: z.number().int().min(1).default(50),
@@ -132,6 +134,7 @@ export const PolicyOverridesSchema = z.object({
   photosPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
+  scenePromptMaxChars: z.number().int().min(1).optional(),
   workingCopyTtlHours: z.number().positive().optional(),
   participantsPerBoard: z.number().int().min(1).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
