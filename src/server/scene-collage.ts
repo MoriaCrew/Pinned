@@ -54,9 +54,16 @@ function gradientSvg({ width, height }: CollageSize): Buffer {
  * cut-outs; sharp errors on undecodable input propagate so the
  * caller can land the job as failed (typed, never a 500).
  */
+/**
+ * With `backgroundBytes` (PIN-79 remix fallback, §5.7) the
+ * cut-outs composite OVER that image — the parent scene,
+ * cover-fitted to the canvas — instead of the gradient. The
+ * Scene is still recorded kind "collage", honestly labelled.
+ */
 export async function composeCollage(
   cutouts: Buffer[],
   size: CollageSize,
+  backgroundBytes?: Buffer,
 ): Promise<Buffer> {
   if (cutouts.length === 0) {
     throw new RangeError("A collage needs at least one cut-out.");
@@ -96,6 +103,11 @@ export async function composeCollage(
     });
   }
 
-  const background = await sharp(gradientSvg(size)).png().toBuffer();
+  const background = backgroundBytes
+    ? await sharp(backgroundBytes)
+        .resize(size.width, size.height, { fit: "cover" })
+        .png()
+        .toBuffer()
+    : await sharp(gradientSvg(size)).png().toBuffer();
   return sharp(background).composite(composites).png().toBuffer();
 }

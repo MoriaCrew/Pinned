@@ -177,6 +177,10 @@ export interface SceneJob {
   elementIds: string[];
   prompt: string;
   status: SceneStatus; // pending -> running -> ready / failed / refused
+  /** Remix parent Scene id (PIN-79, §5.7); absent on fresh scenes and pre-PIN-79 records (stores JSON-round-trip the record, so the optional field is migration-safe). elementIds holds only the NEW pins for a remix — the parent is not an element. */
+  parentSceneId?: string;
+  /** Remix only: union of new pins + every ancestor scene's pins, snapshotted at request time. The Scene record carries this as its elementIds so credits cover all contributors AND the delete cascade hides the child when any contributing element is deleted (PIN-79). The job's own elementIds stay the NEW pins (compose inputs + cap basis). */
+  creditElementIds?: string[];
   promptVersion: string; // scene prompt actually used
   /** Stored scene image under `scenes/` once ready. */
   imageRef?: string;

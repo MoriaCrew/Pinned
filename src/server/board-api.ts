@@ -98,6 +98,7 @@ export function publicSceneJob(job: SceneJob) {
     elementIds: job.elementIds,
     prompt: job.prompt,
     kind: job.kind ?? "ai",
+    ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
     ...(job.errorCode ? { errorCode: job.errorCode } : {}),
     ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
@@ -683,6 +684,8 @@ export async function resolveElementImage(
 }
 
 export interface RequestSceneInput {
+  /** Remix parent Scene id (PIN-79, §5.7); elementIds stay the NEW pins. */
+  parentSceneId?: string;
   elementIds: string[];
   prompt: string;
   sceneId?: string;
@@ -703,6 +706,13 @@ export function parseRequestSceneInput(value: unknown): RequestSceneInput {
   if (typeof body.prompt !== "string" || !body.prompt.trim()) {
     throw new BoardApiError("Describe your scene.");
   }
+  let parentSceneId: string | undefined;
+  if (body.parentSceneId !== undefined && body.parentSceneId !== null && body.parentSceneId !== "") {
+    if (typeof body.parentSceneId !== "string") {
+      throw new BoardApiError("That scene is not ready to remix.");
+    }
+    parentSceneId = body.parentSceneId;
+  }
   let sceneId: string | undefined;
   if (body.sceneId !== undefined && body.sceneId !== null && body.sceneId !== "") {
     if (typeof body.sceneId !== "string") {
@@ -713,6 +723,7 @@ export function parseRequestSceneInput(value: unknown): RequestSceneInput {
   return {
     elementIds: body.elementIds as string[],
     prompt: body.prompt,
+    ...(parentSceneId ? { parentSceneId } : {}),
     ...(sceneId ? { sceneId } : {}),
   };
 }
@@ -753,6 +764,7 @@ export async function requestScene(
         elementIds: input.elementIds,
         prompt: input.prompt,
         ...(input.sceneId ? { sceneId: input.sceneId } : {}),
+        ...(input.parentSceneId ? { parentSceneId: input.parentSceneId } : {}),
       },
       {
         boards: deps.boards,
@@ -773,7 +785,8 @@ export async function requestScene(
           ? 429
           : error.code === "scene_id_conflict"
             ? 409
-            : error.code === "element_not_found"
+            : error.code === "element_not_found" ||
+                error.code === "parent_not_found"
               ? 404
               : 400;
       throw new BoardApiError(error.message, status, error.code);

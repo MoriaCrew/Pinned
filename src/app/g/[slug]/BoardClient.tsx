@@ -19,6 +19,7 @@ import {
 import {
   isTerminalScene,
   pruneSelection,
+  canRemixScene,
   sceneCreditParts,
   scenesNewestFirst,
   selectableCards,
@@ -54,6 +55,8 @@ export interface BoardClientPolicy {
 }
 
 interface SceneAttempt {
+  /** Remix parent scene id (PIN-79); elementIds are the NEW pins. */
+  parentSceneId?: string;
   sceneId: string;
   elementIds: string[];
   prompt: string;
@@ -118,6 +121,8 @@ function BoardBody({
   // Sheet prompt seed: "" for a fresh scene; the refused/failed
   // attempt's prompt only via "Change idea".
   const [sheetPrompt, setSheetPrompt] = useState("");
+  // PIN-79: remix mode — the ready scene the Make sheet extends.
+  const [remixOfId, setRemixOfId] = useState<string | null>(null);
   // PIN-75: generated chips, keyed by the selection they were made for.
   const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
   const [confirmDeleteElementId, setConfirmDeleteElementId] = useState<string | null>(null);
@@ -181,6 +186,9 @@ function BoardBody({
             elementIds: sceneAttempt.elementIds,
             prompt: sceneAttempt.prompt,
             sceneId: sceneAttempt.sceneId,
+            ...(sceneAttempt.parentSceneId
+              ? { parentSceneId: sceneAttempt.parentSceneId }
+              : {}),
           }),
         },
       );
@@ -198,6 +206,7 @@ function BoardBody({
       // the board cache so the cooking card hands over to the real
       // card with no empty poll gap, then let polls reconcile.
       setSelected(new Set());
+      setRemixOfId(null);
       setLiveSceneId(scene.id);
       queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
         current
@@ -367,6 +376,11 @@ function BoardBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [makeOpen, selectionKey, slug, view.me?.id]);
   const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
+  // The remix parent from the live view (a deleted/hidden parent
+  // drops out and the sheet degrades to a fresh scene).
+  const remixParent = remixOfId
+    ? view.scenes.find((scene) => scene.id === remixOfId && canRemixScene(scene))
+    : undefined;
   const empty = needsEmptyPrompt(view);
 
   function togglePin(pinId: string) {
@@ -377,7 +391,7 @@ function BoardBody({
     );
   }
 
-  function submitScene(input: { elementIds: string[]; prompt: string; pinIds: string[] }) {
+  function submitScene(input: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) {
     // A fresh sceneId per Make-it press; the network retry below
     // reuses it, which the server treats idempotently (PIN-69).
     const sceneAttempt: SceneAttempt = { ...input, sceneId: newSceneId() };
@@ -398,7 +412,17 @@ function BoardBody({
     if (!attempt) return;
     setSelected(pruneSelection(new Set(attempt.pinIds), selectableIds));
     setSheetPrompt(attempt.prompt);
+    setRemixOfId(attempt.parentSceneId ?? null);
     setMakeOpen(true);
+  }
+
+  function startRemix(scene: BoardViewScene) {
+    // Fresh picks for the remix: the parent carries its own pins
+    // in its image; the cap counts only these new ones (PIN-79).
+    setRemixOfId(scene.id);
+    setSelected(new Set());
+    setSheetPrompt("");
+    setAttemptError("");
   }
 
   function openMakeSheet() {
@@ -476,7 +500,7 @@ function BoardBody({
   }
 
   function renderScene(scene: BoardViewScene) {
-    const parts = sceneCreditParts(scene, view.elements, view.participants);
+    const parts = sceneCreditParts(scene, view.elements, view.participants, view.scenes);
     const mine = attempt !== null && scene.id === attempt.sceneId;
     return (
       <li key={scene.id} className="scene-card">
@@ -492,6 +516,9 @@ function BoardBody({
         )}
         {scene.status === "ready" && scene.kind === "collage" ? (
           <p className="state-pill">{t("en", "make.collage")}</p>
+        ) : null}
+        {scene.parentSceneId ? (
+          <p className="state-pill">{t("en", "make.remixOf")}</p>
         ) : null}
         <p className="scene-prompt">{scene.prompt}</p>
         {parts.length > 0 ? (
@@ -510,6 +537,11 @@ function BoardBody({
             onClick={() => void shareScene(scene)}
           >
             {sharingSceneId === scene.id ? t("en", "share.sharing") : t("en", "share.button")}
+          </button>
+        ) : null}
+        {view.me && canRemixScene(scene) ? (
+          <button type="button" className="btn btn-small" onClick={() => startRemix(scene)}>
+            {t("en", "make.remix")}
           </button>
         ) : null}
         {shareErrorSceneId === scene.id ? (
@@ -642,6 +674,15 @@ function BoardBody({
         ) : null}
       </section>
 
+      {remixParent ? (
+        <p className="hint" role="status">
+          {t("en", "make.remixPick")}{" "}
+          <button type="button" className="btn btn-small" onClick={() => setRemixOfId(null)}>
+            {t("en", "add.close")}
+          </button>
+        </p>
+      ) : null}
+
       <nav className="bottom-bar" aria-label={t("en", "board.pins")}>
         {view.me ? (
           <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
@@ -688,6 +729,11 @@ function BoardBody({
           pinsPerScene={policy.pinsPerScene}
           promptMaxChars={policy.scenePromptMaxChars}
           initialPrompt={sheetPrompt}
+          remixParent={
+            remixParent?.imageUrl
+              ? { id: remixParent.id, imageUrl: remixParent.imageUrl, prompt: remixParent.prompt }
+              : null
+          }
           onMake={submitScene}
           onClose={() => setMakeOpen(false)}
         />

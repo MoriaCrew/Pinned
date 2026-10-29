@@ -98,6 +98,8 @@ export function chipsForSelection(
 }
 
 export interface ScenePayload {
+  /** Remix parent scene id (PIN-79); elementIds are the NEW pins only. */
+  parentSceneId?: string;
   elementIds: string[];
   prompt: string;
   sceneId: string;
@@ -110,19 +112,27 @@ export interface ScenePayload {
  * Policy.scenePromptMaxChars. The client sceneId makes a retried
  * POST idempotent server-side (PIN-69).
  */
+/** Only a ready scene with an image can be remixed (PIN-79). */
+export function canRemixScene(
+  scene: Pick<BoardViewScene, "status" | "imageUrl">,
+): boolean {
+  return scene.status === "ready" && scene.imageUrl !== null;
+}
+
 export function scenePayload(
   cards: readonly PinCard[],
   rawPrompt: string,
   sceneId: string,
   range: { min: number; max: number },
   maxPromptChars: number,
+  parentSceneId?: string,
 ): ScenePayload | null {
   if (!sceneId) return null;
   const prompt = rawPrompt.trim().replace(/\s+/g, " ");
   if (!prompt || charCount(prompt) > maxPromptChars) return null;
   const elementIds = [...new Set(cards.map((card) => card.element.id))];
   if (elementIds.length < range.min || elementIds.length > range.max) return null;
-  return { elementIds, prompt, sceneId };
+  return { elementIds, prompt, sceneId, ...(parentSceneId ? { parentSceneId } : {}) };
 }
 
 export type SceneStatusLike = BoardViewScene["status"];
@@ -149,15 +159,44 @@ export interface SceneCreditPart {
  * elements. An element no longer visible (its pin went away after
  * the scene was made) is skipped rather than mis-credited.
  */
+/**
+ * Element ids to credit for a scene (PIN-79): its own (new) pins
+ * first, then — walking the remix parent chain — every ancestor's
+ * pins, deduped. Credits are the union of these elements' owners.
+ * A parent missing from the view (or a cycle in corrupt data)
+ * just ends the walk.
+ */
+export function sceneCreditElementIds(
+  scene: { id?: string; elementIds: string[]; parentSceneId?: string },
+  scenes: readonly BoardViewScene[] = [],
+): string[] {
+  const byId = new Map(scenes.map((s) => [s.id, s]));
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const visited = new Set<string>();
+  let current: { id?: string; elementIds: string[]; parentSceneId?: string } | undefined = scene;
+  while (current && !(current.id && visited.has(current.id))) {
+    if (current.id) visited.add(current.id);
+    for (const elementId of current.elementIds) {
+      if (seen.has(elementId)) continue;
+      seen.add(elementId);
+      ids.push(elementId);
+    }
+    current = current.parentSceneId ? byId.get(current.parentSceneId) : undefined;
+  }
+  return ids;
+}
+
 export function sceneCreditParts(
-  scene: Pick<BoardViewScene, "elementIds">,
+  scene: { id?: string; elementIds: string[]; parentSceneId?: string },
   elements: readonly BoardViewElement[],
   participants: readonly BoardViewParticipant[],
+  scenes: readonly BoardViewScene[] = [],
 ): SceneCreditPart[] {
   const elementsById = new Map(elements.map((e) => [e.id, e]));
   const namesById = new Map(participants.map((p) => [p.id, p.displayName]));
   const parts: SceneCreditPart[] = [];
-  for (const elementId of scene.elementIds) {
+  for (const elementId of sceneCreditElementIds(scene, scenes)) {
     const element = elementsById.get(elementId);
     if (!element) continue;
     parts.push({

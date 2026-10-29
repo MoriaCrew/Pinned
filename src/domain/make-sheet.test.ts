@@ -5,6 +5,8 @@ import {
   chipsSelectionKey,
   isTerminalScene,
   pruneSelection,
+  canRemixScene,
+  sceneCreditElementIds,
   sceneCreditParts,
   scenePayload,
   scenesNewestFirst,
@@ -121,6 +123,54 @@ describe("make sheet logic (PIN-70)", () => {
       "b",
       "a",
     ]);
+  });
+
+  it("remix (PIN-79): credits union parent + new owners deduped, new first, chains walked", () => {
+    const view = (id: string, elementIds: string[], parentSceneId?: string): BoardViewScene => ({
+      id,
+      createdBy: "me",
+      elementIds,
+      ...(parentSceneId ? { parentSceneId } : {}),
+      prompt: "x",
+      status: "ready",
+      imageUrl: `/${id}`,
+      createdAt: 1,
+    });
+    const grand = view("s0", ["e1"]);
+    const parent = view("s1", ["e2", "e1"], "s0");
+    const child = view("s2", ["e3", "e2"], "s1");
+    expect(sceneCreditElementIds(child, [grand, parent, child])).toEqual(["e3", "e2", "e1"]);
+    // Missing parent just ends the walk; a self-parent cannot loop.
+    expect(sceneCreditElementIds(view("sx", ["e9"], "gone"), [])).toEqual(["e9"]);
+    expect(sceneCreditElementIds(view("sy", ["e8"], "sy"), [view("sy", ["e8"], "sy")])).toEqual(["e8"]);
+    const elements = [
+      { id: "e1", ownerId: "me", label: "mug", faceFlag: false, imageUrl: "/e1" },
+      { id: "e2", ownerId: "aye", label: "cat", faceFlag: false, imageUrl: "/e2" },
+      { id: "e3", ownerId: "me", label: "duck", faceFlag: false, imageUrl: "/e3" },
+    ];
+    const participants = [
+      { id: "me", displayName: "Robin" },
+      { id: "aye", displayName: "Aye" },
+    ];
+    expect(sceneCreditParts(child, elements, participants, [grand, parent, child])).toEqual([
+      { ownerName: "Robin", label: "duck" },
+      { ownerName: "Aye", label: "cat" },
+      { ownerName: "Robin", label: "mug" },
+    ]);
+  });
+
+  it("remix (PIN-79): payload carries the parent and only ready scenes can remix", () => {
+    const cards = [card("p1", "e1")];
+    expect(scenePayload(cards, "add confetti", "s9", { min: 1, max: 4 }, 120, "s1")).toEqual({
+      elementIds: ["e1"],
+      prompt: "add confetti",
+      sceneId: "s9",
+      parentSceneId: "s1",
+    });
+    expect(scenePayload(cards, "fresh", "s9", { min: 1, max: 4 }, 120)).not.toHaveProperty("parentSceneId");
+    expect(canRemixScene({ status: "ready", imageUrl: "/x" })).toBe(true);
+    expect(canRemixScene({ status: "ready", imageUrl: null })).toBe(false);
+    expect(canRemixScene({ status: "running", imageUrl: "/x" })).toBe(false);
   });
 
   it("credits scene elements to their owners and skips vanished elements", () => {

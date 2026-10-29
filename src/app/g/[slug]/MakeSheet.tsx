@@ -19,6 +19,7 @@ export function MakeSheet({
   pinsPerScene,
   promptMaxChars,
   initialPrompt,
+  remixParent = null,
   onMake,
   onClose,
 }: {
@@ -27,7 +28,9 @@ export function MakeSheet({
   pinsPerScene: { min: number; max: number };
   promptMaxChars: number;
   initialPrompt: string;
-  onMake: (payload: { elementIds: string[]; prompt: string; pinIds: string[] }) => void;
+  /** Remix mode (PIN-79): the parent scene being extended. */
+  remixParent?: { id: string; imageUrl: string; prompt: string } | null;
+  onMake: (payload: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) => void;
   onClose: () => void;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -44,7 +47,7 @@ export function MakeSheet({
   }, [chips]);
   // Validation only — the board assigns the client sceneId per
   // attempt so a network retry can reuse it (idempotent, PIN-69).
-  const valid = scenePayload(cards, prompt, "pending", pinsPerScene, promptMaxChars);
+  const valid = scenePayload(cards, prompt, "pending", pinsPerScene, promptMaxChars, remixParent?.id);
 
   return (
     <div className="sheet-backdrop" role="presentation" onClick={onClose}>
@@ -52,15 +55,25 @@ export function MakeSheet({
         className="sheet"
         role="dialog"
         aria-modal="true"
-        aria-label={t("en", "make.title")}
+        aria-label={remixParent ? t("en", "make.remixTitle") : t("en", "make.title")}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="sheet-head">
-          <h2>{t("en", "make.title")}</h2>
+          <h2>{remixParent ? t("en", "make.remixTitle") : t("en", "make.title")}</h2>
           <button type="button" className="btn btn-small" onClick={onClose}>
             {t("en", "add.close")}
           </button>
         </div>
+
+        {remixParent ? (
+          <ul className="thumb-row">
+            <li className="thumb-item">
+              {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
+              <img src={remixParent.imageUrl} alt={remixParent.prompt} loading="lazy" />
+              <span className="thumb-owner">{t("en", "make.remixBase")}</span>
+            </li>
+          </ul>
+        ) : null}
 
         {cards.length > 0 ? (
           <ul className="thumb-row">
@@ -122,6 +135,7 @@ export function MakeSheet({
                 elementIds: valid.elementIds,
                 prompt: valid.prompt,
                 pinIds: cards.map((card) => card.pinId),
+                ...(valid.parentSceneId ? { parentSceneId: valid.parentSceneId } : {}),
               })
             }
           >
