@@ -186,6 +186,20 @@ details.card > summary { cursor: pointer; font-weight: 800; font-size: 1.15rem; 
   .field-meta { flex-direction: column; gap: 0.15rem; }
 }
 
+/* Studio board (PIN-66) */
+.board-main { padding-bottom: 7.5rem; }
+.board-placeholder { text-align: center; color: var(--muted); font-weight: 700; padding: 2rem 1rem; margin: 0; border: 1.5px dashed var(--line); border-radius: 12px; }
+.board-empty-prompt { font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; margin: 0 0 0.4rem; }
+.pins-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.75rem; list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.pin-card { border: 1px solid var(--line); border-radius: 14px; padding: 0.6rem; background: #fffdf8; }
+.pin-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 10px; background: repeating-conic-gradient(#e8e2d4 0% 25%, #f7f2e6 0% 50%) 0 0 / 22px 22px; }
+.pin-label { font-weight: 750; margin: 0.5rem 0 0.15rem; overflow-wrap: anywhere; }
+.pin-owner { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+.bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 0.75rem; justify-content: center; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); background: var(--paper); border-top: 1px solid var(--line); z-index: 10; }
+.bottom-bar .btn { flex: 1 1 0; max-width: 16rem; justify-content: center; min-height: 52px; }
+.bottom-bar .btn:disabled { cursor: not-allowed; }
+.theme-grid { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
