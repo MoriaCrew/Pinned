@@ -5,10 +5,10 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { FirebaseWebConfig } from "../../domain/auth-ui";
 import {
   completeRedirectSignIn,
@@ -79,11 +79,14 @@ export function AuthProvider({
     config ? "loading" : "signedOut",
   );
   const [signInError, setSignInError] = useState(false);
-  const started = useRef(false);
+  const router = useRouter();
 
+  // PIN-86: hydrate is idempotent across remounts. No "started"
+  // latch: Strict Mode setup-cleanup-setup would abandon the one
+  // allowed run and strand status at "loading". Each run owns a
+  // cancelled flag; a duplicate /api/me read is harmless.
   useEffect(() => {
-    if (!config || started.current) return;
-    started.current = true;
+    if (!config) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -120,6 +123,9 @@ export function AuthProvider({
       if (!signedIn) throw new Error("session failed");
       setUser(signedIn);
       setStatus("signedIn");
+      // PIN-86: server pages (/me/*) read the cookie server-side;
+      // refresh so they reflect the new session immediately.
+      router.refresh();
     } catch (error) {
       // Redirect fallback: the browser is leaving for Google;
       // popup-closed is a user cancel, not an error to report.
@@ -134,7 +140,7 @@ export function AuthProvider({
       }
       setSignInError(true);
     }
-  }, [config]);
+  }, [config, router]);
 
   const signOut = useCallback(async () => {
     if (!config) return;
@@ -146,7 +152,8 @@ export function AuthProvider({
     await signOutFirebase(config).catch(() => {});
     setUser(null);
     setStatus("signedOut");
-  }, [config]);
+    router.refresh();
+  }, [config, router]);
 
   if (!config) return <>{children}</>;
   return (

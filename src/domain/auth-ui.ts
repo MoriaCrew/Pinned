@@ -61,10 +61,13 @@ export const SIGN_IN_NUDGE_STORAGE_KEY = "pinned.signInNudgeSeen";
 /**
  * First-pin nudge (PIN-84): shown once, after the viewer's first
  * pinned pin, only when sign-in is actually available and Policy
- * allows it. Never for signed-in users or link-only visitors.
+ * allows it. Never for signed-in users or link-only visitors,
+ * and never while auth state is still loading (PIN-86: a signed-in
+ * user briefly looks signed out during hydrate).
  */
 export function shouldShowSignInNudge(input: {
   authEnabled: boolean;
+  authLoading: boolean;
   policyNudge: boolean;
   signedIn: boolean;
   joined: boolean;
@@ -73,6 +76,7 @@ export function shouldShowSignInNudge(input: {
 }): boolean {
   return (
     input.authEnabled &&
+    !input.authLoading &&
     input.policyNudge &&
     !input.signedIn &&
     input.joined &&

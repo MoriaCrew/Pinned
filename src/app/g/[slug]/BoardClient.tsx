@@ -170,6 +170,14 @@ function BoardBody({
     }
   };
   const authUid = auth.user?.uid ?? null;
+  // PIN-86: refetch the board the moment sign-in state lands.
+  // The board GET restores this user's participant from the user
+  // cookie; waiting for the poll delayed restore and let a
+  // racing join create a second identity.
+  useEffect(() => {
+    if (!authUid) return;
+    void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+  }, [authUid, queryClient, slug]);
   const myParticipantId = view.me?.id ?? null;
   useEffect(() => {
     // Signed in on this board: link this participant right away
@@ -642,6 +650,7 @@ function BoardBody({
 
       {shouldShowSignInNudge({
         authEnabled: auth.enabled,
+        authLoading: auth.status === "loading",
         policyNudge: policy.signInNudge,
         signedIn: auth.user !== null,
         joined: view.me !== null,
