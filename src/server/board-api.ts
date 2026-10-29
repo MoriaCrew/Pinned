@@ -18,10 +18,12 @@ import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type P
 import { activityLines } from "../domain/board-activity";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
+import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
+import { plusRequiredError } from "./board-plus";
 import { t } from "../i18n";
 import {
   addTapElement,
@@ -185,6 +187,9 @@ export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoa
     if (!isBoardThemeId(body.themeId)) {
       throw new BoardApiError("That theme is not available.");
     }
+    // PIN-103: a new board holds no entitlement, so a Plus skin
+    // here would bypass the skin gate; the host buys Plus first.
+    if (isPlusSkin(body.themeId)) throw plusRequiredError();
     themeId = body.themeId;
   }
   return { title, ...(themeId ? { themeId } : {}) };
@@ -220,15 +225,26 @@ export async function createBoard(
   throw new BoardApiError("Could not create a board. Please try again.", 503);
 }
 
+/** Per-request facts the board view needs beyond the participant (PIN-103). */
+export interface BoardViewAccess {
+  /** The request carries this board's valid host cookie. */
+  isHost?: boolean;
+  /** PLUS_MODE, so the UI can show the Plus offer honestly. */
+  plusMode?: PlusMode;
+}
+
 /**
  * Board view for the polling board page: pinned pins are public to
  * anyone holding the link; candidate pins only to their uploader.
- * Returns null when the board does not exist.
+ * Returns null when the board does not exist. PIN-103 adds, purely
+ * additively, `viewer.isHost` and `plus` (entitlement state, mode,
+ * Policy price labels — no billing source, time or secret).
  */
 export async function getBoardView(
   slug: string,
   viewer: Participant | null,
   deps: BoardApiDeps,
+  access: BoardViewAccess = {},
 ) {
   const board = await deps.boards.getBoard(slug);
   if (!board) return null;
@@ -255,6 +271,11 @@ export async function getBoardView(
     // Activity strip (PIN-74): board-visible BoardEvent lines,
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(events, participants, elements, deps.policy.activityStripMax),
+    viewer: { isHost: access.isHost ?? false },
+    plus: plusView(board, {
+      mode: access.plusMode ?? "off",
+      priceLabels: deps.policy.plus.priceLabels,
+    }),
   };
 }
 

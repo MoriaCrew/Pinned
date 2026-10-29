@@ -33,3 +33,7 @@ env:
     value: optional
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-dev.firebasestorage.app
+  # PIN-103: Board Plus demo billing on dev only (instant mock
+  # grant, no money moves). Prod inherits the code default "off".
+  - variable: PLUS_MODE
+    value: mock

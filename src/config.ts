@@ -1,4 +1,5 @@
 /** Server configuration. Single place that reads process.env. */
+import type { PlusMode } from "./domain/plus";
 
 export type AuthMode = "link-only" | "optional";
 
@@ -47,6 +48,14 @@ export interface AppConfig {
    * the landing demo link stays hidden/inert.
    */
   demoBoardSlug: string | null;
+  /**
+   * Board Plus billing adapter (PIN-103, docs/15). "off" (the
+   * default; anything but the exact value "mock") answers every
+   * checkout "unavailable" and writes nothing; "mock" grants the
+   * entitlement instantly with source "mock" for the demo. Never
+   * set mock on prod. Stripe adds a mode when it lands.
+   */
+  plusMode: PlusMode;
   storageBucket: string | null;
   labEnabled: boolean;
   meta: MetaConfig;
@@ -113,6 +122,7 @@ export function parseConfig(
     firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
     firebaseWebAuthDomain: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
+    plusMode: env.PLUS_MODE === "mock" ? "mock" : "off",
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??
       nonEmpty(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) ??

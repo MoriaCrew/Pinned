@@ -12,6 +12,7 @@ import {
   isFreshAuth,
 } from "../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../auth-shared";
+import { hostFor } from "../plus-shared";
 import {
   JSON_HEADERS,
   boardApiDeps,
@@ -87,7 +88,11 @@ export async function GET(
         console.error("board auth restore failed", error);
       }
     }
-    const view = await getBoardView(slug, viewer, boardApiDeps(policy));
+    // PIN-103: additive viewer.isHost + plus (state, mode, labels).
+    const view = await getBoardView(slug, viewer, boardApiDeps(policy), {
+      isHost: hostFor(request, slug),
+      plusMode: getConfig().plusMode,
+    });
     if (!view) return notFound();
     return NextResponse.json(view, {
       headers: restoredCookie
