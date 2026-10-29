@@ -29,11 +29,13 @@ env:
     value: moriacrew-pinned-prod
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: moriacrew-pinned-prod
-  # PIN-83: stays empty + AUTH_MODE link-only on prod until the
-  # operator enables sign-in here (docs/13-auth.md).
+  # PIN-57: operator enabled the Google provider + authorized
+  # domain (Oct 29) and supplied the web config. AUTH_MODE stays
+  # link-only (inherited) until sign-in is proven live on dev;
+  # flip it to optional here as part of promotion (PIN-76).
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: ""
+    value: "AIzaSyCGQg5I2ZC-tphdgspj7_s7UcrsifcxOcI"
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: ""
+    value: "moriacrew-pinned-prod.firebaseapp.com"
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-prod.firebasestorage.app

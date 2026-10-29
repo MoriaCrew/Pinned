@@ -27,12 +27,13 @@ env:
     value: moriacrew-pinned-dev
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: moriacrew-pinned-dev
-  # PIN-83: operator fills these from the Firebase console web
-  # app config (public identifiers, build-time) and flips
-  # AUTH_MODE to optional in the same change (docs/13-auth.md).
+  # PIN-57: Google provider + authorized domain enabled by the
+  # operator (Oct 29); web config values are public identifiers.
+  - variable: AUTH_MODE
+    value: optional
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: ""
+    value: "AIzaSyBSqqMKH7xQ-nd4CkmKSRhn5SM2bblmNZQ"
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: ""
+    value: "moriacrew-pinned-dev.firebaseapp.com"
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-dev.firebasestorage.app
