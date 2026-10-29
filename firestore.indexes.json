@@ -37,6 +37,16 @@
       ]
     },
     {
+      "collectionGroup": "elements",
+      "fieldPath": "sourceElementId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "pins",
       "fieldPath": "id",
       "indexes": [

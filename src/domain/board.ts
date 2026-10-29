@@ -84,6 +84,14 @@ export interface Element {
   sourcePhotoId: string;
   /** Spark flagged a visible face: consent note, never a block. */
   faceFlag: boolean;
+  /**
+   * Provenance for a library copy (PIN-85): the Element this one
+   * was copied from when pinned cross-board from My pins. Copies
+   * SHARE the source's cutout/flattened storage refs — deleting
+   * either record must not delete objects the other still uses
+   * (see deleteMyElement). Absent on native elements.
+   */
+  sourceElementId?: string;
   createdAt: number;
 }
 

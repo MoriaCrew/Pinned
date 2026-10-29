@@ -40,6 +40,8 @@ export const PolicySchema = z
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
     signInNudge: z.boolean().default(true),
+    /** My pins library page size: newest elements kept per GET (PIN-85). */
+    libraryPageSize: z.number().int().min(1).default(60),
     /** Activity strip: latest BoardEvent lines shown (PIN-74). */
     activityStripMax: z.number().int().min(0).default(5),
     /** Generated-chips cache: hours a label-set entry stays fresh (PIN-75). */
@@ -164,6 +166,7 @@ export const PolicyOverridesSchema = z.object({
   participantCookieDays: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
   signInNudge: z.boolean().optional(),
+  libraryPageSize: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
   jobPollIntervalMs: z.number().int().min(250).optional(),
   uploadMaxPx: z.number().int().positive().optional(),

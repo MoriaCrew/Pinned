@@ -262,6 +262,14 @@ export class FirestoreBoardRepository implements BoardRepository {
     return sortedValues(rows.filter((row) => row.value.ownerId === ownerId));
   }
 
+  async listElementsBySource(sourceElementId: string): Promise<Element[]> {
+    const snap = await this.db
+      .collectionGroup(ELEMENTS)
+      .where("sourceElementId", "==", sourceElementId)
+      .get();
+    return sortedValues(rowsFrom<Element>(snap));
+  }
+
   async deleteElement(elementId: string): Promise<DeleteElementResult> {
     const found = await this.findOneById<Element>(ELEMENTS, elementId);
     if (!found) return { deleted: false, removedPinIds: [], hiddenSceneIds: [] };

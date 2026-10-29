@@ -165,5 +165,19 @@
   "myBoards.empty": "No boards yet. Open a board link, add a pin, and it lands here.",
   "myBoards.myPins": "my pins",
   "myBoards.lastActive": "Last active",
-  "myBoards.signInPrompt": "Sign in to see your boards here."
+  "myBoards.signInPrompt": "Sign in to see your boards here.",
+  "auth.myPins": "My pins",
+  "add.photoTab": "📷 Photo",
+  "add.fromMyPins": "📌 From my pins",
+  "myPins.title": "📌 My pins",
+  "myPins.empty": "No pins yet. Add a photo on a board and your pins land here.",
+  "myPins.signInPrompt": "Sign in to see your pins here.",
+  "myPins.fromBoard": "From",
+  "myPins.pinToBoard": "📌 Pin to this board",
+  "myPins.pinning": "⏳ Pinning…",
+  "myPins.pinned": "✅ Pinned",
+  "myPins.alreadyPinned": "✅ Already pinned",
+  "myPins.failed": "❌ Try again",
+  "myPins.loading": "⏳ Loading your pins…",
+  "myPins.backToBoard": "Back to board"
 }

@@ -182,6 +182,26 @@ export function describeBoardRepositoryContract(
       await expect(repo.createElement(makeElement())).rejects.toThrow(RangeError);
     });
 
+    it("listElementsBySource returns library copies across boards (PIN-85)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createBoard(makeBoard({ slug: "board-b", createdAt: 1_100 }));
+      await repo.createElement(makeElement());
+      await repo.createElement(
+        makeElement({
+          id: "el-copy",
+          boardId: "board-b",
+          sourceElementId: "el-1",
+          createdAt: 1_300,
+        }),
+      );
+      await repo.createElement(makeElement({ id: "el-other", createdAt: 1_400 }));
+      expect((await repo.listElementsBySource("el-1")).map((e) => e.id)).toEqual([
+        "el-copy",
+      ]);
+      expect(await repo.listElementsBySource("el-copy")).toEqual([]);
+    });
+
     it("pins: candidate is silent, pinning emits pin_added once, counters track pinned", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());
