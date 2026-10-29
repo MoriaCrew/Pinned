@@ -252,7 +252,7 @@ describe("tapAddPin API layer (PIN-78)", () => {
     const other = (await joinBoard(board.slug, { displayName: "Aye" }, null, session)).participant;
     const job = await uploadPhoto(board.slug, owner, await photoBytes(), deps);
     expect(job.status).toBe("ready");
-    return { deps, slug: board.slug, owner, other, job };
+    return { deps, boards, slug: board.slug, owner, other, job };
   }
 
   it("owner tap lands a generic-labelled candidate confirmable with the rest", async () => {
@@ -285,6 +285,20 @@ describe("tapAddPin API layer (PIN-78)", () => {
     });
     const after = await getJobView(slug, job.id, owner, deps);
     expect(after?.job.workingCopyGone).toBe(true);
+  });
+
+  it("confirming without the tap pin drops it (no orphan candidate)", async () => {
+    const { deps, boards, slug, owner, job } = await makeApiHarness();
+    const tap = await tapAddPin(slug, owner, job.id, { x: 0.4, y: 0.6 }, deps);
+    const confirmed = await confirmPins(
+      slug,
+      owner,
+      { jobId: job.id, pinIds: [job.pinIds[0]] },
+      deps,
+    );
+    expect(confirmed.droppedPinIds).toContain(tap.pin.id);
+    expect(await boards.getPin(tap.pin.id)).toBeNull();
+    expect(confirmed.workingCopyDeleted).toBe(true);
   });
 
   it("404s non-uploaders, anonymous callers and wrong boards; 400s bad points", async () => {

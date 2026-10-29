@@ -286,11 +286,22 @@ export async function sweepExpiredWorkingCopies(
   return deleted;
 }
 
+/**
+ * Delete the A6a working copy and mark the job. The mark is
+ * always written on top of the FRESHEST job read (before and
+ * after the store delete), never the caller's snapshot, so a
+ * tap-add (PIN-78) that appended ids meanwhile is not clobbered
+ * by this whole-job replace (Bugbot PIN-78 finding).
+ */
 async function deleteWorkingCopy(job: DecomposeJob, deps: BoardApiDeps): Promise<DecomposeJob> {
-  if (job.workingDeletedAt !== undefined) return job;
+  const fresh = (await deps.jobs.get(job.id)) ?? job;
+  if (fresh.workingDeletedAt !== undefined) return fresh;
+  job = fresh;
   const now = deps.now?.() ?? Date.now();
   await deps.store.delete(job.workingRef);
-  const updated: DecomposeJob = { ...job, workingDeletedAt: now, updatedAt: now };
+  const latest = (await deps.jobs.get(job.id)) ?? job;
+  if (latest.workingDeletedAt !== undefined) return latest;
+  const updated: DecomposeJob = { ...latest, workingDeletedAt: now, updatedAt: now };
   await deps.jobs.update(updated);
   return updated;
 }
@@ -512,8 +523,18 @@ export async function confirmPins(
     pinnedPinIds.push(pinId);
   }
 
+  // Delete the working copy BEFORE dropping unselected pins
+  // (after validation/pinning, so a failed confirm keeps it):
+  // from the delete mark on, a racing tap-add's fresh check
+  // sees the copy gone and cleans itself up, and the drop loop
+  // below runs over the FRESHEST pin list, so a tap appended
+  // mid-confirm is dropped here instead of orphaned (Bugbot
+  // PIN-78 finding; the Add sheet also disables Pin during a
+  // tap + refetch, closing the UI path).
+  const updated = await deleteWorkingCopy(job, deps);
+  const freshJob = (await deps.jobs.get(job.id)) ?? updated;
   const droppedPinIds: string[] = [];
-  for (const pinId of job.pinIds) {
+  for (const pinId of freshJob.pinIds) {
     if (pinnedPinIds.includes(pinId)) continue;
     const pin = await deps.boards.getPin(pinId);
     if (pin && pin.status === "candidate") {
@@ -522,7 +543,6 @@ export async function confirmPins(
     }
   }
 
-  const updated = await deleteWorkingCopy(job, deps);
   return {
     pinnedPinIds,
     droppedPinIds,

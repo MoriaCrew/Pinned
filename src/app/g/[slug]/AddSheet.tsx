@@ -271,7 +271,14 @@ export function AddSheet({
     (job !== null && !isTerminalJob(job.status));
   const payload = jobId ? confirmPayload(jobId, selected) : null;
   const canPin =
-    payload !== null && job?.status === "ready" && !confirm.isPending;
+    // Never pin while a tap is cutting or its refetch is in
+    // flight: selected only gains the tap pin when the refetched
+    // candidates land, and confirm drops unlisted job pins.
+    payload !== null &&
+    job?.status === "ready" &&
+    !confirm.isPending &&
+    !tapAdd.isPending &&
+    !jobQuery.isFetching;
   const showFaceNote = shouldShowFaceNote(job?.faceNote ?? false, jobId, dismissedFaceJobId);
   // Visibility excludes `busy` so the preview stays up (disabled)
   // while a tap is cutting; canTapAdd's busy gate is unit-tested.
