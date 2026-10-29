@@ -38,5 +38,9 @@ hurry, with zero instructions read.
   tap to pick (✅ Picked + count in the bottom bar), fixed
   suggestion chips are tappable example prompts (§3), refused and
   failed scenes are one friendly line + "✏️ Change idea" (§8).
+- **Collage fallback (PIN-71):** offline (AI_MOCK) and
+  over-budget scenes arrive as a "🧩 Collage" card — the cut-outs
+  on a gradient, labelled in the UI and in the data
+  (kind="collage"), never dressed up as an AI scene (§6 honesty).
 - Next candidates: reveal/guessing flow (PIN-10), poster share
   (PIN-11), creator admin (PIN-12), FR pass with family testers.

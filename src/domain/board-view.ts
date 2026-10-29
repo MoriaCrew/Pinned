@@ -33,6 +33,8 @@ export interface BoardViewScene {
   elementIds: string[];
   prompt: string;
   status: "pending" | "running" | "ready" | "failed" | "refused";
+  /** PIN-71: "collage" = sharp mock-collage fallback, not AI output. */
+  kind?: "ai" | "collage";
   refusalReason?: string;
   imageUrl: string | null;
   createdAt: number;

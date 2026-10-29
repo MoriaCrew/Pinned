@@ -59,6 +59,9 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     segmenter: ports.segmenter,
     sceneJobs: getSceneJobStore(),
     ...(ports.sceneComposer ? { composer: ports.sceneComposer } : {}),
+    // PIN-71: under AI_MOCK the sharp collage composes scenes
+    // offline; live mode keeps the port (over-budget -> collage).
+    collageMode: getConfig().aiMock,
     policy,
   };
 }

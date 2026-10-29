@@ -176,3 +176,40 @@ Teal Mug, Potted Succulent, Sunglasses Duck), prompt chip
 - No new Firestore index was needed: SceneJobs live at
   `boards/{slug}/sceneJobs` with board-scoped doc refs only.
   No prod or console steps were taken.
+
+## PIN-71 Slice 2 demo closer (2026-10-29, hosted dev + local mock)
+
+Evening-demo run on ONE hosted dev board (slug + scene ids
+preserved in PIN-71's PR and Linear evidence, capability link
+kept out of this file): 2 participants each uploaded 1 synthetic
+fixture (`desk-mug-duck`, `kitchen-cat-lamp`) and confirmed
+3 pins; 3 live scenes were made from both people's pins:
+
+| Scene | Pins (owners) | Prompt | s | Image |
+| --- | --- | --- | --- | --- |
+| 1 | Sunglasses Rubber Duck (Aye) + Potted Succulent (Aye) + Ginger Cat (Robin) | "on a sunny picnic blanket" (chip) | 12.5 | 200 image/webp, 447,342 B |
+| 2 | Ginger Cat (Robin) + Sunglasses Rubber Duck (Aye) | "in a tiny museum" (chip) | 10.6 | 200 image/webp, 356,816 B |
+| 3 | Distressed Teal Mug (Aye) + Brass Lamp (Robin) + Ginger Cat (Robin) | "a cozy reading nook at golden hour" | 15.8 | 200 image/webp, 421,916 B |
+
+- Photo -> ready: 9.1s / 9.8s (3 pins each);
+  workingCopyDeleted=true on every confirm. All 3 scenes
+  < 30s, credited to both owners in the gallery.
+- Cost (labelled estimates at PIN-50/69 unit rates, gateway
+  Spark-token proxy; provider dashboard authoritative):
+  ~$0.020/photo, ~$0.017-0.022/scene -> run total ~$0.11,
+  far under the $0.30/scene stop line.
+- Mock collage (PIN-71): under AI_MOCK=1 locally the same flow
+  produced a sharp collage of the 3 cut-outs on a gradient at
+  Policy.sceneSize in 0.12s, recorded kind "collage" (never an
+  AI scene) at $0, with the Collage pill + both-owner credit in
+  the gallery (390px screenshot in PR evidence). Over-budget
+  decorator denies (budget/call_limit/budget_off) take the same
+  collage path; participant/board caps stay friendly failures.
+- Refused path was NOT probed live (no benign prompt reliably
+  triggers a provider refusal, and no abusive prompt was used);
+  it remains covered by the PIN-69/70 unit + fixture evidence
+  (typed refused scene with the friendly line, never a 500).
+- These 3 hosted scenes were composed by the pre-PIN-71 dev
+  deployment, so their records carry no `kind`; the PIN-71 API
+  reports them "ai" (all pre-PIN-71 scenes are AI composes).
+  No prod or console steps were taken.

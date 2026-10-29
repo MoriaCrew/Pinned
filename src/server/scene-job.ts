@@ -39,6 +39,7 @@ import {
   assertDerivativeRef,
   type DerivativeStore,
 } from "./derivative-store";
+import { composeCollage, parseSceneSize } from "./scene-collage";
 
 /** Request-time denial, mapped to an HTTP status by board-api. */
 export class SceneJobRequestError extends Error {
@@ -170,6 +171,12 @@ export interface SceneJobDeps {
   jobs: SceneJobStore;
   store: DerivativeStore;
   composer: SceneComposer;
+  /**
+   * Offline/demo mode (AI_MOCK=1 at the composition root, PIN-71):
+   * the sharp mock collage IS the scene composer — no port call,
+   * and the Scene is recorded kind "collage", never as AI output.
+   */
+  collageMode?: boolean;
   policy: Policy;
   now?: () => number;
   newId?: () => string;
@@ -202,6 +209,7 @@ function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
     prompt: job.prompt,
     status: job.status,
     ...(job.imageRef ? { imageRef: job.imageRef } : {}),
+    ...(job.kind ? { kind: job.kind } : {}),
     promptVersion: job.promptVersion,
     ...(job.costUsd !== undefined ? { costUsd: job.costUsd } : {}),
     ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
@@ -464,6 +472,63 @@ async function composeElement(
 }
 
 /**
+ * Decorator budget denies (PIN-61 ReserveDenyReason -> errorCode)
+ * that the sharp mock collage covers instead of a dead-end failed
+ * card (PIN-71, PIN-54 outcome: "with AI_MOCK=1 or over budget, a
+ * collage of the cut-outs appears instead"). Participant/board
+ * daily caps are NOT budget fallback: they stay friendly failed.
+ */
+const BUDGET_FALLBACK_CODES = new Set(["budget", "call_limit", "budget_off"]);
+
+function isBudgetFallback(errorCode: string | undefined): boolean {
+  return errorCode !== undefined && BUDGET_FALLBACK_CODES.has(errorCode);
+}
+
+/**
+ * Finish a job with the mock collage (PIN-71): cut-outs on a
+ * gradient at Policy.sceneSize, stored under scenes/, recorded
+ * kind "collage" at $0 — honestly labelled, never an AI scene.
+ * Failures land as typed failed states like every other path.
+ */
+async function finishCollage(
+  deps: SceneJobDeps,
+  job: SceneJob,
+  records: Element[],
+): Promise<SceneJob> {
+  const size = parseSceneSize(deps.policy.sceneSize);
+  if (!size) {
+    job.status = "failed";
+    job.errorCode = "collage_failed";
+    return finish(deps, job);
+  }
+  const cutouts: Buffer[] = [];
+  for (const element of records) {
+    const bytes = await deps.store.get(element.cutoutRef);
+    if (!bytes) {
+      job.status = "failed";
+      job.errorCode = "element_image_missing";
+      return finish(deps, job);
+    }
+    cutouts.push(bytes);
+  }
+  let png: Buffer;
+  try {
+    png = await composeCollage(cutouts, size);
+  } catch {
+    job.status = "failed";
+    job.errorCode = "collage_failed";
+    return finish(deps, job);
+  }
+  const imageRef = buildSceneImageRef(job.boardId, job.id, "png");
+  await deps.store.put(imageRef, png, "image/png");
+  job.status = "ready";
+  job.kind = "collage";
+  job.imageRef = imageRef;
+  job.costUsd = 0;
+  return finish(deps, job);
+}
+
+/**
  * Run one pending job. Idempotent: a job already running or in a
  * terminal state is returned as-is without any port call. Port
  * refusals/failures become typed terminal states, never a throw;
@@ -486,7 +551,7 @@ export async function runSceneJob(
   try {
     await syncScene(deps, job); // status running, for the gallery poll
 
-    const elements: ComposeSceneElement[] = [];
+    const records: Element[] = [];
     for (const elementId of job.elementIds) {
       const element = await deps.boards.getElement(elementId);
       if (!element || element.boardId !== boardId) {
@@ -495,6 +560,14 @@ export async function runSceneJob(
         job.errorCode = "element_missing";
         return finish(deps, job);
       }
+      records.push(element);
+    }
+    // Offline/demo mode (PIN-71): the collage is the composer; the
+    // SceneComposer port (and its budget reserve) is never called.
+    if (deps.collageMode) return finishCollage(deps, job, records);
+
+    const elements: ComposeSceneElement[] = [];
+    for (const element of records) {
       const composed = await composeElement(deps, element);
       if (!composed) {
         job.status = "failed";
@@ -523,6 +596,11 @@ export async function runSceneJob(
       return finish(deps, job);
     }
     if (outcome.status !== "ready") {
+      // Over budget (PIN-71): the collage appears instead, clearly
+      // labelled kind "collage" — never a silent mock swap.
+      if (isBudgetFallback(outcome.errorCode)) {
+        return finishCollage(deps, job, records);
+      }
       job.status = "failed";
       job.errorCode = outcome.errorCode ?? "scene_failed";
       return finish(deps, job);
@@ -545,6 +623,7 @@ export async function runSceneJob(
     const imageRef = buildSceneImageRef(boardId, job.id, kind.ext);
     await deps.store.put(imageRef, bytes, kind.contentType);
     job.status = "ready";
+    job.kind = "ai";
     job.imageRef = imageRef;
     // Gateway reserve proxy (Spark-token estimate until /responses
     // prices publish); the provider dashboard is authoritative.
