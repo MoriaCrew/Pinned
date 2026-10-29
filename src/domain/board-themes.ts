@@ -4,7 +4,12 @@
  * design tokens + a motif, never a host. Theme ids match the ids
  * stored on pre-pivot games (`presetId`) so existing boards keep
  * their art; new boards store the same id as `themeId`.
+ *
+ * PIN-96: boards now wear design-system skins (`./skins`). A skin id
+ * is a valid stored `themeId` too; these first-generation themes stay
+ * readable and render through `skinForTheme`.
  */
+import { isSkinId } from "./skins";
 
 export interface BoardThemeTokens {
   accent: string;
@@ -87,8 +92,9 @@ export function getBoardTheme(id: string | undefined | null): BoardTheme | null 
   return BOARD_THEMES.find((theme) => theme.id === id) ?? null;
 }
 
+/** A storable board look: a design-system skin id or a first-generation theme id. */
 export function isBoardThemeId(value: unknown): value is string {
-  return typeof value === "string" && getBoardTheme(value) !== null;
+  return isSkinId(value) || (typeof value === "string" && getBoardTheme(value) !== null);
 }
 
 /**
