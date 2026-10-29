@@ -118,6 +118,35 @@ export interface Scene {
   createdAt: number;
 }
 
+/**
+ * One photo-decompose run (docs/11 section 5.3, PIN-64). The job
+ * id doubles as Element.sourcePhotoId. `workingRef` points at the
+ * stripped working copy under `tmp/` (photo-intake derivative),
+ * never at original upload bytes. `elementIds`/`pinIds` grow as
+ * each SAM call lands, so a polling client sees candidate pins
+ * pop in while the job is still running. Persistence lives behind
+ * the DecomposeJobStore port in src/server/decompose-job.ts
+ * (Firestore home boards/{slug}/jobs/{id} is reserved, PIN-63).
+ */
+export interface DecomposeJob {
+  id: string;
+  boardId: string;
+  participantId: string; // Participant.id of the uploader
+  status: SceneStatus; // pending -> running -> ready / failed / refused
+  /** Stripped working copy under `tmp/`; deleted by later slices. */
+  workingRef: string;
+  promptVersion: string; // elements prompt actually used
+  elementIds: string[];
+  pinIds: string[];
+  /** Policy faces=note and the namer flagged a face: show the note. */
+  faceNote: boolean;
+  /** Concepts that produced no usable pin (partial failure count). */
+  failedConceptCount: number;
+  errorCode?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type BoardEventType =
   | "element_added"
   | "pin_added"

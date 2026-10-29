@@ -11,6 +11,11 @@ const Range = z.object({
   max: z.number().int().min(0),
 });
 
+const FractionRange = z.object({
+  min: z.number().min(0).max(1),
+  max: z.number().min(0).max(1),
+});
+
 export const PolicySchema = z
   .object({
     elementsPerPhoto: Range.default({ min: 1, max: 6 }),
@@ -38,6 +43,11 @@ export const PolicySchema = z
     /** Backoff before the single 429/5xx retry (PIN-61). */
     retryBackoffMs: z.number().int().min(0).default(500),
     samConcurrency: z.number().int().min(1).default(4),
+    /** Usable-mask window, share of frame (PIN-50 lock: 0.5%-60%). */
+    usableMaskFrameFraction: FractionRange.default({ min: 0.005, max: 0.6 }),
+    /** Flattened scene-input bounds (docs/11 section 5.6, PIN-50 spike). */
+    flattenedMaxPx: z.number().int().positive().default(1024),
+    flattenedPaddingFraction: z.number().min(0).max(1).default(0.08),
     maxTokens: z
       .object({
         // Spike: 1500 starved Spark reasoning; 4000 required.
@@ -82,6 +92,13 @@ export const PolicySchema = z
         message: "elementsPerPhoto.max < min",
       });
     }
+    if (p.usableMaskFrameFraction.max < p.usableMaskFrameFraction.min) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["usableMaskFrameFraction"],
+        message: "usableMaskFrameFraction.max < min",
+      });
+    }
     if (p.pinsPerScene.max < p.pinsPerScene.min) {
       ctx.addIssue({
         code: "custom",
@@ -96,6 +113,7 @@ export type Policy = z.infer<typeof PolicySchema>;
 export const DEFAULT_POLICY: Policy = PolicySchema.parse({});
 
 const RangeOverride = Range.partial();
+const FractionRangeOverride = FractionRange.partial();
 export const PolicyOverridesSchema = z.object({
   elementsPerPhoto: RangeOverride.optional(),
   conceptMaxWords: z.number().int().min(1).optional(),
@@ -118,6 +136,9 @@ export const PolicyOverridesSchema = z.object({
   retries: z.number().int().min(0).optional(),
   retryBackoffMs: z.number().int().min(0).optional(),
   samConcurrency: z.number().int().min(1).optional(),
+  usableMaskFrameFraction: FractionRangeOverride.optional(),
+  flattenedMaxPx: z.number().int().positive().optional(),
+  flattenedPaddingFraction: z.number().min(0).max(1).optional(),
   maxTokens: z
     .object({ sparkElements: z.number().int().positive().optional() })
     .optional(),

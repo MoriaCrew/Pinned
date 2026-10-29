@@ -6,6 +6,7 @@ import {
   decodeSegment,
   maskAt,
   renderCutout,
+  renderFlattened,
   renderMask,
   renderOverlay,
 } from "./sam-mask";
@@ -87,6 +88,20 @@ describe("compositing", () => {
     let opaque = 0;
     for (let i = 3; i < data.length; i += 4) if (data[i] === 255) opaque++;
     expect(opaque).toBe(decoded.maskPixels);
+  });
+
+  it("flattened copy is a white-padded JPEG bounded by the given max px", async () => {
+    const { image, decoded } = await fixture();
+    const cutout = await renderCutout(image, decoded);
+    const flat = await renderFlattened(cutout, { maxPx: 40, paddingFraction: 0.08 });
+    const meta = await sharp(flat).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBeLessThanOrEqual(40);
+    // Top-left corner lands in the padding: plain white.
+    const { data } = await sharp(flat).raw().toBuffer({ resolveWithObject: true });
+    expect(data[0]).toBeGreaterThan(240);
+    expect(data[1]).toBeGreaterThan(240);
+    expect(data[2]).toBeGreaterThan(240);
   });
 
   it("overlay tints masked pixels and mask render is binary", async () => {

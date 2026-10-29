@@ -22,6 +22,16 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(resolvePolicy({ retryBackoffMs: 0 }).retryBackoffMs).toBe(0);
     expect(DEFAULT_POLICY.elementsPerPhoto).toEqual({ min: 1, max: 6 });
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
+    // PIN-50 usable-mask window + flattened bounds (PIN-64).
+    expect(DEFAULT_POLICY.usableMaskFrameFraction).toEqual({ min: 0.005, max: 0.6 });
+    expect(DEFAULT_POLICY.flattenedMaxPx).toBe(1024);
+    expect(DEFAULT_POLICY.flattenedPaddingFraction).toBe(0.08);
+    expect(
+      resolvePolicy({ usableMaskFrameFraction: { max: 0.5 } }).usableMaskFrameFraction,
+    ).toEqual({ min: 0.005, max: 0.5 });
+    expect(() =>
+      resolvePolicy({ usableMaskFrameFraction: { min: 0.7, max: 0.6 } }),
+    ).toThrow();
   });
 
   it("merge order is defaults < env < board, deep for nested", () => {
