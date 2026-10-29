@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -127,6 +128,11 @@ export function AuthProvider({
   );
   const [signInError, setSignInError] = useState(false);
   const router = useRouter();
+  // PIN-86: bumped by every explicit sign-in/out. A hydrate run
+  // only applies its result while the epoch it started in is
+  // still current, so a slow hydrate can never resurrect a
+  // session the user explicitly ended (or clobber a fresh one).
+  const authEpoch = useRef(0);
 
   // PIN-86: every effect run awaits the shared hydrate (no
   // "started" latch to strand status at "loading", no competing
@@ -135,8 +141,9 @@ export function AuthProvider({
   useEffect(() => {
     if (!config) return;
     let cancelled = false;
+    const runEpoch = authEpoch.current;
     void hydrateSession(config).then((result) => {
-      if (cancelled) return;
+      if (cancelled || authEpoch.current !== runEpoch) return;
       if (result.user) {
         setUser(result.user);
         setStatus("signedIn");
@@ -159,6 +166,7 @@ export function AuthProvider({
       const idToken = await signInWithGoogle(config);
       const signedIn = await postSession(idToken);
       if (!signedIn) throw new Error("session failed");
+      authEpoch.current += 1;
       setUser(signedIn);
       setStatus("signedIn");
       // PIN-86: server pages (/me/*) read the cookie server-side;
@@ -188,6 +196,7 @@ export function AuthProvider({
       // Cookie clear is idempotent server-side; still sign out locally.
     }
     await signOutFirebase(config).catch(() => {});
+    authEpoch.current += 1;
     setUser(null);
     setStatus("signedOut");
     router.refresh();
