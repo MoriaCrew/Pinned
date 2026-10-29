@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   authInitials,
+  defaultJoinName,
   resolveAuthUi,
   shouldShowSignInNudge,
 } from "./auth-ui";
@@ -52,6 +53,30 @@ describe("authInitials", () => {
     expect(authInitials("  Jo  van Der Berg ")).toBe("JB");
     expect(authInitials(null)).toBe("?");
     expect(authInitials("")).toBe("?");
+  });
+});
+
+describe("defaultJoinName", () => {
+  it("passes a normal profile name through", () => {
+    expect(defaultJoinName("Robin Elm")).toBe("Robin Elm");
+  });
+
+  it("trims and collapses whitespace", () => {
+    expect(defaultJoinName("  Aye   Chan  ")).toBe("Aye Chan");
+  });
+
+  it("caps at the server 30-character limit", () => {
+    expect([...defaultJoinName("x".repeat(40))]).toHaveLength(30);
+  });
+
+  it("neutralises control characters the server rejects", () => {
+    expect(defaultJoinName("A\u0001B")).toBe("A B");
+  });
+
+  it("returns empty for missing or blank names", () => {
+    expect(defaultJoinName(null)).toBe("");
+    expect(defaultJoinName(undefined)).toBe("");
+    expect(defaultJoinName("   ")).toBe("");
   });
 });
 

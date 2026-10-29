@@ -32,7 +32,11 @@ import { chooseShareAction, sceneShareFilename } from "../../../domain/board-pre
 import type { ActivityLine } from "../../../domain/board-activity";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
-import { shouldShowSignInNudge, SIGN_IN_NUDGE_STORAGE_KEY } from "../../../domain/auth-ui";
+import {
+  defaultJoinName,
+  shouldShowSignInNudge,
+  SIGN_IN_NUDGE_STORAGE_KEY,
+} from "../../../domain/auth-ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { AddSheet, boardQueryKey } from "./AddSheet";
 import { MakeSheet } from "./MakeSheet";
@@ -646,7 +650,12 @@ function BoardBody({
         </section>
       ) : null}
 
-      <JoinSection slug={slug} me={view.me} onJoined={handleJoined} />
+      <JoinSection
+        slug={slug}
+        me={view.me}
+        profileName={auth.user?.displayName ?? null}
+        onJoined={handleJoined}
+      />
 
       {shouldShowSignInNudge({
         authEnabled: auth.enabled,
@@ -820,14 +829,17 @@ function BoardBody({
 function JoinSection({
   slug,
   me,
+  profileName,
   onJoined,
 }: {
   slug: string;
   me: { id: string; displayName: string } | null;
+  profileName: string | null;
   onJoined: (participant: { id: string; displayName: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(me?.displayName ?? "");
+  const [nameTouched, setNameTouched] = useState(false);
   const [reclaimPin, setReclaimPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -835,6 +847,15 @@ function JoinSection({
   useEffect(() => {
     if (me && !editing) setDisplayName(me.displayName);
   }, [me, editing]);
+
+  // PIN-87: signed in but not joined yet -> prefill the profile
+  // name (auth hydrates async, so this runs when it lands).
+  // Never overwrites typing: once touched, the field is theirs.
+  useEffect(() => {
+    if (me || nameTouched) return;
+    const prefill = defaultJoinName(profileName);
+    if (prefill) setDisplayName(prefill);
+  }, [me, nameTouched, profileName]);
 
   if (me && !editing) {
     return (
@@ -888,7 +909,10 @@ function JoinSection({
         <input
           id="join-name"
           value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
+          onChange={(event) => {
+            setNameTouched(true);
+            setDisplayName(event.target.value);
+          }}
           placeholder={t("en", "join.namePlaceholder")}
           autoComplete="nickname"
           required
