@@ -664,7 +664,10 @@ describe("remix (PIN-79, docs/11 section 5.7)", () => {
     expect(child.promptVersion).toBe("scene.v1");
 
     const scene = await h.boards.getScene(child.id);
-    expect(scene).toMatchObject({ parentSceneId: parent.id, elementIds: ["el3"], status: "ready" });
+    // Scene carries the credit union (new first, then parent's) so
+    // credits + the delete cascade see every contributor.
+    expect(scene).toMatchObject({ parentSceneId: parent.id, elementIds: ["el3", "el1", "el2"], status: "ready" });
+    expect(child.creditElementIds).toEqual(["el3", "el1", "el2"]);
     expect(publicScene("board-1", scene!)).toMatchObject({ parentSceneId: parent.id });
 
     expect(h.calls).toHaveLength(2);
@@ -804,6 +807,29 @@ describe("remix (PIN-79, docs/11 section 5.7)", () => {
     );
     expect(child).toMatchObject({ status: "failed", errorCode: "parent_missing" });
     expect(h.calls).toHaveLength(1);
+  });
+
+  it("delete cascade hides a remix child when a PARENT contributor deletes their element", async () => {
+    const h = await makeHarness();
+    const parent = await readyParent(h); // el1 (p1) + el2 (p2)
+    const child = await startSceneJob(
+      {
+        boardId: "board-1",
+        participantId: "p1",
+        elementIds: ["el3"],
+        prompt: "remix",
+        parentSceneId: parent.id,
+      },
+      h.deps,
+    );
+    expect(child.status).toBe("ready");
+    // p2 deletes el2 — used only via the parent, never a child pin.
+    const result = await h.boards.deleteElement("el2");
+    expect(result.hiddenSceneIds).toContain(parent.id);
+    expect(result.hiddenSceneIds).toContain(child.id);
+    expect((await h.boards.getScene(child.id))?.hidden).toBe(true);
+    const visible = await h.boards.listScenes("board-1");
+    expect(visible.map((s) => s.id)).not.toContain(child.id);
   });
 
   it("requestScene parses parentSceneId and maps a bad parent to a 404 BoardApiError", async () => {

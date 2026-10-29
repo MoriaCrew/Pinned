@@ -208,12 +208,48 @@ function startOfUtcDay(now: number): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+/**
+ * Remix credit/cascade set (PIN-79): the new pins plus every
+ * ancestor scene's elementIds, walking parentSceneId on the same
+ * board (cycle-safe). Snapshotted onto the job so the Scene can
+ * carry it for credits and the delete cascade.
+ */
+async function remixCreditElementIds(
+  deps: SceneJobDeps,
+  boardId: string,
+  parentSceneId: string,
+  newElementIds: string[],
+): Promise<string[]> {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const push = (id: string) => {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  };
+  newElementIds.forEach(push);
+  const visited = new Set<string>();
+  let cursor: string | undefined = parentSceneId;
+  while (cursor && !visited.has(cursor)) {
+    visited.add(cursor);
+    const ancestor = await deps.boards.getScene(cursor);
+    if (!ancestor || ancestor.boardId !== boardId) break;
+    ancestor.elementIds.forEach(push);
+    cursor = ancestor.parentSceneId;
+  }
+  return ids;
+}
+
 function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
   return {
     id: job.id,
     boardId: job.boardId,
     createdBy: job.participantId,
-    elementIds: [...job.elementIds],
+    // Remix children carry the full credit union here so the
+    // delete cascade (keyed on Scene.elementIds) hides them when
+    // ANY contributing element — parent's included — is deleted.
+    elementIds: [...(job.creditElementIds ?? job.elementIds)],
     prompt: job.prompt,
     status: job.status,
     ...(job.imageRef ? { imageRef: job.imageRef } : {}),
@@ -243,7 +279,7 @@ async function syncScene(deps: SceneJobDeps, job: SceneJob): Promise<Scene> {
   const scene = sceneFromJob(job, existing?.boardId === job.boardId ? existing.hidden : undefined);
   await deps.boards.putScene(scene);
   if (!scene.hidden) {
-    for (const elementId of job.elementIds) {
+    for (const elementId of scene.elementIds) {
       const element = await deps.boards.getElement(elementId);
       if (!element || element.boardId !== job.boardId) {
         const hiddenScene: Scene = { ...scene, hidden: true };
@@ -344,6 +380,10 @@ export async function startSceneJob(
     }
   }
 
+  const creditElementIds = parentSceneId
+    ? await remixCreditElementIds(deps, input.boardId, parentSceneId, elementIds)
+    : undefined;
+
   const sceneId = input.sceneId?.trim();
   if (sceneId) {
     if (!SCENE_ID.test(sceneId)) {
@@ -426,6 +466,7 @@ export async function startSceneJob(
     prompt,
     status: "pending",
     ...(parentSceneId ? { parentSceneId } : {}),
+    ...(creditElementIds ? { creditElementIds } : {}),
     promptVersion: policy.promptVersions.scene,
     createdAt: at,
     updatedAt: at,
