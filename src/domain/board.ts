@@ -101,6 +101,14 @@ export interface Pin {
 /** Job lifecycle shared with docs/11 §5.3. */
 export type SceneStatus = "pending" | "running" | "ready" | "failed" | "refused";
 
+/**
+ * How a ready scene image was made (PIN-71): a Muse Image compose
+ * ("ai") or the sharp mock collage fallback ("collage") used under
+ * AI_MOCK / over budget. A collage is never recorded as an AI
+ * scene. Absent on pre-PIN-71 records (all of them AI scenes).
+ */
+export type SceneKind = "ai" | "collage";
+
 export interface Scene {
   id: string;
   boardId: string;
@@ -111,6 +119,8 @@ export interface Scene {
   imageRef?: string; // under `scenes/` once ready
   parentSceneId?: string; // remix parent (§5.7)
   promptVersion: string; // e.g. "scene.v1", stored with every output
+  /** "collage" = sharp mock-collage fallback; absent = AI scene. */
+  kind?: SceneKind;
   costUsd?: number;
   refusalReason?: string;
   /** Set by the delete cascade when a used element is deleted (§5.4). */
@@ -170,6 +180,8 @@ export interface SceneJob {
   promptVersion: string; // scene prompt actually used
   /** Stored scene image under `scenes/` once ready. */
   imageRef?: string;
+  /** "collage" = sharp mock-collage fallback; absent = AI scene. */
+  kind?: SceneKind;
   /** Cost estimate (gateway reserve proxy; dashboard authoritative). */
   costUsd?: number;
   refusalReason?: string;

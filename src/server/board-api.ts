@@ -38,6 +38,8 @@ export interface BoardApiDeps {
   /** Scene slice (PIN-69); scene functions 503 cleanly without them. */
   sceneJobs?: SceneJobStore;
   composer?: SceneComposer;
+  /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
+  collageMode?: boolean;
   policy: Policy;
   now?: () => number;
   createSlug?: () => string;
@@ -62,6 +64,8 @@ export function publicScene(slug: string, scene: Scene) {
     elementIds: scene.elementIds,
     prompt: scene.prompt,
     status: scene.status,
+    // Pre-PIN-71 scenes are all AI composes; collages say so.
+    kind: scene.kind ?? "ai",
     promptVersion: scene.promptVersion,
     ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
     ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
@@ -81,6 +85,7 @@ export function publicSceneJob(job: SceneJob) {
     status: job.status,
     elementIds: job.elementIds,
     prompt: job.prompt,
+    kind: job.kind ?? "ai",
     promptVersion: job.promptVersion,
     ...(job.errorCode ? { errorCode: job.errorCode } : {}),
     ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
@@ -539,6 +544,7 @@ export async function requestScene(
         jobs: sceneJobs,
         store: deps.store,
         composer,
+        collageMode: deps.collageMode ?? false,
         policy: deps.policy,
         now: deps.now,
         newId: deps.newId,

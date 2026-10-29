@@ -298,6 +298,9 @@ function BoardBody({
         ) : (
           <p role="status">{t("en", "make.cooking")}</p>
         )}
+        {scene.status === "ready" && scene.kind === "collage" ? (
+          <p className="state-pill">{t("en", "make.collage")}</p>
+        ) : null}
         <p className="scene-prompt">{scene.prompt}</p>
         {parts.length > 0 ? (
           <p className="scene-credit">

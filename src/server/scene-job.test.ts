@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   emptyBoardCounters,
@@ -627,5 +628,94 @@ describe("deleted-element exclusion and hidden scenes", () => {
       createdAt: T0,
     });
     expect(await resolveSceneImage("board-1", "forged", h.api)).toBeNull();
+    // Pre-PIN-71 records carry no kind: the API reports them "ai".
+    expect(publicScene("board-1", (await h.boards.getScene("forged"))!).kind).toBe("ai");
   });
+});
+
+describe("mock collage fallback (PIN-71)", () => {
+  // The harness cut-out bytes are the mock composer's header-only
+  // 1x1 PNG, which sharp cannot decode; real cut-outs are
+  // sharp-produced. Seed decodable cut-outs for the collage path.
+  async function seedCutouts(h: Harness): Promise<void> {
+    const png = await sharp({
+      create: { width: 30, height: 20, channels: 4, background: { r: 20, g: 160, b: 200, alpha: 1 } },
+    })
+      .png()
+      .toBuffer();
+    for (let i = 1; i <= 5; i += 1) {
+      const el = await h.boards.getElement(`el${i}`);
+      await h.store.put(el!.cutoutRef, png, "image/png");
+    }
+  }
+
+  it("collageMode (AI_MOCK) composes the cut-outs with NO composer call, kind collage at $0", async () => {
+    const h = await makeHarness();
+    await seedCutouts(h);
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2", "el3"], prompt: "in a tiny museum" },
+      { ...h.deps, collageMode: true },
+    );
+    expect(job).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
+    expect(h.calls).toHaveLength(0); // offline: no port call, no reserve
+    expect(job.imageRef).toBe(buildSceneImageRef("board-1", job.id, "png"));
+    const bytes = await h.store.get(job.imageRef as string);
+    expect(bytes).not.toBeNull();
+    // A real collage at Policy.sceneSize, not the mock's 1x1 PNG.
+    const meta = await sharp(bytes as Buffer).metadata();
+    expect(meta).toMatchObject({ format: "png", width: 1024, height: 1536 });
+    const scene = await h.boards.getScene(job.id);
+    expect(scene).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
+    expect(publicScene("board-1", scene!).kind).toBe("collage");
+    const types = (await h.boards.listEvents("board-1"))
+      .filter((e) => e.sceneId === job.id)
+      .map((e) => e.type);
+    expect(types).toEqual(["scene_requested", "scene_ready"]);
   });
+
+  it("an over-budget composer outcome falls back to the collage (labelled, $0)", async () => {
+    const h = await makeHarness();
+    await seedCutouts(h);
+    h.setBehavior({ kind: "cap", errorCode: "budget" });
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2"], prompt: "picnic" },
+      h.deps,
+    );
+    expect(h.calls).toHaveLength(1); // the (denied) port attempt happened
+    expect(job).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
+    expect((await h.boards.getScene(job.id))?.kind).toBe("collage");
+    expect(await h.store.get(job.imageRef as string)).not.toBeNull();
+  });
+
+  it("an AI ready scene is recorded kind ai (collage is never disguised, and vice versa)", async () => {
+    const h = await makeHarness();
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "museum" },
+      h.deps,
+    );
+    expect(job).toMatchObject({ status: "ready", kind: "ai" });
+    expect(job.costUsd).toBeGreaterThan(0);
+    expect((await h.boards.getScene(job.id))?.kind).toBe("ai");
+  });
+
+  it("collageMode still excludes deleted elements and reports missing cut-outs as failed", async () => {
+    const h = await makeHarness();
+    await h.boards.deleteElement("el3");
+    const denied = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el3"], prompt: "x" },
+      { ...h.deps, collageMode: true },
+    ).catch((e: unknown) => e);
+    expect(denied).toMatchObject({ code: "element_not_found" });
+
+    // Cut-out bytes gone from the store: typed failed, never a fake image.
+    const missing = await makeHarness();
+    const el1 = await missing.boards.getElement("el1");
+    await missing.store.delete(el1!.cutoutRef);
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "x" },
+      { ...missing.deps, collageMode: true },
+    );
+    expect(job).toMatchObject({ status: "failed", errorCode: "element_image_missing" });
+    expect(job.imageRef).toBeUndefined();
+  });
+});
