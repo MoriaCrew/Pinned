@@ -199,6 +199,40 @@ export async function renderCutout(
   return sharp(out, { raw: { width: outW, height: outH, channels } }).png().toBuffer();
 }
 
+/**
+ * Flattened scene-input copy (docs/11 section 5.6, PIN-50 spike):
+ * the transparent cut-out composited on plain white with padding,
+ * bounded to `maxPx` and encoded as JPEG. Bounds come from Policy
+ * (flattenedMaxPx / flattenedPaddingFraction), passed in by caller.
+ */
+export async function renderFlattened(
+  cutoutPng: Uint8Array,
+  opts: { maxPx: number; paddingFraction: number },
+): Promise<Buffer> {
+  const meta = await sharp(Buffer.from(cutoutPng)).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (!(width > 0 && height > 0)) throw new SamMaskError("Cut-out has no size.");
+  const pad = Math.round(Math.max(width, height) * opts.paddingFraction);
+  // Two steps: in one sharp pipeline resize runs before composite,
+  // which would shrink the canvas below the cut-out's size.
+  const padded = await sharp({
+    create: {
+      width: width + pad * 2,
+      height: height + pad * 2,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  })
+    .composite([{ input: Buffer.from(cutoutPng), left: pad, top: pad }])
+    .png()
+    .toBuffer();
+  return sharp(padded)
+    .resize({ width: opts.maxPx, height: opts.maxPx, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
+
 /** The mask alone as a grayscale PNG at mask resolution. */
 export async function renderMask(segment: DecodedSegment): Promise<Buffer> {
   const gray = Buffer.alloc(segment.raster.length);
