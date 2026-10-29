@@ -137,6 +137,54 @@ export function describeBoardRepositoryContract(
       expect(events[0].id).not.toBe(events[1].id);
     });
 
+    it("reclaim attempts: atomic mutate, isolated copies, clear, per-board keys (PIN-90)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createBoard(makeBoard({ slug: "board-b" }));
+      expect(await repo.getReclaimAttempt(SLUG, "key-a")).toBeNull();
+
+      const first = await repo.mutateReclaimAttempt(SLUG, "key-a", (current) => {
+        expect(current).toBeNull();
+        return {
+          boardId: SLUG,
+          key: "key-a",
+          failures: 1,
+          firstFailureAt: 2_000,
+          lastFailureAt: 2_000,
+          lockedUntil: 0,
+        };
+      });
+      expect(first?.failures).toBe(1);
+      first!.failures = 99;
+      expect((await repo.getReclaimAttempt(SLUG, "key-a"))?.failures).toBe(1);
+
+      const second = await repo.mutateReclaimAttempt(SLUG, "key-a", (current) => ({
+        ...(current as NonNullable<typeof current>),
+        failures: (current?.failures ?? 0) + 1,
+        lastFailureAt: 2_100,
+        lockedUntil: 3_000,
+      }));
+      expect(second).toMatchObject({ failures: 2, lockedUntil: 3_000 });
+      // Same key on another board is a separate counter.
+      expect(await repo.getReclaimAttempt("board-b", "key-a")).toBeNull();
+
+      expect(await repo.mutateReclaimAttempt(SLUG, "key-a", () => null)).toBeNull();
+      expect(await repo.getReclaimAttempt(SLUG, "key-a")).toBeNull();
+      await expect(
+        repo.mutateReclaimAttempt("ghost-board", "key-a", () => null),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        repo.mutateReclaimAttempt(SLUG, "key-a", () => ({
+          boardId: SLUG,
+          key: "other-key",
+          failures: 1,
+          firstFailureAt: 2_000,
+          lastFailureAt: 2_000,
+          lockedUntil: 0,
+        })),
+      ).rejects.toThrow(RangeError);
+    });
+
     it("rejects writes against a missing board", async () => {
       const repo = makeRepo();
       await expect(repo.putParticipant(makeParticipant())).rejects.toThrow(RangeError);

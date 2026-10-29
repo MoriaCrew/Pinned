@@ -10,10 +10,25 @@ import "server-only";
  * Policy. The cookie payload reuses the player shape
  * (gameId = board slug, playerId = participant id) and the same
  * cookie name, so one browser identity carries across the pivot.
+ *
+ * PIN-90 hardens the reclaim path: a PIN-bearing join against an
+ * existing name either reclaims it or fails with ONE uniform error
+ * (wrong PIN, no PIN on file, and locked-out are byte-identical to
+ * the caller, with a dummy hash check on every failure path).
+ * Failures are counted per (board, name) and per (board, IP) in the
+ * BoardRepository — shared across instances — with Policy-owned
+ * thresholds and an exponentially growing lockout. A PIN-bearing
+ * join for a name nobody has taken is still a first join (it sets
+ * the PIN), and a first-try correct reclaim succeeds unchanged.
  */
 import { randomUUID } from "node:crypto";
 import type { Participant } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
+import {
+  isReclaimLocked,
+  recordReclaimFailure,
+  type ReclaimLockoutParams,
+} from "../domain/reclaim-lockout";
 import {
   hashToken,
   signPlayerCookie,
@@ -58,6 +73,11 @@ export interface JoinBoardResult {
   outcome: "created" | "updated" | "reclaimed" | "restored";
 }
 
+/** Per-request join context; the IP only ever reaches storage hashed. */
+export interface JoinBoardContext {
+  clientIp?: string | null;
+}
+
 function requireSessionSecret(secret: string | null): string {
   if (!secret || secret.length < 32) {
     throw new BoardApiError("Board sessions are not configured on this server.", 503);
@@ -67,6 +87,44 @@ function requireSessionSecret(secret: string | null): string {
 
 function reclaimPinHash(slug: string, pin: string): string {
   return hashToken(`${slug}:${pin}`);
+}
+
+/** The one reclaim-failure error: same status/body for every cause. */
+function reclaimFailedError(): BoardApiError {
+  return new BoardApiError(
+    "That name and secret number didn't match. Check both and try again.",
+    401,
+    "reclaim_failed",
+  );
+}
+
+/** Dummy hash so failed reclaims do the same hash work as real ones. */
+const DUMMY_PIN_HASH = hashToken("pinned-reclaim:v1:dummy");
+
+function nameAttemptKey(slug: string, lowerName: string): string {
+  return hashToken(`pinned-reclaim:v1:name:${slug}:${lowerName}`);
+}
+
+function ipAttemptKey(slug: string, clientIp: string): string {
+  return hashToken(`pinned-reclaim:v1:ip:${slug}:${clientIp}`);
+}
+
+function nameLockoutParams(policy: Policy): ReclaimLockoutParams {
+  return {
+    maxFailures: policy.reclaimMaxFailuresPerName,
+    failureWindowMs: policy.reclaimFailureWindowMs,
+    lockoutBaseMs: policy.reclaimLockoutBaseMs,
+    lockoutMaxMs: policy.reclaimLockoutMaxMs,
+  };
+}
+
+function ipLockoutParams(policy: Policy): ReclaimLockoutParams {
+  return {
+    maxFailures: policy.reclaimMaxFailuresPerIp,
+    failureWindowMs: policy.reclaimFailureWindowMs,
+    lockoutBaseMs: policy.reclaimLockoutBaseMs,
+    lockoutMaxMs: policy.reclaimLockoutMaxMs,
+  };
 }
 
 export interface JoinBoardInput {
@@ -169,11 +227,68 @@ export async function restoreParticipantSession(
   return issueSession(participant, deps, now, "restored");
 }
 
+/**
+ * PIN-90 reclaim attempt against an existing name. Returns the
+ * reclaimed participant, or throws the one uniform failure error.
+ * Locks are checked before any PIN verification (a locked name/IP
+ * refuses even the correct PIN until the lock expires), and locked
+ * attempts do not extend the lock. Every failure path runs at
+ * least one hash verification so timing stays coarse-uniform.
+ */
+async function attemptReclaim(
+  slug: string,
+  input: Required<JoinBoardInput>,
+  sameName: Participant[],
+  deps: BoardSessionDeps,
+  now: number,
+  context: JoinBoardContext | undefined,
+): Promise<Participant> {
+  const nameKey = nameAttemptKey(slug, input.displayName.toLowerCase());
+  const ipKey = context?.clientIp ? ipAttemptKey(slug, context.clientIp) : null;
+  const token = `${slug}:${input.reclaimPin}`;
+
+  const nameState = await deps.boards.getReclaimAttempt(slug, nameKey);
+  const ipState = ipKey ? await deps.boards.getReclaimAttempt(slug, ipKey) : null;
+  if (isReclaimLocked(nameState, now) || isReclaimLocked(ipState, now)) {
+    verifyToken(token, DUMMY_PIN_HASH);
+    throw reclaimFailedError();
+  }
+
+  const candidates = sameName.filter((p) => p.reclaimPinHash);
+  let reclaimed: Participant | undefined;
+  if (candidates.length === 0) {
+    verifyToken(token, DUMMY_PIN_HASH);
+  } else {
+    reclaimed = candidates.find((p) =>
+      verifyToken(token, p.reclaimPinHash as string),
+    );
+  }
+
+  if (!reclaimed) {
+    await deps.boards.mutateReclaimAttempt(slug, nameKey, (current) =>
+      recordReclaimFailure(slug, nameKey, current, now, nameLockoutParams(deps.policy)),
+    );
+    if (ipKey) {
+      await deps.boards.mutateReclaimAttempt(slug, ipKey, (current) =>
+        recordReclaimFailure(slug, ipKey, current, now, ipLockoutParams(deps.policy)),
+      );
+    }
+    throw reclaimFailedError();
+  }
+
+  await deps.boards.mutateReclaimAttempt(slug, nameKey, () => null);
+  if (ipKey) {
+    await deps.boards.mutateReclaimAttempt(slug, ipKey, () => null);
+  }
+  return reclaimed;
+}
+
 export async function joinBoard(
   slug: string,
   rawInput: unknown,
   existingCookieValue: string | null,
   deps: BoardSessionDeps,
+  context?: JoinBoardContext,
 ): Promise<JoinBoardResult> {
   requireSessionSecret(deps.sessionSecret);
   const input = parseJoinBoardInput(rawInput);
@@ -195,13 +310,18 @@ export async function joinBoard(
 
   if (input.reclaimPin) {
     const wantedName = input.displayName.toLowerCase();
-    const candidates = (await deps.boards.listParticipants(slug)).filter(
-      (p) => p.displayName.toLowerCase() === wantedName && p.reclaimPinHash,
+    const sameName = (await deps.boards.listParticipants(slug)).filter(
+      (p) => p.displayName.toLowerCase() === wantedName,
     );
-    const reclaimed = candidates.find((p) =>
-      verifyToken(`${slug}:${input.reclaimPin}`, p.reclaimPinHash as string),
-    );
-    if (reclaimed) {
+    if (sameName.length > 0) {
+      const reclaimed = await attemptReclaim(
+        slug,
+        { displayName: input.displayName, reclaimPin: input.reclaimPin },
+        sameName,
+        deps,
+        now,
+        context,
+      );
       return issueSession({ ...reclaimed, ...updates }, deps, now, "reclaimed");
     }
   }

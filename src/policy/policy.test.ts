@@ -39,6 +39,17 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       sparkChips: 800,
     });
     expect(resolvePolicy({ boardPollIntervalMs: 1_000 }).boardPollIntervalMs).toBe(1_000);
+    // PIN-90 reclaim-PIN lockout thresholds.
+    expect(DEFAULT_POLICY.reclaimMaxFailuresPerName).toBe(5);
+    expect(DEFAULT_POLICY.reclaimMaxFailuresPerIp).toBe(20);
+    expect(DEFAULT_POLICY.reclaimFailureWindowMs).toBe(900_000);
+    expect(DEFAULT_POLICY.reclaimLockoutBaseMs).toBe(60_000);
+    expect(DEFAULT_POLICY.reclaimLockoutMaxMs).toBe(3_600_000);
+    expect(resolvePolicy({ reclaimMaxFailuresPerName: 2 }).reclaimMaxFailuresPerName).toBe(2);
+    expect(() => resolvePolicy({ reclaimMaxFailuresPerName: 0 })).toThrow();
+    expect(() =>
+      resolvePolicy({ reclaimLockoutBaseMs: 2_000, reclaimLockoutMaxMs: 1_000 }),
+    ).toThrow();
     expect(() => resolvePolicy({ boardPollIntervalMs: 10 })).toThrow();
     // PIN-50 usable-mask window + flattened bounds (PIN-64).
     expect(DEFAULT_POLICY.usableMaskFrameFraction).toEqual({ min: 0.005, max: 0.6 });

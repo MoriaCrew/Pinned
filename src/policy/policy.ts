@@ -33,6 +33,15 @@ export const PolicySchema = z
     participantsPerBoard: z.number().int().min(1).default(50),
     boardTitleMaxChars: z.number().int().min(1).default(80),
     participantCookieDays: z.number().int().min(1).default(30),
+    /** Reclaim-PIN brute-force lockout (PIN-90): failed attempts per
+     * (board, name) and per (board, IP) counted in the board store
+     * (shared across instances); reaching a threshold locks further
+     * reclaims for an exponentially growing window. */
+    reclaimMaxFailuresPerName: z.number().int().min(1).default(5),
+    reclaimMaxFailuresPerIp: z.number().int().min(1).default(20),
+    reclaimFailureWindowMs: z.number().int().min(1).default(900_000),
+    reclaimLockoutBaseMs: z.number().int().min(0).default(60_000),
+    reclaimLockoutMaxMs: z.number().int().min(0).default(3_600_000),
     /** Signed-in user cookie life (PIN-83). Retention note: the
      * users/{uid} profile + board index persist until account
      * deletion lands (PIN-57c) — this TTL bounds the cookie only. */
@@ -133,6 +142,13 @@ export const PolicySchema = z
         message: "usableMaskFrameFraction.max < min",
       });
     }
+    if (p.reclaimLockoutMaxMs < p.reclaimLockoutBaseMs) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reclaimLockoutMaxMs"],
+        message: "reclaimLockoutMaxMs < reclaimLockoutBaseMs",
+      });
+    }
     if (p.pinsPerScene.max < p.pinsPerScene.min) {
       ctx.addIssue({
         code: "custom",
@@ -164,6 +180,11 @@ export const PolicyOverridesSchema = z.object({
   chipsMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
+  reclaimMaxFailuresPerName: z.number().int().min(1).optional(),
+  reclaimMaxFailuresPerIp: z.number().int().min(1).optional(),
+  reclaimFailureWindowMs: z.number().int().min(1).optional(),
+  reclaimLockoutBaseMs: z.number().int().min(0).optional(),
+  reclaimLockoutMaxMs: z.number().int().min(0).optional(),
   userSessionDays: z.number().int().min(1).optional(),
   signInNudge: z.boolean().optional(),
   libraryPageSize: z.number().int().min(1).optional(),
