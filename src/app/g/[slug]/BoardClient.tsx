@@ -24,6 +24,7 @@ import {
   togglePinSelection,
 } from "../../../domain/make-sheet";
 import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
+import type { ActivityLine } from "../../../domain/board-activity";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
 import { AddSheet, boardQueryKey } from "./AddSheet";
@@ -33,6 +34,7 @@ export interface BoardClientView extends BoardViewLike {
   board: { slug: string; title: string };
   me: { id: string; displayName: string } | null;
   scenes: BoardViewScene[];
+  activity: ActivityLine[];
 }
 
 export interface BoardClientPolicy {
@@ -428,6 +430,25 @@ function BoardBody({
           <p className="board-placeholder">{t("en", "board.scenesEmpty")}</p>
         ) : null}
       </section>
+
+      {view.activity.length > 0 ? (
+        <section className="card" aria-label={t("en", "board.activity")}>
+          <h2>{t("en", "board.activity")}</h2>
+          <ul className="activity-list">
+            {view.activity.map((line) => (
+              <li key={line.id}>
+                {line.actorName ?? t("en", "board.someone")}{" "}
+                {line.kind === "joined"
+                  ? t("en", "activity.joined")
+                  : line.kind === "pinned"
+                    ? t("en", "activity.pinned")
+                    : t("en", "activity.sceneReady")}
+                {line.label ? <> {line.label}</> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <JoinSection slug={slug} me={view.me} onJoined={handleJoined} />
 

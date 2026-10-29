@@ -129,5 +129,9 @@
   "share.button": "↗ Share",
   "share.sharing": "⏳ Sharing…",
   "share.failed": "❌ Share failed. Try again.",
-  "board.previewDescription": "A shared Pinneds board — everyone's things, pinned."
+  "board.previewDescription": "A shared Pinneds board — everyone's things, pinned.",
+  "board.activity": "🕓 Latest",
+  "activity.joined": "👋 joined",
+  "activity.pinned": "📌 pinned",
+  "activity.sceneReady": "✨ made a scene"
 }

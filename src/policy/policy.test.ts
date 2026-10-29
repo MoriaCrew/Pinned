@@ -23,6 +23,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.elementsPerPhoto).toEqual({ min: 1, max: 6 });
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
     expect(DEFAULT_POLICY.boardPollIntervalMs).toBe(5_000);
+    expect(DEFAULT_POLICY.activityStripMax).toBe(5);
     expect(resolvePolicy({ boardPollIntervalMs: 1_000 }).boardPollIntervalMs).toBe(1_000);
     expect(() => resolvePolicy({ boardPollIntervalMs: 10 })).toThrow();
     // PIN-50 usable-mask window + flattened bounds (PIN-64).

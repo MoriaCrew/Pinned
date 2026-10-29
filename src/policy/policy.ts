@@ -33,6 +33,8 @@ export const PolicySchema = z
     participantsPerBoard: z.number().int().min(1).default(50),
     boardTitleMaxChars: z.number().int().min(1).default(80),
     participantCookieDays: z.number().int().min(1).default(30),
+    /** Activity strip: latest BoardEvent lines shown (PIN-74). */
+    activityStripMax: z.number().int().min(0).default(5),
     /** Board page poll cadence (docs/11 section 5.8, PIN-66). */
     boardPollIntervalMs: z.number().int().min(250).default(5_000),
     /** Add-sheet job poll cadence while SAM lands (PIN-67). */
@@ -140,6 +142,7 @@ export const PolicyOverridesSchema = z.object({
   sceneImageCacheMaxAgeSeconds: z.number().int().min(0).optional(),
   workingCopyTtlHours: z.number().positive().optional(),
   participantsPerBoard: z.number().int().min(1).optional(),
+  activityStripMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),

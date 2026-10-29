@@ -191,6 +191,7 @@ export interface SceneJob {
 }
 
 export type BoardEventType =
+  | "participant_joined"
   | "element_added"
   | "pin_added"
   | "scene_requested"
@@ -199,7 +200,9 @@ export type BoardEventType =
   | "scene_failed";
 
 /**
- * Append-only activity record. `element_added` / `pin_added` are
+ * Append-only activity record. `participant_joined` (PIN-74: first
+ * insert only — a board has no actor at creation, so there is no
+ * board_created event), `element_added` / `pin_added` are
  * emitted by the repository itself (see BoardRepository); the
  * `scene_*` types are reserved for the scene slices, whose jobs
  * append them via `appendEvent`. No update or delete exists.
