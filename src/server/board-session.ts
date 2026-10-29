@@ -55,7 +55,7 @@ export interface JoinBoardResult {
   participant: Participant;
   cookieValue: string;
   cookieExpiresAt: number;
-  outcome: "created" | "updated" | "reclaimed";
+  outcome: "created" | "updated" | "reclaimed" | "restored";
 }
 
 function requireSessionSecret(secret: string | null): string {
@@ -151,6 +151,22 @@ export async function resolveParticipantSession(
     return null;
   }
   return participant;
+}
+
+/**
+ * Cross-device restore (PIN-84): re-issue the participant cookie
+ * for an identity the caller has already proven belongs to the
+ * signed-in user (user-session findClaimedParticipant). Like the
+ * reclaim-PIN path this rotates cookieSecretHash, so the previous
+ * device's cookie stops working — the single-hash record cannot
+ * hold two live cookies. slug is still required to reach here.
+ */
+export async function restoreParticipantSession(
+  participant: Participant,
+  deps: BoardSessionDeps,
+): Promise<JoinBoardResult> {
+  const now = deps.now?.() ?? Date.now();
+  return issueSession(participant, deps, now, "restored");
 }
 
 export async function joinBoard(

@@ -25,6 +25,8 @@ let getMe: Handler;
 let createBoardRoute: Handler;
 let joinRoute: SlugHandler;
 let claimRoute: SlugHandler;
+let boardGetRoute: SlugHandler;
+let myBoardsRoute: Handler;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
@@ -44,6 +46,8 @@ beforeAll(async () => {
   ({ POST: createBoardRoute } = await import("../boards/route"));
   ({ POST: joinRoute } = await import("../boards/[slug]/participants/route"));
   ({ POST: claimRoute } = await import("../boards/[slug]/claim/route"));
+  ({ GET: boardGetRoute } = await import("../boards/[slug]/route"));
+  ({ GET: myBoardsRoute } = await import("../me/boards/route"));
 });
 
 function req(url: string, init: RequestInit = {}): Request {
@@ -234,6 +238,111 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     );
     expect(own.status).toBe(200);
     expect((await own.json()).userId).toBe("synthetic-bob");
+  });
+
+  it("restore: user cookie alone re-enters as the claimed participant (new device)", async () => {
+    const aliceCookie = await signIn("token-alice");
+    const slug = await makeBoard("Restore board");
+    // Device A: join while signed in (auto-claims + writes index).
+    const { res, participantCookie } = await join(slug, "Aye", aliceCookie);
+    expect(res.status).toBe(201);
+    const joined = (await res.clone().json()) as {
+      participant: { id: string };
+    };
+
+    // Device B: only the user cookie, no participant cookie.
+    const restored = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: aliceCookie } }),
+      slugParams(slug),
+    );
+    expect(restored.status).toBe(200);
+    const setCookie = restored.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("HttpOnly");
+    const view = (await restored.json()) as {
+      me: { id: string; displayName: string } | null;
+    };
+    expect(view.me?.id).toBe(joined.participant.id);
+    expect(view.me?.displayName).toBe("Aye");
+
+    // The restored cookie actually works as the participant session.
+    const restoredCookie = cookiePair(restored);
+    const again = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: restoredCookie } }),
+      slugParams(slug),
+    );
+    expect(((await again.json()) as { me: unknown }).me).not.toBeNull();
+
+    // Rotation revoked device A's cookie (documented single-hash limit).
+    const oldDevice = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: participantCookie } }),
+      slugParams(slug),
+    );
+    expect(((await oldDevice.json()) as { me: unknown }).me).toBeNull();
+
+    // A signed-in stranger with no claim restores nobody, sets nothing.
+    const bobCookie = await signIn("token-bob");
+    const stranger = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: bobCookie } }),
+      slugParams(slug),
+    );
+    expect(stranger.status).toBe(200);
+    expect(stranger.headers.get("set-cookie")).toBeNull();
+    expect(((await stranger.json()) as { me: unknown }).me).toBeNull();
+  });
+
+  it("auto-claim: opening a board signed in links an unclaimed participant", async () => {
+    const aliceCookie = await signIn("token-alice");
+    const bobCookie = await signIn("token-bob");
+    const slug = await makeBoard("Auto-claim open board");
+
+    // Joined while signed OUT: no claim yet.
+    const { res, participantCookie } = await join(slug, "Cee");
+    expect(res.status).toBe(201);
+
+    // Bob could claim it before any board open as Alice? Prove the
+    // open did it: first open as Alice (both cookies), then Bob 409s.
+    const opened = await boardGetRoute(
+      req("http://t/x", {
+        headers: { cookie: `${participantCookie}; ${aliceCookie}` },
+      }),
+      slugParams(slug),
+    );
+    expect(opened.status).toBe(200);
+    expect(((await opened.json()) as { me: unknown }).me).not.toBeNull();
+
+    const conflict = await claimRoute(
+      req("http://t/x", {
+        method: "POST",
+        headers: { cookie: `${participantCookie}; ${bobCookie}` },
+      }),
+      slugParams(slug),
+    );
+    expect(conflict.status).toBe(409);
+  });
+
+  it("GET /api/me/boards: 401 signed out; claimed boards newest claim first", async () => {
+    const anon = await myBoardsRoute(req("http://t/api/me/boards"));
+    expect(anon.status).toBe(401);
+
+    const aliceCookie = await signIn("token-alice");
+    const first = await makeBoard("First claimed");
+    const second = await makeBoard("Second claimed");
+    await join(first, "Aye", aliceCookie);
+    await join(second, "Aye", aliceCookie);
+
+    const res = await myBoardsRoute(
+      req("http://t/api/me/boards", { headers: { cookie: aliceCookie } }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      boards: { slug: string; title: string; myPinCount: number }[];
+    };
+    const mine = body.boards.filter((b) => [first, second].includes(b.slug));
+    // Same-ms activity ties break on claimedAt then slug; both
+    // boards must be present with the card shape.
+    expect(mine.map((b) => b.slug).sort()).toEqual([first, second].sort());
+    expect(mine[0]).toMatchObject({ myPinCount: 0 });
+    expect(body.boards.every((b) => typeof b.title === "string")).toBe(true);
   });
 
   it("DELETE /api/auth/session clears the cookie; /api/me is then 401", async () => {
