@@ -636,12 +636,11 @@ export async function deleteMyElement(
   // on the other side still points at the same refs — the copy
   // (and its scenes on its board) keeps working, and the last
   // record out deletes the objects.
-  const copies = await deps.boards.listElementsBySource(elementId);
-  const sourceAlive = element.sourceElementId
-    ? (await deps.boards.getElement(element.sourceElementId)) !== null
-    : false;
+  const othersSharingRefs = (
+    await deps.boards.listElementsByCutoutRef(element.cutoutRef)
+  ).filter((other) => other.id !== elementId);
   const sharedRefs: string[] =
-    copies.length > 0 || sourceAlive ? [] : [element.cutoutRef, element.flattenedRef];
+    othersSharingRefs.length > 0 ? [] : [element.cutoutRef, element.flattenedRef];
 
   let storageDeleted = false;
   for (const ref of sharedRefs) {

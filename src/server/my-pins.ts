@@ -212,20 +212,29 @@ export async function pinFromLibrary(
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? randomUUID;
 
-  // The element on THIS board representing the source: itself
-  // when native, else its earlier copy, else a fresh copy.
+  // Family root: copies always point sourceElementId at the
+  // ORIGINAL element (never at an intermediate copy), so the
+  // root is one hop away and stays meaningful even after the
+  // original is deleted. One board holds at most one family
+  // member: the root itself or a single copy of it.
+  const rootId = source.sourceElementId ?? source.id;
+  const familyRoot = (element: Element) => element.sourceElementId ?? element.id;
+
+  // The element on THIS board representing the source family:
+  // the source itself when native here, else the family member
+  // already on this board (root or earlier copy), else a copy.
   let target: Element;
   if (source.boardId === slug) {
     target = source;
   } else {
     const existing = (await deps.boards.listElements(slug)).find(
-      (element) => element.sourceElementId === source.id,
+      (element) => familyRoot(element) === rootId,
     );
     if (existing) {
       target = existing;
     } else {
       target = {
-        id: libraryCopyId(slug, source.id),
+        id: libraryCopyId(slug, rootId),
         boardId: slug,
         ownerId: participant.id,
         label: source.label,
@@ -235,7 +244,7 @@ export async function pinFromLibrary(
         flattenedRef: source.flattenedRef,
         sourcePhotoId: source.sourcePhotoId,
         faceFlag: source.faceFlag,
-        sourceElementId: source.id,
+        sourceElementId: rootId,
         createdAt: now,
       };
       try {
@@ -247,7 +256,7 @@ export async function pinFromLibrary(
         if (
           !winner ||
           winner.boardId !== slug ||
-          winner.sourceElementId !== source.id
+          winner.sourceElementId !== rootId
         ) {
           throw error;
         }

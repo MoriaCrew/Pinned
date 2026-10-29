@@ -361,6 +361,55 @@ describe("pinFromLibrary (PIN-85 copy semantics)", () => {
     expect(await h2.boards.listPinsForElement(one.elementId)).toHaveLength(1);
   });
 
+  it("family dedupe: pinning a sibling copy or back to the root board is alreadyPinned (Bugbot PR74)", async () => {
+    const h = await makeHarness();
+    // Fourth board where alice also participates + is claimed.
+    await h.boards.createBoard({
+      slug: "board-d-secret-slug-d",
+      title: "Fourth",
+      counters: emptyBoardCounters(),
+      createdAt: 1,
+      version: 1,
+    });
+    const aliceOnD = participant("pe", "board-d-secret-slug-d", ALICE.uid);
+    await h.boards.putParticipant(aliceOnD);
+    await h.users.putUserBoard(ALICE.uid, {
+      boardId: "board-d-secret-slug-d",
+      participantId: "pe",
+      claimedAt: 1,
+      updatedAt: 1,
+    });
+
+    const onB = await pinFromLibrary("board-b-secret-slug-b", h.aliceOnB, ALICE, "el-lamp", h.pins);
+    const onD = await pinFromLibrary("board-d-secret-slug-d", aliceOnD, ALICE, "el-lamp", h.pins);
+    expect(onD.elementId).not.toBe(onB.elementId);
+
+    // Tapping the board-D copy's library card while on board B:
+    // same family (root el-lamp) already there, no second copy.
+    const viaSibling = await pinFromLibrary(
+      "board-b-secret-slug-b",
+      h.aliceOnB,
+      ALICE,
+      onD.elementId,
+      h.pins,
+    );
+    expect(viaSibling).toMatchObject({ alreadyPinned: true, elementId: onB.elementId });
+    expect(await h.boards.listElements("board-b-secret-slug-b")).toHaveLength(2);
+    // Copies always provenance-point at the root, never chained.
+    expect((await h.boards.getElement(onD.elementId))?.sourceElementId).toBe("el-lamp");
+
+    // Tapping the board-B copy while on the root's board A: the
+    // root's own pin answers, alreadyPinned.
+    const backHome = await pinFromLibrary(
+      "board-a-secret-slug-a",
+      h.aliceOnA,
+      ALICE,
+      onB.elementId,
+      h.pins,
+    );
+    expect(backHome).toMatchObject({ alreadyPinned: true, elementId: "el-lamp" });
+  });
+
   it("parsePinFromLibraryInput rejects malformed bodies", () => {
     expect(parsePinFromLibraryInput({ elementId: "x" })).toEqual({ elementId: "x" });
     expect(() => parsePinFromLibraryInput(null)).toThrow(BoardApiError);
@@ -475,6 +524,40 @@ describe("library pin in scenes, remix and delete cascade (PIN-85)", () => {
     const deletedCopy = await deleteMyElement("board-b-secret-slug-b", h.aliceOnB, copyId, h.api);
     expect(deletedCopy).toMatchObject({ deleted: true, storageDeleted: true });
     expect(deletedCopy.hiddenSceneIds).toEqual(["scene-b"]);
+    expect(await h.store.get("elements/el-lamp/cutout.png")).toBeNull();
+  });
+
+  it("sibling copies keep shared assets until the LAST family record goes (Bugbot PR74 High)", async () => {
+    const h = await makeHarness();
+    await h.boards.createBoard({
+      slug: "board-d-secret-slug-d",
+      title: "Fourth",
+      counters: emptyBoardCounters(),
+      createdAt: 1,
+      version: 1,
+    });
+    const aliceOnD = participant("pe", "board-d-secret-slug-d", ALICE.uid);
+    await h.boards.putParticipant(aliceOnD);
+    await h.users.putUserBoard(ALICE.uid, {
+      boardId: "board-d-secret-slug-d",
+      participantId: "pe",
+      claimedAt: 1,
+      updatedAt: 1,
+    });
+    const onB = await pinFromLibrary("board-b-secret-slug-b", h.aliceOnB, ALICE, "el-lamp", h.pins);
+    const onD = await pinFromLibrary("board-d-secret-slug-d", aliceOnD, ALICE, "el-lamp", h.pins);
+
+    // Original goes first: assets survive for both siblings.
+    const delRoot = await deleteMyElement("board-a-secret-slug-a", h.aliceOnA, "el-lamp", h.api);
+    expect(delRoot.storageDeleted).toBe(false);
+    // One sibling goes: the other sibling still needs the bytes.
+    const delB = await deleteMyElement("board-b-secret-slug-b", h.aliceOnB, onB.elementId, h.api);
+    expect(delB.storageDeleted).toBe(false);
+    expect(await h.store.get("elements/el-lamp/cutout.png")).not.toBeNull();
+    expect(await h.boards.getElement(onD.elementId)).not.toBeNull();
+    // Last family record out frees the objects.
+    const delD = await deleteMyElement("board-d-secret-slug-d", aliceOnD, onD.elementId, h.api);
+    expect(delD.storageDeleted).toBe(true);
     expect(await h.store.get("elements/el-lamp/cutout.png")).toBeNull();
   });
 });

@@ -200,6 +200,14 @@ export function describeBoardRepositoryContract(
         "el-copy",
       ]);
       expect(await repo.listElementsBySource("el-copy")).toEqual([]);
+      // Copies share the source's refs verbatim (makeElement
+      // default), so both records list under the one cutoutRef.
+      expect(
+        (await repo.listElementsByCutoutRef("elements/el-1/cutout.png")).map(
+          (e) => e.id,
+        ),
+      ).toEqual(["el-1", "el-copy", "el-other"]);
+      expect(await repo.listElementsByCutoutRef("elements/none.png")).toEqual([]);
     });
 
     it("pins: candidate is silent, pinning emits pin_added once, counters track pinned", async () => {
