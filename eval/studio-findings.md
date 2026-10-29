@@ -147,3 +147,32 @@ First end-to-end live run of the real board flow on hosted dev
   added: none runs in CI and there is no Java locally; the
   fake-Firestore contract suite stays the repo pattern, now
   backed by the real-Firestore dev runs above.
+
+## PIN-69 first live SceneJob (2026-10-29, hosted dev)
+
+First end-to-end live run of the real scene flow on hosted dev
+(create board -> join -> upload -> confirm 3 pins -> POST scene ->
+poll -> image), 1 synthetic PIN-50 fixture (`desk-mug-duck`:
+Teal Mug, Potted Succulent, Sunglasses Duck), prompt chip
+"on a sunny picnic blanket":
+
+| Step | s | Notes |
+| --- | --- | --- |
+| photo -> ready (3 pins) | 12.0 | workingCopyDeleted=true on confirm |
+| scene POST -> ready (3 pins) | 12.0 | scene.v1, 1024x1536 request |
+| idempotent re-POST (same sceneId) | 0.4 | same scene returned, no second call |
+
+- Scene image served board-link-checked: 200, `image/webp`,
+  430,078 bytes (Muse Image returned WebP bytes; the service
+  sniffs PNG/JPEG/WebP magic for the stored `scenes/` ref).
+  Gallery poll returned the 1 ready scene.
+- Cost (labelled estimates, gateway Spark-token proxy; provider
+  dashboard authoritative): scene ~$0.017-0.022, photo ~$0.020
+  (PIN-50 unit estimate) -> run total ~$0.04. Far under the
+  $0.30/scene stop line and the $0.10/scene target.
+- Demo board slug + scene id are preserved in PIN-69's PR #58
+  evidence comment and on the PIN-69 issue, so the board can be
+  opened directly (capability link; kept out of this file).
+- No new Firestore index was needed: SceneJobs live at
+  `boards/{slug}/sceneJobs` with board-scoped doc refs only.
+  No prod or console steps were taken.
