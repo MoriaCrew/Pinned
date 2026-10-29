@@ -64,6 +64,7 @@ export default async function BoardPage({
   if (!view) notFound();
 
   const theme = getBoardTheme(board.themeId);
+  const resolved = getPolicy(board.policyOverrides ?? null);
 
   return (
     <div className="theme-bg" style={themeVars(theme?.tokens ?? board.theme)}>
@@ -84,7 +85,7 @@ export default async function BoardPage({
         <BoardClient
           slug={slug}
           initialView={view as BoardClientView}
-          pollIntervalMs={getPolicy(board.policyOverrides ?? null).boardPollIntervalMs}
+          policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality }}
         />
       </main>
     </div>

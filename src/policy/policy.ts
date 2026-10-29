@@ -31,6 +31,11 @@ export const PolicySchema = z
     participantCookieDays: z.number().int().min(1).default(30),
     /** Board page poll cadence (docs/11 section 5.8, PIN-66). */
     boardPollIntervalMs: z.number().int().min(250).default(5_000),
+    /** Add-sheet job poll cadence while SAM lands (PIN-67). */
+    jobPollIntervalMs: z.number().int().min(250).default(1_500),
+    /** Client downscale before upload (docs/11 section 5.8, PIN-67). */
+    uploadMaxPx: z.number().int().positive().default(1600),
+    uploadJpegQuality: z.number().min(0.1).max(1).default(0.85),
     faces: z.enum(["allow", "note", "block"]).default("note"),
     // PIN-50 locks: flattened won T2; portrait verified; store=false ok.
     sceneInputMode: z
@@ -132,6 +137,9 @@ export const PolicyOverridesSchema = z.object({
   boardTitleMaxChars: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
+  jobPollIntervalMs: z.number().int().min(250).optional(),
+  uploadMaxPx: z.number().int().positive().optional(),
+  uploadJpegQuality: z.number().min(0.1).max(1).optional(),
   faces: z.enum(["allow", "note", "block"]).optional(),
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
   sceneSize: z.string().min(3).optional(),
