@@ -103,6 +103,12 @@ function BoardBody({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState<SceneAttempt | null>(null);
   const [attemptError, setAttemptError] = useState("");
+  // Set only when a POST actually created the scene — polling a
+  // client id that a 400/429 rejected would 404 forever.
+  const [liveSceneId, setLiveSceneId] = useState<string | null>(null);
+  // Sheet prompt seed: "" for a fresh scene; the refused/failed
+  // attempt's prompt only via "Change idea".
+  const [sheetPrompt, setSheetPrompt] = useState("");
   const boardQuery = useQuery({
     queryKey: boardQueryKey(slug),
     queryFn: async (): Promise<BoardClientView> => {
@@ -172,9 +178,22 @@ function BoardBody({
       }
       return data.scene;
     },
-    onSuccess: () => {
-      // The picks are spent; the board poll brings the scene in.
+    onSuccess: (scene) => {
+      // The picks are spent. Merge the POST's scene straight into
+      // the board cache so the cooking card hands over to the real
+      // card with no empty poll gap, then let polls reconcile.
       setSelected(new Set());
+      setLiveSceneId(scene.id);
+      queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
+        current
+          ? {
+              ...current,
+              scenes: current.scenes.some((s) => s.id === scene.id)
+                ? current.scenes.map((s) => (s.id === scene.id ? scene : s))
+                : [...current.scenes, scene],
+            }
+          : current,
+      );
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
     },
     onError: (cause) =>
@@ -188,10 +207,10 @@ function BoardBody({
     ? view.scenes.find((scene) => scene.id === attempt.sceneId)
     : undefined;
   const scenePoll = useQuery({
-    queryKey: ["board-scene", slug, attempt?.sceneId],
+    queryKey: ["board-scene", slug, liveSceneId],
     queryFn: async (): Promise<{ scene: BoardViewScene }> => {
       const response = await fetch(
-        `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(attempt?.sceneId ?? "")}`,
+        `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(liveSceneId ?? "")}`,
         { cache: "no-store" },
       );
       const data = (await response.json()) as { scene?: BoardViewScene; error?: string };
@@ -199,7 +218,8 @@ function BoardBody({
       return { scene: data.scene };
     },
     enabled:
-      attempt !== null &&
+      liveSceneId !== null &&
+      attempt?.sceneId === liveSceneId &&
       !makeScene.isPending &&
       !(attemptInView && isTerminalScene(attemptInView.status)),
     refetchInterval: (query) =>
@@ -240,6 +260,7 @@ function BoardBody({
     const sceneAttempt: SceneAttempt = { ...input, sceneId: newSceneId() };
     setAttempt(sceneAttempt);
     setAttemptError("");
+    setLiveSceneId(null);
     setMakeOpen(false);
     makeScene.mutate(sceneAttempt);
   }
@@ -253,6 +274,12 @@ function BoardBody({
   function changeIdea() {
     if (!attempt) return;
     setSelected(pruneSelection(new Set(attempt.pinIds), selectableIds));
+    setSheetPrompt(attempt.prompt);
+    setMakeOpen(true);
+  }
+
+  function openMakeSheet() {
+    setSheetPrompt("");
     setMakeOpen(true);
   }
 
@@ -401,7 +428,7 @@ function BoardBody({
             type="button"
             className="btn"
             disabled={selected.size < policy.pinsPerScene.min}
-            onClick={() => setMakeOpen(true)}
+            onClick={openMakeSheet}
           >
             {`${t("en", "board.make")} ${selected.size}/${policy.pinsPerScene.max}`}
           </button>
@@ -430,7 +457,7 @@ function BoardBody({
           chips={policy.sceneChips}
           pinsPerScene={policy.pinsPerScene}
           promptMaxChars={policy.scenePromptMaxChars}
-          initialPrompt={attempt?.prompt ?? ""}
+          initialPrompt={sheetPrompt}
           onMake={submitScene}
           onClose={() => setMakeOpen(false)}
         />
