@@ -6,10 +6,12 @@ import "server-only";
  */
 import { mockGateway } from "./mock-gateway";
 import {
+  buildSceneResponsesBody,
   buildSegmentPromptText,
   normalizeElements,
   type ElementNamer,
   type NamedElement,
+  type SceneComposer,
   type Segmenter,
 } from "./ports";
 
@@ -55,5 +57,25 @@ export const mockSegmenter: Segmenter = {
       concept: promptText.value,
     });
     return { status: "ready", value: { segments } };
+  },
+};
+
+/** Deterministic 1x1 PNG returned as the composed scene (PIN-68). */
+export const MOCK_SCENE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+
+export const mockSceneComposer: SceneComposer = {
+  async composeScene(input) {
+    // Same validation as the Meta builder (model id is a dummy here:
+    // the mock never sends the body anywhere).
+    const built = buildSceneResponsesBody(input, "mock-image");
+    if (built.status !== "ready") return built;
+    return {
+      status: "ready",
+      value: {
+        imageBase64: MOCK_SCENE_PNG_BASE64,
+        promptVersion: input.promptVersion,
+      },
+    };
   },
 };

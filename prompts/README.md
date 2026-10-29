@@ -20,6 +20,8 @@ call log once live calls land).
 - `elements.v1.md` — photo → element list for the Studio namer (PIN-50).
 - `label.v1.md` — photo → main-object label + alt text + safety flags
   (PIN-52 seam; feeds the SAM concept prompt until elements land).
+- `scene.v1.md` — elements + prompt → composed scene, the final
+  `input_text` of the Muse Image compose request (PIN-68).
 
 Segmentation uses the plain-noun `objectLabel` as the SAM concept
 prompt; it is not a chat prompt and has no template file.
