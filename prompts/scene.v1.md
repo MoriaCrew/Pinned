@@ -11,3 +11,14 @@ request carries only `tools: [{type: "image_generation", size}]`
 (size from Policy) and `store` from Policy; the image is read from
 `image_generation_call.result`, and HTTP 200 with no such item is
 the typed `refused` outcome.
+
+Remix variant (PIN-79, docs/11 section 5.7): when the port input
+carries `parentSceneImageRef`, the same builder places the parent
+scene FIRST — one `input_text` base-scene label ("Base scene:
+keep this exact scene recognisable and compose the new elements
+into it:") and the parent `input_image` — then the NEW elements
+(labelled as above), then this same final instruction LAST. The
+remix is stateless: `store=false` and no `previous_response_id`.
+The final instruction above the rule is unchanged by the variant,
+so the remix stays `scene.v1`; the only new fixed text is the
+base-scene label, the remix twin of the "Element N" binding text.

@@ -28,6 +28,8 @@ export interface BoardViewPin {
 }
 
 export interface BoardViewScene {
+  /** Remix parent scene id (PIN-79, §5.7); absent on fresh scenes. */
+  parentSceneId?: string;
   id: string;
   createdBy: string;
   elementIds: string[];

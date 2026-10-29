@@ -25,6 +25,7 @@ export type {
 } from "./ports";
 export {
   buildSceneResponsesBody,
+  PARENT_SCENE_LABEL,
   buildSegmentPromptText,
   classifyPortError,
   elementsSystemPrompt,

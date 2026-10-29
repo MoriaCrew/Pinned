@@ -108,6 +108,16 @@ export interface ComposeSceneElement {
 }
 
 export interface ComposeSceneInput {
+  /**
+   * Remix (PIN-79, docs/11 section 5.7): the parent scene image as
+   * a provider-fetchable ref (data: URL). When set, the builder
+   * puts it FIRST with a base-scene label, then the NEW elements,
+   * then the instruction last. Stateless: no previous_response_id
+   * is ever sent, and the caller passes store=false for a remix.
+   * The final instruction template is unchanged, so the remix
+   * variant stays scene.v1 (documented in prompts/scene.v1.md).
+   */
+  parentSceneImageRef?: string;
   elements: ComposeSceneElement[];
   prompt: string;
   /** Policy sceneSize / sceneStore / timeoutsMs.scene. */
@@ -508,6 +518,14 @@ export interface SceneResponsesBody {
 const SCENE_SIZE = /^\d+x\d+$/;
 
 /**
+ * Base-scene binding text shown immediately before the parent
+ * scene image in a remix (PIN-79, docs/11 section 5.7) — the
+ * remix twin of sceneElementLabel. Part of scene.v1.
+ */
+export const PARENT_SCENE_LABEL =
+  "Base scene: keep this exact scene recognisable and compose the new elements into it:";
+
+/**
  * Build the compose request body: one user message whose content is
  * [label, image] per element in order, then the scene prompt LAST.
  * Invalid caller input is a failed/bad_prompt outcome, never a throw
@@ -529,6 +547,13 @@ export function buildSceneResponsesBody(
     return bad(`Scene size must look like "1024x1536", got "${input.size}".`);
   }
   const content: SceneContentPart[] = [];
+  if (input.parentSceneImageRef !== undefined) {
+    if (!input.parentSceneImageRef.trim()) {
+      return bad("A remix needs the parent scene image.");
+    }
+    content.push({ type: "input_text", text: PARENT_SCENE_LABEL });
+    content.push({ type: "input_image", image_url: input.parentSceneImageRef });
+  }
   for (let i = 0; i < input.elements.length; i += 1) {
     const element = input.elements[i];
     if (!element.label.trim()) return bad(`Element ${i + 1} has no label.`);

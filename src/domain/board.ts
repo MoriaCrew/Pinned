@@ -177,6 +177,8 @@ export interface SceneJob {
   elementIds: string[];
   prompt: string;
   status: SceneStatus; // pending -> running -> ready / failed / refused
+  /** Remix parent Scene id (PIN-79, §5.7); absent on fresh scenes and pre-PIN-79 records (stores JSON-round-trip the record, so the optional field is migration-safe). elementIds holds only the NEW pins for a remix — the parent is not an element. */
+  parentSceneId?: string;
   promptVersion: string; // scene prompt actually used
   /** Stored scene image under `scenes/` once ready. */
   imageRef?: string;

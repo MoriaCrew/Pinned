@@ -125,6 +125,51 @@ describe("scene builder (PIN-68, docs/11 sections 3 + 5.6)", () => {
     });
   });
 
+  it("remix (PIN-79): parent image FIRST with base label, new elements next, instruction last, stateless", () => {
+    const built = buildSceneResponsesBody(
+      composeInput({ parentSceneImageRef: "data:image/png;base64,PARENT", store: false }),
+      "muse-image-1.0",
+    );
+    expect(built.status).toBe("ready");
+    if (built.status !== "ready") return;
+    expect(built.value.store).toBe(false);
+    const content = built.value.input[0].content;
+    expect(content.map((part) => part.type)).toEqual([
+      "input_text",
+      "input_image",
+      "input_text",
+      "input_image",
+      "input_text",
+      "input_image",
+      "input_text",
+    ]);
+    expect(content[0]).toEqual({
+      type: "input_text",
+      text: "Base scene: keep this exact scene recognisable and compose the new elements into it:",
+    });
+    expect(content[1]).toEqual({ type: "input_image", image_url: "data:image/png;base64,PARENT" });
+    // New elements keep their Element N labels after the parent.
+    expect(content[2]).toMatchObject({ type: "input_text" });
+    expect((content[2] as { text: string }).text).toContain("Element 1 (from Robin)");
+    // The same scene.v1 final instruction stays LAST.
+    expect(content[6]).toEqual({
+      type: "input_text",
+      text: "Compose these exact elements into one new photorealistic scene, keeping each element recognisable: a sunny picnic blanket on grass with these things on it",
+    });
+    const wire = JSON.stringify(built.value);
+    expect(wire).not.toContain("previous_response_id");
+    expect(wire).not.toContain("parentSceneImageRef");
+    expect(Object.keys(built.value).sort()).toEqual(["input", "model", "store", "tools"]);
+  });
+
+  it("remix (PIN-79): an empty parent ref is bad_prompt, never a silent fresh scene", () => {
+    const built = buildSceneResponsesBody(
+      composeInput({ parentSceneImageRef: "  " }),
+      "muse-image-1.0",
+    );
+    expect(built).toMatchObject({ status: "failed", errorCode: "bad_prompt" });
+  });
+
   it("carries only the documented keys and the Policy size tool", () => {
     const built = buildSceneResponsesBody(composeInput(), "muse-image-1.0");
     expect(built.status).toBe("ready");

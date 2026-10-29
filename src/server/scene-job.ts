@@ -51,7 +51,8 @@ export class SceneJobRequestError extends Error {
       | "element_not_found"
       | "scenes_per_participant_day"
       | "scenes_per_board_day"
-      | "scene_id_conflict",
+      | "scene_id_conflict"
+      | "parent_not_found",
   ) {
     super(message);
     this.name = "SceneJobRequestError";
@@ -183,6 +184,13 @@ export interface SceneJobDeps {
 }
 
 export interface StartSceneInput {
+  /**
+   * Remix parent Scene id (PIN-79, §5.7). The parent must be a
+   * ready, non-hidden scene on the same board. `elementIds` are
+   * the NEW pins only: the pinsPerScene cap below counts them and
+   * excludes the parent (the parent is a scene, not a pin).
+   */
+  parentSceneId?: string;
   boardId: string;
   participantId: string;
   elementIds: string[];
@@ -210,6 +218,7 @@ function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
     status: job.status,
     ...(job.imageRef ? { imageRef: job.imageRef } : {}),
     ...(job.kind ? { kind: job.kind } : {}),
+    ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
     ...(job.costUsd !== undefined ? { costUsd: job.costUsd } : {}),
     ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
@@ -314,6 +323,27 @@ export async function startSceneJob(
     throw new RangeError(`Participant ${input.participantId} not found`);
   }
 
+  // Remix (PIN-79, §5.7): the parent must be a ready, visible
+  // scene on THIS board with a stored image — checked before any
+  // job or spend exists. Missing/other-board/hidden/not-ready
+  // all land as parent_not_found (one uniform 404 at the route).
+  const parentSceneId = input.parentSceneId?.trim() || undefined;
+  if (parentSceneId) {
+    const parent = await deps.boards.getScene(parentSceneId);
+    if (
+      !parent ||
+      parent.boardId !== input.boardId ||
+      parent.hidden ||
+      parent.status !== "ready" ||
+      !parent.imageRef
+    ) {
+      throw new SceneJobRequestError(
+        "That scene is not ready to remix.",
+        "parent_not_found",
+      );
+    }
+  }
+
   const sceneId = input.sceneId?.trim();
   if (sceneId) {
     if (!SCENE_ID.test(sceneId)) {
@@ -323,6 +353,7 @@ export async function startSceneJob(
     if (existing) {
       if (
         existing.participantId !== input.participantId ||
+        (existing.parentSceneId ?? undefined) !== parentSceneId ||
         existing.prompt !== prompt ||
         !sameStringList(existing.elementIds, elementIds)
       ) {
@@ -394,6 +425,7 @@ export async function startSceneJob(
     elementIds,
     prompt,
     status: "pending",
+    ...(parentSceneId ? { parentSceneId } : {}),
     promptVersion: policy.promptVersions.scene,
     createdAt: at,
     updatedAt: at,
@@ -408,6 +440,7 @@ export async function startSceneJob(
       if (
         raced &&
         raced.participantId === input.participantId &&
+        (raced.parentSceneId ?? undefined) === parentSceneId &&
         raced.prompt === prompt &&
         sameStringList(raced.elementIds, elementIds)
       ) {
@@ -513,7 +546,22 @@ async function finishCollage(
   }
   let png: Buffer;
   try {
-    png = await composeCollage(cutouts, size);
+    // Remix fallback (PIN-79): cut-outs go OVER the parent image.
+    let parentBytes: Buffer | undefined;
+    if (job.parentSceneId) {
+      const parent = await deps.boards.getScene(job.parentSceneId);
+      const bytes =
+        parent?.boardId === job.boardId && parent.imageRef
+          ? await deps.store.get(parent.imageRef)
+          : null;
+      if (!bytes) {
+        job.status = "failed";
+        job.errorCode = "parent_missing";
+        return finish(deps, job);
+      }
+      parentBytes = bytes;
+    }
+    png = await composeCollage(cutouts, size, parentBytes);
   } catch {
     job.status = "failed";
     job.errorCode = "collage_failed";
@@ -577,11 +625,33 @@ export async function runSceneJob(
       elements.push(composed);
     }
 
+    // Remix (PIN-79, §5.7): resolve the parent scene image to a
+    // data: URL for the builder's first slot. A parent that
+    // vanished (or lost its image) between request and run fails
+    // typed BEFORE any composer spend. The parent record itself
+    // is never written here — remixes leave it unchanged.
+    let parentSceneImageRef: string | undefined;
+    if (job.parentSceneId) {
+      const parent = await deps.boards.getScene(job.parentSceneId);
+      const bytes =
+        parent?.boardId === boardId && parent.imageRef
+          ? await deps.store.get(parent.imageRef)
+          : null;
+      if (!bytes) {
+        job.status = "failed";
+        job.errorCode = "parent_missing";
+        return finish(deps, job);
+      }
+      parentSceneImageRef = `data:${sniffSceneImage(bytes).contentType};base64,${bytes.toString("base64")}`;
+    }
+
     const outcome = await deps.composer.composeScene({
       elements,
+      ...(parentSceneImageRef ? { parentSceneImageRef } : {}),
       prompt: job.prompt,
       size: policy.sceneSize,
-      store: policy.sceneStore,
+      // Remix is stateless (PIN-79, §5.7): store=false, always.
+      store: parentSceneImageRef ? false : policy.sceneStore,
       timeoutMs: policy.timeoutsMs.scene,
       promptVersion: policy.promptVersions.scene,
       sceneInputMode: policy.sceneInputMode,

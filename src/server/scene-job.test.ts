@@ -633,6 +633,202 @@ describe("deleted-element exclusion and hidden scenes", () => {
   });
 });
 
+describe("remix (PIN-79, docs/11 section 5.7)", () => {
+  async function readyParent(h: Harness) {
+    const parent = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2"], prompt: "picnic" },
+      h.deps,
+    );
+    expect(parent.status).toBe("ready");
+    return parent;
+  }
+
+  it("composes parent-first with store=false, links the child, leaves the parent untouched", async () => {
+    const h = await makeHarness();
+    const parent = await readyParent(h);
+    const parentBefore = await h.boards.getScene(parent.id);
+
+    const child = await startSceneJob(
+      {
+        boardId: "board-1",
+        participantId: "p2",
+        elementIds: ["el3"],
+        prompt: "now with confetti",
+        parentSceneId: parent.id,
+      },
+      h.deps,
+    );
+    expect(child.status).toBe("ready");
+    expect(child.parentSceneId).toBe(parent.id);
+    expect(child.elementIds).toEqual(["el3"]); // NEW pins only
+    expect(child.promptVersion).toBe("scene.v1");
+
+    const scene = await h.boards.getScene(child.id);
+    expect(scene).toMatchObject({ parentSceneId: parent.id, elementIds: ["el3"], status: "ready" });
+    expect(publicScene("board-1", scene!)).toMatchObject({ parentSceneId: parent.id });
+
+    expect(h.calls).toHaveLength(2);
+    const remixCall = h.calls[1];
+    expect(remixCall.store).toBe(false);
+    expect(remixCall.parentSceneImageRef).toBe(
+      `data:image/png;base64,${Buffer.from(PNG_B64, "base64").toString("base64")}`,
+    );
+    expect(remixCall.elements).toHaveLength(1);
+    expect(remixCall.elements[0].label).toBe("Thing 3");
+
+    // Parent record + image bytes unchanged by the remix.
+    expect(await h.boards.getScene(parent.id)).toEqual(parentBefore);
+    const parentBytes = await h.store.get(parent.imageRef as string);
+    expect(parentBytes?.equals(Buffer.from(PNG_B64, "base64"))).toBe(true);
+  });
+
+  it("caps count NEW pins only: parent excluded, max new pins pass, max+1 denied pre-spend", async () => {
+    const h = await makeHarness({ pinsPerScene: { min: 1, max: 2 } });
+    const parent = await readyParent(h); // parent itself used 2 pins
+    const ok = await startSceneJob(
+      {
+        boardId: "board-1",
+        participantId: "p1",
+        elementIds: ["el3", "el4"], // 2 new + parent's 2: only new count
+        prompt: "more friends",
+        parentSceneId: parent.id,
+      },
+      h.deps,
+    );
+    expect(ok.status).toBe("ready");
+    await expect(
+      startSceneJob(
+        {
+          boardId: "board-1",
+          participantId: "p1",
+          elementIds: ["el3", "el4", "el5"],
+          prompt: "too many",
+          parentSceneId: parent.id,
+        },
+        h.deps,
+      ),
+    ).rejects.toMatchObject({ code: "pins_per_scene" });
+    expect(h.calls).toHaveLength(2); // parent + ok remix; the deny never composed
+  });
+
+  it("denies missing, not-ready, hidden and other-board parents as parent_not_found with zero spend", async () => {
+    const h = await makeHarness();
+    const base = { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "x" };
+    await expect(startSceneJob({ ...base, parentSceneId: "nope" }, h.deps)).rejects.toMatchObject({
+      code: "parent_not_found",
+    });
+    await h.boards.putScene({
+      id: "pending-scene",
+      boardId: "board-1",
+      createdBy: "p1",
+      elementIds: ["el1"],
+      prompt: "x",
+      status: "running",
+      promptVersion: "scene.v1",
+      createdAt: 1,
+    });
+    await expect(
+      startSceneJob({ ...base, parentSceneId: "pending-scene" }, h.deps),
+    ).rejects.toMatchObject({ code: "parent_not_found" });
+    await h.boards.putScene({
+      id: "hidden-scene",
+      boardId: "board-1",
+      createdBy: "p1",
+      elementIds: ["el1"],
+      prompt: "x",
+      status: "ready",
+      imageRef: "scenes/boards/board-1/hidden-scene/scene.png",
+      hidden: true,
+      promptVersion: "scene.v1",
+      createdAt: 1,
+    });
+    await expect(
+      startSceneJob({ ...base, parentSceneId: "hidden-scene" }, h.deps),
+    ).rejects.toMatchObject({ code: "parent_not_found" });
+    await h.boards.putScene({
+      id: "other-board-scene",
+      boardId: "board-2",
+      createdBy: "p1",
+      elementIds: ["el1"],
+      prompt: "x",
+      status: "ready",
+      imageRef: "scenes/boards/board-2/other-board-scene/scene.png",
+      promptVersion: "scene.v1",
+      createdAt: 1,
+    });
+    await expect(
+      startSceneJob({ ...base, parentSceneId: "other-board-scene" }, h.deps),
+    ).rejects.toMatchObject({ code: "parent_not_found" });
+    expect(h.calls).toHaveLength(0);
+  });
+
+  it("collage fallback composites over the parent and stays labelled collage", async () => {
+    // Real decodable PNGs: the harness 1x1 mock bytes are not
+    // sharp-readable, and the collage actually decodes its inputs.
+    const h = await makeHarness();
+    const parent = await readyParent(h);
+    const swatch = await sharp({ create: { width: 30, height: 20, channels: 4, background: { r: 30, g: 120, b: 200, alpha: 1 } } }).png().toBuffer();
+    await h.store.put(parent.imageRef as string, swatch, "image/png");
+    const el3 = await h.boards.getElement("el3");
+    await h.store.put(el3!.cutoutRef, swatch, "image/png");
+    const child = await startSceneJob(
+      {
+        boardId: "board-1",
+        participantId: "p1",
+        elementIds: ["el3"],
+        prompt: "offline remix",
+        parentSceneId: parent.id,
+      },
+      { ...h.deps, collageMode: true },
+    );
+    expect(child).toMatchObject({ status: "ready", kind: "collage", parentSceneId: parent.id, costUsd: 0 });
+    expect(h.calls).toHaveLength(1); // parent only; the remix never hit the port
+    const bytes = await h.store.get(child.imageRef as string);
+    const meta = await sharp(bytes as Buffer).metadata();
+    expect(meta.format).toBe("png");
+  });
+
+  it("parent image gone at run time fails typed before any composer spend", async () => {
+    const h = await makeHarness();
+    const parent = await readyParent(h);
+    await h.store.delete(parent.imageRef as string);
+    const child = await startSceneJob(
+      {
+        boardId: "board-1",
+        participantId: "p1",
+        elementIds: ["el3"],
+        prompt: "ghost parent",
+        parentSceneId: parent.id,
+      },
+      h.deps,
+    );
+    expect(child).toMatchObject({ status: "failed", errorCode: "parent_missing" });
+    expect(h.calls).toHaveLength(1);
+  });
+
+  it("requestScene parses parentSceneId and maps a bad parent to a 404 BoardApiError", async () => {
+    const h = await makeHarness();
+    const participant = await h.boards.getParticipant("board-1", "p1");
+    await expect(
+      requestScene(
+        "board-1",
+        participant!,
+        { elementIds: ["el1"], prompt: "x", parentSceneId: "nope" },
+        h.api,
+      ),
+    ).rejects.toMatchObject({ status: 404, code: "parent_not_found" });
+    const parent = await readyParent(h);
+    const { job, scene } = await requestScene(
+      "board-1",
+      participant!,
+      { elementIds: ["el3"], prompt: "api remix", parentSceneId: parent.id },
+      h.api,
+    );
+    expect(job).toMatchObject({ status: "ready", parentSceneId: parent.id });
+    expect(scene).toMatchObject({ parentSceneId: parent.id });
+  });
+});
+
 describe("mock collage fallback (PIN-71)", () => {
   // The harness cut-out bytes are the mock composer's header-only
   // 1x1 PNG, which sharp cannot decode; real cut-outs are
