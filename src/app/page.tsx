@@ -1,9 +1,16 @@
+import { getConfig } from "../config";
 import { t } from "../i18n";
 
+// DEMO_BOARD_SLUG is a runtime env value (PIN-73); render per
+// request so setting it needs no rebuild.
+export const dynamic = "force-dynamic";
+
 // Landing. Board creation is live (PIN-66): Start goes to /new.
-// The seeded demo board lands with PIN-55, so that action stays
-// inert — no fake functionality.
+// The demo action points at the seeded judge board only when
+// DEMO_BOARD_SLUG is set (PIN-73, scripts/seed-demo-board.mjs);
+// unset or invalid keeps it inert — no fake functionality.
 export default function HomePage() {
+  const demoSlug = getConfig().demoBoardSlug;
   return (
     <main>
       <h1>{t("en", "landing.title")}</h1>
@@ -14,11 +21,19 @@ export default function HomePage() {
         <a className="btn btn-primary" href="/new">
           {t("en", "landing.start")}
         </a>
-        <a className="btn" href="#soon" aria-disabled="true">
-          {t("en", "landing.demo")}
-        </a>
+        {demoSlug ? (
+          <a className="btn" href={`/g/${demoSlug}`}>
+            {t("en", "landing.demo")}
+          </a>
+        ) : (
+          <a className="btn" href="#soon" aria-disabled="true">
+            {t("en", "landing.demo")}
+          </a>
+        )}
       </div>
-      <p className="soon" id="soon">{t("en", "landing.soon")}</p>
+      {!demoSlug && (
+        <p className="soon" id="soon">{t("en", "landing.soon")}</p>
+      )}
 
       <h2>{t("en", "landing.howTitle")}</h2>
       <ol className="steps">

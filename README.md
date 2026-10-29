@@ -101,6 +101,18 @@ Open http://localhost:3000 in a browser. Health check:
 http://localhost:3000/api/health
 
 Quality gates: `npm run typecheck`, `npm test`, and `npm run build`.
+
+Seeded demo board (PIN-73): with a server running,
+`npm run seed:demo` creates one synthetic demo board through the
+public boards API (2 demo participants, PIN-50 fixture photos,
+confirmed pins, 1 ready scene; `--no-scene` skips the scene,
+`SEED_BASE_URL` targets a hosted backend). The script prints the
+board slug once — record it privately, never commit it — and
+setting `DEMO_BOARD_SLUG` in the host env turns on the landing
+demo link. Re-running is the reset: a fresh board with the same
+title marker and counts; repoint `DEMO_BOARD_SLUG`.
+`npm run seed:demo -- --time-first-scene <slug>` times a fresh
+visitor's first-scene path (docs/11 §6 target: under 90 s).
 Firebase projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod`
 exist with Firestore in `eur3`, billing enabled, and `pinned-web`
 App Hosting backends in `europe-west4`; the first rollout follows merge.
