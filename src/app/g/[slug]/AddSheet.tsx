@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   applyOptimisticConfirm,
   canTapAdd,
+  isAwaitingTapPin,
   normalizedTapPoint,
   confirmPayload,
   downscaleTarget,
@@ -109,6 +110,7 @@ export function AddSheet({
   const previewRef = useRef<string | null>(null);
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
+  const [pendingTapPinId, setPendingTapPinId] = useState<string | null>(null);
 
   function showPreview(file: File) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -247,13 +249,16 @@ export function AddSheet({
           body: JSON.stringify(point),
         },
       );
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string; pin?: { id: string } };
       if (!response.ok) throw new Error(data.error || t("en", "add.tapFailed"));
       return data;
     },
     onMutate: (point) => {
       setLastTap(point);
       setTapError("");
+    },
+    onSuccess: (data) => {
+      if (data.pin?.id) setPendingTapPinId(data.pin.id);
     },
     onError: (cause) =>
       setTapError(cause instanceof Error ? cause.message : t("en", "add.tapFailed")),
@@ -271,14 +276,15 @@ export function AddSheet({
     (job !== null && !isTerminalJob(job.status));
   const payload = jobId ? confirmPayload(jobId, selected) : null;
   const canPin =
-    // Never pin while a tap is cutting or its refetch is in
-    // flight: selected only gains the tap pin when the refetched
-    // candidates land, and confirm drops unlisted job pins.
+    // Never pin while a tap is cutting or its candidate has
+    // not landed in the job view yet: selected only gains the
+    // tap pin then, and confirm drops unlisted job pins. Scoped
+    // to that one pin — background refetches never disable Pin.
     payload !== null &&
     job?.status === "ready" &&
     !confirm.isPending &&
     !tapAdd.isPending &&
-    !jobQuery.isFetching;
+    !isAwaitingTapPin(pendingTapPinId, candidateIds, jobQuery.isError);
   const showFaceNote = shouldShowFaceNote(job?.faceNote ?? false, jobId, dismissedFaceJobId);
   // Visibility excludes `busy` so the preview stays up (disabled)
   // while a tap is cutting; canTapAdd's busy gate is unit-tested.

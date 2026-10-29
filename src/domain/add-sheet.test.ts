@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyOptimisticConfirm,
   canTapAdd,
+  isAwaitingTapPin,
   normalizedTapPoint,
   confirmPayload,
   downscaleTarget,
@@ -98,6 +99,13 @@ describe("add sheet logic (PIN-67)", () => {
     expect(canTapAdd({ ...base, hasPreview: false })).toBe(false);
     expect(canTapAdd({ ...base, elementCount: 6 })).toBe(false);
     expect(canTapAdd({ ...base, busy: true })).toBe(false);
+  });
+
+  it("waits only for the just-tapped pin, and gives up on a failed refetch (PIN-78)", () => {
+    expect(isAwaitingTapPin("tap1", ["c1"], false)).toBe(true);
+    expect(isAwaitingTapPin("tap1", ["c1", "tap1"], false)).toBe(false);
+    expect(isAwaitingTapPin(null, ["c1"], false)).toBe(false);
+    expect(isAwaitingTapPin("tap1", ["c1"], true)).toBe(false);
   });
 
   it("treats ready/failed/refused as terminal", () => {

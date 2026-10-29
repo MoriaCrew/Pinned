@@ -148,6 +148,26 @@ export function canTapAdd(input: {
   );
 }
 
+/**
+ * True while a successful tap's candidate has not appeared in
+ * the job view yet (PIN-78): Pin N must wait for it, because
+ * confirm drops job pins missing from the payload — but ONLY
+ * for that pin. A failed job refetch releases the wait (the
+ * pin is not visible to select anyway) instead of wedging Pin
+ * disabled on every background refetch.
+ */
+export function isAwaitingTapPin(
+  pendingTapPinId: string | null,
+  candidateIds: readonly string[],
+  jobQueryFailed: boolean,
+): boolean {
+  return (
+    pendingTapPinId !== null &&
+    !candidateIds.includes(pendingTapPinId) &&
+    !jobQueryFailed
+  );
+}
+
 export function isTerminalJob(status: JobStatusLike): boolean {
   return status === "ready" || status === "failed" || status === "refused";
 }
