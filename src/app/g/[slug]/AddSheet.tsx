@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   applyOptimisticConfirm,
+  canTapAdd,
+  isAwaitingTapPin,
+  type PendingTapPin,
+  normalizedTapPoint,
   confirmPayload,
   downscaleTarget,
   isTerminalJob,
@@ -21,6 +25,8 @@ interface PublicJob {
   status: JobStatusLike;
   faceNote: boolean;
   pinIds: string[];
+  elementIds?: string[];
+  workingCopyGone?: boolean;
 }
 
 interface JobView {
@@ -77,6 +83,7 @@ export function AddSheet({
   uploadMaxPx,
   uploadJpegQuality,
   jobPollIntervalMs,
+  elementsPerPhotoMax,
   onClose,
 }: {
   slug: string;
@@ -85,6 +92,7 @@ export function AddSheet({
   uploadMaxPx: number;
   uploadJpegQuality: number;
   jobPollIntervalMs: number;
+  elementsPerPhotoMax: number;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -94,9 +102,42 @@ export function AddSheet({
   const [dropped, setDropped] = useState<ReadonlySet<string>>(new Set());
   const [dismissedFaceJobId, setDismissedFaceJobId] = useState<string | null>(null);
   const knownPinIds = useRef<ReadonlySet<string>>(new Set(boardView.pins.map((p) => p.id)));
+  // Tap-to-add (PIN-78): the preview is a LOCAL object URL of the
+  // picked file (never uploaded/stored as-is; the server segments
+  // its own stripped working copy). Photo intake auto-rotates and
+  // browsers apply EXIF orientation to <img>, so normalized tap
+  // points line up with the working copy's frame.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewRef = useRef<string | null>(null);
+  const [tapError, setTapError] = useState("");
+  const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
+  const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
+
+  function showPreview(file: File) {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    const url = URL.createObjectURL(file);
+    previewRef.current = url;
+    setPreviewUrl(url);
+  }
+
+  function clearPreview() {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = null;
+    setPreviewUrl(null);
+    setLastTap(null);
+  }
+
+  useEffect(
+    () => () => {
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    },
+    [],
+  );
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
+      showPreview(file);
+      setTapError("");
       const blob = await downscalePhoto(file, uploadMaxPx, uploadJpegQuality);
       const form = new FormData();
       form.set("photo", blob, "photo.jpg");
@@ -114,6 +155,7 @@ export function AddSheet({
       setUploadError("");
       setSelected(new Set());
       setDropped(new Set());
+      setPendingTapPin(null);
     },
     onSuccess: (job) => setJobId(job.id),
     onError: (cause) =>
@@ -199,14 +241,68 @@ export function AddSheet({
     onSettled: () => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) }),
   });
 
+  const tapAdd = useMutation({
+    // The job id travels in the mutation VARIABLES, captured at
+    // tap time: callbacks must never bind a late-landing tap to
+    // whatever jobId the latest render holds (Bugbot PIN-78).
+    mutationFn: async (point: { x: number; y: number; jobId: string }) => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(point.jobId)}/tap-add`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x: point.x, y: point.y }),
+        },
+      );
+      const data = (await response.json()) as { error?: string; pin?: { id: string } };
+      if (!response.ok) throw new Error(data.error || t("en", "add.tapFailed"));
+      return data;
+    },
+    onMutate: (point) => {
+      setLastTap({ x: point.x, y: point.y });
+      setTapError("");
+    },
+    onSuccess: (data, point) => {
+      if (data.pin?.id) {
+        setPendingTapPin({ pinId: data.pin.id, jobId: point.jobId, at: Date.now() });
+      }
+    },
+    onError: (cause) =>
+      setTapError(cause instanceof Error ? cause.message : t("en", "add.tapFailed")),
+    onSettled: (_data, _cause, point) => {
+      // The job poll stops at terminal status, so pull the new
+      // candidate (or the gone-copy flag) in explicitly.
+      void queryClient.invalidateQueries({ queryKey: ["board-job", slug, point.jobId] });
+      void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+    },
+  });
+
   const finding =
     upload.isPending ||
     (jobId !== null && !jobQuery.data) ||
     (job !== null && !isTerminalJob(job.status));
   const payload = jobId ? confirmPayload(jobId, selected) : null;
   const canPin =
-    payload !== null && job?.status === "ready" && !confirm.isPending;
+    // Never pin while a tap is cutting or its candidate has
+    // not landed in the job view yet: selected only gains the
+    // tap pin then, and confirm drops unlisted job pins. Scoped
+    // to that one pin — background refetches never disable Pin.
+    payload !== null &&
+    job?.status === "ready" &&
+    !confirm.isPending &&
+    !tapAdd.isPending &&
+    !isAwaitingTapPin(pendingTapPin, jobId, candidateIds, jobQuery.errorUpdatedAt);
   const showFaceNote = shouldShowFaceNote(job?.faceNote ?? false, jobId, dismissedFaceJobId);
+  // Visibility excludes `busy` so the preview stays up (disabled)
+  // while a tap is cutting; canTapAdd's busy gate is unit-tested.
+  const showTap = canTapAdd({
+    jobStatus: job?.status ?? null,
+    workingCopyGone: job?.workingCopyGone ?? false,
+    hasPreview: previewUrl !== null,
+    elementCount: job?.elementIds?.length ?? candidatePins.length,
+    maxElements: elementsPerPhotoMax,
+    busy: false,
+  });
   const terminalEmpty =
     job?.status === "ready" && candidatePins.length === 0;
 
@@ -224,6 +320,9 @@ export function AddSheet({
     setSelected(new Set());
     setDropped(new Set());
     setUploadError("");
+    setTapError("");
+    setPendingTapPin(null);
+    clearPreview();
     upload.reset();
   }
 
@@ -308,6 +407,40 @@ export function AddSheet({
           </>
         ) : null}
 
+        {showTap && previewUrl ? (
+          <>
+            <p className="hint" role="status">
+              {tapAdd.isPending ? t("en", "add.tapWorking") : t("en", "add.tapHint")}
+            </p>
+            <button
+              type="button"
+              className="tap-photo"
+              aria-label={t("en", "add.tapHint")}
+              disabled={tapAdd.isPending || confirm.isPending}
+              onClick={(event) => {
+                const point = normalizedTapPoint(
+                  event.clientX,
+                  event.clientY,
+                  event.currentTarget.getBoundingClientRect(),
+                );
+                if (point && jobId) tapAdd.mutate({ ...point, jobId });
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
+              <img src={previewUrl} alt="" />
+              {lastTap ? (
+                <span
+                  className="tap-dot"
+                  aria-hidden="true"
+                  style={{ left: `${lastTap.x * 100}%`, top: `${lastTap.y * 100}%` }}
+                />
+              ) : null}
+            </button>
+          </>
+        ) : null}
+        {tapError ? (
+          <p className="error" role="alert">{tapError}</p>
+        ) : null}
         {terminalEmpty ? <p className="hint" role="status">{t("en", "add.noneFound")}</p> : null}
         {job?.status === "failed" ? (
           <p className="error" role="alert">{t("en", "add.failed")}</p>

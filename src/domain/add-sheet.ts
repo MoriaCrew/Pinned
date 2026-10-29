@@ -102,6 +102,85 @@ export function shouldShowFaceNote(
 
 export type JobStatusLike = "pending" | "running" | "ready" | "failed" | "refused";
 
+/**
+ * Tap-to-add geometry (PIN-78): a tap on the photo preview
+ * (rendered at natural aspect, so the element box IS the image
+ * area) becomes a point normalized 0..1 — the Segmenter point
+ * prompt convention (gateway ports). Outside / degenerate
+ * boxes are null, never a guessed point.
+ */
+export function normalizedTapPoint(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+): { x: number; y: number } | null {
+  if (!(rect.width > 0 && rect.height > 0)) return null;
+  const x = (clientX - rect.left) / rect.width;
+  const y = (clientY - rect.top) / rect.height;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+    return null;
+  }
+  return { x, y };
+}
+
+/**
+ * When the Add sheet shows the tap surface (PIN-78): the job
+ * landed (ready), its working copy is still alive (pre-confirm,
+ * pre-TTL — hidden the moment the copy is gone), a photo
+ * preview exists to tap on, the photo is not already at the
+ * Policy elementsPerPhoto.max (tap-adds count), and no tap or
+ * confirm is already in flight.
+ */
+export function canTapAdd(input: {
+  jobStatus: JobStatusLike | null;
+  workingCopyGone: boolean;
+  hasPreview: boolean;
+  elementCount: number;
+  maxElements: number;
+  busy: boolean;
+}): boolean {
+  return (
+    input.jobStatus === "ready" &&
+    !input.workingCopyGone &&
+    input.hasPreview &&
+    input.elementCount < input.maxElements &&
+    !input.busy
+  );
+}
+
+/**
+ * True while a successful tap's candidate has not appeared in
+ * the job view yet (PIN-78): Pin N must wait for it, because
+ * confirm drops job pins missing from the payload — but ONLY
+ * for that pin, on that job. A job refetch that fails after
+ * the tap releases the wait (the pin is not visible to select
+ * anyway) instead of wedging Pin disabled; background
+ * refetches and stale pre-tap errors never affect it.
+ */
+/** A tap whose candidate has not landed in the job view yet. */
+export interface PendingTapPin {
+  pinId: string;
+  jobId: string;
+  /** Epoch-ms the tap succeeded (client clock). */
+  at: number;
+}
+
+export function isAwaitingTapPin(
+  pending: PendingTapPin | null,
+  currentJobId: string | null,
+  candidateIds: readonly string[],
+  jobErrorUpdatedAt: number,
+): boolean {
+  if (!pending) return false;
+  // A previous photo's pending tap never gates a new job.
+  if (pending.jobId !== currentJobId) return false;
+  if (candidateIds.includes(pending.pinId)) return false;
+  // Only a refetch failure AFTER this tap releases the wait; a
+  // stale error from before the tap must not skip it.
+  if (jobErrorUpdatedAt > pending.at) return false;
+  return true;
+}
+
 export function isTerminalJob(status: JobStatusLike): boolean {
   return status === "ready" || status === "failed" || status === "refused";
 }

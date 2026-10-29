@@ -216,6 +216,12 @@ details.card > summary { cursor: pointer; font-weight: 800; font-size: 1.15rem; 
 .pin-toggle .pin-label { display: block; }
 .pin-dropped { opacity: 0.45; }
 .pin-dropped img { filter: grayscale(1); }
+/* Tap-to-add photo surface (PIN-78): natural aspect, so the
+   button box is exactly the image area for normalized points. */
+.tap-photo { position: relative; display: block; width: 100%; min-height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: #fffdf8; cursor: pointer; }
+.tap-photo:disabled { cursor: wait; opacity: 0.75; }
+.tap-photo img { display: block; width: 100%; height: auto; border-radius: 14px; }
+.tap-dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #fff; background: #d9480f; pointer-events: none; }
 
 /* Make a scene (PIN-70) */
 .pin-selected { border: 2px solid var(--accent); box-shadow: 0 0 0 2px var(--accent); }
