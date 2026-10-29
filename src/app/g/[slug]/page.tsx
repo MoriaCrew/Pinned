@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { t } from "../../../i18n";
-import { getBoardTheme, storedThemeId } from "../../../domain/board-themes";
-import { getGameRepository } from "../../../server/repository";
+import { getBoardTheme } from "../../../domain/board-themes";
+import { isValidSlug } from "../../../domain/tokens";
+import { getPolicy } from "../../../policy/server";
+import { getBoardView } from "../../../server/board-api";
+import { getBoardRepository } from "../../../server/board-repository";
+import {
+  playerCookieName,
+  resolveParticipantSession,
+} from "../../../server/board-session";
 import { getConfig } from "../../../config";
-import { playerCookieName, publicPlayer, resolvePlayerSession } from "../../../server/player-session";
-import type { CSSProperties } from "react";
-import { JoinPanel } from "./JoinPanel";
-import { LocalDeadline } from "./LocalDeadline";
+import { boardApiDeps, policyForBoard } from "../../api/boards/shared";
+import { BoardClient, type BoardClientView } from "./BoardClient";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +22,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function themeVars(theme: { accent: string; accentInk: string; paper: string; line: string } | undefined): CSSProperties {
+function themeVars(
+  theme: { accent: string; accentInk: string; paper: string; line: string } | null | undefined,
+): CSSProperties {
   if (!theme) return {};
   return {
     "--accent": theme.accent,
@@ -27,56 +34,59 @@ function themeVars(theme: { accent: string; accentInk: string; paper: string; li
   } as CSSProperties;
 }
 
-// PIN-52 seam: existing games keep rendering here (read + join +
-// photo intake) until the Studio board page replaces this (PIN-66).
-export default async function GamePage({
+/**
+ * Studio board page (PIN-66, docs/11 section 6). Replaces the
+ * game read-path: boards live in `boards/` (PIN-62/63), so an
+ * old game slug with no Studio board is a plain 404 here (the
+ * accepted post-PIN-52 break). Slug shape is checked before any
+ * repository read, mirroring the API slug gate.
+ */
+export default async function BoardPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const repository = getGameRepository();
-  const game = await repository.getGame(slug);
-  if (!game) notFound();
+  if (!isValidSlug(slug)) notFound();
+
+  const boards = getBoardRepository();
+  const board = await boards.getBoard(slug);
+  if (!board) notFound();
+
+  const policy = await policyForBoard(slug);
   const cookieStore = await cookies();
-  const currentPlayer = await resolvePlayerSession(
+  const viewer = await resolveParticipantSession(
     slug,
     cookieStore.get(playerCookieName(slug))?.value ?? null,
-    { repository, sessionSecret: getConfig().sessionSecret },
-  );
-  const canJoin = game.state === "OPEN" && Date.now() < game.deadlineAt;
-  const boardTheme = getBoardTheme(storedThemeId(game));
+    { boards, sessionSecret: getConfig().sessionSecret, policy },
+  ).catch(() => null);
+  const view = await getBoardView(slug, viewer, boardApiDeps(policy));
+  if (!view) notFound();
+
+  const theme = getBoardTheme(board.themeId);
 
   return (
-    <div className="theme-bg" style={themeVars(game.theme)}>
-    <main>
-      <p className="eyebrow"><a href="/">📌 Pinneds</a></p>
-
-      <section className="card">
-        <p className="eyebrow">{t("en", "game.challenge")}</p>
-        {boardTheme ? (
-          // eslint-disable-next-line @next/next/no-img-element -- static baked asset
-          <img className="theme-art" src={boardTheme.image} alt="" aria-hidden="true" width={512} height={512} />
-        ) : null}
-        <h1 className="challenge">“{game.challenge}”</h1>
-        <p className="fact-chips">
-          {boardTheme ? (
-            <span className="fact-chip">{boardTheme.motif} {boardTheme.label}</span>
+    <div className="theme-bg" style={themeVars(theme?.tokens ?? board.theme)}>
+      <main className="board-main">
+        <p className="eyebrow"><a href="/">📌 Pinneds</a></p>
+        <section className="card">
+          {theme ? (
+            // eslint-disable-next-line @next/next/no-img-element -- static baked asset
+            <img className="theme-art" src={theme.image} alt="" aria-hidden="true" width={512} height={512} />
           ) : null}
-          <span className="fact-chip">
-            {t("en", "game.deadline")}{" "}
-            <LocalDeadline value={game.deadlineAt} />
-          </span>
-          <span className="fact-chip">{game.entryCount} {t("en", "game.entries")}</span>
-        </p>
-      </section>
-
-      <JoinPanel
-        slug={slug}
-        initialPlayer={currentPlayer ? publicPlayer(currentPlayer) : null}
-        canJoin={canJoin}
-      />
-    </main>
+          <h1 className="challenge">{board.title}</h1>
+          {theme ? (
+            <p className="fact-chips">
+              <span className="fact-chip">{theme.motif} {theme.label}</span>
+            </p>
+          ) : null}
+        </section>
+        <BoardClient
+          slug={slug}
+          initialView={view as BoardClientView}
+          pollIntervalMs={getPolicy(board.policyOverrides ?? null).boardPollIntervalMs}
+        />
+      </main>
     </div>
   );
 }
