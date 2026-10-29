@@ -242,13 +242,16 @@ export function AddSheet({
   });
 
   const tapAdd = useMutation({
-    mutationFn: async (point: { x: number; y: number }) => {
+    // The job id travels in the mutation VARIABLES, captured at
+    // tap time: callbacks must never bind a late-landing tap to
+    // whatever jobId the latest render holds (Bugbot PIN-78).
+    mutationFn: async (point: { x: number; y: number; jobId: string }) => {
       const response = await fetch(
-        `/api/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(jobId ?? "")}/tap-add`,
+        `/api/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(point.jobId)}/tap-add`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(point),
+          body: JSON.stringify({ x: point.x, y: point.y }),
         },
       );
       const data = (await response.json()) as { error?: string; pin?: { id: string } };
@@ -256,20 +259,20 @@ export function AddSheet({
       return data;
     },
     onMutate: (point) => {
-      setLastTap(point);
+      setLastTap({ x: point.x, y: point.y });
       setTapError("");
     },
-    onSuccess: (data) => {
-      if (data.pin?.id && jobId) {
-        setPendingTapPin({ pinId: data.pin.id, jobId, at: Date.now() });
+    onSuccess: (data, point) => {
+      if (data.pin?.id) {
+        setPendingTapPin({ pinId: data.pin.id, jobId: point.jobId, at: Date.now() });
       }
     },
     onError: (cause) =>
       setTapError(cause instanceof Error ? cause.message : t("en", "add.tapFailed")),
-    onSettled: () => {
+    onSettled: (_data, _cause, point) => {
       // The job poll stops at terminal status, so pull the new
       // candidate (or the gone-copy flag) in explicitly.
-      void queryClient.invalidateQueries({ queryKey: ["board-job", slug, jobId] });
+      void queryClient.invalidateQueries({ queryKey: ["board-job", slug, point.jobId] });
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
     },
   });
@@ -420,7 +423,7 @@ export function AddSheet({
                   event.clientY,
                   event.currentTarget.getBoundingClientRect(),
                 );
-                if (point) tapAdd.mutate(point);
+                if (point && jobId) tapAdd.mutate({ ...point, jobId });
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
