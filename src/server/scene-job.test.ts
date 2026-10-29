@@ -584,6 +584,34 @@ describe("deleted-element exclusion and hidden scenes", () => {
     expect((await h.boards.getScene(scene.id))?.hidden).toBe(true);
   });
 
+  it("a delete landing mid-finish cannot unhide the scene (sync race)", async () => {
+    const h = await makeHarness();
+    // Simulate the cascade landing between syncScene's hidden
+    // read and its write: when the finish sync reads the running
+    // scene, delete el1 before the write happens.
+    const boards = h.boards;
+    const origGetScene = boards.getScene.bind(boards);
+    let armed = true;
+    boards.getScene = async (sceneId: string) => {
+      const scene = await origGetScene(sceneId);
+      if (armed && scene?.status === "running") {
+        armed = false;
+        await boards.deleteElement("el1");
+      }
+      return scene;
+    };
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "race" },
+      h.deps,
+    );
+    expect(job.status).toBe("ready");
+    expect(armed).toBe(false); // the race was actually injected
+    expect((await origGetScene(job.id))?.hidden).toBe(true);
+    expect(await h.boards.listScenes("board-1")).toHaveLength(0);
+    expect(await getSceneView("board-1", job.id, h.api)).toBeNull();
+    expect(await resolveSceneImage("board-1", job.id, h.api)).toBeNull();
+  });
+
   it("never serves a scene whose imageRef points outside scenes/", async () => {
     const h = await makeHarness();
     await h.store.put("tmp/boards/secret/working.webp", Buffer.from("s"), "image/webp");

@@ -210,11 +210,31 @@ function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
   };
 }
 
-/** Keep the gallery Scene in step, preserving a delete-cascade hide. */
+/**
+ * Keep the gallery Scene in step, preserving a delete-cascade
+ * hide. The pre-write `hidden` read alone races a concurrent
+ * delete (its cascade could land between our read and our write,
+ * and the full-scene write would unhide it), so after writing we
+ * re-check that every used element still exists and re-hide if
+ * one is gone. The delete cascade is atomic with the element
+ * removal in both repositories, so a delete either committed
+ * before the re-check (element gone -> re-hide here) or its
+ * cascade runs after our write and hides the scene itself.
+ */
 async function syncScene(deps: SceneJobDeps, job: SceneJob): Promise<Scene> {
   const existing = await deps.boards.getScene(job.id);
   const scene = sceneFromJob(job, existing?.boardId === job.boardId ? existing.hidden : undefined);
   await deps.boards.putScene(scene);
+  if (!scene.hidden) {
+    for (const elementId of job.elementIds) {
+      const element = await deps.boards.getElement(elementId);
+      if (!element || element.boardId !== job.boardId) {
+        const hiddenScene: Scene = { ...scene, hidden: true };
+        await deps.boards.putScene(hiddenScene);
+        return hiddenScene;
+      }
+    }
+  }
   return scene;
 }
 
