@@ -60,6 +60,8 @@ export interface DecomposeJobStore {
   claim(jobId: string, now: number): Promise<DecomposeJob | null>;
   /** Replace the stored job (progress + terminal states). */
   update(job: DecomposeJob): Promise<void>;
+  /** All jobs on one board, createdAt-ascending (caps + TTL sweep). */
+  listForBoard(boardId: string): Promise<DecomposeJob[]>;
 }
 
 function cloneJob(job: DecomposeJob): DecomposeJob {
@@ -79,6 +81,13 @@ export class InMemoryDecomposeJobStore implements DecomposeJobStore {
   async get(jobId: string): Promise<DecomposeJob | null> {
     const job = this.jobs.get(jobId);
     return job ? cloneJob(job) : null;
+  }
+
+  async listForBoard(boardId: string): Promise<DecomposeJob[]> {
+    return [...this.jobs.values()]
+      .filter((job) => job.boardId === boardId)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map(cloneJob);
   }
 
   async claim(jobId: string, now: number): Promise<DecomposeJob | null> {

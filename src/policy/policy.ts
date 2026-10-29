@@ -25,6 +25,10 @@ export const PolicySchema = z
     scenesPerParticipantPerDay: z.number().int().min(0).default(10),
     scenesPerBoardPerDay: z.number().int().min(0).default(40),
     workingCopyTtlHours: z.number().positive().default(24),
+    /** Board API caps (PIN-65): join roster, title length, cookie life. */
+    participantsPerBoard: z.number().int().min(1).default(50),
+    boardTitleMaxChars: z.number().int().min(1).default(80),
+    participantCookieDays: z.number().int().min(1).default(30),
     faces: z.enum(["allow", "note", "block"]).default("note"),
     // PIN-50 locks: flattened won T2; portrait verified; store=false ok.
     sceneInputMode: z
@@ -122,6 +126,9 @@ export const PolicyOverridesSchema = z.object({
   scenesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
   workingCopyTtlHours: z.number().positive().optional(),
+  participantsPerBoard: z.number().int().min(1).optional(),
+  boardTitleMaxChars: z.number().int().min(1).optional(),
+  participantCookieDays: z.number().int().min(1).optional(),
   faces: z.enum(["allow", "note", "block"]).optional(),
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
   sceneSize: z.string().min(3).optional(),

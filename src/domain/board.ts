@@ -135,6 +135,8 @@ export interface DecomposeJob {
   status: SceneStatus; // pending -> running -> ready / failed / refused
   /** Stripped working copy under `tmp/`; deleted by later slices. */
   workingRef: string;
+  /** Set when the working copy was deleted (PIN-65 A6a / TTL sweep). */
+  workingDeletedAt?: number;
   promptVersion: string; // elements prompt actually used
   elementIds: string[];
   pinIds: string[];
