@@ -11,9 +11,11 @@ import "server-only";
  */
 import type { SamSegment } from "./model-gateway";
 import {
+  buildSceneResponsesBody,
   buildSegmentPromptText,
   normalizeElements,
   type ElementNamer,
+  type SceneComposer,
   type Segmenter,
 } from "./ports";
 
@@ -28,8 +30,18 @@ export interface StudioFixtureElement {
   confidence?: number;
 }
 
+export interface StudioFixtureScene {
+  id: string;
+  mode: string;
+  size: string;
+  prompt: string;
+  elementIds: string[];
+  outcome: string;
+}
+
 export interface StudioFixtures {
   elements: StudioFixtureElement[];
+  scenes?: StudioFixtureScene[];
 }
 
 export function fixtureElementNamer(fixtures: StudioFixtures): ElementNamer {
@@ -90,6 +102,56 @@ export function fixtureSegmenter(fixtures: StudioFixtures): Segmenter {
         };
       });
       return { status: "ready", value: { segments } };
+    },
+  };
+}
+
+/**
+ * Replay a recorded PIN-50 scene (PIN-68). fixtures.json stores the
+ * scene metadata (mode, prompt, elementIds, outcome); the composed
+ * JPEG itself lives at eval/fixtures/studio/scenes/{id}.jpg, so the
+ * outcome carries it as imageRef instead of inline base64. PIN-50
+ * recorded no raw /v1/responses body; the wire-level replay fixture
+ * is eval/fixtures/studio/compose-response.fixture.json.
+ */
+export function fixtureSceneComposer(fixtures: StudioFixtures): SceneComposer {
+  return {
+    async composeScene(input) {
+      const built = buildSceneResponsesBody(input, "fixture-image");
+      if (built.status !== "ready") return built;
+      const scenes = fixtures.scenes ?? [];
+      const scene = input.fixtureSceneId
+        ? scenes.find((s) => s.id === input.fixtureSceneId)
+        : (scenes.find((s) => s.mode === "flattened" && s.outcome === "ok") ??
+          scenes[0]);
+      if (!scene) {
+        return {
+          status: "failed",
+          errorCode: "fixture_not_found",
+          message: `No recorded scene ${input.fixtureSceneId ?? "(default)"}.`,
+        };
+      }
+      if (scene.outcome === "refused") {
+        return {
+          status: "refused",
+          errorCode: "no_image",
+          message: "The image model returned no image for this prompt.",
+        };
+      }
+      if (scene.outcome !== "ok") {
+        return {
+          status: "failed",
+          errorCode: "fixture_outcome",
+          message: `Recorded scene ${scene.id} outcome was ${scene.outcome}.`,
+        };
+      }
+      return {
+        status: "ready",
+        value: {
+          imageRef: `eval/fixtures/studio/scenes/${scene.id}.jpg`,
+          promptVersion: input.promptVersion,
+        },
+      };
     },
   };
 }

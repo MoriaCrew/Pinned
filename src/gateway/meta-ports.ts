@@ -10,6 +10,7 @@ import {
   buildSegmentPromptText,
   classifyPortError,
   type ElementNamer,
+  type SceneComposer,
   type Segmenter,
 } from "./ports";
 
@@ -45,6 +46,26 @@ export function metaSegmenter(gateway: MetaGateway): Segmenter {
           timeoutMs: input.timeoutMs,
         });
         return { status: "ready", value: { segments } };
+      } catch (cause) {
+        return classifyPortError(cause);
+      }
+    },
+  };
+}
+
+export function metaSceneComposer(gateway: MetaGateway): SceneComposer {
+  return {
+    async composeScene(input) {
+      try {
+        const outcome = await gateway.composeScene(input);
+        if (outcome.status !== "ready") return outcome;
+        return {
+          status: "ready",
+          value: {
+            imageBase64: outcome.value.imageBase64,
+            promptVersion: input.promptVersion,
+          },
+        };
       } catch (cause) {
         return classifyPortError(cause);
       }

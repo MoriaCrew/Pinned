@@ -90,17 +90,35 @@ export interface Segmenter {
 }
 
 /**
- * SceneComposer port — interface only in PIN-60; the Meta adapter
- * lands in PIN-54a1 reusing the PIN-50 /v1/responses builder.
+ * SceneComposer port (PIN-60 interface; Meta adapter PIN-68).
+ *
+ * `imageRef` is the provider-fetchable scene input for the element
+ * (a data: URL or https URL), already prepared per Policy
+ * `sceneInputMode`: the caller resolves the element's flattened copy
+ * (PIN-50 lock: flattened, docs/11 section 5.6) to bytes/URL. The
+ * builder never transforms image bytes and sends no wire key for the
+ * mode — `sceneInputMode` is carried for traceability only.
  */
+export interface ComposeSceneElement {
+  label: string;
+  description: string;
+  imageRef: string;
+  /** Owner display name for the "Element N (from X)" label. */
+  from?: string;
+}
+
 export interface ComposeSceneInput {
-  elements: { label: string; description: string; imageRef: string }[];
+  elements: ComposeSceneElement[];
   prompt: string;
   /** Policy sceneSize / sceneStore / timeoutsMs.scene. */
   size: string;
   store: boolean;
   timeoutMs: number;
   promptVersion: string;
+  /** Policy sceneInputMode the imageRefs were prepared with. */
+  sceneInputMode?: "flattened" | "transparent" | "whole";
+  /** Recorded-fixture adapter only: fixtures.json scene id. */
+  fixtureSceneId?: string;
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
@@ -322,5 +340,105 @@ export function sceneImageOutcome(
     status: "refused",
     errorCode: "no_image",
     message: "The image model returned no image for this prompt.",
+  };
+}
+
+/**
+ * prompts/scene.v1.md final-instruction text (the part above its
+ * rule): the fixed prefix with the user's prompt substituted into
+ * the {{PROMPT}} slot. Ported verbatim from the PIN-50 spike
+ * (scripts/studio-spike.mjs composeScene).
+ */
+const SCENE_TEMPLATE =
+  "Compose these exact elements into one new photorealistic scene, keeping each element recognisable: {{PROMPT}}";
+
+export function scenePromptText(prompt: string): string {
+  return SCENE_TEMPLATE.replace("{{PROMPT}}", prompt.trim());
+}
+
+const FROM_MAX = 40;
+
+function oneLine(value: string, max: number): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/**
+ * "Element N (from X): label" binding text shown immediately before
+ * the element's image (docs/11 section 5.6). The distinguishing
+ * description follows the label when it adds information, matching
+ * the spike, which labelled with the description.
+ */
+export function sceneElementLabel(
+  element: ComposeSceneElement,
+  index: number,
+): string {
+  const label = oneLine(element.label, LABEL_MAX);
+  const description = oneLine(element.description, DESCRIPTION_MAX);
+  const from = element.from ? oneLine(element.from, FROM_MAX) : "";
+  const detail =
+    description && description.toLowerCase() !== label.toLowerCase()
+      ? `${label} — ${description}`
+      : label;
+  return `Element ${index + 1}${from ? ` (from ${from})` : ""}: ${detail}`;
+}
+
+export type SceneContentPart =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string };
+
+/**
+ * Documented /v1/responses compose body (PIN-68, from the PIN-50
+ * spike): ONLY {model, store, input, tools}; the single tool is
+ * {type:"image_generation", size} — no undocumented keys anywhere.
+ */
+export interface SceneResponsesBody {
+  model: string;
+  store: boolean;
+  input: [{ role: "user"; content: SceneContentPart[] }];
+  tools: [{ type: "image_generation"; size: string }];
+}
+
+const SCENE_SIZE = /^\d+x\d+$/;
+
+/**
+ * Build the compose request body: one user message whose content is
+ * [label, image] per element in order, then the scene prompt LAST.
+ * Invalid caller input is a failed/bad_prompt outcome, never a throw
+ * (same contract as buildSegmentPromptText).
+ */
+export function buildSceneResponsesBody(
+  input: ComposeSceneInput,
+  imageModel: string,
+): PortOutcome<SceneResponsesBody> {
+  const bad = (message: string): PortOutcome<SceneResponsesBody> => ({
+    status: "failed",
+    errorCode: "bad_prompt",
+    message,
+  });
+  if (!imageModel.trim()) return bad("Scene image model is required.");
+  if (!input.elements.length) return bad("A scene needs at least one element.");
+  if (!input.prompt.trim()) return bad("A scene needs a prompt.");
+  if (!SCENE_SIZE.test(input.size)) {
+    return bad(`Scene size must look like "1024x1536", got "${input.size}".`);
+  }
+  const content: SceneContentPart[] = [];
+  for (let i = 0; i < input.elements.length; i += 1) {
+    const element = input.elements[i];
+    if (!element.label.trim()) return bad(`Element ${i + 1} has no label.`);
+    if (!element.imageRef.trim()) {
+      return bad(`Element ${i + 1} has no scene input image.`);
+    }
+    content.push({ type: "input_text", text: sceneElementLabel(element, i) });
+    content.push({ type: "input_image", image_url: element.imageRef });
+  }
+  content.push({ type: "input_text", text: scenePromptText(input.prompt) });
+  return {
+    status: "ready",
+    value: {
+      model: imageModel,
+      store: input.store,
+      input: [{ role: "user", content }],
+      tools: [{ type: "image_generation", size: input.size }],
+    },
   };
 }

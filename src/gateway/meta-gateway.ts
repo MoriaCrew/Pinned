@@ -15,7 +15,16 @@ import type {
   ObjectLabel,
   SamSegment,
 } from "./model-gateway";
-import { elementsSystemPrompt, normalizeElements, type NameElementsInput, type NamedElement } from "./ports";
+import {
+  buildSceneResponsesBody,
+  elementsSystemPrompt,
+  normalizeElements,
+  sceneImageOutcome,
+  type ComposeSceneInput,
+  type NameElementsInput,
+  type NamedElement,
+  type PortOutcome,
+} from "./ports";
 
 export interface MetaGatewayOptions {
   apiKey: string;
@@ -247,6 +256,30 @@ export class MetaGateway implements ModelGateway {
       );
     }
     return { segments: parseSamOutput(text) };
+  }
+
+  /**
+   * Muse Image compose (prompts/scene.v1.md, PIN-68): one
+   * /v1/responses call built by buildSceneResponsesBody (label +
+   * flattened image per element, prompt last, image_generation
+   * tool only, store from Policy). HTTP 200 with no populated
+   * image_generation_call item is a refusal (sceneImageOutcome),
+   * returned as data — transport/HTTP errors still throw and the
+   * port adapter classifies them.
+   */
+  async composeScene(
+    input: ComposeSceneInput,
+  ): Promise<PortOutcome<{ imageBase64: string }>> {
+    const built = buildSceneResponsesBody(input, this.options.imageModel);
+    if (built.status !== "ready") return built;
+    const json = await this.request(
+      "composeScene",
+      this.options.imageModel,
+      "/responses",
+      built.value as unknown as Json,
+      input.timeoutMs,
+    );
+    return sceneImageOutcome(json.output);
   }
 }
 
