@@ -125,5 +125,9 @@
   "create.creating": "⏳ Creating…",
   "create.error": "❌ Could not create. Try again.",
   "create.titleRequired": "Give your board a title.",
-  "create.titleTooLong": "Title is too long."
+  "create.titleTooLong": "Title is too long.",
+  "share.button": "↗ Share",
+  "share.sharing": "⏳ Sharing…",
+  "share.failed": "❌ Share failed. Try again.",
+  "board.previewDescription": "A shared Pinneds board — everyone's things, pinned."
 }

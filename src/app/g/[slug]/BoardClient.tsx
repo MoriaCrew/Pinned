@@ -23,6 +23,7 @@ import {
   selectedCards,
   togglePinSelection,
 } from "../../../domain/make-sheet";
+import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
 import { playerColorFor } from "../../../domain/board-themes";
 import { t } from "../../../i18n";
 import { AddSheet, boardQueryKey } from "./AddSheet";
@@ -109,6 +110,8 @@ function BoardBody({
   // Sheet prompt seed: "" for a fresh scene; the refused/failed
   // attempt's prompt only via "Change idea".
   const [sheetPrompt, setSheetPrompt] = useState("");
+  const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
+  const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   const boardQuery = useQuery({
     queryKey: boardQueryKey(slug),
     queryFn: async (): Promise<BoardClientView> => {
@@ -283,6 +286,75 @@ function BoardBody({
     setMakeOpen(true);
   }
 
+  // PIN-72: share the scene image file when the browser can,
+  // else the board link, else download. A user-cancelled sheet
+  // (AbortError) is silent; success is never claimed in the UI.
+  async function shareScene(scene: BoardViewScene) {
+    if (!scene.imageUrl || sharingSceneId) return;
+    setSharingSceneId(scene.id);
+    setShareErrorSceneId(null);
+    const pageUrl = window.location.href.split("#")[0] ?? window.location.href;
+    const shareText = scene.prompt;
+    let blob: Blob | null = null;
+    let file: File | null = null;
+    try {
+      if (typeof navigator !== "undefined" && "share" in navigator) {
+        try {
+          const response = await fetch(scene.imageUrl);
+          if (response.ok) {
+            blob = await response.blob();
+            file = new File([blob], sceneShareFilename(scene.id, blob.type), {
+              type: blob.type || "image/png",
+            });
+          }
+        } catch {
+          file = null;
+        }
+      }
+      const nav = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean;
+      };
+      const canShareFiles = Boolean(
+        file && nav.canShare && nav.canShare({ files: [file] }),
+      );
+      const urlData: ShareData = { title: view.board.title, text: shareText, url: pageUrl };
+      const canShareUrl = Boolean(
+        "share" in navigator && (!nav.canShare || nav.canShare(urlData)),
+      );
+      const action = chooseShareAction({ canShareFiles, canShareUrl });
+      if (action === "files" && file) {
+        await navigator.share({ title: view.board.title, text: shareText, files: [file] });
+        return;
+      }
+      if (action === "url") {
+        await navigator.share(urlData);
+        return;
+      }
+      if (!blob) {
+        const response = await fetch(scene.imageUrl);
+        if (!response.ok) throw new Error("download failed");
+        blob = await response.blob();
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = sceneShareFilename(scene.id, blob.type);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      if (cause instanceof Error && cause.name === "AbortError") return;
+      setShareErrorSceneId(scene.id);
+    } finally {
+      setSharingSceneId(null);
+    }
+  }
+
   function renderScene(scene: BoardViewScene) {
     const parts = sceneCreditParts(scene, view.elements, view.participants);
     const mine = attempt !== null && scene.id === attempt.sceneId;
@@ -309,6 +381,19 @@ function BoardBody({
               .map((part) => (part.ownerName ? `${part.ownerName}'s ${part.label}` : part.label))
               .join(" + ")}
           </p>
+        ) : null}
+        {scene.status === "ready" && scene.imageUrl ? (
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={sharingSceneId === scene.id}
+            onClick={() => void shareScene(scene)}
+          >
+            {sharingSceneId === scene.id ? t("en", "share.sharing") : t("en", "share.button")}
+          </button>
+        ) : null}
+        {shareErrorSceneId === scene.id ? (
+          <p className="error" role="alert">{t("en", "share.failed")}</p>
         ) : null}
         {mine && (scene.status === "refused" || scene.status === "failed") ? (
           <button type="button" className="btn btn-small" onClick={changeIdea}>
