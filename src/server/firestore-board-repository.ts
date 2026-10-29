@@ -191,12 +191,24 @@ export class FirestoreBoardRepository implements BoardRepository {
       const seq = existing.exists
         ? rowFrom<Participant>(ref, existing.data() as DocumentData).seq
         : nextSeq(rows as StoredRow<Participant>[]);
+      const events = existing.exists
+        ? null
+        : rowsFrom<BoardEvent>(await tx.get(this.col(participant.boardId, EVENTS)));
       tx.set(ref, toStored(participant, seq));
       if (!existing.exists) {
         tx.set(
           this.boardRef(participant.boardId),
           toFirestoreData(withCounters(board, { participantCount: 1 })),
         );
+        const eventRef = this.col(participant.boardId, EVENTS).doc();
+        const event: BoardEvent = {
+          id: eventRef.id,
+          boardId: participant.boardId,
+          type: "participant_joined",
+          actorId: participant.id,
+          createdAt: participant.createdAt,
+        };
+        tx.set(eventRef, toStored(event, nextSeq(events as StoredRow<BoardEvent>[])));
       }
     });
   }

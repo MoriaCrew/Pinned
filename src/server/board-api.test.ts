@@ -246,6 +246,33 @@ describe("uploadPhoto -> job -> confirmPins (A6a)", () => {
   });
 });
 
+describe("activity strip in the board view (PIN-74)", () => {
+  it("shows joins then the pinned line, newest first, capped by Policy.activityStripMax", async () => {
+    const h = makeHarness({ activityStripMax: 2 });
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+
+    // Unconfirmed candidates stay out of the strip: only the two
+    // joins are activity so far, and the cap keeps the newest two.
+    const before = await getBoardView(board.slug, null, h.deps);
+    expect(before?.activity.map((a) => a.kind)).toEqual(["joined", "joined"]);
+
+    await confirmPins(board.slug, owner, { jobId: job.id, pinIds: [job.pinIds[0]] }, h.deps);
+    const after = await getBoardView(board.slug, null, h.deps);
+    expect(after?.activity).toHaveLength(2);
+    expect(after?.activity[0].kind).toBe("pinned");
+    expect(after?.activity[0].label).toBeTruthy();
+    expect(after?.activity[0].actorName).toBe(owner.displayName);
+  });
+
+  it("is empty on a brand-new board with no participants yet", async () => {
+    const h = makeHarness();
+    const board = await createBoard({ title: "Fresh" }, h.deps);
+    const view = await getBoardView(board.slug, null, h.deps);
+    expect(view?.activity).toEqual([]);
+  });
+});
+
 describe("sweepExpiredWorkingCopies (A6a TTL hook)", () => {
   it("deletes only working copies past Policy.workingCopyTtlHours", async () => {
     const h = makeHarness({ workingCopyTtlHours: 2 });

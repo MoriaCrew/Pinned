@@ -120,6 +120,23 @@ export function describeBoardRepositoryContract(
       expect(await repo.getParticipant(SLUG, "ghost")).toBeNull();
     });
 
+    it("emits participant_joined once per new participant, never on upsert (PIN-74)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.putParticipant(makeParticipant());
+      await repo.putParticipant(makeParticipant({ displayName: "Aye A." }));
+      await repo.putParticipant(makeParticipant({ id: "part-2", createdAt: 1_150 }));
+      const events = await repo.listEvents(SLUG);
+      expect(events.map((e) => e.type)).toEqual([
+        "participant_joined",
+        "participant_joined",
+      ]);
+      expect(events[0]).toMatchObject({ actorId: "part-1", boardId: SLUG });
+      expect(events[1]).toMatchObject({ actorId: "part-2", createdAt: 1_150 });
+      expect(events[0].id).not.toBe("");
+      expect(events[0].id).not.toBe(events[1].id);
+    });
+
     it("rejects writes against a missing board", async () => {
       const repo = makeRepo();
       await expect(repo.putParticipant(makeParticipant())).rejects.toThrow(RangeError);

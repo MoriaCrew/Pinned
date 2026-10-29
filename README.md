@@ -113,6 +113,13 @@ demo link. Re-running is the reset: a fresh board with the same
 title marker and counts; repoint `DEMO_BOARD_SLUG`.
 `npm run seed:demo -- --time-first-scene <slug>` times a fresh
 visitor's first-scene path (docs/11 §6 target: under 90 s).
+
+Usage counts (PIN-74): `npm run usage:report -- <slug> [<slug> ...]`
+(or `USAGE_BOARD_SLUGS=slug1,slug2`; `USAGE_BASE_URL` targets a hosted
+backend) prints per-board people/elements/pins/scenes from the public
+board view counters plus one `TOTAL:` line for the video. Board slugs
+are capability secrets: pass them locally, never commit them; the
+script prints titles and counts only.
 Firebase projects `moriacrew-pinned-dev` and `moriacrew-pinned-prod`
 exist with Firestore in `eur3`, billing enabled, and `pinned-web`
 App Hosting backends in `europe-west4`; the first rollout follows merge.

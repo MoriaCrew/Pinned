@@ -222,7 +222,13 @@ describe("FirestoreBoardRepository layout (fake Firestore)", () => {
     expect(paths).toContain(`boards/${SLUG}/participants/part-1`);
     expect(paths).toContain(`boards/${SLUG}/elements/el-1`);
     expect(paths).toContain(`boards/${SLUG}/pins/pin-1`);
-    expect(paths.filter((p) => p.startsWith(`boards/${SLUG}/events/`))).toHaveLength(2);
+    // participant_joined (PIN-74) + element_added + pin_added.
+    expect(paths.filter((p) => p.startsWith(`boards/${SLUG}/events/`))).toHaveLength(3);
+    expect((await repo.listEvents(SLUG)).map((e) => e.type)).toEqual([
+      "participant_joined",
+      "element_added",
+      "pin_added",
+    ]);
     expect(paths.filter((p) => p.startsWith("games/"))).toEqual(["games/legacy"]);
     expect(fake.store.get("games/legacy")).toEqual(gameDoc);
 

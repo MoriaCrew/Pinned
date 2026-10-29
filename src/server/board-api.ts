@@ -15,6 +15,7 @@ import "server-only";
  * an operator step; until it lands no copy may claim 24h deletion.
  */
 import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
+import { activityLines } from "../domain/board-activity";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { generateSlug } from "../domain/tokens";
@@ -216,11 +217,12 @@ export async function getBoardView(
 ) {
   const board = await deps.boards.getBoard(slug);
   if (!board) return null;
-  const [participants, allPins, elements, scenes] = await Promise.all([
+  const [participants, allPins, elements, scenes, events] = await Promise.all([
     deps.boards.listParticipants(slug),
     deps.boards.listPins(slug),
     deps.boards.listElements(slug),
     deps.boards.listScenes(slug),
+    deps.boards.listEvents(slug),
   ]);
   const pins = allPins.filter(
     (pin) => pin.status === "pinned" || (viewer !== null && pin.pinnedBy === viewer.id),
@@ -235,6 +237,9 @@ export async function getBoardView(
       .filter((element) => visibleElementIds.has(element.id))
       .map((element) => publicElement(slug, element)),
     scenes: scenes.map((scene) => publicScene(slug, scene)),
+    // Activity strip (PIN-74): board-visible BoardEvent lines,
+    // latest Policy.activityStripMax, names/labels resolved here.
+    activity: activityLines(events, participants, elements, deps.policy.activityStripMax),
   };
 }
 

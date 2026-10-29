@@ -45,7 +45,10 @@ export interface BoardRepository {
   createBoard(board: Board): Promise<void>;
   getBoard(slug: string): Promise<Board | null>;
 
-  /** Upsert join identity; participantCount grows only on first insert. */
+  /**
+   * Upsert join identity; participantCount grows only on first
+   * insert, which also appends `participant_joined` (PIN-74).
+   */
   putParticipant(participant: Participant): Promise<void>;
   getParticipant(boardId: string, participantId: string): Promise<Participant | null>;
   listParticipants(boardId: string): Promise<Participant[]>;
@@ -136,7 +139,15 @@ export class InMemoryBoardRepository implements BoardRepository {
     const key = `${participant.boardId}/${participant.id}`;
     const isNew = !this.participants.has(key);
     this.participants.set(key, clone(participant));
-    if (isNew) this.adjustCounters(participant.boardId, { participantCount: 1 });
+    if (isNew) {
+      this.adjustCounters(participant.boardId, { participantCount: 1 });
+      this.emit({
+        boardId: participant.boardId,
+        type: "participant_joined",
+        actorId: participant.id,
+        createdAt: participant.createdAt,
+      });
+    }
   }
 
   async getParticipant(boardId: string, participantId: string): Promise<Participant | null> {
