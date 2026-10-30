@@ -323,3 +323,49 @@
   color: var(--danger);
   font: 650 15px/20px var(--font-ui);
 }
+
+/* Scene viewer (PIN-131): the whole picture on the skin's dark ground, the paper panel under it. */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--viewer-bg);
+}
+
+.viewer:focus {
+  outline: none;
+}
+
+/* The picture takes what the panel leaves: contained, never cropped. Pinch-zoom stays native. */
+.viewerStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  touch-action: pinch-zoom;
+}
+
+.viewerStage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.viewerPanel {
+  flex: none;
+  max-height: 55%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.viewerMore {
+  position: relative;
+}
+
+.viewerMenu {
+  right: 0;
+  bottom: 100%;
+}

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
-import { BoardScenes } from "./BoardScenes";
+import { BoardScenes, type PrintSlot } from "./BoardScenes";
 import { BoardThings, type DeleteControls } from "./BoardThings";
+import { SceneViewer } from "./SceneViewer";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
@@ -157,5 +160,67 @@ describe("board scenes strip (PIN-98)", () => {
     expect(out).not.toContain("pn-credit-item");
     // Nothing in the credits is a tab stop; the only buttons are the print's own (Remix, Share).
     expect(out.match(/<button/g)).toHaveLength(2);
+  });
+});
+
+describe("scene viewer (PIN-131)", () => {
+  const names = ["teal mug", "rubber duck", "succulent", "alarm clock", "book stack", "red sneakers", "straw hat"];
+  const remix: PrintSlot = {
+    type: "print",
+    ratio: "2 / 3",
+    id: "s7",
+    src: "/api/boards/b/scenes/s7/image",
+    alt: "A picnic, with Robin's teal mug",
+    idea: "A picnic",
+    credits: names.map((thing, i) => ({ thing, owner: { id: "p1", name: "Robin" }, src: `/e${i}` })),
+    kind: "remix",
+    remixOf: { title: "A tiny picnic", owner: "Jo" },
+    onShare: noop,
+    sharing: false,
+  };
+  const viewer = (over: Partial<Parameters<typeof SceneViewer>[0]> = {}) =>
+    html(h(SceneViewer, { slot: remix, onClose: noop, onStep: noop, onRemix: noop, ...over }));
+
+  it("is a modal dialog named by the idea", () => {
+    const out = viewer();
+    expect(out).toContain('role="dialog"');
+    expect(out).toContain('aria-modal="true"');
+    const labelledBy = out.match(/aria-labelledby="([^"]+)"/)?.[1];
+    expect(out).toContain(`id="${labelledBy}">“A picnic”</h2>`);
+  });
+
+  it("shows the full image, contained and never cropped", () => {
+    const out = viewer();
+    expect(out).toContain('src="/api/boards/b/scenes/s7/image" alt="A picnic, with Robin&#x27;s teal mug"');
+    // Not in a print frame (those cover their shape); the stage contains it.
+    expect(out).not.toContain("pn-print-frame");
+    const css = readFileSync(path.join(process.cwd(), "src/app/g/[slug]/board.module.css"), "utf8");
+    expect(css).toMatch(/\.viewerStage img \{[^}]*object-fit: contain;/);
+    expect(css).toMatch(/\.viewerStage \{[^}]*touch-action: pinch-zoom;/);
+  });
+
+  it("lists every credit in full with the remix line", () => {
+    const out = viewer();
+    expect(out).not.toContain("pn-credit-compact");
+    expect(out.match(/class="pn-credit-item"/g)).toHaveLength(names.length);
+    expect(out).toContain("straw hat");
+    expect(out).toContain("Remix of <b>A tiny picnic</b> by Jo");
+  });
+
+  it("puts Share first, then Remix, and More only when it has items", () => {
+    const out = viewer();
+    expect(out).toMatch(/pn-btn-primary[^>]*>.*Share<\/button>.*Remix<\/button>/);
+    expect(out).toContain('aria-label="Close"');
+    expect(out).not.toContain('aria-label="More"');
+    expect(viewer({ onRemix: undefined })).not.toContain("Remix</button>");
+    expect(viewer({ more: [{ label: "Delete", onSelect: noop, danger: true }] })).toContain('aria-label="More"');
+    expect(viewer({ slot: { ...remix, sharing: true } })).toMatch(/disabled=""[^>]*>.*Share<\/button>/);
+  });
+
+  it("makes the print's picture and credits row open the viewer", () => {
+    const out = html(h(BoardScenes, { count: 1, slots: [{ ...remix, onOpen: noop }] }));
+    expect(out).toContain('data-scene-id="s7"');
+    expect(out).toMatch(/<button type="button" class="pn-print-open" aria-label="A picnic" aria-haspopup="dialog"><div class="pn-print-frame"/);
+    expect(out).toMatch(/class="pn-credit-row pn-credit-open" aria-label="Made from [^"]+" aria-haspopup="dialog"/);
   });
 });

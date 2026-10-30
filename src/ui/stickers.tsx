@@ -231,7 +231,7 @@ export function CreditLine({
     return (
       <div className={cx("pn-credit", "pn-credit-compact", className)}>
         {items.length === 0 ? null : onOpen ? (
-          <button type="button" className="pn-credit-row pn-credit-open" aria-label={name} onClick={onOpen}>
+          <button type="button" className="pn-credit-row pn-credit-open" aria-label={name} aria-haspopup="dialog" onClick={onOpen}>
             {content}
           </button>
         ) : (

@@ -24,6 +24,8 @@ export type SceneSlot =
       number?: number;
       onRemix?: () => void;
       onShare: () => void;
+      /** Opens the scene viewer (PIN-131) from the picture and the credits row. */
+      onOpen?: () => void;
       sharing: boolean;
       footer?: ReactNode;
     }
@@ -46,6 +48,8 @@ export type SceneSlot =
       onTryAgain?: () => void;
     };
 
+export type PrintSlot = Extract<SceneSlot, { type: "print" }>;
+
 /**
  * Scenes (PIN-98): the newest print first in a sideways strip.
  * A scene still being made shows as Developing where it will land;
@@ -64,7 +68,7 @@ export function BoardScenes({ slots, count }: { slots: SceneSlot[]; count: numbe
         <div className={styles.strip}>
           <ul className="pn-prints">
             {slots.map((slot) => (
-              <li key={`${slot.type}-${slot.id}`} style={{ "--print-ratio": slot.ratio } as CSSProperties}>
+              <li key={`${slot.type}-${slot.id}`} data-scene-id={slot.id} style={{ "--print-ratio": slot.ratio } as CSSProperties}>
                 <Slot slot={slot} />
               </li>
             ))}
@@ -90,6 +94,7 @@ function Slot({ slot }: { slot: SceneSlot }) {
         seed={slot.id}
         onRemix={slot.onRemix}
         onShare={slot.onShare}
+        onOpen={slot.onOpen}
         sharing={slot.sharing}
         footer={slot.footer}
       />
