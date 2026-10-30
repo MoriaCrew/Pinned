@@ -37,7 +37,9 @@ import {
 } from "../../../domain/board-ui";
 import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
 import type { ActivityLine } from "../../../domain/board-activity";
-import type { SkinId } from "../../../domain/skins";
+import type { PlusView } from "../../../domain/plus";
+import { foilPinId, lookSample } from "../../../domain/plus-ui";
+import { skinForTheme, type SkinId } from "../../../domain/skins";
 import { t, tCount, tf } from "../../../i18n";
 import {
   shouldShowSignInNudge,
@@ -50,13 +52,19 @@ import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
 import { JoinSheet } from "./JoinSheet";
+import { BoardMore } from "./BoardMore";
+import { PlusFlow, useLookFlow } from "./PlusFlow";
 import styles from "./board.module.css";
 
 export interface BoardClientView extends BoardViewLike {
-  board: { slug: string; title: string };
+  board: { slug: string; title: string; themeId?: string | null };
   me: { id: string; displayName: string } | null;
   scenes: BoardViewScene[];
   activity: ActivityLine[];
+  /** PIN-103: false in the server render (the host cookie is API-path scoped); the first poll says. */
+  viewer?: { isHost: boolean };
+  /** PIN-103: the board's Plus state, billing mode and Policy price labels. */
+  plus?: PlusView;
 }
 
 export interface BoardClientPolicy {
@@ -140,13 +148,12 @@ export function BoardClient({
   slug,
   initialView,
   policy,
+  tryOnSkin = null,
 }: {
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
-  /** The board's skin (its root carries data-theme). */
-  skin?: SkinId;
-  /** `?tryon=<skin>` (PIN-103 wires try-on; passed through only). */
+  /** `?tryon=<skin>`: the host's Plus try-on from the start flow (PIN-111). */
   tryOnSkin?: SkinId | null;
 }) {
   const [queryClient] = useState(
@@ -157,7 +164,7 @@ export function BoardClient({
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <BoardBody slug={slug} initialView={initialView} policy={policy} />
+      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} />
     </QueryClientProvider>
   );
 }
@@ -166,10 +173,12 @@ function BoardBody({
   slug,
   initialView,
   policy,
+  tryOnSkin,
 }: {
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
+  tryOnSkin: SkinId | null;
 }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -215,6 +224,12 @@ function BoardBody({
     refetchIntervalInBackground: false,
   });
   const view = boardQuery.data;
+
+  // PIN-111: the board's skin (first-generation theme ids map onto a
+  // free skin) and the host's Change look / try-on / Board Plus flow.
+  const boardSkin = skinForTheme(view.board.themeId);
+  const isHost = view.viewer?.isHost === true;
+  const look = useLookFlow({ slug, boardSkin, isHost, plus: view.plus, tryOnParam: tryOnSkin });
 
   // PIN-84: sign-in sync. Disabled (link-only) -> useAuth is the
   // inert default and everything below renders/runs nothing.
@@ -788,179 +803,198 @@ function BoardBody({
   const showScenes = !pickingNow && (!empty || slots.length > 0);
   const atMax = picked.length >= policy.pinsPerScene.max;
   const showDock = !empty;
+  const lookSampleUrls = lookSample(cards);
 
   return (
-    <main className={cx(styles.board, !showDock && styles.boardRest)}>
-      <BoardHeader
-        title={view.board.title}
-        people={people}
-        counts={counts}
-        onShare={() => void shareBoard()}
-        homeHref="/"
-      />
+    <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>
+      <main className={cx(styles.board, !showDock && styles.boardRest, look.tryOn && styles.boardTryOn)}>
+        <BoardHeader
+          title={view.board.title}
+          people={people}
+          counts={counts}
+          onShare={() => void shareBoard()}
+          homeHref="/"
+          actions={isHost ? <BoardMore onChangeLook={look.openLook} /> : null}
+        />
 
-      <div className={styles.under}>
-        {latestLine && !pickingNow ? (
-          <p className={cx("pn-board-meta", styles.latest)}>
-            <span className="pn-sr">{t("en", "board.activity")}: </span>
-            {latestLine}
-          </p>
-        ) : null}
-        {shareNotice ? (
-          <p className={shareNotice === "copied" ? styles.notice : styles.error} role="status">
-            {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
-          </p>
-        ) : null}
-        {boardQuery.isError ? (
-          <div className={styles.errorRow}>
-            <p className={styles.error} role="alert">
-              {t("en", "board.loadError")}
-            </p>
-            <Button size="sm" onClick={() => void boardQuery.refetch()}>
-              {t("en", "board.retry")}
-            </Button>
-          </div>
-        ) : null}
-        {showNudge ? (
-          <div className={styles.nudge} role="status">
-            <p>{t("en", "auth.nudge")}</p>
-            <div className={styles.nudgeActions}>
-              <Button
-                size="sm"
-                onClick={() => {
-                  dismissNudge();
-                  void auth.signIn();
-                }}
-              >
-                {t("en", "auth.signIn")}
-              </Button>
-              <Button variant="quiet" size="sm" onClick={dismissNudge}>
-                {t("en", "auth.nudgeDismiss")}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {pickingNow ? (
-        <div className={styles.hintRow}>
-          {remixParent ? (
-            <Hint onDismiss={exitPicking} dismissLabel={t("en", "board.stop")} x={40}>
-              {tf("en", "board.remixing", { idea: remixParent.prompt })}
-            </Hint>
-          ) : !pickHintSeen ? (
-            <Hint onDismiss={dismissPickHint} x={40}>
-              {tCount("en", "board.pickHint", policy.pinsPerScene.max)}
-            </Hint>
-          ) : atMax ? (
-            <p className="pn-board-meta" role="status">
-              {tf("en", "board.pickMax", { n: policy.pinsPerScene.max })}
+        <div className={styles.under}>
+          {latestLine && !pickingNow ? (
+            <p className={cx("pn-board-meta", styles.latest)}>
+              <span className="pn-sr">{t("en", "board.activity")}: </span>
+              {latestLine}
             </p>
           ) : null}
+          {shareNotice ? (
+            <p className={shareNotice === "copied" ? styles.notice : styles.error} role="status">
+              {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
+            </p>
+          ) : null}
+          {boardQuery.isError ? (
+            <div className={styles.errorRow}>
+              <p className={styles.error} role="alert">
+                {t("en", "board.loadError")}
+              </p>
+              <Button size="sm" onClick={() => void boardQuery.refetch()}>
+                {t("en", "board.retry")}
+              </Button>
+            </div>
+          ) : null}
+          {showNudge ? (
+            <div className={styles.nudge} role="status">
+              <p>{t("en", "auth.nudge")}</p>
+              <div className={styles.nudgeActions}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    dismissNudge();
+                    void auth.signIn();
+                  }}
+                >
+                  {t("en", "auth.signIn")}
+                </Button>
+                <Button variant="quiet" size="sm" onClick={dismissNudge}>
+                  {t("en", "auth.nudgeDismiss")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
 
-      {showScenes ? <BoardScenes slots={slots} count={counts.scenes} /> : null}
+        {pickingNow ? (
+          <div className={styles.hintRow}>
+            {remixParent ? (
+              <Hint onDismiss={exitPicking} dismissLabel={t("en", "board.stop")} x={40}>
+                {tf("en", "board.remixing", { idea: remixParent.prompt })}
+              </Hint>
+            ) : !pickHintSeen ? (
+              <Hint onDismiss={dismissPickHint} x={40}>
+                {tCount("en", "board.pickHint", policy.pinsPerScene.max)}
+              </Hint>
+            ) : atMax ? (
+              <p className="pn-board-meta" role="status">
+                {tf("en", "board.pickMax", { n: policy.pinsPerScene.max })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
-      {empty && !pickingNow ? (
-        <EmptyState onAction={() => requireJoin({ kind: "add" })} onShare={() => void shareBoard()} />
-      ) : null}
+        {showScenes ? <BoardScenes slots={slots} count={counts.scenes} /> : null}
 
-      {cards.length > 0 ? (
-        <BoardThings
-          cards={cards}
-          count={counts.things}
-          meId={view.me?.id ?? null}
-          picking={pickingNow}
-          pickNumbers={pickNumbers(cards, selected)}
-          showHead={!pickingNow}
-          onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
-          deletion={{
-            confirmElementId: confirmDeleteElementId,
-            errorElementId: deleteErrorElementId,
-            deletingElementId: deleteElement.isPending ? (deleteElement.variables ?? null) : null,
-            onAsk: (elementId) => {
-              setDeleteErrorElementId(null);
-              setConfirmDeleteElementId(elementId);
-            },
-            onConfirm: (elementId) => deleteElement.mutate(elementId),
-            onCancel: () => setConfirmDeleteElementId(null),
-          }}
-        />
-      ) : null}
+        {empty && !pickingNow ? (
+          <EmptyState onAction={() => requireJoin({ kind: "add" })} onShare={() => void shareBoard()} />
+        ) : null}
 
-      {view.me && !pickingNow ? (
-        <p className={cx("pn-board-meta", styles.me)}>
-          {tf("en", "join.youAre", { name: view.me.displayName })}
-          <Button variant="quiet" size="sm" onClick={() => setJoinIntent({ kind: "edit" })}>
-            {t("en", "join.edit")}
-          </Button>
-        </p>
-      ) : null}
+        {cards.length > 0 ? (
+          <BoardThings
+            cards={cards}
+            count={counts.things}
+            meId={view.me?.id ?? null}
+            picking={pickingNow}
+            pickNumbers={pickNumbers(cards, selected)}
+            foilPinId={foilPinId(cards, view.plus)}
+            showHead={!pickingNow}
+            onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
+            deletion={{
+              confirmElementId: confirmDeleteElementId,
+              errorElementId: deleteErrorElementId,
+              deletingElementId: deleteElement.isPending ? (deleteElement.variables ?? null) : null,
+              onAsk: (elementId) => {
+                setDeleteErrorElementId(null);
+                setConfirmDeleteElementId(elementId);
+              },
+              onConfirm: (elementId) => deleteElement.mutate(elementId),
+              onCancel: () => setConfirmDeleteElementId(null),
+            }}
+          />
+        ) : null}
 
-      {showDock ? (
-        <>
-          <div className={styles.fade} aria-hidden="true" />
-          {pickingNow ? (
-            <Dock
-              mode="picking"
-              fixed
-              picked={picked.map((card) => ({ src: card.element.imageUrl, label: card.element.label }))}
-              max={policy.pinsPerScene.max}
-              onCancel={exitPicking}
-              onNext={openMakeSheet}
-              nextDisabled={picked.length < policy.pinsPerScene.min}
+        {view.me && !pickingNow ? (
+          <p className={cx("pn-board-meta", styles.me)}>
+            {tf("en", "join.youAre", { name: view.me.displayName })}
+            <Button variant="quiet" size="sm" onClick={() => setJoinIntent({ kind: "edit" })}>
+              {t("en", "join.edit")}
+            </Button>
+          </p>
+        ) : null}
+
+        {showDock ? (
+          <>
+            <div
+              className={cx(styles.fade, (look.tryOn || look.state.notice) && styles.fadeTall)}
+              aria-hidden="true"
             />
-          ) : (
-            <Dock
-              fixed
-              onAdd={() => requireJoin({ kind: "add" })}
-              onMake={() => requireJoin({ kind: "make" })}
-              makeDisabled={selectableIds.length === 0}
-            />
-          )}
-        </>
-      ) : null}
+            {pickingNow ? (
+              <Dock
+                mode="picking"
+                fixed
+                picked={picked.map((card) => ({ src: card.element.imageUrl, label: card.element.label }))}
+                max={policy.pinsPerScene.max}
+                onCancel={exitPicking}
+                onNext={openMakeSheet}
+                nextDisabled={picked.length < policy.pinsPerScene.min}
+              />
+            ) : (
+              <Dock
+                fixed
+                onAdd={() => requireJoin({ kind: "add" })}
+                onMake={() => requireJoin({ kind: "make" })}
+                makeDisabled={selectableIds.length === 0}
+              />
+            )}
+          </>
+        ) : null}
 
-      {addOpen && view.me ? (
-        <AddSheet
-          slug={slug}
-          meId={view.me.id}
-          boardView={view}
-          uploadMaxPx={policy.uploadMaxPx}
-          uploadJpegQuality={policy.uploadJpegQuality}
-          jobPollIntervalMs={policy.jobPollIntervalMs}
-          elementsPerPhotoMax={policy.elementsPerPhotoMax}
-          onClose={() => setAddOpen(false)}
-        />
-      ) : null}
+        {addOpen && view.me ? (
+          <AddSheet
+            slug={slug}
+            meId={view.me.id}
+            boardView={view}
+            uploadMaxPx={policy.uploadMaxPx}
+            uploadJpegQuality={policy.uploadJpegQuality}
+            jobPollIntervalMs={policy.jobPollIntervalMs}
+            elementsPerPhotoMax={policy.elementsPerPhotoMax}
+            onClose={() => setAddOpen(false)}
+          />
+        ) : null}
 
-      {makeOpen && view.me ? (
-        <MakeSheet
-          cards={picked}
-          chips={sheetChips}
-          pinsPerScene={policy.pinsPerScene}
-          promptMaxChars={policy.scenePromptMaxChars}
-          initialPrompt={sheetPrompt}
-          remixParent={
-            remixParent?.imageUrl
-              ? { id: remixParent.id, imageUrl: remixParent.imageUrl, prompt: remixParent.prompt }
-              : null
-          }
-          onMake={submitScene}
-          onClose={() => setMakeOpen(false)}
-        />
-      ) : null}
+        {makeOpen && view.me ? (
+          <MakeSheet
+            cards={picked}
+            chips={sheetChips}
+            pinsPerScene={policy.pinsPerScene}
+            promptMaxChars={policy.scenePromptMaxChars}
+            initialPrompt={sheetPrompt}
+            remixParent={
+              remixParent?.imageUrl
+                ? { id: remixParent.id, imageUrl: remixParent.imageUrl, prompt: remixParent.prompt }
+                : null
+            }
+            onMake={submitScene}
+            onClose={() => setMakeOpen(false)}
+          />
+        ) : null}
 
-      {joinIntent ? (
-        <JoinSheet
-          slug={slug}
-          me={view.me}
-          profileName={auth.user?.displayName ?? null}
-          onJoined={onJoined}
-          onClose={() => setJoinIntent(null)}
-        />
-      ) : null}
-    </main>
+        {joinIntent ? (
+          <JoinSheet
+            slug={slug}
+            me={view.me}
+            profileName={auth.user?.displayName ?? null}
+            onJoined={onJoined}
+            onClose={() => setJoinIntent(null)}
+          />
+        ) : null}
+
+        {isHost ? (
+          <PlusFlow
+            look={look}
+            boardSkin={boardSkin}
+            plus={view.plus}
+            sample={lookSampleUrls}
+            foilSrc={lookSampleUrls[0]}
+            aboveDock={showDock}
+          />
+        ) : null}
+      </main>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { buildBoardPreview } from "../../../domain/board-preview";
-import { isSkinId, skinForTheme } from "../../../domain/skins";
+import { isSkinId } from "../../../domain/skins";
 import { isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
@@ -89,10 +89,11 @@ export async function generateMetadata({
  * accepted post-PIN-52 break). Slug shape is checked before any
  * repository read, mirroring the API slug gate.
  *
- * PIN-98: the board renders in its skin (docs/14): the root carries
- * `data-theme` from `skinForTheme(board.themeId)`, so first-generation
- * theme ids map onto a free skin. `?tryon=<skin>` is read and passed
- * through for PIN-103 (no behaviour yet).
+ * PIN-98: the board renders in its skin (docs/14): the client root
+ * carries `data-theme` from `skinForTheme(board.themeId)`, so
+ * first-generation theme ids map onto a free skin. PIN-111:
+ * `?tryon=<skin>` becomes the host's Plus try-on once the first poll
+ * confirms the host (guests ignore it).
  */
 export default async function BoardPage({
   params,
@@ -119,19 +120,17 @@ export default async function BoardPage({
   if (!view) notFound();
 
   const resolved = getPolicy(board.policyOverrides ?? null);
-  const skin = skinForTheme(board.themeId);
   const tryOnParam = (await searchParams).tryon;
   const tryOnSkin = isSkinId(tryOnParam) ? tryOnParam : null;
 
+  // The client renders the skin root (data-theme from the board's
+  // themeId), so a look change or a host try-on switches it at once.
   return (
-    <div className="pn-skin-root" data-theme={skin} style={{ minHeight: "100dvh" }}>
-      <BoardClient
-        slug={slug}
-        initialView={view as BoardClientView}
-        skin={skin}
-        tryOnSkin={tryOnSkin}
-        policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge }}
-      />
-    </div>
+    <BoardClient
+      slug={slug}
+      initialView={view as BoardClientView}
+      tryOnSkin={tryOnSkin}
+      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge }}
+    />
   );
 }
