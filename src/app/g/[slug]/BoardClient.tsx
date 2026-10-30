@@ -253,7 +253,10 @@ function BoardBody({
   useEffect(() => {
     const onPop = () => {
       viewerPushed.current = false;
-      setViewerId(sceneIdInUrl(window.location.href));
+      const id = sceneIdInUrl(window.location.href);
+      // Forward can reopen the viewer: its print gets focus back again.
+      if (id) viewerReturnId.current = id;
+      setViewerId(id);
       afterViewer.current?.();
       afterViewer.current = null;
     };
