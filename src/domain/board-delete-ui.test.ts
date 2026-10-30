@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   afterBoardDeleteHref,
   boardDeleteOutcome,
+  boardPollError,
   isBoardDeletedFlag,
+  isBoardGone,
   urlWithoutBoardDeletedFlag,
 } from "./board-delete-ui";
 
@@ -36,5 +38,14 @@ describe("the DELETE answer (PIN-168)", () => {
     expect(boardDeleteOutcome({ ok: false, status: 429 })).toBe("failed");
     expect(boardDeleteOutcome({ ok: false, status: 403 })).toBe("failed");
     expect(boardDeleteOutcome(null)).toBe("failed");
+  });
+});
+
+describe("the board poll's errors (PIN-168)", () => {
+  it("a 404 means the board is gone, any other failure is just a load error", () => {
+    expect(isBoardGone(boardPollError(404))).toBe(true);
+    expect(isBoardGone(boardPollError(500))).toBe(false);
+    expect(isBoardGone(new Error("load failed"))).toBe(false);
+    expect(isBoardGone(null)).toBe(false);
   });
 });

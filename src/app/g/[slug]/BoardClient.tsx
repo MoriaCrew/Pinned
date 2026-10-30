@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { notFound } from "next/navigation";
 import {
   QueryClient,
   QueryClientProvider,
@@ -15,6 +16,7 @@ import {
   type BoardViewLike,
   type BoardViewScene,
 } from "../../../domain/board-view";
+import { boardPollError, isBoardGone } from "../../../domain/board-delete-ui";
 import { rollbackElementLabel, withElementLabel } from "../../../domain/element-label";
 import {
   attemptPollInterval,
@@ -305,7 +307,7 @@ function BoardBody({
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}`, {
         cache: "no-store",
       });
-      if (!response.ok) throw new Error("load failed");
+      if (!response.ok) throw boardPollError(response.status);
       return (await response.json()) as BoardClientView;
     },
     initialData: initialView,
@@ -1088,6 +1090,12 @@ function BoardBody({
   const atMax = picked.length >= policy.pinsPerScene.max;
   const showDock = !empty;
   const lookSampleUrls = lookSample(cards);
+
+  // PIN-168: the host deleted this board while it was open here (the
+  // poll got a 404). Show the not-found an unknown link shows; that
+  // unmounts the board, so the polling stops with it. Not for the host
+  // who is leaving after their own delete.
+  if (!leaving && isBoardGone(boardQuery.error)) notFound();
 
   return (
     <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>

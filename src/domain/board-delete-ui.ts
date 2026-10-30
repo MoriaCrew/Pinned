@@ -41,3 +41,17 @@ export function boardDeleteOutcome(response: { ok: boolean; status: number } | n
   if (response.ok) return "deleted";
   return response.status === 404 ? "gone" : "failed";
 }
+
+/** The board poll got a 404: someone deleted the board while this page was open. */
+export class BoardGoneError extends Error {
+  constructor() {
+    super("board gone");
+    this.name = "BoardGoneError";
+  }
+}
+
+export const isBoardGone = (error: unknown): boolean => error instanceof BoardGoneError;
+
+/** What a failed board poll throws: a 404 is "gone", the rest a load error. */
+export const boardPollError = (status: number): Error =>
+  status === 404 ? new BoardGoneError() : new Error("load failed");

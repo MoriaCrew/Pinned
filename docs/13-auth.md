@@ -348,6 +348,9 @@ cache and replaces itself with `/me/boards?deleted=1` (signed in) or
 `/?deleted=1`, which show a one-line "Board deleted" notice and strip
 the flag (no slug travels). A 404 (already deleted, or no longer the
 host) or any other failure keeps the board and says so in the sheet.
+Everyone else with the board open: the board poll's 404 (not a
+generic load error) renders the same not-found as an unknown link,
+which unmounts the board and so ends the polling.
 
 ## Thing rename (PIN-156, parent PIN-134)
 
