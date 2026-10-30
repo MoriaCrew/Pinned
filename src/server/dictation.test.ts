@@ -37,6 +37,20 @@ describe("parseWav (PIN-119)", () => {
     });
   });
 
+  it("rejects a header whose declared byte rate lies about duration", () => {
+    const lied = wav(2);
+    const view = new DataView(lied.buffer, lied.byteOffset, lied.byteLength);
+    view.setUint32(28, 32_000 * 100, true); // inflate byteRate 100x
+    expect(parseWav(lied)).toBeNull();
+  });
+
+  it("measures duration from bytes present, not the claimed data size", () => {
+    const shrunk = wav(2);
+    const view = new DataView(shrunk.buffer, shrunk.byteOffset, shrunk.byteLength);
+    view.setUint32(40, 32, true); // claim a 1ms data chunk
+    expect(parseWav(shrunk)?.durationSeconds).toBe(2);
+  });
+
   it("rejects non-WAV and truncated bytes", () => {
     expect(parseWav(new Uint8Array([1, 2, 3]))).toBeNull();
     expect(parseWav(new TextEncoder().encode("not a wav file at all, nope nope nope"))).toBeNull();
@@ -146,6 +160,19 @@ describe("transcribeDictation gates (PIN-119)", () => {
     expect(capErr).toBeInstanceOf(BoardApiError);
     expect(capErr).toMatchObject({ status: 429, code: "participant_cap" });
     expect((capErr as Error).message).toContain("today's limit");
+
+    // A silent take from the provider is the same 400 as the
+    // empty-clip paths, never a 5xx.
+    const silent: SpeechTranscriber = {
+      async transcribe() {
+        return { status: "failed", errorCode: "no_speech", message: "No speech was heard in that clip." };
+      },
+    };
+    await expectBoardError(
+      transcribeDictation(SLUG, viewer, clip, { transcriber: silent, policy }),
+      400,
+      "no_speech",
+    );
 
     // Shared-budget denials are also a friendly 429, never 5xx.
     const overBudget: SpeechTranscriber = {

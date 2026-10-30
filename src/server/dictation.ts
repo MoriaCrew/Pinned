@@ -55,14 +55,27 @@ export function parseWav(bytes: Uint8Array): WavInfo | null {
     if (id === "fmt " && body + 16 <= bytes.length) {
       const audioFormat = view.getUint16(body, true);
       if (audioFormat !== 1) return null; // PCM only
+      // Declared byteRate/blockAlign are client-controlled: they
+      // must agree with the rate derived from the format fields,
+      // or a clip could understate its duration (cap + reserve).
+      const derivedAlign =
+        (view.getUint16(body + 2, true) * view.getUint16(body + 14, true)) / 8;
+      if (
+        view.getUint16(body + 12, true) !== derivedAlign ||
+        view.getUint32(body + 8, true) !== view.getUint32(body + 4, true) * derivedAlign
+      ) {
+        return null;
+      }
       fmt = {
         channels: view.getUint16(body + 2, true),
         sampleRate: view.getUint32(body + 4, true),
-        byteRate: view.getUint32(body + 8, true),
+        byteRate: view.getUint32(body + 4, true) * ((view.getUint16(body + 2, true) * view.getUint16(body + 14, true)) / 8),
         bitsPerSample: view.getUint16(body + 14, true),
       };
     } else if (id === "data") {
-      dataBytes = Math.min(size, bytes.length - body);
+      // Claimed chunk size is client-controlled too: measure the
+      // bytes actually present after the header (conservative).
+      dataBytes = bytes.length - body;
       break;
     }
     offset = body + size + (size % 2);
@@ -145,6 +158,11 @@ export async function transcribeDictation(
   }
   if (outcome.status === "refused") {
     throw new BoardApiError(t("en", "dictate.noSpeech"), 400, "refused");
+  }
+  if (outcome.errorCode === "no_speech") {
+    // A silent take is a normal outcome, like the empty-WAV and
+    // empty-text paths above — never a service failure.
+    throw new BoardApiError(t("en", "dictate.noSpeech"), 400, "no_speech");
   }
   const friendly =
     outcome.errorCode && FRIENDLY_CODES.has(outcome.errorCode)
