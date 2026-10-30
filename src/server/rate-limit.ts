@@ -6,7 +6,9 @@ import "server-only";
  * brake against scripts and PIN brute-force, not a distributed
  * guarantee. Game-level caps in the domain remain the hard limits.
  * The distributed reclaim-PIN lockout lives in the BoardRepository
- * attempt counters (PIN-90, board-session.ts).
+ * attempt counters (PIN-90, board-session.ts), as does the
+ * per-IP new-join budget (PIN-91) — this in-process brake stays
+ * as the cheap first gate on the join route.
  */
 const globalBuckets = globalThis as typeof globalThis & {
   __pinnedRateLimits?: Map<string, { count: number; resetAt: number }>;
