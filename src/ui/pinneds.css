@@ -159,7 +159,7 @@
 [class^="pn-"], [class*=" pn-"], [class^="pn-"]::before, [class*=" pn-"]::before, [class^="pn-"]::after, [class*=" pn-"]::after { box-sizing: border-box; }
 .pn-skin-root { background-color: var(--surface); background-image: var(--board-pattern); background-size: var(--board-pattern-size); color: var(--ink); font-family: var(--font-ui); font-size: 16px; line-height: 24px; }
 .pn-sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.pn-focusable:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-input:focus-visible {
+.pn-focusable:focus-visible, .pn-wordmark:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-input:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 
@@ -485,7 +485,7 @@ textarea.pn-input { resize: none; min-height: 88px; }
 .pn-lib-signin[data-stacked] .pn-lib-signin-error { order: 2; text-align: center; }
 
 /* Pages on the Paper skin: landing, My boards, My pins, not found. */
-.pn-lib-page { min-height: 100dvh; max-width: none; margin: 0; padding: 0 0 var(--space-7); }
+.pn-lib-page { min-height: 100dvh; padding-bottom: var(--space-7); }
 .pn-lib-header + .pn-lib-page { min-height: calc(100dvh - 52px); }
 .pn-lib-page > :not(.pn-landing-inner) { width: min(100%, 960px); margin-inline: auto; }
 .pn-lib-empty { padding-top: var(--space-7); }
@@ -545,7 +545,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-step-no { font: 500 13px/18px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
 .pn-landing-step-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
 .pn-landing-step-text p { margin: 0; color: var(--ink-muted); font: 400 16px/24px var(--font-ui); }
-.pn-landing-foot { grid-area: foot; margin-top: var(--space-4); padding: 0; border: 0; color: var(--ink-muted); }
+.pn-landing-foot { grid-area: foot; margin-top: var(--space-4); color: var(--ink-muted); }
 .pn-landing-foot a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
 .pn-landing-foot a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
