@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { getSkin, type SkinId } from "../domain/skins";
 import { t, type MessageKey } from "../i18n";
 import { Icon } from "./icons";
@@ -174,6 +174,8 @@ export function PlusSheet({
     { icon: "download", title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
   ];
   const price = plan === "board" ? prices.board : prices.host;
+  // One radio group per sheet: two open sheets never share a name.
+  const planGroup = `plus-plan-${useId()}`;
   return (
     <Sheet
       title={t("en", "ui.plusTitle")}
@@ -219,7 +221,7 @@ export function PlusSheet({
         <legend className="pn-sr">{t("en", "ui.plusPlans")}</legend>
         {(["board", "host"] as const).map((id) => (
           <label key={id} className="pn-plan">
-            <input type="radio" name="plus-plan" value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
+            <input type="radio" name={planGroup} value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
             <span className="pn-plan-name">{t("en", id === "board" ? "ui.plusPlanBoard" : "ui.plusPlanHost")}</span>
             <span className="pn-plan-price">{id === "board" ? prices.board : prices.host}</span>
             <span className="pn-plan-note">{t("en", id === "board" ? "ui.plusPlanBoardNote" : "ui.plusPlanHostNote")}</span>
