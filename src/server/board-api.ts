@@ -303,13 +303,19 @@ export async function getBoardView(
 ) {
   const board = await deps.boards.getBoard(slug);
   if (!board) return null;
-  const [participants, allPins, elements, scenes, events] = await Promise.all([
+  const [participants, allPins, elements, allScenes, events] = await Promise.all([
     deps.boards.listParticipants(slug),
     deps.boards.listPins(slug),
     deps.boards.listElements(slug),
-    deps.boards.listScenes(slug),
+    deps.boards.listScenes(slug, { includeHidden: true }),
     deps.boards.listEvents(slug),
   ]);
+  const scenes = allScenes.filter((scene) => !scene.hidden);
+  // PIN-142: a deleted scene's lines leave the strip before it is cut to max.
+  const deletedSceneIds = new Set(
+    allScenes.filter((scene) => scene.deletedAt !== undefined).map((scene) => scene.id),
+  );
+  const liveEvents = events.filter((event) => !event.sceneId || !deletedSceneIds.has(event.sceneId));
   const pins = allPins.filter(
     (pin) => pin.status === "pinned" || (viewer !== null && pin.pinnedBy === viewer.id),
   );
@@ -329,7 +335,7 @@ export async function getBoardView(
     scenes: scenes.map((scene) => publicScene(slug, scene)),
     // Activity strip (PIN-74): board-visible BoardEvent lines,
     // latest Policy.activityStripMax, names/labels resolved here.
-    activity: activityLines(events, participants, elements, deps.policy.activityStripMax),
+    activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
     viewer: {
       isHost: verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now()),
     },
@@ -906,7 +912,8 @@ export async function requestScene(
     throw error;
   }
   const scene = await deps.boards.getScene(job.id);
-  if (!scene) throw new BoardApiError("Scene not found.", 404);
+  // A repeat POST of a hidden or deleted scene's id: 404, like its GET (PIN-142).
+  if (!scene || scene.hidden) throw new BoardApiError("Scene not found.", 404);
   return { job, scene };
 }
 
@@ -943,6 +950,67 @@ export async function getSceneView(
     scene: publicScene(slug, scene),
     job: job ? publicSceneJob(job) : null,
   };
+}
+
+function isInFlight(status: Scene["status"]): boolean {
+  return status === "pending" || status === "running";
+}
+
+/**
+ * Delete a scene (PIN-142): its maker or the board host. Every miss
+ * (unknown board or scene, another board's scene, anyone else) is the
+ * same 404, decided before the scene's state is looked at. Only then:
+ * 409 while it or its job is in flight; else it becomes a tombstone
+ * (the repository never rewrites one) and its objects are deleted. A
+ * repeat by the maker or host is a no-op that retries the storage.
+ */
+export async function deleteScene(
+  slug: string,
+  sceneId: string,
+  viewer: Participant | null,
+  access: { hostToken: string | null },
+  deps: BoardApiDeps,
+): Promise<void> {
+  const board = await deps.boards.getBoard(slug);
+  const scene = board ? await deps.boards.getScene(sceneId) : null;
+  const now = deps.now?.() ?? Date.now();
+  let role: "maker" | "host" | null = null;
+  if (board && scene && scene.boardId === slug) {
+    if (viewer !== null && scene.createdBy === viewer.id) role = "maker";
+    else if (verifyHostToken(board, access.hostToken, deps.policy, now)) role = "host";
+  }
+  if (!scene || role === null) throw new BoardApiError("Scene not found.", 404);
+
+  if (scene.deletedAt === undefined) {
+    const job = deps.sceneJobs ? await deps.sceneJobs.get(slug, scene.id) : null;
+    if (isInFlight(scene.status) || (job !== null && isInFlight(job.status))) {
+      throw new BoardApiError(t("en", "board.sceneDeleteDeveloping"), 409, "scene_in_flight");
+    }
+    await deps.boards.putScene({ ...scene, hidden: true, deletedAt: now, deletedBy: role });
+  }
+  await deleteSceneObjects(scene, deps.store);
+}
+
+/**
+ * The one place that knows a scene's stored objects: its full image
+ * (PIN-133 adds the preview). Only refs inside the scene's own folder
+ * (the store's assertDerivativeRef also refuses `..`). Best-effort:
+ * the tombstone already hides it, so a failure is logged by scene id
+ * only (no ref, URL or env).
+ */
+export async function deleteSceneObjects(scene: Scene, store: DerivativeStore): Promise<void> {
+  const folder = `scenes/boards/${scene.boardId}/${scene.id}/`;
+  for (const ref of [scene.imageRef]) {
+    if (!ref || !ref.startsWith(folder)) continue;
+    try {
+      await store.delete(ref);
+    } catch (error) {
+      console.error("Scene image delete failed; the tombstone stands.", {
+        sceneId: scene.id,
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
 }
 
 /**

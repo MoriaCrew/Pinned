@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   emptyBoardCounters,
   type Element,
@@ -18,6 +18,7 @@ import {
   type PolicyOverrides,
 } from "../policy/policy";
 import {
+  deleteScene,
   getSceneView,
   getScenesView,
   publicScene,
@@ -811,6 +812,23 @@ describe("remix (PIN-79, docs/11 section 5.7)", () => {
     expect(h.calls).toHaveLength(1);
   });
 
+  it("a parent deleted after the request is never read, even with its image left in storage (PIN-142)", async () => {
+    const h = await makeHarness();
+    const parent = await readyParent(h);
+    const stored = await h.boards.getScene(parent.id);
+    // Tombstone only: the storage delete "failed", so the bytes are still there.
+    await h.boards.putScene({ ...stored!, hidden: true, deletedAt: T0, deletedBy: "host" });
+    for (const [id, collageMode] of [["late-ai", false], ["late-collage", true]] as const) {
+      await h.jobs.create({
+        id, boardId: "board-1", participantId: "p1", elementIds: ["el3"], prompt: "late",
+        status: "pending", parentSceneId: parent.id, promptVersion: "scene.v1", createdAt: T0, updatedAt: T0,
+      });
+      const child = await runSceneJob("board-1", id, { ...h.deps, collageMode });
+      expect(child).toMatchObject({ status: "failed", errorCode: "parent_missing" });
+    }
+    expect(h.calls).toHaveLength(1); // the parent's own compose only
+  });
+
   it("delete cascade hides a remix child when a PARENT contributor deletes their element", async () => {
     const h = await makeHarness();
     const parent = await readyParent(h); // el1 (p1) + el2 (p2)
@@ -993,5 +1011,66 @@ describe("scene image size (PIN-129)", () => {
     const view = publicScene("board-1", scene!);
     expect(view).not.toHaveProperty("width");
     expect(view).not.toHaveProperty("height");
+  });
+});
+
+describe("scene delete (PIN-142)", () => {
+  const noHost = { hostToken: null };
+
+  it("a job sync landing after the delete cannot undo the tombstone (sync race)", async () => {
+    const h = await makeHarness();
+    const p1 = await h.boards.getParticipant("board-1", "p1");
+    // In finish's post-write element re-check: delete the scene, then el2,
+    // so the re-check re-hides with a full, tombstone-less write.
+    const boards = h.boards;
+    const origGetElement = boards.getElement.bind(boards);
+    let armed = true;
+    boards.getElement = async (id: string) => {
+      const ready = armed ? (await boards.listScenes("board-1")).find((s) => s.status === "ready") : undefined;
+      if (ready) {
+        armed = false;
+        await deleteScene("board-1", ready.id, p1, noHost, h.api);
+        await boards.deleteElement("el2");
+      }
+      return origGetElement(id);
+    };
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2"], prompt: "race" },
+      h.deps,
+    );
+    expect(job.status).toBe("ready");
+    expect(armed).toBe(false); // the race was actually injected
+    expect(await h.boards.getScene(job.id)).toMatchObject({ hidden: true, deletedAt: T0, deletedBy: "maker" });
+    expect(await h.store.get(job.imageRef as string)).toBeNull();
+    expect((await h.boards.getBoard("board-1"))?.counters.sceneCount).toBe(0);
+  });
+
+  it("a repeat POST of a deleted scene's client id is a 404, never the dead scene", async () => {
+    const h = await makeHarness();
+    const p1 = await h.boards.getParticipant("board-1", "p1");
+    const input = { elementIds: ["el1"], prompt: "again", sceneId: "client-1" };
+    await requestScene("board-1", p1!, input, h.api);
+    await deleteScene("board-1", "client-1", p1, noHost, h.api);
+    await expect(requestScene("board-1", p1!, input, h.api)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("storage is best-effort and only this scene's own folder is ever deleted", async () => {
+    const h = await makeHarness();
+    const p1 = await h.boards.getParticipant("board-1", "p1");
+    const job = await startSceneJob({ boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "x" }, h.deps);
+    const forged = await startSceneJob({ boardId: "board-1", participantId: "p1", elementIds: ["el2"], prompt: "y" }, h.deps);
+    // A forged ref pointing at another scene's image is never touched.
+    await h.boards.putScene({ ...(await h.boards.getScene(forged.id))!, imageRef: job.imageRef });
+    await deleteScene("board-1", forged.id, p1, noHost, h.api);
+    expect(await h.store.get(job.imageRef as string)).not.toBeNull();
+    // A failing store still leaves the tombstone; the log names no ref; a repeat retries.
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(h.store, "delete").mockRejectedValueOnce(new Error(`gs://bucket/${job.imageRef}`));
+    await deleteScene("board-1", job.id, p1, noHost, h.api);
+    expect((await h.boards.getScene(job.id))?.deletedAt).toBe(T0);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("scenes/");
+    vi.restoreAllMocks();
+    await deleteScene("board-1", job.id, p1, noHost, h.api);
+    expect(await h.store.get(job.imageRef as string)).toBeNull();
   });
 });

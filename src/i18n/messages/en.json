@@ -211,6 +211,7 @@
   "board.thingActions": "More for {thing}",
   "board.sceneAlt": "{idea}, with {things}",
   "board.sceneMissing": "That scene isn't here any more.",
+  "board.sceneDeleteDeveloping": "That scene is still developing. Delete it once it's done.",
   "auth.signIn": "Sign in",
   "auth.signingIn": "Signing in…",
   "auth.signOut": "Sign out",
