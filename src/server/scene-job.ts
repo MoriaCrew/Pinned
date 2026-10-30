@@ -142,6 +142,11 @@ export class InMemorySceneJobStore implements SceneJobStore {
 
 const SCENE_ID = /^[A-Za-z0-9_-]+$/;
 
+/** Shape of every scene id (client ids and randomUUID alike). */
+export function isSceneId(value: string): boolean {
+  return SCENE_ID.test(value);
+}
+
 /** Persistent scene image under `scenes/` (docs/11 section 5.5). */
 export function buildSceneImageRef(
   boardId: string,
@@ -610,8 +615,9 @@ async function finishCollage(
     let parentBytes: Buffer | undefined;
     if (job.parentSceneId) {
       const parent = await deps.boards.getScene(job.parentSceneId);
+      // A parent hidden or deleted since the request (PIN-142) is gone.
       const bytes =
-        parent?.boardId === job.boardId && parent.imageRef
+        parent?.boardId === job.boardId && !parent.hidden && parent.imageRef
           ? await deps.store.get(parent.imageRef)
           : null;
       if (!bytes) {
@@ -695,7 +701,7 @@ export async function runSceneJob(
     if (job.parentSceneId) {
       const parent = await deps.boards.getScene(job.parentSceneId);
       const bytes =
-        parent?.boardId === boardId && parent.imageRef
+        parent?.boardId === boardId && !parent.hidden && parent.imageRef
           ? await deps.store.get(parent.imageRef)
           : null;
       if (!bytes) {

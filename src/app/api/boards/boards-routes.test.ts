@@ -12,7 +12,7 @@ import { POST as confirmRoute } from "./[slug]/pins/confirm/route";
 import { GET as imageRoute } from "./[slug]/elements/[elementId]/image/route";
 import { DELETE as deleteElementRoute } from "./[slug]/elements/[elementId]/route";
 import { GET as getScenesRoute, POST as postSceneRoute } from "./[slug]/scenes/route";
-import { GET as getSceneRoute } from "./[slug]/scenes/[sceneId]/route";
+import { DELETE as deleteSceneRoute, GET as getSceneRoute } from "./[slug]/scenes/[sceneId]/route";
 import { GET as sceneImageRoute } from "./[slug]/scenes/[sceneId]/image/route";
 
 /**
@@ -81,6 +81,9 @@ describe("slug gate: malformed slug -> uniform 404 on every board route", () => 
     calls.push(
       deleteElementRoute(req("http://t/x", { method: "DELETE" }), {
         params: Promise.resolve({ slug, elementId: "el-1" }),
+      }),
+      deleteSceneRoute(req("http://t/x", { method: "DELETE" }), {
+        params: Promise.resolve({ slug, sceneId: "scene-1" }),
       }),
     );
     for (const call of calls) {

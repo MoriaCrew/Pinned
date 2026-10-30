@@ -562,6 +562,8 @@ export class FirestoreBoardRepository implements BoardRepository {
       if (before && before.value.boardId !== scene.boardId) {
         throw new RangeError(`Scene ${scene.id} belongs to board ${before.value.boardId}`);
       }
+      // A tombstone is final (PIN-142): see BoardRepository.putScene.
+      if (before?.value.deletedAt !== undefined) return;
       const scenes = before
         ? null
         : rowsFrom<Scene>(await tx.get(this.col(scene.boardId, SCENES)));

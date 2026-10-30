@@ -507,6 +507,22 @@ export function describeBoardRepositoryContract(
       expect((await repo.getScene("scene-2"))?.hidden).toBeUndefined();
     });
 
+    it("scenes: a tombstone is final — a later put never unhides it or moves the count (PIN-142)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.putScene(makeScene());
+      await repo.putScene(makeScene({ hidden: true, deletedAt: 1_500, deletedBy: "host" }));
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(0);
+      // A stale full write (job sync) and a repeat tombstone are both ignored.
+      await repo.putScene(makeScene({ prompt: "stale sync" }));
+      await repo.putScene(makeScene({ hidden: true, deletedAt: 1_600, deletedBy: "maker" }));
+      const stored = await repo.getScene("scene-1");
+      expect(stored).toMatchObject({ hidden: true, deletedAt: 1_500, deletedBy: "host", prompt: "on a sunny picnic blanket" });
+      expect(await repo.listScenes(SLUG)).toEqual([]);
+      expect((await repo.listScenes(SLUG, { includeHidden: true })).map((s) => s.id)).toEqual(["scene-1"]);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(0);
+    });
+
     it("events: append-only, chronological, limit keeps the most recent", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());
