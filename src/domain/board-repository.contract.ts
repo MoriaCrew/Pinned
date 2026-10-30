@@ -201,6 +201,20 @@ export function describeBoardRepositoryContract(
       expect(await repo.getParticipant(SLUG, "ghost")).toBeNull();
     });
 
+    it("an upsert without userId clears a claim, keeping every other field (PIN-166)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      const claimed = makeParticipant({ reclaimPinHash: "pin-hash", userId: "synthetic-user-1" });
+      await repo.putParticipant(claimed);
+      const { userId: _cleared, ...unlinked } = claimed;
+      await repo.putParticipant(unlinked);
+      const stored = await repo.getParticipant(SLUG, "part-1");
+      expect(stored).not.toHaveProperty("userId");
+      expect(stored).toEqual(unlinked);
+      expect((await repo.getBoard(SLUG))?.counters.participantCount).toBe(1);
+      expect(await repo.listEvents(SLUG)).toHaveLength(1);
+    });
+
     it("emits participant_joined once per new participant, never on upsert (PIN-74)", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());
