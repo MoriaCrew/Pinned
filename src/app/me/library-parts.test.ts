@@ -1,10 +1,13 @@
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MyBoardCard } from "../../domain/my-boards";
 import type { MyPinCard } from "../../domain/my-pins";
 import en from "../../i18n/messages/en.json";
 import { BoardCards, LibraryEmpty, PinLibrary } from "./LibraryParts";
+
+// Each My boards card's More menu refreshes the page after a remove (PIN-166).
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
@@ -45,6 +48,16 @@ describe("My boards cards (PIN-104)", () => {
     const without = html(h(BoardCards, { boards: [board({})] }));
     expect(without).toContain("pn-lib-board-ghosts");
     expect(without).not.toContain("<img");
+  });
+
+  it("gives each card a closed More menu button beside the link, named for the board (PIN-166)", () => {
+    const markup = html(h(BoardCards, { boards: [board({ title: "Garden swap", themeId: "zine" })] }));
+    expect(markup).toContain('aria-label="More for Garden swap"');
+    expect(markup).toContain('aria-haspopup="menu"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('role="menu"');
+    // A sibling of the link (never nested in it), in the card's skin.
+    expect(markup).toMatch(/<\/a><span class="pn-lib-board-more" data-theme="zine"><button/);
   });
 
   it("sets the counts in mono lines", () => {
