@@ -33,15 +33,25 @@ env:
     value: optional
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-dev.firebasestorage.app
-  # PIN-103: Board Plus demo billing on dev only (instant mock
-  # grant, no money moves). Prod inherits the code default "off".
+  # PIN-153: dev runs real (sandbox) Stripe credit packs. The
+  # webhook grants (PIN-150) + endpoint/secret (PIN-153) landed,
+  # so dev may take sandbox payments it can fulfil. PIN-103's
+  # instant mock grant retires on dev; prod keeps code "off".
   - variable: PLUS_MODE
-    value: mock
-  # PIN-149: the Stripe key is referenced for the dev runtime
-  # only. PLUS_MODE deliberately stays "mock" above - hosted
-  # stripe mode waits for webhook grants (PIN-150/PIN-153), so
-  # dev never takes a payment it cannot fulfil yet.
+    value: stripe
+  # PIN-149/PIN-153: Stripe keys for the dev runtime only,
+  # referenced from Secret Manager (values never in git). The
+  # webhook signing secret belongs to the dev endpoint created
+  # by scripts/ensure-stripe-webhook-endpoint.mjs (PIN-153).
   - variable: STRIPE_SECRET_KEY
     secret: STRIPE_SECRET_KEY
     availability:
       - RUNTIME
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+  # PIN-153: enable the makes pool on dev only (PIN-151 shipped
+  # credits default-off; prod keeps the default until promotion).
+  - variable: POLICY_OVERRIDES_JSON
+    value: '{"credits":{"enabled":true}}'
