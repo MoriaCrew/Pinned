@@ -214,6 +214,8 @@ describe("scene viewer (PIN-131)", () => {
     expect(css).toMatch(/\.viewer > \.viewerPanel \{[^}]*display: flex;[^}]*flex-direction: column;/);
     expect(css).toMatch(/\.viewerCredits \{[^}]*min-height: 0;[^}]*overflow-y: auto;/);
     expect(css).not.toMatch(/\.viewerPanel \{[^}]*overflow-y/);
+    // The 55% cap must beat the panel's content-based flex minimum.
+    expect(css).toMatch(/\.viewerPanel \{[^}]*min-height: 0;[^}]*max-height: 55%;/);
   });
 
   it("puts Share first, then Remix, and More only when it has items", () => {
