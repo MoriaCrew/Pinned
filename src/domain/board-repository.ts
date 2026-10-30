@@ -45,6 +45,11 @@
  *   no event. Join-rate counters (PIN-91) work like the reclaim
  *   counters: `tryRecordJoin` checks and increments atomically,
  *   and a denied join records nothing.
+ * - A deleted board (PIN-167, `deleteBoard`) is a tombstone: getBoard
+ *   returns null, updateBoardSettings is a null no-op, and every
+ *   other write that names the board or one of its records throws
+ *   RangeError like a missing board. Its records stay readable by
+ *   id and by board list (storage cleanup enumerates them).
  */
 import type {
   Board,
@@ -112,6 +117,13 @@ export interface BoardRepository {
    * the write (unchanged when `fn` returned null).
    */
   updateBoardSettings(slug: string, fn: BoardSettingsMutator): Promise<Board | null>;
+  /**
+   * Tombstone the board (PIN-167): `deletedAt = at`, written
+   * atomically against the counter writers so none can clear it.
+   * True only for the call that tombstoned it; false when missing
+   * or already deleted. The slug is never reusable.
+   */
+  deleteBoard(slug: string, at: number): Promise<boolean>;
 
   /**
    * Upsert join identity; participantCount grows only on first
@@ -209,6 +221,17 @@ export interface BoardRepository {
   listEvents(boardId: string, opts?: { limit?: number }): Promise<BoardEvent[]>;
 }
 
+/**
+ * The one live-board check (PIN-167) for code that never needs the
+ * board itself: false for a missing or deleted board alike.
+ */
+export async function isLiveBoard(
+  boards: Pick<BoardRepository, "getBoard">,
+  slug: string,
+): Promise<boolean> {
+  return (await boards.getBoard(slug)) !== null;
+}
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -229,8 +252,14 @@ export class InMemoryBoardRepository implements BoardRepository {
   private joinAttempts = new Map<string, JoinAttemptState>();
   private eventSeq = 0;
 
-  private requireBoard(slug: string): Board {
+  /** Stored and not tombstoned (PIN-167); the raw map keeps tombstones. */
+  private liveBoard(slug: string): Board | null {
     const board = this.boards.get(slug);
+    return board && board.deletedAt === undefined ? board : null;
+  }
+
+  private requireBoard(slug: string): Board {
+    const board = this.liveBoard(slug);
     if (!board) throw new RangeError(`Board ${slug} not found`);
     return board;
   }
@@ -256,19 +285,26 @@ export class InMemoryBoardRepository implements BoardRepository {
   }
 
   async getBoard(slug: string): Promise<Board | null> {
-    const board = this.boards.get(slug);
+    const board = this.liveBoard(slug);
     return board ? clone(board) : null;
   }
 
   // Read, decide and write in one synchronous body: atomic in-process.
   async updateBoardSettings(slug: string, fn: BoardSettingsMutator): Promise<Board | null> {
-    const board = this.boards.get(slug);
+    const board = this.liveBoard(slug);
     if (!board) return null;
     const patch = fn(clone(board));
     if (patch === null) return clone(board);
     const updated = applyBoardSettings(clone(board), clone(patch));
     this.boards.set(slug, updated);
     return clone(updated);
+  }
+
+  async deleteBoard(slug: string, at: number): Promise<boolean> {
+    const board = this.liveBoard(slug);
+    if (!board) return false;
+    this.boards.set(slug, { ...board, deletedAt: at });
+    return true;
   }
 
   // Cap check and insert share one synchronous body: no awaits
@@ -415,6 +451,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   async renameElement(elementId: string, label: string): Promise<Element | null> {
     const element = this.elements.get(elementId);
     if (!element) return null;
+    this.requireBoard(element.boardId);
     // Same Map key, so iteration (createdAt order for ties) is unchanged.
     this.elements.set(elementId, { ...clone(element), label });
     return clone(this.elements.get(elementId)!);
@@ -423,6 +460,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   async deleteElement(elementId: string): Promise<DeleteElementResult> {
     const element = this.elements.get(elementId);
     if (!element) return { deleted: false, removedPinIds: [], hiddenSceneIds: [] };
+    this.requireBoard(element.boardId); // before any change: a refusal writes nothing
     this.elements.delete(elementId);
     this.adjustCounters(element.boardId, { elementCount: -1 });
 
@@ -496,6 +534,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   async setPinStatus(pinId: string, status: PinStatus, now: number): Promise<Pin | null> {
     const pin = this.pins.get(pinId);
     if (!pin) return null;
+    this.requireBoard(pin.boardId);
     if (pin.status === status) return clone(pin);
     const updated: Pin = { ...clone(pin), status };
     this.pins.set(pinId, updated);
@@ -511,6 +550,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   async deletePin(pinId: string): Promise<boolean> {
     const pin = this.pins.get(pinId);
     if (!pin) return false;
+    this.requireBoard(pin.boardId);
     this.pins.delete(pinId);
     if (pin.status === "pinned") this.adjustCounters(pin.boardId, { pinCount: -1 });
     return true;

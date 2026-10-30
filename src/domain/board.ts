@@ -66,6 +66,12 @@ export interface Board {
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter
+  /**
+   * Deleted for everyone by its host (PIN-167). A tombstone is
+   * final: the repository then reads the board as missing and
+   * refuses every write to it (see BoardRepository.deleteBoard).
+   */
+  deletedAt?: number;
 }
 
 /**

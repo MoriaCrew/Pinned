@@ -556,6 +556,57 @@ export function describeBoardRepositoryContract(
       expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(0);
     });
 
+    it("deleteBoard: the tombstone reads as missing, refuses every write and is final (PIN-167)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.putParticipant(makeParticipant());
+      await repo.createElement(makeElement());
+      await repo.createPin(makePin());
+      await repo.putScene(makeScene());
+      expect(await repo.deleteBoard(SLUG, 2_000)).toBe(true);
+      expect(await repo.getBoard(SLUG)).toBeNull();
+      expect(await repo.deleteBoard(SLUG, 2_100)).toBe(false);
+      expect(await repo.deleteBoard("nope", 2_100)).toBe(false);
+      expect(await repo.updateBoardSettings(SLUG, () => ({ skin: { themeId: "x" } }))).toBeNull();
+      const event = { id: "e1", boardId: SLUG, type: "scene_requested" as const, actorId: "part-1", createdAt: 2_200 };
+      const writes = [
+        () => repo.putParticipant(makeParticipant({ displayName: "renamed" })),
+        () => repo.createParticipantIfBelowCap(makeParticipant({ id: "part-2" }), 10),
+        () => repo.tryRecordJoin(SLUG, "key", 2_200, { maxJoins: 5, windowMs: 1_000 }),
+        () => repo.mutateReclaimAttempt(SLUG, "key", () => null),
+        () => repo.createElement(makeElement({ id: "el-2" })),
+        () => repo.renameElement("el-1", "renamed"),
+        () => repo.deleteElement("el-1"),
+        () => repo.createPin(makePin({ id: "pin-2" })),
+        () => repo.setPinStatus("pin-1", "candidate", 2_200),
+        () => repo.setPinStatus("pin-1", "pinned", 2_200),
+        () => repo.deletePin("pin-1"),
+        () => repo.putScene(makeScene({ prompt: "late sync" })),
+        () => repo.appendEvent(event),
+        () => repo.createBoard(makeBoard()),
+      ];
+      for (const write of writes) await expect(write()).rejects.toThrow(RangeError);
+      // Nothing moved, and the records stay listable for storage cleanup.
+      expect((await repo.listParticipants(SLUG)).map((p) => p.displayName)).toEqual(["Aye"]);
+      expect(await repo.listElements(SLUG)).toEqual([makeElement()]);
+      expect(await repo.listPins(SLUG)).toEqual([makePin()]);
+      expect(await repo.listScenes(SLUG, { includeHidden: true })).toEqual([makeScene()]);
+      expect((await repo.listEvents(SLUG)).map((e) => e.type)).toEqual(["participant_joined", "element_added"]);
+    });
+
+    it("deleteBoard: a racing counter write never clears the tombstone (PIN-167)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await Promise.allSettled([
+        repo.putParticipant(makeParticipant()),
+        repo.deleteBoard(SLUG, 2_000),
+        repo.createElement(makeElement()),
+      ]);
+      expect(await repo.getBoard(SLUG)).toBeNull();
+      await expect(repo.putParticipant(makeParticipant({ id: "part-2" }))).rejects.toThrow(RangeError);
+      expect(await repo.getBoard(SLUG)).toBeNull();
+    });
+
     it("events: append-only, chronological, limit keeps the most recent", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());
