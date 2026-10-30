@@ -434,8 +434,10 @@ function BoardBody({
   const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
   // The remix parent from the live view (a deleted/hidden parent
   // drops out and the sheet degrades to a fresh scene).
+  // From the merged list the prints use (job poll + board cache), so a
+  // print the job poll just made ready is a valid parent at once.
   const remixParent = remixOfId
-    ? view.scenes.find((scene) => scene.id === remixOfId && canRemixScene(scene))
+    ? scenes.find((scene) => scene.id === remixOfId && canRemixScene(scene))
     : undefined;
   const empty = needsEmptyPrompt(view);
   // Nothing to pick on an empty board: picking ends with it.
