@@ -32,7 +32,8 @@ export const dynamic = "force-dynamic";
  * (PIN-83 claim flow). Needs both cookies: no user session ->
  * 401, not joined to the board -> 401, already claimed by a
  * different user -> 409. PIN-94: a stale sign-in (auth_time
- * outside the Policy fresh window) -> 401 stale_auth.
+ * outside the Policy fresh window) -> 401 stale_auth, unlike the
+ * automatic link on join/board-open (any sign-in age, PIN-160).
  */
 export async function POST(
   request: Request,

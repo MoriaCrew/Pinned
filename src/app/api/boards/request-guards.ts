@@ -15,15 +15,19 @@ function refuse(status: number, key: MessageKey, code: string): NextResponse {
 }
 
 /**
- * Fetch-metadata CSRF check: a browser that labels the request
- * anything but same-origin is refused (403). Clients that send no
- * Sec-Fetch-Site (old browsers, scripts) pass; requireJson and the
- * SameSite=Lax cookie remain the other layers.
+ * True when a browser labels the request anything but same-origin.
+ * Clients that send no Sec-Fetch-Site (old browsers, scripts) are
+ * not cross-site here; requireJson and the SameSite=Lax cookie
+ * remain the other layers.
  */
-export function rejectCrossSite(request: Request): NextResponse | null {
+export function isCrossSite(request: Request): boolean {
   const site = request.headers.get("sec-fetch-site");
-  if (site === null || site === "same-origin") return null;
-  return refuse(403, "request.crossSite", "cross_site");
+  return site !== null && site !== "same-origin";
+}
+
+/** Fetch-metadata CSRF check: a cross-site request is refused (403). */
+export function rejectCrossSite(request: Request): NextResponse | null {
+  return isCrossSite(request) ? refuse(403, "request.crossSite", "cross_site") : null;
 }
 
 /**
