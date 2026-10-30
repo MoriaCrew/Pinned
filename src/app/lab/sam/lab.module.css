@@ -1,0 +1,280 @@
+/* SAM lab (PIN-36, dev tool): the styles this page used to take from the
+   first-generation globals.css, moved here (PIN-114). Plain, token-based,
+   not part of the product look. The page root wears the Paper skin
+   (`pn-skin-root`), so colours and the reading face come from the tokens. */
+
+.shell {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-7);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  margin: 0;
+  font: 700 0.78rem/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display-paper);
+  font-size: clamp(2.4rem, 9vw, 3.5rem);
+  line-height: 1;
+}
+
+.lede {
+  max-width: 34rem;
+  margin: 0 0 var(--space-5);
+}
+
+.notice {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
+}
+
+.card {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.card h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 1.45rem;
+}
+
+.card summary {
+  min-height: var(--tap);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.field {
+  display: block;
+  margin: 0 0 var(--space-4);
+  border: 0;
+  padding: 0;
+}
+
+.field label:not(.choice) {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.field input:not([type="checkbox"]):not([type="file"]) {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+}
+
+.fieldHelp {
+  margin: var(--space-2) 0 var(--space-4);
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 650 1rem/1.2 var(--font-ui);
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.btnPrimary {
+  min-height: var(--tap-main);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btnSmall {
+  padding-inline: var(--space-3);
+}
+
+.btn:focus-visible,
+.seg:focus-visible,
+.chip:focus-visible,
+.choice input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.segControl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.seg {
+  min-height: var(--tap);
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 700 1rem/1.2 var(--font-ui);
+  cursor: pointer;
+}
+
+.segActive {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  font-weight: 500;
+}
+
+.choice input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--accent);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+.stage {
+  position: relative;
+  margin: 0 0 var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-sunk);
+  touch-action: none;
+}
+
+.stage img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* A neutral checkerboard behind the cut-out view, so transparency shows. */
+.stage img.checker {
+  background: repeating-conic-gradient(var(--surface-sunk) 0% 25%, var(--surface-raised) 0% 50%) 0 0 / 24px 24px;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+
+.dot {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 3px solid var(--surface-raised);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Positive (on the object) and negative (not the object) tap points. */
+.pos { background: var(--person-3); }
+.neg { background: var(--danger); }
+
+.box {
+  position: absolute;
+  border: 3px solid var(--accent);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.error {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-4);
+}
+
+.facts dt {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.facts dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 650 1rem/1.2 var(--font-ui);
+  cursor: pointer;
+}
+
+.chipActive {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.chipDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.raw {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -1,5 +1,9 @@
 # 08 — UX principles: minimal, icon-first (PIN-37)
 
+> The look, words and components are now defined in
+> [`docs/14-design-system.md`](14-design-system.md), which wins where
+> the two disagree (no emoji, verb-first words, the Pinneds UI kit).
+
 Audience assumption: a player who tapped a chat link and does not
 "do apps". Every screen must survive being used one-handed, in a
 hurry, with zero instructions read.

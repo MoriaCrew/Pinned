@@ -254,8 +254,7 @@ export function AddSheet({
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
   const tabsId = useId();
-  // The board's skin (PIN-99): the sheet wears it even while the
-  // first-generation stylesheet still sets :root variables.
+  // The board's skin (PIN-99): the sheet wears it.
   const skin = skinForTheme((boardView.board as { themeId?: string | null }).themeId);
 
   function showPreview(file: File) {

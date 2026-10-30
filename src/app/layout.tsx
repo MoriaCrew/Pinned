@@ -4,10 +4,10 @@ import { preload } from "react-dom";
 import { getConfig } from "../config";
 import { resolveAuthUi } from "../domain/auth-ui";
 import { DEFAULT_SKIN } from "../domain/skins";
+import { t } from "../i18n";
 import { AuthControl } from "./auth/AuthControl";
 import { AuthProvider } from "./auth/AuthProvider";
-// Design tokens first (PIN-96); first-generation styles still load
-// after them until every screen is rebuilt (PIN-95 children).
+// Tokens, then components, then the small global reset (docs/14).
 import "../ui/tokens.css";
 import "../ui/pinneds.css";
 import "./globals.css";
@@ -18,10 +18,10 @@ const PRELOADED_FONTS = [
   "/fonts/BricolageGrotesque-200-800.woff2",
 ];
 
+// The landing's own words (docs/14 Words): the name, the one-liner, what it does.
 export const metadata: Metadata = {
-  title: "Pinneds — one link, one game, hosted by an AI",
-  description:
-    "Describe a host in one line, drop the link in your group chat, and play an async photo game. Nothing to install.",
+  title: t("en", "landing.title"),
+  description: `${t("en", "landing.tagline")} ${t("en", "landing.body")}`,
 };
 
 // Mobile-first (docs/08): without this, phones lay out at 980px.
