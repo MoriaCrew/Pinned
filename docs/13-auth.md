@@ -32,7 +32,11 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    always verifies with revocation checking, and only Policy
    `authAllowedProviders` (default `google.com`) may mint a
    session — enabling another Firebase provider (e.g. Anonymous)
-   in a console cannot sign anyone in by itself.
+   in a console cannot sign anyone in by itself. PIN-160: the
+   exchange refuses a cross-site request (403 `cross_site`) or a
+   non-JSON body (415) before any body read, so another site
+   cannot plant its own session in a visitor's browser (login
+   CSRF).
 3. On success the server upserts `users/{uid}` and sets the
    `pinned_user` cookie: httpOnly, SameSite=Lax, Secure on
    https, HMAC-signed via `src/domain/tokens.ts` with a

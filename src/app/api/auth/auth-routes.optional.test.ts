@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { TokenVerifier } from "../../../server/token-verifier";
 
 /**
  * Optional-mode route flow (PIN-83 Checks): real route handlers
@@ -34,6 +35,7 @@ let myElementImageRoute: (
 ) => Promise<Response>;
 let fromLibraryRoute: SlugHandler;
 let seedElement: (boardId: string, ownerId: string) => Promise<void>;
+let tokenVerifier: TokenVerifier;
 /** A participant's userId and where that user's board index points. */
 let linkState: (
   slug: string,
@@ -44,7 +46,7 @@ beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
     await import("../../../server/token-verifier");
   setTokenVerifierForTests(
-    new FakeTokenVerifier({
+    (tokenVerifier = new FakeTokenVerifier({
       "token-alice": {
         uid: "synthetic-alice",
         displayName: "Alice A",
@@ -60,7 +62,7 @@ beforeAll(async () => {
         displayName: "Alice A",
         authTimeMs: Date.now() - 2 * 60 * 60 * 1000,
       },
-    }),
+    })),
   );
   ({ POST: postSession, DELETE: deleteSession } = await import("./session/route"));
   ({ GET: getMe } = await import("../me/route"));
@@ -121,6 +123,20 @@ function req(url: string, init: RequestInit = {}): Request {
   return new Request(url, init);
 }
 
+/** What the app's own fetch sends (PIN-160 login-CSRF guard). */
+const SAME_ORIGIN_JSON = {
+  "content-type": "application/json",
+  "sec-fetch-site": "same-origin",
+};
+
+function sessionReq(idToken: string, headers: HeadersInit = SAME_ORIGIN_JSON): Request {
+  return req("http://t/api/auth/session", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ idToken }),
+  });
+}
+
 function slugParams(slug: string) {
   return { params: Promise.resolve({ slug }) };
 }
@@ -133,12 +149,7 @@ function cookiePair(res: Response): string {
 }
 
 async function signIn(idToken: string): Promise<string> {
-  const res = await postSession(
-    req("http://t/api/auth/session", {
-      method: "POST",
-      body: JSON.stringify({ idToken }),
-    }),
-  );
+  const res = await postSession(sessionReq(idToken));
   expect(res.status).toBe(200);
   return cookiePair(res);
 }
@@ -180,23 +191,13 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     const me = await getMe(req("http://t/api/me"));
     expect(me.status).toBe(401);
 
-    const bad = await postSession(
-      req("http://t/api/auth/session", {
-        method: "POST",
-        body: JSON.stringify({ idToken: "not-a-token" }),
-      }),
-    );
+    const bad = await postSession(sessionReq("not-a-token"));
     expect(bad.status).toBe(401);
     expect(bad.headers.get("set-cookie")).toBeNull();
   });
 
   it("sign-in sets an httpOnly Lax user cookie; /api/me reads it; tamper is 401", async () => {
-    const res = await postSession(
-      req("http://t/api/auth/session", {
-        method: "POST",
-        body: JSON.stringify({ idToken: "token-alice" }),
-      }),
-    );
+    const res = await postSession(sessionReq("token-alice"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { user: Record<string, unknown> };
     expect(body.user).toMatchObject({
@@ -220,6 +221,34 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
       req("http://t/api/me", { headers: { cookie: tampered } }),
     );
     expect(forged.status).toBe(401);
+  });
+
+  it("PIN-160: sign-in refuses cross-site (403) and non-JSON (415) before any verify", async () => {
+    // Refused before the rate limit, so this spends no sign-in budget.
+    const verify = vi.spyOn(tokenVerifier, "verifyIdToken");
+    try {
+      for (const site of ["cross-site", "same-site", "none"]) {
+        const res = await postSession(
+          sessionReq("token-alice", {
+            "content-type": "application/json",
+            "sec-fetch-site": site,
+          }),
+        );
+        expect(res.status).toBe(403);
+        expect((await res.json()).code).toBe("cross_site");
+        expect(res.headers.get("set-cookie")).toBeNull();
+      }
+      // A cross-site HTML form can only post text/plain.
+      const form = await postSession(
+        sessionReq("token-alice", { "content-type": "text/plain" }),
+      );
+      expect(form.status).toBe(415);
+      expect((await form.json()).code).toBe("unsupported_media_type");
+      expect(form.headers.get("set-cookie")).toBeNull();
+      expect(verify).not.toHaveBeenCalled();
+    } finally {
+      verify.mockRestore();
+    }
   });
 
   it("claim: needs both sessions, same user ok, other user 409, missing board 404", async () => {
@@ -494,12 +523,7 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
 
   it("PIN-94: wrong-provider and revoked tokens are 401 with no cookie", async () => {
     for (const idToken of ["token-anon", "token-revoked"]) {
-      const res = await postSession(
-        req("http://t/api/auth/session", {
-          method: "POST",
-          body: JSON.stringify({ idToken }),
-        }),
-      );
+      const res = await postSession(sessionReq(idToken));
       expect(res.status).toBe(401);
       expect(res.headers.get("set-cookie")).toBeNull();
     }
