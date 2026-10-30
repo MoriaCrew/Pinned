@@ -1,23 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  addSheetStage,
   applyOptimisticConfirm,
   canTapAdd,
-  isAwaitingTapPin,
-  type PendingTapPin,
-  normalizedTapPoint,
   confirmPayload,
+  cuttingProgress,
   downscaleTarget,
+  isAwaitingTapPin,
   isTerminalJob,
+  maskBoxOf,
   newCandidatePins,
+  normalizedTapPoint,
+  overlayRect,
   selectionWithCandidates,
   shouldShowFaceNote,
+  spreadLabels,
+  type AddStage,
   type JobStatusLike,
+  type MaskBoxLike,
+  type OverlayRect,
+  type PendingTapPin,
 } from "../../../domain/add-sheet";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
-import { t } from "../../../i18n";
+import { skinForTheme } from "../../../domain/skins";
+import { t, tCount } from "../../../i18n";
+import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
 import { LibraryTab } from "./LibraryTab";
@@ -31,10 +41,13 @@ interface PublicJob {
   workingCopyGone?: boolean;
 }
 
+/** The public element payload carries its maskBox (PIN-99); library copies may not. */
+type CandidateElement = BoardViewElement & { maskBox?: MaskBoxLike };
+
 interface JobView {
   job: PublicJob;
   pins: (BoardViewPin & { boardId: string })[];
-  elements: (BoardViewElement & { flattenedUrl: string; createdAt: number })[];
+  elements: (CandidateElement & { flattenedUrl: string; createdAt: number })[];
 }
 
 export const boardQueryKey = (slug: string) => ["board", slug] as const;
@@ -71,12 +84,133 @@ async function downscalePhoto(file: File, maxPx: number, quality: number): Promi
   }
 }
 
+/** One friendly line that names the fix; errors are alerts, the rest is status. */
+function SheetLine({ tone = "info", children }: { tone?: "info" | "error"; children: ReactNode }) {
+  return (
+    <p className={cx("pn-add-line", tone === "error" && "pn-add-line-error")} role={tone === "error" ? "alert" : "status"}>
+      <Icon name="info" size={18} />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** "Finding things" / "Cutting out" + one line of what is happening. */
+function CutStatus({ tag, children }: { tag: string; children: ReactNode }) {
+  return (
+    <div className="pn-cut-status" role="status" aria-live="polite">
+      <Tag tone="ink" icon="cut">
+        {tag}
+      </Tag>
+      <p className="pn-cut-line">{children}</p>
+    </div>
+  );
+}
+
+interface LiftedSticker {
+  id: string;
+  label: string;
+  src: string;
+  seed: string;
+  rect: OverlayRect;
+  cutting: boolean;
+}
+
+const pct = (fraction: number) => `${fraction * 100}%`;
+
 /**
- * Add sheet (PIN-67, docs/11 section 6): photo -> "finding
- * things…" -> candidate pins pop in pre-selected (board poll while
- * the in-request job runs, then the job view) -> tap to drop ->
- * "Pin N ->" with optimistic pins. A face shows the one-line
- * consent note once per photo and never blocks pinning.
+ * The photo at the heart of the cut-out moment: a sweep while
+ * finding, dimmed with each sticker lifted at its maskBox while
+ * cutting, and the tap surface (PIN-78) while reviewing. The frame
+ * takes the photo's own aspect ratio, so the tap box IS the image.
+ */
+function CutPhoto({
+  src,
+  stage,
+  lifted,
+  tap,
+  lastTap,
+}: {
+  src: string;
+  stage: AddStage;
+  lifted: LiftedSticker[];
+  tap: { working: boolean; disabled: boolean; onTap: (point: { x: number; y: number }) => void } | null;
+  lastTap: { x: number; y: number } | null;
+}) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  const style = ratio ? ({ "--ratio": ratio } as CSSProperties) : undefined;
+  return (
+    <div className="pn-cut-photo" data-stage={stage} data-working={tap?.working ? "" : undefined} style={style}>
+      <div className="pn-cut-frame">
+        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
+        <img
+          src={src}
+          alt={t("en", "add.photoAlt")}
+          onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            if (naturalWidth > 0 && naturalHeight > 0) setRatio(naturalWidth / naturalHeight);
+          }}
+        />
+        {stage === "finding" ? <span className="pn-cut-sweep" aria-hidden="true" /> : null}
+        {tap ? (
+          <button
+            type="button"
+            className="pn-cut-tap"
+            aria-label={t("en", "add.tapHint")}
+            disabled={tap.disabled}
+            onClick={(event) => {
+              const point = normalizedTapPoint(
+                event.clientX,
+                event.clientY,
+                event.currentTarget.getBoundingClientRect(),
+              );
+              if (point) tap.onTap(point);
+            }}
+          />
+        ) : null}
+        {tap && lastTap ? (
+          <span
+            className="pn-cut-dot"
+            data-working={tap.working ? "" : undefined}
+            aria-hidden="true"
+            style={{ left: pct(lastTap.x), top: pct(lastTap.y) }}
+          />
+        ) : null}
+      </div>
+      {lifted.map((item) => (
+        <span
+          key={item.id}
+          className="pn-cut-lift"
+          data-cutting={item.cutting ? "" : undefined}
+          aria-hidden="true"
+          style={{ left: pct(item.rect.left), top: pct(item.rect.top), width: pct(item.rect.width), height: pct(item.rect.height) }}
+        >
+          <Sticker src={item.src} seed={item.seed} tilt={0} state={item.cutting ? "cutting" : "rest"} loading="eager" />
+        </span>
+      ))}
+      {lifted.map((item) => (
+        <span
+          key={`${item.id}-label`}
+          className="pn-cut-label"
+          data-below={item.rect.label.below ? "" : undefined}
+          style={{ left: pct(item.rect.label.x), top: pct(item.rect.label.y) }}
+        >
+          <span>{item.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Add sheet (PIN-67, docs/11 section 6), rebuilt as the design
+ * system's cut-out moment (PIN-99, docs/14): pick a photo → the
+ * photo with a sweep while Spark finds things → each candidate's
+ * sticker lifts off the photo at its maskBox as it lands (board
+ * poll while the in-request job runs, then the job view) → review:
+ * every thing kept, tap one to drop it, tap the photo to add a
+ * missed one (PIN-78) → "Pin N things" with optimistic pins. A
+ * face shows the one-line consent note once per photo and never
+ * blocks pinning.
  */
 export function AddSheet({
   slug,
@@ -99,7 +233,7 @@ export function AddSheet({
 }) {
   const queryClient = useQueryClient();
   // PIN-85: "From my pins" library tab. Disabled auth (link-only
-  // or signed out) keeps the pre-PIN-85 sheet byte-identical.
+  // or signed out) keeps the photo-only sheet.
   const auth = useAuth();
   const [tab, setTab] = useState<"photo" | "library">("photo");
   const showLibraryTab = auth.enabled && auth.status === "signedIn";
@@ -119,6 +253,10 @@ export function AddSheet({
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
+  const tabsId = useId();
+  // The board's skin (PIN-99): the sheet wears it even while the
+  // first-generation stylesheet still sets :root variables.
+  const skin = skinForTheme((boardView.board as { themeId?: string | null }).themeId);
 
   function showPreview(file: File) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -186,7 +324,15 @@ export function AddSheet({
   });
 
   const job = jobQuery.data?.job ?? null;
-  const jobPins = useMemo(() => jobQuery.data?.pins ?? [], [jobQuery.data]);
+  // Arrival order, like the board-poll pop-ins, so the review row
+  // never reshuffles the stickers the photo just showed.
+  const jobPins = useMemo(
+    () =>
+      [...(jobQuery.data?.pins ?? [])].sort(
+        (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+      ),
+    [jobQuery.data],
+  );
   const jobElements = useMemo(
     () => new Map((jobQuery.data?.elements ?? []).map((e) => [e.id, e])),
     [jobQuery.data],
@@ -205,7 +351,7 @@ export function AddSheet({
   // actually lands; switching on jobId alone would blank the
   // sheet (and the selection) for one fetch.
   const candidatePins: BoardViewPin[] = jobQuery.data ? jobPins : popInPins;
-  const elementFor = (pin: BoardViewPin) =>
+  const elementFor = (pin: BoardViewPin): CandidateElement | undefined =>
     jobElements.get(pin.elementId) ?? boardElements.get(pin.elementId);
   const candidateIds = candidatePins.map((p) => p.id);
 
@@ -223,7 +369,7 @@ export function AddSheet({
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error || t("en", "add.failed"));
+      if (!response.ok) throw new Error(data.error || t("en", "add.pinFailed"));
       return data;
     },
     onMutate: async (payload) => {
@@ -239,7 +385,7 @@ export function AddSheet({
     },
     onError: (_cause, _payload, context) => {
       if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
-      setUploadError(t("en", "add.failed"));
+      setUploadError(t("en", "add.pinFailed"));
     },
     onSuccess: () => {
       setJobId(null);
@@ -284,11 +430,14 @@ export function AddSheet({
     },
   });
 
-  const finding =
-    upload.isPending ||
-    (jobId !== null && !jobQuery.data) ||
-    (job !== null && !isTerminalJob(job.status));
+  const stage = addSheetStage({
+    uploadPending: upload.isPending,
+    jobId,
+    jobStatus: job?.status ?? null,
+    candidateCount: candidatePins.length,
+  });
   const payload = jobId ? confirmPayload(jobId, selected) : null;
+  const awaitingTap = isAwaitingTapPin(pendingTapPin, jobId, candidateIds, jobQuery.errorUpdatedAt);
   const canPin =
     // Never pin while a tap is cutting or its candidate has
     // not landed in the job view yet: selected only gains the
@@ -298,10 +447,11 @@ export function AddSheet({
     job?.status === "ready" &&
     !confirm.isPending &&
     !tapAdd.isPending &&
-    !isAwaitingTapPin(pendingTapPin, jobId, candidateIds, jobQuery.errorUpdatedAt);
+    !awaitingTap;
   const showFaceNote = shouldShowFaceNote(job?.faceNote ?? false, jobId, dismissedFaceJobId);
-  // Visibility excludes `busy` so the preview stays up (disabled)
-  // while a tap is cutting; canTapAdd's busy gate is unit-tested.
+  // Visibility excludes `busy` so the photo stays tappable-looking
+  // (disabled) while a tap is cutting; canTapAdd's busy gate is
+  // unit-tested.
   const showTap = canTapAdd({
     jobStatus: job?.status ?? null,
     workingCopyGone: job?.workingCopyGone ?? false,
@@ -310,8 +460,31 @@ export function AddSheet({
     maxElements: elementsPerPhotoMax,
     busy: false,
   });
-  const terminalEmpty =
-    job?.status === "ready" && candidatePins.length === 0;
+  const tapWorking = tapAdd.isPending || awaitingTap;
+
+  // Cut-out moment: while the job runs, every landed candidate sits
+  // on the photo at its maskBox; the newest is still "cutting".
+  const progress = cuttingProgress(candidatePins, stage === "cutting");
+  const placed: LiftedSticker[] =
+    stage === "cutting"
+      ? candidatePins.flatMap((pin) => {
+          const element = elementFor(pin);
+          const rect = element ? overlayRect(maskBoxOf(element)) : null;
+          if (!element || !rect) return [];
+          return [
+            {
+              id: pin.id,
+              label: element.label,
+              src: element.imageUrl,
+              seed: pin.elementId,
+              rect,
+              cutting: pin.id === progress.cuttingId,
+            },
+          ];
+        })
+      : [];
+  const spread = spreadLabels(placed.map((item) => item.rect));
+  const lifted = placed.map((item, index) => ({ ...item, rect: spread[index] }));
 
   function toggle(pinId: string) {
     setDropped((current) => {
@@ -333,179 +506,192 @@ export function AddSheet({
     upload.reset();
   }
 
-  return (
-    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("en", "add.title")}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="sheet-head">
-          <h2>{t("en", "add.title")}</h2>
-          <button type="button" className="btn btn-small" onClick={onClose}>
-            {t("en", "add.close")}
-          </button>
-        </div>
+  const onPhotoTab = !showLibraryTab || tab === "photo";
+  const title = onPhotoTab && stage === "review" && candidatePins.length > 0 ? t("en", "add.reviewTitle") : t("en", "add.title");
 
-        {showLibraryTab ? (
-          <div className="sheet-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "photo"}
-              className={`btn btn-small${tab === "photo" ? " btn-primary" : ""}`}
-              onClick={() => setTab("photo")}
-            >
-              {t("en", "add.photoTab")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "library"}
-              className={`btn btn-small${tab === "library" ? " btn-primary" : ""}`}
-              onClick={() => setTab("library")}
-            >
-              {t("en", "add.fromMyPins")}
-            </button>
-          </div>
-        ) : null}
-
-        {showLibraryTab && tab === "library" ? <LibraryTab slug={slug} /> : null}
-
-        {!showLibraryTab || tab === "photo" ? (
-          <>
-        {jobId === null && !upload.isPending ? (
-          <label className="btn btn-primary sheet-pick">
-            {t("en", "add.pick")}
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) upload.mutate(file);
-              }}
-            />
-          </label>
-        ) : null}
-
-        {finding ? (
-          <p className="hint" role="status">
-            {t("en", "add.finding")}
-          </p>
-        ) : null}
-
-        {showFaceNote ? (
-          <p className="card sheet-face" role="status">
-            {t("en", "add.faceNote")}{" "}
-            <button
-              type="button"
-              className="btn btn-small"
-              onClick={() => setDismissedFaceJobId(jobId)}
-            >
-              {t("en", "add.gotIt")}
-            </button>
-          </p>
-        ) : null}
-
+  let footer: ReactNode = null;
+  if (onPhotoTab && stage === "review") {
+    footer = (
+      <>
         {candidatePins.length > 0 ? (
-          <>
-            <p className="hint">{t("en", "add.tapDrop")}</p>
-            <ul className="pins-grid">
-              {candidatePins.map((pin) => {
-                const element = elementFor(pin);
-                if (!element) return null;
-                const keeping = selected.has(pin.id);
-                return (
-                  <li key={pin.id}>
-                    <button
-                      type="button"
-                      className={`pin-card pin-toggle${keeping ? "" : " pin-dropped"}`}
-                      aria-pressed={keeping}
-                      onClick={() => toggle(pin.id)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
-                      <img src={element.imageUrl} alt={element.label} loading="lazy" />
-                      <span className="pin-label">{element.label}</span>
-                      <span className="state-pill">
-                        {keeping ? t("en", "add.selected") : t("en", "add.dropped")}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        ) : null}
-
-        {showTap && previewUrl ? (
-          <>
-            <p className="hint" role="status">
-              {tapAdd.isPending ? t("en", "add.tapWorking") : t("en", "add.tapHint")}
-            </p>
-            <button
-              type="button"
-              className="tap-photo"
-              aria-label={t("en", "add.tapHint")}
-              disabled={tapAdd.isPending || confirm.isPending}
-              onClick={(event) => {
-                const point = normalizedTapPoint(
-                  event.clientX,
-                  event.clientY,
-                  event.currentTarget.getBoundingClientRect(),
-                );
-                if (point && jobId) tapAdd.mutate({ ...point, jobId });
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
-              <img src={previewUrl} alt="" />
-              {lastTap ? (
-                <span
-                  className="tap-dot"
-                  aria-hidden="true"
-                  style={{ left: `${lastTap.x * 100}%`, top: `${lastTap.y * 100}%` }}
-                />
-              ) : null}
-            </button>
-          </>
-        ) : null}
-        {tapError ? (
-          <p className="error" role="alert">{tapError}</p>
-        ) : null}
-        {terminalEmpty ? <p className="hint" role="status">{t("en", "add.noneFound")}</p> : null}
-        {job?.status === "failed" ? (
-          <p className="error" role="alert">{t("en", "add.failed")}</p>
-        ) : null}
-        {job?.status === "refused" ? (
-          <p className="error" role="alert">{t("en", "add.refused")}</p>
-        ) : null}
-        {uploadError ? (
-          <p className="error" role="alert">{uploadError}</p>
-        ) : null}
-
-        <div className="sheet-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
+          <Button
+            variant="primary"
+            size="lg"
+            icon="pin"
+            block
             disabled={!canPin}
             onClick={() => payload && confirm.mutate(payload)}
           >
-            {confirm.isPending
-              ? t("en", "add.pinning")
-              : `${t("en", "add.pin")} ${selected.size} →`}
-          </button>
-          {job && isTerminalJob(job.status) ? (
-            <button type="button" className="btn" onClick={resetForAnother}>
-              {t("en", "add.another")}
-            </button>
-          ) : null}
-        </div>
-          </>
+            {confirm.isPending ? t("en", "add.pinning") : tCount("en", "add.pinCount", selected.size)}
+          </Button>
         ) : null}
-      </section>
+        <Button
+          variant={candidatePins.length > 0 ? "quiet" : "secondary"}
+          icon={candidatePins.length > 0 ? undefined : "camera"}
+          block={candidatePins.length === 0}
+          className="pn-add-another"
+          onClick={resetForAnother}
+        >
+          {t("en", "add.another")}
+        </Button>
+      </>
+    );
+  } else if (onPhotoTab && stage === "ended") {
+    footer = (
+      <Button variant="primary" size="lg" icon="camera" block onClick={resetForAnother}>
+        {t("en", "add.another")}
+      </Button>
+    );
+  }
+
+  const photoContent = (
+    <>
+      {stage === "pick" ? (
+        <label className="pn-add-pick">
+          <span className="pn-add-pick-icon" aria-hidden="true">
+            <Icon name="camera" size={28} />
+          </span>
+          <span className="pn-add-pick-title">{t("en", "add.pick")}</span>
+          <span className="pn-add-pick-help">{t("en", "add.pickHelp")}</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="pn-sr"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) upload.mutate(file);
+            }}
+          />
+        </label>
+      ) : null}
+
+      {showFaceNote ? (
+        <Hint point="none" dismissLabel={t("en", "add.gotIt")} onDismiss={() => setDismissedFaceJobId(jobId)}>
+          {t("en", "add.faceNote")}
+        </Hint>
+      ) : null}
+
+      {stage !== "pick" && previewUrl ? (
+        <CutPhoto
+          src={previewUrl}
+          stage={stage}
+          lifted={lifted}
+          lastTap={lastTap}
+          tap={
+            stage === "review" && showTap
+              ? {
+                  working: tapWorking,
+                  disabled: tapAdd.isPending || confirm.isPending,
+                  onTap: (point) => {
+                    if (jobId) tapAdd.mutate({ ...point, jobId });
+                  },
+                }
+              : null
+          }
+        />
+      ) : null}
+
+      {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t("en", "add.noneFound")}</SheetLine> : null}
+      {stage === "finding" ? <CutStatus tag={t("en", "cutout.findingTag")}>{t("en", "add.finding")}</CutStatus> : null}
+      {stage === "cutting" ? (
+        <CutStatus tag={t("en", "cutout.cuttingTag")}>
+          {progress.ready === 0
+            ? t("en", "cutout.cuttingFirst")
+            : tCount("en", "cutout.readySoFar", progress.ready)}
+        </CutStatus>
+      ) : null}
+
+      {stage === "review" && showTap ? (
+        tapWorking ? (
+          <CutStatus tag={t("en", "cutout.cuttingTag")}>{t("en", "add.tapWorking")}</CutStatus>
+        ) : (
+          <p className="pn-add-tapline">
+            <Icon name="tap" size={20} />
+            {t("en", "add.tapHint")}
+          </p>
+        )
+      ) : null}
+      {tapError ? <SheetLine tone="error">{tapError}</SheetLine> : null}
+
+      {stage === "review" && candidatePins.length > 0 ? (
+        <div className="pn-add-review">
+          <ul className="pn-pins pn-add-keep">
+            {candidatePins.map((pin) => {
+              const element = elementFor(pin);
+              if (!element) return null;
+              // Display follows the explicit drops so a just-landed
+              // candidate never flashes "dropped" before the
+              // selection effect adds it; the payload is `selected`.
+              return (
+                <Pin
+                  as="li"
+                  key={pin.id}
+                  src={element.imageUrl}
+                  label={element.label}
+                  owner={{ id: meId, name: t("en", "add.you") }}
+                  seed={pin.elementId}
+                  state={dropped.has(pin.id) ? "dropped" : "rest"}
+                  onToggle={() => toggle(pin.id)}
+                  pressedWhenRest
+                />
+              );
+            })}
+          </ul>
+          <p className="pn-add-help">{t("en", "add.tapDrop")}</p>
+        </div>
+      ) : null}
+
+      {job?.status === "failed" ? <SheetLine tone="error">{t("en", "add.failed")}</SheetLine> : null}
+      {job?.status === "refused" ? <SheetLine>{t("en", "add.refused")}</SheetLine> : null}
+      {uploadError ? <SheetLine tone="error">{uploadError}</SheetLine> : null}
+    </>
+  );
+
+  return (
+    <div data-theme={skin} className="pn-skin-root pn-add-root">
+      <Sheet title={title} onClose={onClose} closeLabel={t("en", "add.close")} footer={footer} className="pn-add-sheet">
+        {showLibraryTab ? (
+          <>
+            <div className="pn-add-tabs" role="tablist" aria-label={t("en", "add.tabs")}>
+              <button
+                type="button"
+                role="tab"
+                id={`${tabsId}-photo`}
+                aria-selected={tab === "photo"}
+                aria-controls={`${tabsId}-panel`}
+                className="pn-add-tab"
+                onClick={() => setTab("photo")}
+              >
+                <Icon name="camera" size={18} />
+                {t("en", "add.photoTab")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id={`${tabsId}-library`}
+                aria-selected={tab === "library"}
+                aria-controls={`${tabsId}-panel`}
+                className="pn-add-tab"
+                onClick={() => setTab("library")}
+              >
+                <Icon name="pin" size={18} />
+                {t("en", "add.fromMyPins")}
+              </button>
+            </div>
+            <div
+              className="pn-add-panel"
+              role="tabpanel"
+              id={`${tabsId}-panel`}
+              aria-labelledby={`${tabsId}-${tab}`}
+            >
+              {tab === "library" ? <LibraryTab slug={slug} /> : photoContent}
+            </div>
+          </>
+        ) : (
+          photoContent
+        )}
+      </Sheet>
     </div>
   );
 }
