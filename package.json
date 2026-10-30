@@ -17,7 +17,8 @@
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "spike:studio": "node scripts/studio-spike.mjs",
     "seed:demo": "node scripts/seed-demo-board.mjs",
-    "usage:report": "node scripts/usage-report.mjs"
+    "usage:report": "node scripts/usage-report.mjs",
+    "usage:costs": "node scripts/usage-costs.mjs"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.6",

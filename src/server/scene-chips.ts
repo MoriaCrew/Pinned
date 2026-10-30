@@ -109,6 +109,7 @@ export async function resolveSceneChips(
     promptVersion: policy.promptVersions.chips,
     boardId: slug,
     participantId: participant.id,
+    userIdAtCall: participant.userId ?? null,
   });
   if (outcome.status !== "ready" || outcome.value.chips.length === 0) {
     // Refused / failed / budget-denied: fixed list, nothing cached

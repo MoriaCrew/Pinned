@@ -97,7 +97,8 @@ describe("decorator chain: budget (PIN-61)", () => {
       expect(out.message).toContain("switched off");
     }
     expect(calls).toBe(0);
-    expect(logs).toHaveLength(0);
+    // PIN-137: the denial itself is logged as denied_off.
+    expect(logs).toMatchObject([{ outcome: "denied_off", denialReason: "off", attempts: 0, reservedMicroUsd: 0 }]);
   });
 
   it("fail closed when the budget store errors: no provider call", async () => {
@@ -502,6 +503,7 @@ describe("decorator chain: Segmenter caps (PIN-92)", () => {
     expect(logs.map((l) => [l.operation, l.outcome])).toEqual([
       ["segment", "error"],
       ["segment", "refused"],
+      ["segment", "denied_participant_cap"], // PIN-137: cap denial logged
     ]);
   });
 
@@ -547,7 +549,7 @@ describe("decorator chain: Segmenter caps (PIN-92)", () => {
     expect(out).toMatchObject({ status: "failed", errorCode: "participant_cap" });
     if (out.status === "failed") expect(out.message).toContain("limit");
     expect(attempts).toBe(1);
-    expect(logs).toMatchObject([{ operation: "segment", outcome: "error" }]);
+    expect(logs).toMatchObject([{ operation: "segment", outcome: "denied_participant_cap", attempts: 1 }]);
   });
 });
 
@@ -683,5 +685,99 @@ describe("decorator chain: AiCallLog (PIN-61)", () => {
         estimatedCostUsd: 0.0025,
       },
     ]);
+  });
+});
+
+describe("AiCallLog v2 attribution (PIN-137)", () => {
+  it("threads board/participant/user/photo/job + micro-USD + expireAt; link-only user is null", async () => {
+    const { ports, logs } = setup({
+      async nameElements() {
+        collectMetaCallLog({
+          operation: "nameElements",
+          model: "muse-spark-1.3",
+          latencyMs: 5,
+          outcome: "ok",
+          inputTokens: 100,
+          outputTokens: 100,
+        });
+        return READY;
+      },
+    });
+    await ports.elementNamer.nameElements(
+      namerInput({
+        boardId: "synthetic-board-1",
+        participantId: "p1",
+        userIdAtCall: "user-synthetic-1",
+        photoId: "job-synthetic-1",
+        jobId: "job-synthetic-1",
+      }),
+    );
+    await ports.elementNamer.nameElements(
+      namerInput({ boardId: "synthetic-board-1", participantId: "p2" }),
+    );
+    expect(logs[0]).toMatchObject({
+      schemaVersion: 2,
+      boardId: "synthetic-board-1",
+      gameId: "synthetic-board-1",
+      participantId: "p1",
+      userIdAtCall: "user-synthetic-1",
+      photoId: "job-synthetic-1",
+      jobId: "job-synthetic-1",
+      attempt: 0,
+      attempts: 1,
+    });
+    expect(logs[0].costMicroUsdEst).toBe(550);
+    expect(logs[0].reservedMicroUsd).toBe(17000);
+    expect(logs[0].expireAt).toBe(NOW + resolvePolicy().aiCallLogRetentionDays * 86_400_000);
+    expect(logs[1].userIdAtCall).toBeNull();
+  });
+
+  it("records the retry attempt index on the one logical-call log", async () => {
+    let attempts = 0;
+    const { ports, logs } = setup({
+      async nameElements() {
+        attempts += 1;
+        return attempts === 1 ? { status: "failed", errorCode: "http_429", httpStatus: 429 } : READY;
+      },
+    });
+    await ports.elementNamer.nameElements(namerInput());
+    expect(logs).toMatchObject([{ attempt: 1, attempts: 2, outcome: "ok" }]);
+  });
+
+  it("logs a denied_* record for scene + chips denials too (all operations)", async () => {
+    const composer: SceneComposer = {
+      async composeScene(input) {
+        return { status: "ready", value: { imageBase64: "x", promptVersion: input.promptVersion } };
+      },
+    };
+    const suggester: ChipSuggester = {
+      async suggestChips(input) {
+        return { status: "ready", value: { chips: ["x"], promptVersion: input.promptVersion } };
+      },
+    };
+    const { ports, logs } = setup(
+      { async nameElements() { return READY; } },
+      { composer, suggester, policy: resolvePolicy({ dailyBudgetUsd: 0 }) },
+    );
+    await ports.sceneComposer!.composeScene({
+      elements: [], prompt: "s", size: "1024x1536", store: false,
+      timeoutMs: 1, promptVersion: "scene.v1",
+      boardId: "b1", participantId: "p1", sceneId: "scene-1", jobId: "scene-1",
+    });
+    await ports.chipSuggester!.suggestChips({
+      labels: ["x"], maxChips: 1, maxChipChars: 10, maxTokens: 1,
+      timeoutMs: 1, promptVersion: "chips.v1", boardId: "b1", participantId: "p1",
+    });
+    await ports.segmenter.segment({
+      imageRef: "x", prompt: { kind: "concept", concept: "mug" },
+      timeoutMs: 1, boardId: "b1", participantId: "p1", photoId: "job-9", jobId: "job-9",
+    });
+    expect(logs.map((l) => [l.operation, l.outcome])).toEqual([
+      ["composeScene", "denied_off"],
+      ["suggestChips", "denied_off"],
+      ["segment", "denied_off"],
+    ]);
+    expect(logs[0]).toMatchObject({ sceneId: "scene-1", jobId: "scene-1", participantId: "p1" });
+    expect(logs[2]).toMatchObject({ photoId: "job-9", jobId: "job-9" });
   });
 });

@@ -211,7 +211,7 @@ describe("decorated TapNamer (PIN-117)", () => {
   });
 
   it("denies at the Policy tap-name cap before any provider call", async () => {
-    const { ports, calls } = decorated(
+    const { ports, calls, logs } = decorated(
       resolvePolicy({ tapNamesPerParticipantPerDay: 1 }),
     );
     const input = nameOneInput({ participantId: "p1" });
@@ -219,5 +219,7 @@ describe("decorated TapNamer (PIN-117)", () => {
     const denied = await ports.tapNamer!.nameOne(input);
     expect(denied).toMatchObject({ status: "failed", errorCode: "participant_cap" });
     expect(calls()).toBe(1);
+    // PIN-137: the denial is logged.
+    expect(logs.at(-1)).toMatchObject({ operation: "nameOne", outcome: "denied_participant_cap", attempts: 0 });
   });
 });

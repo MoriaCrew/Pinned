@@ -35,4 +35,13 @@ describe("InMemoryGameRepository (AI call logs, PIN-93)", () => {
     read[0].outcome = "refused";
     expect((await repo.listAiCallLogs("2026-10-26"))[0].outcome).toBe("ok");
   });
+
+  it("PIN-137: old-shape rows read back normalized (boardId + micro-USD, no user backfill)", async () => {
+    const repo = new InMemoryGameRepository();
+    await repo.appendAiCallLog(makeLog({ gameId: "synthetic-board-old", costEstimateUsd: 0.011322 }));
+    const [row] = await repo.listAiCallLogs("2026-10-26");
+    expect(row.boardId).toBe("synthetic-board-old");
+    expect(row.costMicroUsdEst).toBe(11322);
+    expect(row.userIdAtCall).toBeUndefined();
+  });
 });

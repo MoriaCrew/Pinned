@@ -24,6 +24,50 @@
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
+,
+    {
+      "collectionGroup": "aiCallLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "boardId", "order": "ASCENDING" },
+        { "fieldPath": "dayBucket", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "aiCallLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participantId", "order": "ASCENDING" },
+        { "fieldPath": "dayBucket", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "aiCallLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "boardId", "order": "ASCENDING" },
+        { "fieldPath": "participantId", "order": "ASCENDING" },
+        { "fieldPath": "dayBucket", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "aiCallLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userIdAtCall", "order": "ASCENDING" },
+        { "fieldPath": "dayBucket", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "aiCallLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "operation", "order": "ASCENDING" },
+        { "fieldPath": "dayBucket", "order": "ASCENDING" }
+      ]
+    }
   ],
   "fieldOverrides": [
     {

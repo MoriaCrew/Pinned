@@ -31,6 +31,17 @@ export interface NamedElement {
   faceFlag: boolean;
 }
 
+/** PIN-137 AiCallLog v2 attribution carried on port inputs (all optional). */
+export interface CallAttribution {
+  boardId?: string;
+  participantId?: string;
+  /** Signed-in user snapshot at call time; null = link-only. Never backfilled. */
+  userIdAtCall?: string | null;
+  sceneId?: string;
+  photoId?: string;
+  jobId?: string;
+}
+
 export interface NameElementsInput {
   imageRef: string;
   /** Policy elementsPerPhoto. */
@@ -49,6 +60,10 @@ export interface NameElementsInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
+  photoId?: string;
+  jobId?: string;
 }
 
 export interface ElementNamer {
@@ -83,6 +98,9 @@ export interface SegmentInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
+  jobId?: string;
 }
 
 /** Segmenter port: every invocation is budget-reserved per attempt (PIN-92). */
@@ -135,6 +153,10 @@ export interface ComposeSceneInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
+  sceneId?: string;
+  jobId?: string;
 }
 
 export interface SceneComposer {
@@ -420,6 +442,8 @@ export interface SuggestChipsInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
 }
 
 export interface ChipSuggester {
@@ -527,6 +551,10 @@ export interface NameOneInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
+  photoId?: string;
+  jobId?: string;
 }
 
 export interface TapName {
@@ -627,6 +655,8 @@ export interface TranscribeInput {
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution. */
+  userIdAtCall?: string | null;
 }
 
 export interface SpeechTranscriber {

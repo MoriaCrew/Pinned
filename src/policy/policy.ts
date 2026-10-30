@@ -169,6 +169,7 @@ export const PolicySchema = z
       })
       .default({ sparkElements: 4000, sparkChips: 1200, sparkTapName: 1200 }),
     /** 0 means OFF (PIN-59); never a silent fallback. */
+    aiCallLogRetentionDays: z.number().int().min(1).default(90),
     dailyBudgetUsd: z.number().min(0).default(2),
     dailyCallLimit: z.number().int().min(0).default(200),
     models: z
@@ -321,6 +322,7 @@ export const PolicyOverridesSchema = z.object({
       sparkTapName: z.number().int().positive().optional(),
     })
     .optional(),
+  aiCallLogRetentionDays: z.number().int().min(1).optional(),
   dailyBudgetUsd: z.number().min(0).optional(),
   dailyCallLimit: z.number().int().min(0).optional(),
   models: z

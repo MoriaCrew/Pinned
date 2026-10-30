@@ -7,7 +7,7 @@
  * double and the contract. (The `GameRepository` name predates the
  * Studio pivot and is kept to avoid a repo-wide rename.)
  */
-import type { AiCallLog } from "./types";
+import { normalizeAiCallLog, type AiCallLog } from "./types";
 
 export interface GameRepository {
   appendAiCallLog(log: AiCallLog): Promise<void>;
@@ -26,6 +26,8 @@ export class InMemoryGameRepository implements GameRepository {
   }
 
   async listAiCallLogs(dayBucket: string): Promise<AiCallLog[]> {
-    return this.aiLogs.filter((l) => l.dayBucket === dayBucket).map(clone);
+    return this.aiLogs
+      .filter((l) => l.dayBucket === dayBucket)
+      .map((l) => normalizeAiCallLog(clone(l)));
   }
 }

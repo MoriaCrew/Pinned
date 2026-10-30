@@ -26,6 +26,15 @@ export function estimateMetaCostUsd(entry: MetaCallLog): number {
   );
 }
 
+/** USD -> integer micro-USD (PIN-137). Estimates only. */
+export function usdToMicroUsd(usd: number): number {
+  return Math.max(0, Math.round(usd * 1_000_000));
+}
+
+export function estimateMetaCostMicroUsd(entry: MetaCallLog): number {
+  return usdToMicroUsd(estimateMetaCostUsd(entry));
+}
+
 export type PortOperation =
   | "nameElements"
   | "segment"
@@ -60,4 +69,11 @@ export function estimateReserveUsd(
     return Math.ceil(seconds) * VOICE_USD_PER_AUDIO_SECOND;
   }
   return limits.sparkElementsMaxTokens * SPARK_OUTPUT_USD_PER_TOKEN;
+}
+
+export function estimateReserveMicroUsd(
+  operation: PortOperation,
+  limits: Parameters<typeof estimateReserveUsd>[1],
+): number {
+  return usdToMicroUsd(estimateReserveUsd(operation, limits));
 }

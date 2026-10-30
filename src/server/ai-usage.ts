@@ -12,7 +12,7 @@ import "server-only";
  */
 import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
-import type { AiCallLog } from "../domain/types";
+import { aiCallCostUsdEst, type AiCallLog } from "../domain/types";
 import { dayBucketFor } from "../gateway/budget";
 import { estimateMetaCostUsd } from "../gateway/costs";
 import type { MetaCallLog } from "../gateway/meta-gateway";
@@ -29,7 +29,7 @@ export function summarizeAiUsage(logs: readonly AiCallLog[], dayBucket: string):
   return {
     dayBucket,
     callCount: logs.length,
-    estimatedCostUsd: logs.reduce((sum, log) => sum + (log.costEstimateUsd ?? 0), 0),
+    estimatedCostUsd: logs.reduce((sum, log) => sum + aiCallCostUsdEst(log), 0),
   };
 }
 
@@ -65,6 +65,11 @@ export function createMetaLogSink(
       images: entry.images,
       latencyMs: entry.latencyMs,
       costEstimateUsd: estimateMetaCostUsd(entry),
+      costMicroUsdEst: Math.max(0, Math.round(estimateMetaCostUsd(entry) * 1_000_000)),
+      schemaVersion: 2,
+      userIdAtCall: null,
+      attempt: 0,
+      attempts: 1,
       outcome: entry.outcome,
       dayBucket: dayBucketFor(createdAt),
       createdAt,
