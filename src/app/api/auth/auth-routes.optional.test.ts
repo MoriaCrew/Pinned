@@ -41,6 +41,7 @@ let linkState: (
   slug: string,
   participantId: string,
 ) => Promise<{ userId?: string; indexed?: string }>;
+let participantCount: (slug: string) => Promise<number>;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
@@ -88,6 +89,8 @@ beforeAll(async () => {
     const entry = await getUserRepository().getUserBoard(userId, slug);
     return { userId, ...(entry ? { indexed: entry.participantId } : {}) };
   };
+  participantCount = async (slug) =>
+    (await getBoardRepository().listParticipants(slug)).length;
   seedElement = async (boardId, ownerId) => {
     await getBoardRepository().createElement({
       id: "route-el-1",
@@ -154,10 +157,12 @@ async function signIn(idToken: string): Promise<string> {
   return cookiePair(res);
 }
 
-async function makeBoard(title: string): Promise<string> {
+/** `ip` gives a test its own board-create rate-limit bucket. */
+async function makeBoard(title: string, ip?: string): Promise<string> {
   const res = await createBoardRoute(
     req("http://t/api/boards", {
       method: "POST",
+      ...(ip ? { headers: { "x-forwarded-for": ip } } : {}),
       body: JSON.stringify({ title }),
     }),
   );
@@ -174,7 +179,7 @@ async function join(
   const res = await joinRoute(
     req(`http://t/api/boards/${slug}/participants`, {
       method: "POST",
-      headers: cookie ? { cookie } : {},
+      headers: { ...SAME_ORIGIN_JSON, ...(cookie ? { cookie } : {}) },
       body: JSON.stringify({ displayName }),
     }),
     slugParams(slug),
@@ -605,6 +610,71 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     );
     const listed = (await myBoards.json()) as { boards: { slug: string }[] };
     expect(listed.boards.map((b) => b.slug)).toContain(slug);
+  });
+
+  it("PIN-160: join refuses cross-site (403) and non-JSON (415); nobody joins", async () => {
+    const slug = await makeBoard("Join guard board", "192.0.2.160");
+    const joinReq = (headers: Record<string, string>) =>
+      joinRoute(
+        req("http://t/x", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ displayName: "Eve" }),
+        }),
+        slugParams(slug),
+      );
+    for (const site of ["cross-site", "same-site", "none"]) {
+      const res = await joinReq({ "content-type": "application/json", "sec-fetch-site": site });
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("cross_site");
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+    // A cross-site HTML form can only post text/plain.
+    const form = await joinReq({ "content-type": "text/plain" });
+    expect(form.status).toBe(415);
+    expect((await form.json()).code).toBe("unsupported_media_type");
+    expect(form.headers.get("set-cookie")).toBeNull();
+    expect(await participantCount(slug)).toBe(0);
+  });
+
+  it("PIN-160: a cross-site board GET never links or restores; the view is served", async () => {
+    const aliceCookie = await signIn("token-alice");
+    const slug = await makeBoard("Cross-site open board", "192.0.2.161");
+    const dee = await join(slug, "Dee"); // signed out: unclaimed
+    const deeId = await participantIdOf(dee.res);
+    const both = `${dee.participantCookie}; ${aliceCookie}`;
+    const getView = (cookie: string, site: string) =>
+      boardGetRoute(
+        req("http://t/x", { headers: { cookie, "sec-fetch-site": site } }),
+        slugParams(slug),
+      );
+    const meOf = async (res: Response) =>
+      ((await res.json()) as { me: { id: string } | null }).me;
+
+    // Both cookies, cross-site: the view, but no link.
+    const crossOpen = await getView(both, "cross-site");
+    expect(crossOpen.status).toBe(200);
+    expect((await meOf(crossOpen))?.id).toBe(deeId);
+    expect(await linkState(slug, deeId)).toEqual({});
+    // The app's own same-origin poll links it.
+    await getView(both, "same-origin");
+    expect(await linkState(slug, deeId)).toEqual({
+      userId: "synthetic-alice",
+      indexed: deeId,
+    });
+
+    // User cookie alone with a live fresh claim: no restore cookie
+    // cross-site...
+    for (const site of ["cross-site", "same-site", "none"]) {
+      const res = await getView(aliceCookie, site);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(await meOf(res)).toBeNull();
+    }
+    // ...while same-origin restores.
+    const restored = await getView(aliceCookie, "same-origin");
+    expect(restored.headers.get("set-cookie")).not.toBeNull();
+    expect((await meOf(restored))?.id).toBe(deeId);
   });
 
   it("DELETE /api/auth/session clears the cookie; /api/me is then 401", async () => {

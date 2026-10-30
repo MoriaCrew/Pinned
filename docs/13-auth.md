@@ -50,16 +50,20 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    automatically (never overwriting a different user's claim,
    never failing the join). Both paths maintain the
    `users/{uid}/boards/{slug}` index (doc-get/subcollection
-   reads only — no new Firestore index). PIN-94 freshness: the
-   user cookie carries the token's `auth_time`, and the
-   explicit claim route and restore (which mints a fresh
-   participant cookie) require it within Policy
-   `authFreshWindowMs` (default 1h): a stale claim answers 401
-   `stale_auth`, a stale restore restores nobody — signing in
-   again refreshes `auth_time`. PIN-160: the automatic link on
-   join and board-open does not (the browser already holds both
-   cookies), so boards land in My boards at any sign-in age. A
-   stale session still reads `/api/me` and the library.
+   reads only — no new Firestore index). Freshness (PIN-94,
+   narrowed by PIN-160): the user cookie carries the token's
+   `auth_time`, and the Policy `authFreshWindowMs` window
+   (default 1h) now protects restore only — the one path that
+   mints a participant cookie from the account alone; a stale
+   restore restores nobody. The explicit claim route keeps its
+   check (401 `stale_auth`), but join and board-open link the
+   same participant at any sign-in age anyway (the browser
+   already holds both cookies), so boards land in My boards
+   for any signed-in session. Signing in again refreshes
+   `auth_time`; a stale session still reads `/api/me` and the
+   library. The join route refuses cross-site and non-JSON
+   requests (403/415, PIN-160), so another site cannot set an
+   attacker-known participant cookie for that link to pick up.
 
 ## What is stored
 
@@ -139,8 +143,11 @@ The client half of PIN-57b, still behind the same gates:
    reclaim-PIN path, so the previous device's cookie stops
    working — the single-hash record cannot hold two live
    cookies. Restore needs a fresh sign-in (PIN-94); the silent
-   claim works at any sign-in age (PIN-160). Failures degrade
-   to the plain link-only view.
+   claim works at any sign-in age (PIN-160). Neither runs for a
+   request the browser labels cross-site (`Sec-Fetch-Site` other
+   than `same-origin`): the view is served, nothing is linked
+   and no cookie is set. Failures degrade to the plain
+   link-only view.
 5. First-pin nudge: after the viewer's first pinned pin, a
    one-time (localStorage) invite to sign in, gated by
    Policy `signInNudge` (default true) and only ever shown

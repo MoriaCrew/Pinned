@@ -15,6 +15,7 @@ import {
 import { getConfig } from "../../../../../config";
 import { linkParticipantOnJoin } from "../../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../../auth-shared";
+import { rejectCrossSite, requireJson } from "../../request-guards";
 import {
   JSON_HEADERS,
   errorResponse,
@@ -48,7 +49,13 @@ export async function GET(
   }
 }
 
-/** Join (or rename/reclaim) with { displayName, reclaimPin? }; sets the cookie. */
+/**
+ * Join (or rename/reclaim) with { displayName, reclaimPin? }; sets the cookie.
+ * PIN-160 CSRF guard: a cross-site request (403) or a non-JSON body
+ * (415, e.g. a text/plain form) is refused before the rate limit and
+ * any body read, so another site cannot set an attacker-known
+ * participant cookie that a signed-in board open would then link.
+ */
 export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
@@ -56,6 +63,8 @@ export async function POST(
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
+  const refused = rejectCrossSite(request) ?? requireJson(request);
+  if (refused) return refused;
   const gate = RATE_LIMITS.playersPerIpGame;
   if (!checkRateLimit(`${clientKey(request, "participants")}:${slug}`, gate.limit, gate.windowMs)) {
     return NextResponse.json(
