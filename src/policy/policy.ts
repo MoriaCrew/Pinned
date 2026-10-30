@@ -5,11 +5,18 @@
  * Env access stays in src/config.ts; see src/policy/server.ts.
  */
 import { z } from "zod";
+import { parseSceneSize } from "../domain/scene-ratio";
 
 const Range = z.object({
   min: z.number().int().min(0),
   max: z.number().int().min(0),
 });
+
+/** "WIDTHxHEIGHT" with positive sides (PIN-129): prints take this shape until a scene records its own, so a malformed value fails closed. */
+const SceneSize = z
+  .string()
+  .trim()
+  .refine((size) => parseSceneSize(size) !== null, { message: "sceneSize must look like 1024x1536" });
 
 const FractionRange = z.object({
   min: z.number().min(0).max(1),
@@ -137,7 +144,7 @@ export const PolicySchema = z
     sceneInputMode: z
       .enum(["flattened", "transparent", "whole"])
       .default("flattened"),
-    sceneSize: z.string().min(3).default("1024x1536"),
+    sceneSize: SceneSize.default("1024x1536"),
     sceneStore: z.boolean().default(false),
     timeoutsMs: z
       .object({
@@ -299,7 +306,7 @@ export const PolicyOverridesSchema = z.object({
   uploadJpegQuality: z.number().min(0.1).max(1).optional(),
   faces: z.enum(["allow", "note", "block"]).optional(),
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
-  sceneSize: z.string().min(3).optional(),
+  sceneSize: SceneSize.optional(),
   sceneStore: z.boolean().optional(),
   timeoutsMs: z
     .object({

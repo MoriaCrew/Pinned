@@ -40,6 +40,9 @@ export interface BoardViewScene {
   /** PIN-71: "collage" = sharp mock-collage fallback, not AI output. */
   kind?: "ai" | "collage";
   refusalReason?: string;
+  /** Stored image pixel size (PIN-129); absent on older scenes. */
+  width?: number;
+  height?: number;
   imageUrl: string | null;
   createdAt: number;
 }

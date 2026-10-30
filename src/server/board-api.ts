@@ -19,6 +19,7 @@ import { activityLines } from "../domain/board-activity";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
+import { validSceneSize } from "../domain/scene-ratio";
 import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
@@ -90,6 +91,8 @@ export function publicScene(slug: string, scene: Scene) {
     promptVersion: scene.promptVersion,
     ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
     ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
+    // Stored pixel size (PIN-129): the print frame takes this shape.
+    ...(validSceneSize(scene) ?? {}),
     imageUrl:
       scene.status === "ready" && scene.imageRef
         ? sceneImageUrl(slug, scene.id)

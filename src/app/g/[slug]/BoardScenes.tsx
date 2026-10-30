@@ -6,14 +6,14 @@ import { t } from "../../../i18n";
 import { Button, Developing, SceneCard, SectionHead, cx, type Credit, type SceneKind } from "../../../ui";
 import styles from "./board.module.css";
 
-/** Prints in the strip share one frame shape (design system Board). */
-const PRINT_RATIO = "4 / 3";
 /** The developing clock ticks once a second (display only). */
 const CLOCK_TICK_MS = 1000;
 
 export type SceneSlot =
   | {
       type: "print";
+      /** Frame shape, CSS aspect-ratio "w / h" (PIN-129, domain/scene-ratio). */
+      ratio: string;
       id: string;
       src: string;
       alt: string;
@@ -29,6 +29,7 @@ export type SceneSlot =
     }
   | {
       type: "developing";
+      ratio: string;
       id: string;
       stickers: { src: string; seed?: string }[];
       idea: string;
@@ -37,6 +38,7 @@ export type SceneSlot =
     }
   | {
       type: "problem";
+      ratio: string;
       id: string;
       idea: string;
       line: string;
@@ -49,6 +51,8 @@ export type SceneSlot =
  * A scene still being made shows as Developing where it will land;
  * my failed or refused attempt shows as a print-sized card with
  * one friendly line and the way out. No scenes: one quiet line.
+ * Each frame takes its slot's shape; --print-ratio lets the kit
+ * narrow a tall print so it and its caption fit a phone screen.
  */
 export function BoardScenes({ slots, count }: { slots: SceneSlot[]; count: number }) {
   return (
@@ -60,7 +64,7 @@ export function BoardScenes({ slots, count }: { slots: SceneSlot[]; count: numbe
         <div className={styles.strip}>
           <ul className="pn-prints">
             {slots.map((slot) => (
-              <li key={`${slot.type}-${slot.id}`}>
+              <li key={`${slot.type}-${slot.id}`} style={{ "--print-ratio": slot.ratio } as CSSProperties}>
                 <Slot slot={slot} />
               </li>
             ))}
@@ -81,7 +85,7 @@ function Slot({ slot }: { slot: SceneSlot }) {
         credits={slot.credits}
         kind={slot.kind}
         remixOf={slot.remixOf}
-        ratio={PRINT_RATIO}
+        ratio={slot.ratio}
         number={slot.number}
         seed={slot.id}
         onRemix={slot.onRemix}
@@ -92,7 +96,7 @@ function Slot({ slot }: { slot: SceneSlot }) {
     );
   }
   if (slot.type === "developing") {
-    return <DevelopingSlot stickers={slot.stickers} idea={slot.idea} startedAt={slot.startedAt} />;
+    return <DevelopingSlot stickers={slot.stickers} idea={slot.idea} startedAt={slot.startedAt} ratio={slot.ratio} />;
   }
   return <ProblemCard slot={slot} />;
 }
@@ -101,10 +105,12 @@ function DevelopingSlot({
   stickers,
   idea,
   startedAt,
+  ratio,
 }: {
   stickers: { src: string; seed?: string }[];
   idea: string;
   startedAt: number | null;
+  ratio: string;
 }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -114,14 +120,14 @@ function DevelopingSlot({
     return () => window.clearInterval(timer);
   }, [startedAt]);
   const elapsed = startedAt !== null && now !== null ? formatElapsed(now - startedAt) : undefined;
-  return <Developing stickers={stickers} idea={idea} elapsed={elapsed} ratio={PRINT_RATIO} />;
+  return <Developing stickers={stickers} idea={idea} elapsed={elapsed} ratio={ratio} />;
 }
 
 function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }) {
   return (
     <article className="pn-print-wrap" style={{ "--t": 0 } as CSSProperties} aria-label={`${t("en", "ui.scene")}: ${slot.idea}`}>
       <div className="pn-print">
-        <div className={cx("pn-print-frame", styles.problem)} style={{ aspectRatio: PRINT_RATIO }}>
+        <div className={cx("pn-print-frame", styles.problem)} style={{ aspectRatio: slot.ratio }}>
           <p className={styles.problemLine} role="alert">
             {slot.line}
           </p>

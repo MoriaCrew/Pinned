@@ -7,27 +7,14 @@ import "server-only";
  * here are recorded with kind "collage" (domain/board.ts), never
  * presented as an AI scene.
  *
- * Canvas size comes from Policy.sceneSize (parsed by
- * parseSceneSize) so a collage fills the same gallery frame as an
- * AI scene; only layout fractions live here.
+ * Canvas size comes from Policy.sceneSize (parsed by the one
+ * parseSceneSize in domain/scene-ratio) so a collage fills the same
+ * gallery frame as an AI scene; only layout fractions live here.
  */
 import sharp, { type OverlayOptions } from "sharp";
+import type { SceneSize } from "../domain/scene-ratio";
 
-export interface CollageSize {
-  width: number;
-  height: number;
-}
-
-const SCENE_SIZE = /^(\d+)x(\d+)$/;
-
-/** Policy.sceneSize ("1024x1536") -> canvas dims, or null. */
-export function parseSceneSize(size: string): CollageSize | null {
-  const match = SCENE_SIZE.exec(size.trim());
-  if (!match) return null;
-  const width = Number(match[1]);
-  const height = Number(match[2]);
-  return width > 0 && height > 0 ? { width, height } : null;
-}
+export type CollageSize = SceneSize;
 
 /** Fraction of the shorter canvas edge kept as outer padding / gaps. */
 const PAD_FRACTION = 0.06;

@@ -32,8 +32,8 @@ export function MakeSheet({
   pinsPerScene: { min: number; max: number };
   promptMaxChars: number;
   initialPrompt: string;
-  /** Remix mode (PIN-79): the parent scene being extended. */
-  remixParent?: { id: string; imageUrl: string; prompt: string } | null;
+  /** Remix mode (PIN-79): the parent scene being extended; ratio is its print shape (PIN-129). */
+  remixParent?: { id: string; imageUrl: string; prompt: string; ratio: string } | null;
   /** Dictation (PIN-119): board slug + Policy clip cap; null hides the mic. */
   dictate?: { slug: string; maxSeconds: number } | null;
   onMake: (payload: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) => void;
@@ -91,7 +91,7 @@ export function MakeSheet({
           <SceneCard
             className="pn-make-base-print"
             src={remixParent.imageUrl}
-            ratio="4 / 3"
+            ratio={remixParent.ratio}
             seed={remixParent.id}
           />
           <div className="pn-make-base-text">

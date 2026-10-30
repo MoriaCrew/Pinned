@@ -142,6 +142,9 @@ export interface Scene {
   prompt: string;
   status: SceneStatus;
   imageRef?: string; // under `scenes/` once ready
+  /** Stored image pixel size (PIN-129); absent on older scenes (Policy.sceneSize shape applies). */
+  width?: number;
+  height?: number;
   parentSceneId?: string; // remix parent (§5.7)
   promptVersion: string; // e.g. "scene.v1", stored with every output
   /** "collage" = sharp mock-collage fallback; absent = AI scene. */
@@ -209,6 +212,9 @@ export interface SceneJob {
   promptVersion: string; // scene prompt actually used
   /** Stored scene image under `scenes/` once ready. */
   imageRef?: string;
+  /** Its pixel size, read with sharp (PIN-129); copied onto the Scene. Absent when unreadable. */
+  width?: number;
+  height?: number;
   /** "collage" = sharp mock-collage fallback; absent = AI scene. */
   kind?: SceneKind;
   /** Cost estimate (gateway reserve proxy; dashboard authoritative). */

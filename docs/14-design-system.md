@@ -56,6 +56,14 @@ Principles:
   the paper (`.pn-print-meta`) between the picture and the idea, in
   every skin; the row is left out when a print has neither.
   `Developing` keeps its own status tag in its body.
+- The frame takes the scene's own shape (PIN-129): its stored pixel
+  size (`Scene.width`/`height`, read with sharp), else the shape of
+  `Policy.sceneSize` (`domain/scene-ratio`); the picture still covers
+  the frame, never with bars. Developing and problem cards use the
+  Policy shape so nothing jumps when the print lands. In `.pn-prints`
+  an item that sets `--print-ratio` narrows so its picture stays
+  within `--print-frame-max` tall (a tall print and its caption fit a
+  390x844 screen above the dock).
 - Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
   paints the ground, ink and reading face, and lets a board wear a
   different skin than `<html>`. `src/app/globals.css` is only a reset

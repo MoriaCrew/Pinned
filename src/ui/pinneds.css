@@ -285,7 +285,8 @@
 .pn-print-actions { display: flex; align-items: center; gap: var(--space-2); }
 .pn-print-actions .pn-spacer { flex: 1; }
 .pn-prints { display: flex; gap: var(--space-4); overflow-x: auto; scroll-snap-type: x mandatory; padding: 6px var(--space-4) 18px; margin: 0 calc(-1 * var(--space-4)); list-style: none; scrollbar-width: none; }
-.pn-prints > li { flex: 0 0 min(78%, 300px); scroll-snap-align: center; }
+/* PIN-129: an item with --print-ratio ("w / h") narrows so its picture stays within --print-frame-max tall; unset, max-width stays none. */
+.pn-prints > li { flex: 0 0 min(78%, 300px); max-width: calc(var(--print-ratio) * var(--print-frame-max) + 2 * var(--print-pad)); scroll-snap-align: center; }
 
 /* ---------- Developing (scene in progress) ---------- */
 .pn-develop-frame { position: relative; overflow: hidden; border-radius: 2px; background: var(--develop-bg); isolation: isolate; }
