@@ -14,7 +14,7 @@ jobs:
     env:
       AI_MOCK: "1" # CI never makes paid model calls (see AGENTS.md)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Docs sanity (required files present)
         run: |
