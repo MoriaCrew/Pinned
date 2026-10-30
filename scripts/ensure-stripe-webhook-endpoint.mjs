@@ -259,8 +259,16 @@ async function main() {
   const preflight = await runGcloud([
     "secrets", "describe", secretName, "--project", project, "--format", "value(name)",
   ]).catch((error) => ({ code: -1, stdout: "", stderr: String(error?.message ?? error) }));
-  if (preflight.code === -1) {
-    throw new Error(`gcloud preflight failed (${preflight.stderr}); endpoint NOT created.`);
+  // Only a NOT_FOUND non-zero means "absent": auth, project or
+  // permission failures must abort here, or the endpoint gets
+  // created and its one-time secret dies at the store step.
+  const preflightText = `${preflight.stdout}\n${preflight.stderr}`;
+  const secretAbsent = preflight.code !== 0 && preflightText.includes("NOT_FOUND");
+  if (preflight.code !== 0 && !secretAbsent) {
+    throw new Error(
+      `gcloud preflight failed (exit ${preflight.code}: ` +
+        `${preflightText.split("\n").filter(Boolean).slice(-2).join(" ")}); endpoint NOT created.`,
+    );
   }
   console.log(
     `gcloud preflight ok (secret ${secretName} ${preflight.code === 0 ? "exists" : "absent"})`,
