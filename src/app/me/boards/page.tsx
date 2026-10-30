@@ -59,7 +59,7 @@ export default async function MyBoardsPage() {
 function SignedOut({ enabled }: { enabled: boolean }) {
   return (
     <>
-      <LibraryHeader title={t("en", "myBoards.title")} />
+      <LibraryHeader title={t("en", "myBoards.title")} offerSignIn={false} />
       {enabled ? (
         <LibraryEmpty title={t("en", "myBoards.signInPrompt")}>
           <SignInButton variant="primary" size="lg" stacked />

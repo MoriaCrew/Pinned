@@ -47,12 +47,12 @@ import {
 } from "../../../domain/auth-ui";
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
+import { You } from "../../auth/You";
 import { AddSheet, boardQueryKey } from "./AddSheet";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
 import { JoinSheet } from "./JoinSheet";
-import { BoardMore } from "./BoardMore";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import styles from "./board.module.css";
 
@@ -98,6 +98,8 @@ type JoinIntent =
   // The merged scene the print was built from (the job poll can mark
   // it ready before the board cache does).
   | { kind: "remix"; scene: BoardViewScene }
+  // From the "you" menu (PIN-120): just the sheet, nothing to continue.
+  | { kind: "join" }
   | { kind: "edit" };
 
 /** localStorage key: the picking coach mark shows once. */
@@ -702,7 +704,10 @@ function BoardBody({
   // ---------- View model for rendering ----------
 
   const counts = boardCounts(view);
-  const people = view.participants.map((p) => ({ id: p.id, name: p.displayName }));
+  // Everyone but you: you are the "you" button (PIN-120).
+  const people = view.participants
+    .filter((p) => p.id !== view.me?.id)
+    .map((p) => ({ id: p.id, name: p.displayName }));
   const latest = latestActivity(view.activity);
   const latestLine = latest
     ? tf("en", `activity.${latest.kind}` as const, {
@@ -811,10 +816,21 @@ function BoardBody({
         <BoardHeader
           title={view.board.title}
           people={people}
+          peopleLabel={tf("en", "you.alsoHere", { names: people.map((p) => p.name).join(", ") })}
           counts={counts}
           onShare={() => void shareBoard()}
           homeHref="/"
-          actions={isHost ? <BoardMore onChangeLook={look.openLook} /> : null}
+          you={
+            <You
+              board={{
+                me: view.me,
+                isHost,
+                onJoin: () => setJoinIntent({ kind: "join" }),
+                onEditName: () => setJoinIntent({ kind: "edit" }),
+                onChangeLook: look.openLook,
+              }}
+            />
+          }
         />
 
         <div className={styles.under}>
@@ -906,15 +922,6 @@ function BoardBody({
               onCancel: () => setConfirmDeleteElementId(null),
             }}
           />
-        ) : null}
-
-        {view.me && !pickingNow ? (
-          <p className={cx("pn-board-meta", styles.me)}>
-            {tf("en", "join.youAre", { name: view.me.displayName })}
-            <Button variant="quiet" size="sm" onClick={() => setJoinIntent({ kind: "edit" })}>
-              {t("en", "join.edit")}
-            </Button>
-          </p>
         ) : null}
 
         {showDock ? (

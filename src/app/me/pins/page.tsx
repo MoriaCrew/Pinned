@@ -85,7 +85,7 @@ function SignedOut({
 }) {
   return (
     <>
-      <LibraryHeader title={t("en", "myPins.title")} action={backAction(boardSlug)} />
+      <LibraryHeader title={t("en", "myPins.title")} action={backAction(boardSlug)} offerSignIn={false} />
       {enabled ? (
         <LibraryEmpty title={t("en", "myPins.signInPrompt")}>
           <SignInButton variant="primary" size="lg" stacked />

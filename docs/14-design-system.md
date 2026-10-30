@@ -41,7 +41,7 @@ Principles:
 ## UI kit
 
 - `src/ui/` holds the components (`import { … } from "../ui"`):
-  Icon (20 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Icon (21 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
   CreditLine, SceneCard, Developing, BoardHeader, SectionHead, Dock,
   Sheet, EmptyState, Menu, SkinPicker, TryOnBar, PlusSheet.
@@ -78,9 +78,21 @@ Principles:
   around the latest scene, with mono counts. My pins is the sticker
   library: the kit `Pin` grid with the source board's title, and a
   "Pin here" button per pin when opened with `?board=`.
-- The header strip above every page (`pn-lib-header`, only when
-  sign-in is on) holds `AuthControl`: a quiet "Sign in", or the
-  avatar opening the kit `Menu` (My boards, My pins, Sign out).
+- No bar above the pages (PIN-120). Each page's own top row ends
+  with the one "you" button (`src/app/auth/You.tsx`, decisions in
+  `src/domain/you-menu.ts`): the Google photo, else your initials in
+  your person colour once you joined the board, else a person icon.
+  It opens the kit `Menu`, each entry only when it applies: "You're
+  {name} here" (a quiet `note` line) + Edit name, or Join this board;
+  My boards + My pins when signed in; Change look for the host; Sign
+  in with Google / Sign out when sign-in is on. Off a board it is
+  account-only: nothing in link-only, a quiet "Sign in" when signed
+  out (left out where the page itself asks you to sign in), the
+  avatar menu once signed in. On the landing it sits top right over
+  the hero.
+- Board header: wordmark · Share · you. Who else is here moves to
+  the start of the meta line as a small `AvatarStack` (`size="sm"`,
+  `--avatar-sm`); you are not in it, you are the button.
 
 ## Skins
 
