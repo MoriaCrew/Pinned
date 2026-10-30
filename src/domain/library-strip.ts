@@ -66,6 +66,18 @@ export function libraryPinState(
   return onBoard.has(familyOf(card)) ? "already" : "idle";
 }
 
+/**
+ * The library query's status as the strip and list read it: a failed
+ * refetch that still has cards keeps showing them; only a load with
+ * nothing to show is an error.
+ */
+export function libraryLoadStatus(
+  status: "pending" | "error" | "success",
+  hasCards: boolean,
+): "pending" | "error" | "success" {
+  return status === "error" && hasCards ? "success" : status;
+}
+
 export interface StripItem {
   card: MyPinCard;
   state: LibraryPinState;

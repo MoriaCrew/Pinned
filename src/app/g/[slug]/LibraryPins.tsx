@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { familyOf, type LibraryPinState, type LibraryStripView } from "../../../domain/library-strip";
+import { familyOf, libraryLoadStatus, type LibraryPinState, type LibraryStripView } from "../../../domain/library-strip";
 import type { MyPinCard } from "../../../domain/my-pins";
 import { t, tf } from "../../../i18n";
 import { Button, Icon, Sticker } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 
-interface MyPinsResponse {
+export interface MyPinsResponse {
   elements: MyPinCard[];
   total: number;
   limit: number;
@@ -30,6 +30,22 @@ export function libraryPinLabel(state: LibraryPinState): string {
   }
 }
 
+/**
+ * The library with the copy a pin just made, added at the end so the
+ * original stays the family's sticker. Same family as `card`, labelled
+ * with this board's title; no-op when that element is already listed.
+ */
+export function withLibraryCopy(
+  library: MyPinsResponse,
+  card: MyPinCard,
+  copyId: string,
+  boardTitle: string,
+): MyPinsResponse {
+  if (library.elements.some((item) => item.elementId === copyId)) return library;
+  const copy: MyPinCard = { ...card, elementId: copyId, familyId: familyOf(card), sourceBoardTitle: boardTitle };
+  return { ...library, elements: [...library.elements, copy], total: library.total + 1 };
+}
+
 /** In flight or already on the board: a tap does nothing. */
 const isInert = (state: LibraryPinState) => state === "pinning" || state === "pinned" || state === "already";
 
@@ -45,7 +61,7 @@ const isInert = (state: LibraryPinState) => state === "pinning" || state === "pi
  * kept per family, so every row of the same thing follows the tap.
  * Disabled (signed out or sign-in off) it never fetches.
  */
-export function useLibraryPins(slug: string, enabled: boolean) {
+export function useLibraryPins(slug: string, enabled: boolean, boardTitle: string) {
   const queryClient = useQueryClient();
   const [states, setStates] = useState<ReadonlyMap<string, LibraryPinState>>(new Map());
 
@@ -70,7 +86,7 @@ export function useLibraryPins(slug: string, enabled: boolean) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ elementId: card.elementId }),
       });
-      const data = (await response.json()) as { alreadyPinned?: boolean; error?: string };
+      const data = (await response.json()) as { alreadyPinned?: boolean; elementId?: string; error?: string };
       if (!response.ok) throw new Error(data.error || t("en", "add.pinFailed"));
       return data;
     },
@@ -79,6 +95,14 @@ export function useLibraryPins(slug: string, enabled: boolean) {
     onMutate: (card) => setState(card, "pinning"),
     onSuccess: (data, card) => {
       setState(card, data.alreadyPinned ? "already" : "pinned");
+      // Put the copy in the cached library right away, so its family
+      // reads "Already here" even if the sheet closes and reopens
+      // before the library refetch lands (it walks every board).
+      if (data.elementId) {
+        queryClient.setQueryData<MyPinsResponse>(["my-pins"], (current) =>
+          current ? withLibraryCopy(current, card, data.elementId as string, boardTitle) : current,
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
       void queryClient.invalidateQueries({ queryKey: ["my-pins"] });
     },
@@ -86,7 +110,7 @@ export function useLibraryPins(slug: string, enabled: boolean) {
   });
 
   return {
-    status: library.status,
+    status: libraryLoadStatus(library.status, library.data !== undefined),
     cards: library.data?.elements,
     states,
     pin: (card: MyPinCard) => pin.mutate(card),

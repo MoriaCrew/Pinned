@@ -1,9 +1,9 @@
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { LibraryStripView } from "../../../domain/library-strip";
+import { familiesOnBoard, libraryPinState, libraryStripView, type LibraryStripView } from "../../../domain/library-strip";
 import type { MyPinCard } from "../../../domain/my-pins";
-import { LibraryList, LibraryStrip } from "./LibraryPins";
+import { LibraryList, LibraryStrip, withLibraryCopy } from "./LibraryPins";
 
 const card = (elementId: string, label: string): MyPinCard => ({
   elementId,
@@ -77,5 +77,39 @@ describe("See all list (PIN-85 rows, PIN-121)", () => {
     expect(out).toContain('aria-label="Pin here: Teal mug"');
     expect(out).toContain("Already here");
     expect(out).toContain("Pinned");
+  });
+});
+
+describe("library cache after a pin (PIN-121)", () => {
+  const library = { elements: [card("lamp", "Brass lamp"), card("mug", "Teal mug")], total: 2, limit: 60 };
+  // The pin made a copy with a new id; the board refetch has it pinned.
+  const board = {
+    elements: [{ id: "copy-of-lamp" }],
+    pins: [{ elementId: "copy-of-lamp", status: "pinned" as const }],
+  };
+
+  it("adds the copy at the end, same family, labelled with this board", () => {
+    const next = withLibraryCopy(library, library.elements[0], "copy-of-lamp", "Mia's birthday");
+    expect(next.elements.map((c) => c.elementId)).toEqual(["lamp", "mug", "copy-of-lamp"]);
+    expect(next.elements[2]).toMatchObject({ familyId: "lamp", sourceBoardTitle: "Mia's birthday", label: "Brass lamp" });
+    expect(next.total).toBe(3);
+    // Already listed: unchanged.
+    expect(withLibraryCopy(next, library.elements[0], "copy-of-lamp", "Mia's birthday")).toBe(next);
+  });
+
+  it("reads Already here after the sheet reopens, before the library refetch lands", () => {
+    // Reopened sheet: no local state any more.
+    const none = new Map();
+    const stale = familiesOnBoard(library.elements, board);
+    expect(libraryPinState(library.elements[0], none, stale)).toBe("idle");
+    const next = withLibraryCopy(library, library.elements[0], "copy-of-lamp", "Mia's birthday");
+    const onBoard = familiesOnBoard(next.elements, board);
+    expect(libraryPinState(next.elements[0], none, onBoard)).toBe("already");
+    // The strip keeps the original as the family's sticker and leaves the copy (on this board) out.
+    const view = libraryStripView({ signedIn: true, status: "success", cards: next.elements, board, local: none, max: 12 });
+    expect(view.kind === "items" && view.items.map((i) => [i.card.elementId, i.state])).toEqual([
+      ["lamp", "already"],
+      ["mug", "idle"],
+    ]);
   });
 });

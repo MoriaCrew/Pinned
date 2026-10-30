@@ -242,7 +242,7 @@ export function AddSheet({
   // (link-only or signed out) keeps the photo-only sheet.
   const auth = useAuth();
   const signedIn = auth.enabled && auth.status === "signedIn";
-  const library = useLibraryPins(slug, signedIn);
+  const library = useLibraryPins(slug, signedIn, boardView.board.title);
   const [seeAll, setSeeAll] = useState(false);
   const stripHeadingId = useId();
   const seeAllId = `${stripHeadingId}-all`;

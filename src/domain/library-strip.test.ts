@@ -3,6 +3,7 @@ import {
   STRIP_PLACEHOLDER_COUNT,
   familiesOnBoard,
   familyOf,
+  libraryLoadStatus,
   libraryPinState,
   libraryStripView,
   type LibraryPinState,
@@ -180,5 +181,12 @@ describe("library pin state helpers (PIN-121)", () => {
     expect(libraryPinState(card("mug"), local, onBoard)).toBe("pinning");
     expect(libraryPinState(card("lamp"), local, onBoard)).toBe("already");
     expect(libraryPinState(card("hat"), local, onBoard)).toBe("idle");
+  });
+
+  it("keeps showing cached cards when a refetch fails; only a load with nothing is an error", () => {
+    expect(libraryLoadStatus("error", true)).toBe("success");
+    expect(libraryLoadStatus("error", false)).toBe("error");
+    expect(libraryLoadStatus("pending", false)).toBe("pending");
+    expect(libraryLoadStatus("success", true)).toBe("success");
   });
 });
