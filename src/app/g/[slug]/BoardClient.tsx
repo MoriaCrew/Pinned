@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -9,37 +9,48 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
-  canDeleteCard,
   needsEmptyPrompt,
   pinCards,
   type BoardViewLike,
   type BoardViewScene,
-  type PinCard,
 } from "../../../domain/board-view";
 import {
   isTerminalScene,
   pruneSelection,
   canRemixScene,
-  sceneCreditParts,
   scenesNewestFirst,
   selectableCards,
-  selectedCards,
   togglePinSelection,
   chipsForSelection,
   chipsSelectionKey,
 } from "../../../domain/make-sheet";
+import {
+  boardCounts,
+  latestActivity,
+  pickNumbers,
+  pickedInOrder,
+  remixSource,
+  sceneCredits,
+  sceneNumbers,
+  sceneTag,
+  stripItems,
+} from "../../../domain/board-ui";
 import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
 import type { ActivityLine } from "../../../domain/board-activity";
-import { playerColorFor } from "../../../domain/board-themes";
-import { t } from "../../../i18n";
+import type { SkinId } from "../../../domain/skins";
+import { t, tCount, tf } from "../../../i18n";
 import {
-  defaultJoinName,
   shouldShowSignInNudge,
   SIGN_IN_NUDGE_STORAGE_KEY,
 } from "../../../domain/auth-ui";
+import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { AddSheet, boardQueryKey } from "./AddSheet";
 import { MakeSheet } from "./MakeSheet";
+import { BoardScenes, type SceneSlot } from "./BoardScenes";
+import { BoardThings } from "./BoardThings";
+import { JoinSheet } from "./JoinSheet";
+import styles from "./board.module.css";
 
 export interface BoardClientView extends BoardViewLike {
   board: { slug: string; title: string };
@@ -71,6 +82,19 @@ interface SceneAttempt {
   pinIds: string[];
 }
 
+/** What someone who has not joined yet was about to do (continued after joining). */
+type JoinIntent =
+  | { kind: "add" }
+  | { kind: "make" }
+  | { kind: "pick"; pinId: string }
+  | { kind: "remix"; sceneId: string }
+  | { kind: "edit" };
+
+/** localStorage key: the picking coach mark shows once. */
+const PICK_HINT_STORAGE_KEY = "pinned.pickHintSeen";
+/** How long "Link copied" stays under the header (display timing only). */
+const SHARE_NOTICE_MS = 3000;
+
 function newSceneId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -78,13 +102,37 @@ function newSceneId(): string {
   return `scene-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function isAbort(cause: unknown): boolean {
+  return (
+    (cause instanceof DOMException && cause.name === "AbortError") ||
+    (cause instanceof Error && cause.name === "AbortError")
+  );
+}
+
+function readFlag(key: string): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(key) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function writeFlag(key: string) {
+  try {
+    window.localStorage.setItem(key, "1");
+  } catch {
+    // Private mode: the in-memory flag still holds.
+  }
+}
+
 /**
- * Studio board (PIN-66/67/70, docs/11 section 6): scenes first,
- * pins grid with owner names, fixed bottom bar. TanStack Query
- * polls the board view (Policy cadence) so a second phone sees
- * new pins and scenes. Picking up to Policy.pinsPerScene.max pins
- * (count in the bottom bar) opens the Make sheet; "Make it ✨"
- * closes it and a cooking card polls the scene in the gallery.
+ * Studio board (PIN-66/67/70, rebuilt in PIN-98 on the design
+ * system, docs/14): header, the Scenes strip, the Things grid and
+ * the Dock in the thumb zone. TanStack Query polls the board view
+ * (Policy cadence) so a second phone sees new pins and scenes.
+ * "Make a scene" enters picking mode (up to Policy.pinsPerScene.max
+ * things, from anyone), Next opens the Make sheet, and the scene
+ * develops in the strip while its job is polled.
  */
 export function BoardClient({
   slug,
@@ -94,6 +142,10 @@ export function BoardClient({
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
+  /** The board's skin (its root carries data-theme). */
+  skin?: SkinId;
+  /** `?tryon=<skin>` (PIN-103 wires try-on; passed through only). */
+  tryOnSkin?: SkinId | null;
 }) {
   const [queryClient] = useState(
     () =>
@@ -120,9 +172,13 @@ function BoardBody({
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [makeOpen, setMakeOpen] = useState(false);
+  // Picking mode: pins become toggles and the dock becomes the tray.
+  const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState<SceneAttempt | null>(null);
   const [attemptError, setAttemptError] = useState("");
+  // Client clock start of the in-flight attempt (developing clock).
+  const [attemptStartedAt, setAttemptStartedAt] = useState<number | null>(null);
   // Set only when a POST actually created the scene — polling a
   // client id that a 400/429 rejected would 404 forever.
   const [liveSceneId, setLiveSceneId] = useState<string | null>(null);
@@ -137,6 +193,12 @@ function BoardBody({
   const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
+  // Join sheet: open while an intent waits for a name (or "edit").
+  const [joinIntent, setJoinIntent] = useState<JoinIntent | null>(null);
+  const [shareNotice, setShareNotice] = useState<"copied" | "failed" | null>(null);
+  const [pickHintSeen, setPickHintSeen] = useState<boolean>(() => readFlag(PICK_HINT_STORAGE_KEY));
+  // After a tap on a thing at rest starts picking, keep that thing in view.
+  const [scrollToPinId, setScrollToPinId] = useState<string | null>(null);
   const boardQuery = useQuery({
     queryKey: boardQueryKey(slug),
     queryFn: async (): Promise<BoardClientView> => {
@@ -155,23 +217,10 @@ function BoardBody({
   // PIN-84: sign-in sync. Disabled (link-only) -> useAuth is the
   // inert default and everything below renders/runs nothing.
   const auth = useAuth();
-  const [nudgeSeen, setNudgeSeen] = useState<boolean>(() => {
-    try {
-      return (
-        typeof window !== "undefined" &&
-        window.localStorage.getItem(SIGN_IN_NUDGE_STORAGE_KEY) === "1"
-      );
-    } catch {
-      return true;
-    }
-  });
+  const [nudgeSeen, setNudgeSeen] = useState<boolean>(() => readFlag(SIGN_IN_NUDGE_STORAGE_KEY));
   const dismissNudge = () => {
     setNudgeSeen(true);
-    try {
-      window.localStorage.setItem(SIGN_IN_NUDGE_STORAGE_KEY, "1");
-    } catch {
-      // Private mode: the in-memory dismissal still holds.
-    }
+    writeFlag(SIGN_IN_NUDGE_STORAGE_KEY);
   };
   const authUid = auth.user?.uid ?? null;
   // PIN-86: refetch the board the moment sign-in state lands.
@@ -247,14 +296,14 @@ function BoardBody({
         error?: string;
       };
       if (!response.ok || !data.scene) {
-        throw new Error(data.error || t("en", "make.failed"));
+        throw new Error(data.error || t("en", "board.sceneFailed"));
       }
       return data.scene;
     },
     onSuccess: (scene) => {
       // The picks are spent. Merge the POST's scene straight into
-      // the board cache so the cooking card hands over to the real
-      // card with no empty poll gap, then let polls reconcile.
+      // the board cache so the developing card hands over to the
+      // real print with no empty poll gap, then let polls reconcile.
       setSelected(new Set());
       setRemixOfId(null);
       setLiveSceneId(scene.id);
@@ -271,11 +320,11 @@ function BoardBody({
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
     },
     onError: (cause) =>
-      setAttemptError(cause instanceof Error ? cause.message : t("en", "make.failed")),
+      setAttemptError(cause instanceof Error ? cause.message : t("en", "board.sceneFailed")),
   });
 
   // PIN-77: delete my element (owner-only server-side; the
-  // button only renders on own pins). The board poll reconciles
+  // control only renders on own pins). The board poll reconciles
   // pins, hidden scenes and counters after invalidation.
   const deleteElement = useMutation({
     mutationFn: async (elementId: string) => {
@@ -303,51 +352,7 @@ function BoardBody({
     onError: (_cause, elementId) => setDeleteErrorElementId(elementId),
   });
 
-  const renderDeleteControl = (card: PinCard) => {
-    if (!canDeleteCard(card, view.me?.id)) return null;
-    const elementId = card.element.id;
-    const deleting = deleteElement.isPending && deleteElement.variables === elementId;
-    if (confirmDeleteElementId !== elementId) {
-      return (
-        <button
-          type="button"
-          className="btn btn-small pin-delete"
-          onClick={() => {
-            setDeleteErrorElementId(null);
-            setConfirmDeleteElementId(elementId);
-          }}
-        >
-          {t("en", "board.delete")}
-        </button>
-      );
-    }
-    return (
-      <span className="pin-delete-confirm">
-        <span role="status">{t("en", "board.deleteConfirm")}</span>
-        <button
-          type="button"
-          className="btn btn-small"
-          disabled={deleting}
-          onClick={() => deleteElement.mutate(elementId)}
-        >
-          {deleting ? t("en", "board.deleting") : t("en", "board.deleteYes")}
-        </button>
-        <button
-          type="button"
-          className="btn btn-small"
-          disabled={deleting}
-          onClick={() => setConfirmDeleteElementId(null)}
-        >
-          {t("en", "board.deleteKeep")}
-        </button>
-        {deleteErrorElementId === elementId ? (
-          <span className="error" role="alert">{t("en", "board.deleteFailed")}</span>
-        ) : null}
-      </span>
-    );
-  };
-
-  // Poll my in-flight scene at job cadence so the gallery card
+  // Poll my in-flight scene at job cadence so the strip's print
   // lands faster than the board poll; both share the TanStack
   // cache and the poll stops at a terminal status.
   const attemptInView = attempt
@@ -361,7 +366,7 @@ function BoardBody({
         { cache: "no-store" },
       );
       const data = (await response.json()) as { scene?: BoardViewScene; error?: string };
-      if (!response.ok || !data.scene) throw new Error(data.error || t("en", "make.failed"));
+      if (!response.ok || !data.scene) throw new Error(data.error || t("en", "board.sceneFailed"));
       return { scene: data.scene };
     },
     enabled:
@@ -387,10 +392,9 @@ function BoardBody({
       ? [polledScene, ...view.scenes.filter((scene) => scene.id !== polledScene.id)]
       : view.scenes,
   );
-  const showCooking =
-    makeScene.isPending &&
-    !(attempt && scenes.some((scene) => scene.id === attempt.sceneId));
-  const picked = selectedCards(cards, selected);
+  const attemptScene = attempt ? scenes.find((scene) => scene.id === attempt.sceneId) : undefined;
+  const showCooking = makeScene.isPending && !attemptScene;
+  const picked = pickedInOrder(cards, selected);
   const pickedElementIds = [...new Set(picked.map((card) => card.element.id))];
   const selectionKey = chipsSelectionKey(pickedElementIds);
   // PIN-75: fixed Policy chips render instantly; generated chips
@@ -432,6 +436,22 @@ function BoardBody({
     ? view.scenes.find((scene) => scene.id === remixOfId && canRemixScene(scene))
     : undefined;
   const empty = needsEmptyPrompt(view);
+  // Nothing to pick on an empty board: picking ends with it.
+  const pickingNow = picking && !empty;
+
+  useEffect(() => {
+    if (!scrollToPinId || !pickingNow) return;
+    document
+      .querySelector(`[data-pin-id="${CSS.escape(scrollToPinId)}"]`)
+      ?.scrollIntoView({ block: "center" });
+    setScrollToPinId(null);
+  }, [scrollToPinId, pickingNow]);
+
+  useEffect(() => {
+    if (shareNotice !== "copied") return;
+    const timer = window.setTimeout(() => setShareNotice(null), SHARE_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [shareNotice]);
 
   function togglePin(pinId: string) {
     // Functional update: fast successive taps must each see the
@@ -441,21 +461,54 @@ function BoardBody({
     );
   }
 
+  // Picking starts from a clean tray (a remix sets its parent first).
+  function startPicking() {
+    setSelected(new Set());
+    setPicking(true);
+    window.scrollTo({ top: 0 });
+  }
+
+  function exitPicking() {
+    setPicking(false);
+    setSelected(new Set());
+    setRemixOfId(null);
+  }
+
   function submitScene(input: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) {
     // A fresh sceneId per Make-it press; the network retry below
     // reuses it, which the server treats idempotently (PIN-69).
     const sceneAttempt: SceneAttempt = { ...input, sceneId: newSceneId() };
     setAttempt(sceneAttempt);
     setAttemptError("");
+    setAttemptStartedAt(Date.now());
     setLiveSceneId(null);
     setMakeOpen(false);
+    setPicking(false);
     makeScene.mutate(sceneAttempt);
   }
 
   function retryScene() {
     if (!attempt) return;
     setAttemptError("");
+    setAttemptStartedAt(Date.now());
     makeScene.mutate(attempt);
+  }
+
+  // A scene that failed server-side keeps failing under its own id
+  // (idempotent), so "Try again" makes it afresh with the same picks
+  // and idea; a POST that never landed retries the same id.
+  function tryAgain() {
+    if (!attempt) return;
+    if (attemptScene?.status === "failed") {
+      submitScene({
+        elementIds: attempt.elementIds,
+        prompt: attempt.prompt,
+        pinIds: attempt.pinIds,
+        ...(attempt.parentSceneId ? { parentSceneId: attempt.parentSceneId } : {}),
+      });
+      return;
+    }
+    retryScene();
   }
 
   function changeIdea() {
@@ -463,6 +516,7 @@ function BoardBody({
     setSelected(pruneSelection(new Set(attempt.pinIds), selectableIds));
     setSheetPrompt(attempt.prompt);
     setRemixOfId(attempt.parentSceneId ?? null);
+    setPicking(true);
     setMakeOpen(true);
   }
 
@@ -470,14 +524,78 @@ function BoardBody({
     // Fresh picks for the remix: the parent carries its own pins
     // in its image; the cap counts only these new ones (PIN-79).
     setRemixOfId(scene.id);
-    setSelected(new Set());
     setSheetPrompt("");
     setAttemptError("");
+    startPicking();
   }
 
   function openMakeSheet() {
     setSheetPrompt("");
     setMakeOpen(true);
+  }
+
+  function runIntent(intent: JoinIntent) {
+    if (intent.kind === "add") {
+      setAddOpen(true);
+    } else if (intent.kind === "make") {
+      setRemixOfId(null);
+      startPicking();
+    } else if (intent.kind === "pick") {
+      if (picking) {
+        togglePin(intent.pinId);
+      } else {
+        // A tap on a thing at rest starts picking with that thing.
+        setRemixOfId(null);
+        setSelected(togglePinSelection(new Set(), intent.pinId, policy.pinsPerScene.max).next);
+        setPicking(true);
+        setScrollToPinId(intent.pinId);
+      }
+    } else if (intent.kind === "remix") {
+      const scene = view.scenes.find((candidate) => candidate.id === intent.sceneId);
+      if (scene && canRemixScene(scene)) startRemix(scene);
+    }
+  }
+
+  // The board shows the moment the link opens; a name is asked
+  // only when someone first acts, then the action carries on.
+  function requireJoin(intent: JoinIntent) {
+    if (view.me) runIntent(intent);
+    else setJoinIntent(intent);
+  }
+
+  function onJoined(participant: { id: string; displayName: string }) {
+    handleJoined(participant);
+    const intent = joinIntent;
+    setJoinIntent(null);
+    if (intent) runIntent(intent);
+  }
+
+  function dismissPickHint() {
+    setPickHintSeen(true);
+    writeFlag(PICK_HINT_STORAGE_KEY);
+  }
+
+  // Share the board link: the phone's share sheet when there is
+  // one, else copy it. A cancelled share sheet is silent.
+  async function shareBoard() {
+    setShareNotice(null);
+    const url = `${window.location.origin}/g/${encodeURIComponent(slug)}`;
+    const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+    const data: ShareData = { title: view.board.title, url };
+    if (typeof nav.share === "function" && (!nav.canShare || nav.canShare(data))) {
+      try {
+        await nav.share(data);
+        return;
+      } catch (cause) {
+        if (isAbort(cause)) return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareNotice("copied");
+    } catch {
+      setShareNotice("failed");
+    }
   }
 
   // PIN-72: share the scene image file when the browser can,
@@ -541,257 +659,250 @@ function BoardBody({
         URL.revokeObjectURL(objectUrl);
       }
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
-      if (cause instanceof Error && cause.name === "AbortError") return;
+      if (isAbort(cause)) return;
       setShareErrorSceneId(scene.id);
     } finally {
       setSharingSceneId(null);
     }
   }
 
-  function renderScene(scene: BoardViewScene) {
-    const parts = sceneCreditParts(scene, view.elements, view.participants, view.scenes);
-    const mine = attempt !== null && scene.id === attempt.sceneId;
-    return (
-      <li key={scene.id} className="scene-card">
-        {scene.status === "ready" && scene.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image
-          <img src={scene.imageUrl} alt={scene.prompt} loading="lazy" />
-        ) : scene.status === "refused" ? (
-          <p role="status">{scene.refusalReason ?? t("en", "ai.refused")}</p>
-        ) : scene.status === "failed" ? (
-          <p role="status">{t("en", "make.failed")}</p>
-        ) : (
-          <p role="status">{t("en", "make.cooking")}</p>
-        )}
-        {scene.status === "ready" && scene.kind === "collage" ? (
-          <p className="state-pill">{t("en", "make.collage")}</p>
-        ) : null}
-        {scene.parentSceneId ? (
-          <p className="state-pill">{t("en", "make.remixOf")}</p>
-        ) : null}
-        <p className="scene-prompt">{scene.prompt}</p>
-        {parts.length > 0 ? (
-          <p className="scene-credit">
-            {t("en", "make.from")}{" "}
-            {parts
-              .map((part) => (part.ownerName ? `${part.ownerName}'s ${part.label}` : part.label))
-              .join(" + ")}
-          </p>
-        ) : null}
-        {scene.status === "ready" && scene.imageUrl ? (
-          <button
-            type="button"
-            className="btn btn-small"
-            disabled={sharingSceneId === scene.id}
-            onClick={() => void shareScene(scene)}
-          >
-            {sharingSceneId === scene.id ? t("en", "share.sharing") : t("en", "share.button")}
-          </button>
-        ) : null}
-        {view.me && canRemixScene(scene) ? (
-          <button type="button" className="btn btn-small" onClick={() => startRemix(scene)}>
-            {t("en", "make.remix")}
-          </button>
-        ) : null}
-        {shareErrorSceneId === scene.id ? (
-          <p className="error" role="alert">{t("en", "share.failed")}</p>
-        ) : null}
-        {mine && (scene.status === "refused" || scene.status === "failed") ? (
-          <button type="button" className="btn btn-small" onClick={changeIdea}>
-            {t("en", "make.changeIdea")}
-          </button>
-        ) : null}
-      </li>
-    );
+  // ---------- View model for rendering ----------
+
+  const counts = boardCounts(view);
+  const people = view.participants.map((p) => ({ id: p.id, name: p.displayName }));
+  const latest = latestActivity(view.activity);
+  const latestLine = latest
+    ? tf("en", `activity.${latest.kind}` as const, {
+        name: latest.name ?? t("en", "board.someone"),
+        thing: latest.thing ?? "",
+      })
+    : null;
+  const elementsById = new Map(view.elements.map((element) => [element.id, element]));
+  const stickersFor = (elementIds: readonly string[]) =>
+    elementIds.flatMap((id) => {
+      const element = elementsById.get(id);
+      return element ? [{ src: element.imageUrl, seed: id }] : [];
+    });
+  const numbers = sceneNumbers(scenes);
+
+  const slots: SceneSlot[] = [];
+  if (attempt && showCooking) {
+    slots.push({
+      type: "developing",
+      id: attempt.sceneId,
+      stickers: stickersFor(attempt.elementIds),
+      idea: attempt.prompt,
+      startedAt: attemptStartedAt,
+    });
+  } else if (attempt && attemptError && !attemptScene) {
+    slots.push({
+      type: "problem",
+      id: attempt.sceneId,
+      idea: attempt.prompt,
+      line: attemptError,
+      onChangeIdea: changeIdea,
+      onTryAgain: tryAgain,
+    });
+  }
+  for (const item of stripItems(scenes, attempt?.sceneId ?? null)) {
+    const scene = item.scene;
+    if (item.mode === "developing") {
+      slots.push({
+        type: "developing",
+        id: scene.id,
+        stickers: stickersFor(scene.elementIds),
+        idea: scene.prompt,
+        startedAt: item.mine ? attemptStartedAt : null,
+      });
+    } else if (item.mode === "problem") {
+      const refused = scene.status === "refused";
+      slots.push({
+        type: "problem",
+        id: scene.id,
+        idea: scene.prompt,
+        line: refused ? (scene.refusalReason ?? t("en", "ai.refused")) : t("en", "board.sceneFailed"),
+        onChangeIdea: changeIdea,
+        // A refusal repeats for the same idea: only a new idea helps.
+        onTryAgain: refused ? undefined : tryAgain,
+      });
+    } else if (scene.imageUrl) {
+      const credits = sceneCredits(scene, view.elements, view.participants, view.scenes);
+      const things = credits
+        .map((credit) =>
+          credit.owner ? tf("en", "ui.ownerThing", { owner: credit.owner.name, thing: credit.thing }) : credit.thing,
+        )
+        .join(", ");
+      slots.push({
+        type: "print",
+        id: scene.id,
+        src: scene.imageUrl,
+        alt: things ? tf("en", "board.sceneAlt", { idea: scene.prompt, things }) : scene.prompt,
+        idea: scene.prompt,
+        credits,
+        kind: sceneTag(scene),
+        remixOf: remixSource(scene, view.scenes, view.participants),
+        number: numbers.get(scene.id),
+        onRemix: canRemixScene(scene) ? () => requireJoin({ kind: "remix", sceneId: scene.id }) : undefined,
+        onShare: () => void shareScene(scene),
+        sharing: sharingSceneId === scene.id,
+        footer:
+          shareErrorSceneId === scene.id ? (
+            <p className={styles.error} role="alert">
+              {t("en", "share.failed")}
+            </p>
+          ) : null,
+      });
+    }
   }
 
+  const showNudge = shouldShowSignInNudge({
+    authEnabled: auth.enabled,
+    authLoading: auth.status === "loading",
+    policyNudge: policy.signInNudge,
+    signedIn: auth.user !== null,
+    joined: view.me !== null,
+    myPinnedCount: cards.filter(
+      (card) => card.status === "pinned" && card.ownerId === view.me?.id,
+    ).length,
+    seenBefore: nudgeSeen,
+  });
+
+  const showScenes = !pickingNow && (!empty || slots.length > 0);
+  const atMax = picked.length >= policy.pinsPerScene.max;
+  const showDock = !empty;
+
   return (
-    <>
-      <section className="card" aria-label={t("en", "board.scenes")}>
-        <h2>{t("en", "board.scenes")}</h2>
-        {showCooking ? (
-          <p className="scene-card" role="status">
-            {t("en", "make.cooking")}
-            {attempt ? <span className="scene-prompt"> {attempt.prompt}</span> : null}
-          </p>
-        ) : null}
-        {attemptError ? (
-          <p className="error" role="alert">
-            {attemptError}{" "}
-            <button type="button" className="btn btn-small" onClick={retryScene}>
-              {t("en", "admin.retry")}
-            </button>
-          </p>
-        ) : null}
-        {scenes.length > 0 ? (
-          <ul className="scene-list">{scenes.map(renderScene)}</ul>
-        ) : !showCooking ? (
-          <p className="board-placeholder">{t("en", "board.scenesEmpty")}</p>
-        ) : null}
-      </section>
-
-      {view.activity.length > 0 ? (
-        <section className="card" aria-label={t("en", "board.activity")}>
-          <h2>{t("en", "board.activity")}</h2>
-          <ul className="activity-list">
-            {view.activity.map((line) => (
-              <li key={line.id}>
-                {line.actorName ?? t("en", "board.someone")}{" "}
-                {line.kind === "joined"
-                  ? t("en", "activity.joined")
-                  : line.kind === "pinned"
-                    ? t("en", "activity.pinned")
-                    : t("en", "activity.sceneReady")}
-                {line.label ? <> {line.label}</> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <JoinSection
-        slug={slug}
-        me={view.me}
-        profileName={auth.user?.displayName ?? null}
-        onJoined={handleJoined}
+    <main className={cx(styles.board, !showDock && styles.boardRest)}>
+      <BoardHeader
+        title={view.board.title}
+        people={people}
+        counts={counts}
+        onShare={() => void shareBoard()}
+        homeHref="/"
       />
 
-      {shouldShowSignInNudge({
-        authEnabled: auth.enabled,
-        authLoading: auth.status === "loading",
-        policyNudge: policy.signInNudge,
-        signedIn: auth.user !== null,
-        joined: view.me !== null,
-        myPinnedCount: cards.filter(
-          (card) => card.status === "pinned" && card.ownerId === view.me?.id,
-        ).length,
-        seenBefore: nudgeSeen,
-      }) ? (
-        <p className="card auth-nudge" role="status">
-          {t("en", "auth.nudge")}{" "}
-          <button
-            type="button"
-            className="btn btn-small"
-            onClick={() => {
-              dismissNudge();
-              void auth.signIn();
-            }}
-          >
-            🔐 {t("en", "auth.signIn")}
-          </button>{" "}
-          <button type="button" className="btn btn-small" onClick={dismissNudge}>
-            {t("en", "auth.nudgeDismiss")}
-          </button>
-        </p>
-      ) : null}
-
-      <section aria-label={t("en", "board.pins")}>
-        <h2>{t("en", "board.pins")}</h2>
-        {empty ? (
-          <div className="card board-empty">
-            <p className="board-empty-prompt">{t("en", "board.emptyPrompt")}</p>
-            <p>{t("en", "board.emptyBody")}</p>
-          </div>
-        ) : null}
-        {selectableIds.length > 0 && selected.size === 0 ? (
-          <p className="hint" role="status">{t("en", "make.pickHint")}</p>
-        ) : null}
-        {selected.size >= policy.pinsPerScene.max ? (
-          <p className="hint" role="status">
-            {policy.pinsPerScene.max} {t("en", "make.max")}
+      <div className={styles.under}>
+        {latestLine && !pickingNow ? (
+          <p className={cx("pn-board-meta", styles.latest)}>
+            <span className="pn-sr">{t("en", "board.activity")}: </span>
+            {latestLine}
           </p>
         ) : null}
-        {cards.length > 0 ? (
-          <ul className="pins-grid">
-            {cards.map((card) => {
-              const owner = (
-                <>
-                  <span
-                    className="chip-dot"
-                    style={{ background: playerColorFor(card.ownerId) }}
-                    aria-hidden="true"
-                  />{" "}
-                  {card.ownerName ?? t("en", "board.someone")}
-                </>
-              );
-              if (card.status !== "pinned") {
-                return (
-                  <li key={card.pinId} className="pin-card">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
-                    <img src={card.element.imageUrl} alt={card.element.label} loading="lazy" />
-                    <p className="pin-label">{card.element.label}</p>
-                    <p className="pin-owner">{owner}</p>
-                    <p className="state-pill">{t("en", "board.candidate")}</p>
-                    {renderDeleteControl(card)}
-                  </li>
-                );
-              }
-              const picking = selected.has(card.pinId);
-              return (
-                <li key={card.pinId}>
-                  <button
-                    type="button"
-                    className={`pin-card pin-toggle${picking ? " pin-selected" : ""}`}
-                    aria-pressed={picking}
-                    onClick={() => togglePin(card.pinId)}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked API image */}
-                    <img src={card.element.imageUrl} alt={card.element.label} loading="lazy" />
-                    <span className="pin-label">{card.element.label}</span>
-                    <span className="pin-owner">{owner}</span>
-                    {picking ? <span className="state-pill">{t("en", "make.picked")}</span> : null}
-                  </button>
-                  {renderDeleteControl(card)}
-                </li>
-              );
-            })}
-          </ul>
+        {shareNotice ? (
+          <p className={shareNotice === "copied" ? styles.notice : styles.error} role="status">
+            {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
+          </p>
         ) : null}
         {boardQuery.isError ? (
-          <p className="error" role="alert">
-            {t("en", "board.loadError")}{" "}
-            <button type="button" className="btn btn-small" onClick={() => void boardQuery.refetch()}>
-              {t("en", "admin.retry")}
-            </button>
-          </p>
+          <div className={styles.errorRow}>
+            <p className={styles.error} role="alert">
+              {t("en", "board.loadError")}
+            </p>
+            <Button size="sm" onClick={() => void boardQuery.refetch()}>
+              {t("en", "board.retry")}
+            </Button>
+          </div>
         ) : null}
-      </section>
+        {showNudge ? (
+          <div className={styles.nudge} role="status">
+            <p>{t("en", "auth.nudge")}</p>
+            <div className={styles.nudgeActions}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  dismissNudge();
+                  void auth.signIn();
+                }}
+              >
+                {t("en", "auth.signIn")}
+              </Button>
+              <Button variant="quiet" size="sm" onClick={dismissNudge}>
+                {t("en", "auth.nudgeDismiss")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-      {remixParent ? (
-        <p className="hint" role="status">
-          {t("en", "make.remixPick")}{" "}
-          <button type="button" className="btn btn-small" onClick={() => setRemixOfId(null)}>
-            {t("en", "add.close")}
-          </button>
+      {pickingNow ? (
+        <div className={styles.hintRow}>
+          {remixParent ? (
+            <Hint onDismiss={exitPicking} dismissLabel={t("en", "board.stop")} x={40}>
+              {tf("en", "board.remixing", { idea: remixParent.prompt })}
+            </Hint>
+          ) : !pickHintSeen ? (
+            <Hint onDismiss={dismissPickHint} x={40}>
+              {tCount("en", "board.pickHint", policy.pinsPerScene.max)}
+            </Hint>
+          ) : atMax ? (
+            <p className="pn-board-meta" role="status">
+              {tf("en", "board.pickMax", { n: policy.pinsPerScene.max })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showScenes ? <BoardScenes slots={slots} count={counts.scenes} /> : null}
+
+      {empty && !pickingNow ? (
+        <EmptyState onAction={() => requireJoin({ kind: "add" })} onShare={() => void shareBoard()} />
+      ) : null}
+
+      {cards.length > 0 ? (
+        <BoardThings
+          cards={cards}
+          count={counts.things}
+          meId={view.me?.id ?? null}
+          picking={pickingNow}
+          pickNumbers={pickNumbers(cards, selected)}
+          showHead={!pickingNow}
+          onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
+          deletion={{
+            confirmElementId: confirmDeleteElementId,
+            errorElementId: deleteErrorElementId,
+            deletingElementId: deleteElement.isPending ? (deleteElement.variables ?? null) : null,
+            onAsk: (elementId) => {
+              setDeleteErrorElementId(null);
+              setConfirmDeleteElementId(elementId);
+            },
+            onConfirm: (elementId) => deleteElement.mutate(elementId),
+            onCancel: () => setConfirmDeleteElementId(null),
+          }}
+        />
+      ) : null}
+
+      {view.me && !pickingNow ? (
+        <p className={cx("pn-board-meta", styles.me)}>
+          {tf("en", "join.youAre", { name: view.me.displayName })}
+          <Button variant="quiet" size="sm" onClick={() => setJoinIntent({ kind: "edit" })}>
+            {t("en", "join.edit")}
+          </Button>
         </p>
       ) : null}
 
-      <nav className="bottom-bar" aria-label={t("en", "board.pins")}>
-        {view.me ? (
-          <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
-            {t("en", "board.add")}
-          </button>
-        ) : (
-          <a className="btn btn-primary" href="#join">
-            {t("en", "board.add")}
-          </a>
-        )}
-        {view.me ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={selected.size < policy.pinsPerScene.min}
-            onClick={openMakeSheet}
-          >
-            {`${t("en", "board.make")} ${selected.size}/${policy.pinsPerScene.max}`}
-          </button>
-        ) : (
-          <a className="btn" href="#join">
-            {`${t("en", "board.make")} ${selected.size}/${policy.pinsPerScene.max}`}
-          </a>
-        )}
-      </nav>
+      {showDock ? (
+        <>
+          <div className={styles.fade} aria-hidden="true" />
+          {pickingNow ? (
+            <Dock
+              mode="picking"
+              fixed
+              picked={picked.map((card) => ({ src: card.element.imageUrl, label: card.element.label }))}
+              max={policy.pinsPerScene.max}
+              onCancel={exitPicking}
+              onNext={openMakeSheet}
+              nextDisabled={picked.length < policy.pinsPerScene.min}
+            />
+          ) : (
+            <Dock
+              fixed
+              onAdd={() => requireJoin({ kind: "add" })}
+              onMake={() => requireJoin({ kind: "make" })}
+              makeDisabled={selectableIds.length === 0}
+            />
+          )}
+        </>
+      ) : null}
 
       {addOpen && view.me ? (
         <AddSheet
@@ -822,119 +933,16 @@ function BoardBody({
           onClose={() => setMakeOpen(false)}
         />
       ) : null}
-    </>
-  );
-}
 
-function JoinSection({
-  slug,
-  me,
-  profileName,
-  onJoined,
-}: {
-  slug: string;
-  me: { id: string; displayName: string } | null;
-  profileName: string | null;
-  onJoined: (participant: { id: string; displayName: string }) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(me?.displayName ?? "");
-  const [nameTouched, setNameTouched] = useState(false);
-  const [reclaimPin, setReclaimPin] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (me && !editing) setDisplayName(me.displayName);
-  }, [me, editing]);
-
-  // PIN-87: signed in but not joined yet -> prefill the profile
-  // name (auth hydrates async, so this runs when it lands).
-  // Never overwrites typing: once touched, the field is theirs.
-  useEffect(() => {
-    if (me || nameTouched) return;
-    const prefill = defaultJoinName(profileName);
-    if (prefill) setDisplayName(prefill);
-  }, [me, nameTouched, profileName]);
-
-  if (me && !editing) {
-    return (
-      <section className="card player-card" id="join">
-        <span className="player-avatar" style={{ background: playerColorFor(me.id) }} aria-hidden="true">
-          {([...me.displayName][0] ?? "").toUpperCase()}
-        </span>
-        <p className="who">
-          <strong>{me.displayName}</strong>
-          {t("en", "join.ready")}
-        </p>
-        <button type="button" className="btn btn-small" onClick={() => setEditing(true)}>
-          {t("en", "join.edit")}
-        </button>
-      </section>
-    );
-  }
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/participants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName, reclaimPin: reclaimPin || undefined }),
-      });
-      const data = (await response.json()) as {
-        participant?: { id: string; displayName: string };
-        error?: string;
-      };
-      if (!response.ok || !data.participant) throw new Error(data.error || t("en", "join.error"));
-      setReclaimPin("");
-      setEditing(false);
-      onJoined(data.participant);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("en", "join.error"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="card" id="join" onSubmit={onSubmit}>
-      <h2>{t("en", "join.title")}</h2>
-      {!me ? <p className="hint" role="status">{t("en", "board.joinFirst")}</p> : null}
-      <div className="field">
-        <label htmlFor="join-name">{t("en", "join.name")}</label>
-        <input
-          id="join-name"
-          value={displayName}
-          onChange={(event) => {
-            setNameTouched(true);
-            setDisplayName(event.target.value);
-          }}
-          placeholder={t("en", "join.namePlaceholder")}
-          autoComplete="nickname"
-          required
+      {joinIntent ? (
+        <JoinSheet
+          slug={slug}
+          me={view.me}
+          profileName={auth.user?.displayName ?? null}
+          onJoined={onJoined}
+          onClose={() => setJoinIntent(null)}
         />
-      </div>
-      <details className="field">
-        <summary>{t("en", "join.pinSummary")}</summary>
-        <label htmlFor="reclaim-pin">{t("en", "join.pin")}</label>
-        <input
-          id="reclaim-pin"
-          value={reclaimPin}
-          onChange={(event) => setReclaimPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="1234"
-        />
-        <p className="field-help">{t("en", "join.pinHelp")}</p>
-      </details>
-      {error ? <p className="error" role="alert">{error}</p> : null}
-      <button className="btn btn-primary" type="submit" disabled={busy || !displayName.trim()}>
-        {busy ? t("en", "join.saving") : me ? t("en", "join.update") : t("en", "join.submit")}
-      </button>
-    </form>
+      ) : null}
+    </main>
   );
 }
