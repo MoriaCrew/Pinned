@@ -20,6 +20,15 @@ import "server-only";
  * thresholds and an exponentially growing lockout. A PIN-bearing
  * join for a name nobody has taken is still a first join (it sets
  * the PIN), and a first-try correct reclaim succeeds unchanged.
+ *
+ * PIN-91 closes the roster-fill races around that: a NEW
+ * participant is created only through the repository's atomic
+ * cap-checked create (no check-then-write here), failed reclaims
+ * throw before any participant write exists on their path, and
+ * fresh creations per (board, IP) are budgeted in the board
+ * store under Policy — updates, reclaims and restores never
+ * consume that budget, so a family behind one NAT IP keeps
+ * rejoining freely and can still reclaim into a full board.
  */
 import { randomUUID } from "node:crypto";
 import type { Participant } from "../domain/board";
@@ -109,6 +118,10 @@ function ipAttemptKey(slug: string, clientIp: string): string {
   return hashToken(`pinned-reclaim:v1:ip:${slug}:${clientIp}`);
 }
 
+function joinIpKey(slug: string, clientIp: string): string {
+  return hashToken(`pinned-join:v1:ip:${slug}:${clientIp}`);
+}
+
 function nameLockoutParams(policy: Policy): ReclaimLockoutParams {
   return {
     maxFailures: policy.reclaimMaxFailuresPerName,
@@ -154,12 +167,12 @@ export function parseJoinBoardInput(value: unknown): JoinBoardInput {
   }
 }
 
-async function issueSession(
+/** Sign a fresh cookie and bind its hash into the record (pure). */
+function signSession(
   participant: Participant,
   deps: BoardSessionDeps,
   now: number,
-  outcome: JoinBoardResult["outcome"],
-): Promise<JoinBoardResult> {
+): { persisted: Participant; cookieValue: string } {
   const secret = requireSessionSecret(deps.sessionSecret);
   let issuedAt = now;
   let cookieValue = signPlayerCookie(
@@ -176,17 +189,56 @@ async function issueSession(
       secret,
     );
   }
-  const persisted: Participant = {
-    ...participant,
-    cookieSecretHash: hashToken(cookieValue),
+  return {
+    persisted: { ...participant, cookieSecretHash: hashToken(cookieValue) },
+    cookieValue,
   };
-  await deps.boards.putParticipant(persisted);
+}
+
+function sessionResult(
+  persisted: Participant,
+  cookieValue: string,
+  deps: BoardSessionDeps,
+  now: number,
+  outcome: JoinBoardResult["outcome"],
+): JoinBoardResult {
   return {
     participant: persisted,
     cookieValue,
     cookieExpiresAt: now + deps.policy.participantCookieDays * DAY_MS,
     outcome,
   };
+}
+
+async function issueSession(
+  participant: Participant,
+  deps: BoardSessionDeps,
+  now: number,
+  outcome: JoinBoardResult["outcome"],
+): Promise<JoinBoardResult> {
+  const { persisted, cookieValue } = signSession(participant, deps, now);
+  await deps.boards.putParticipant(persisted);
+  return sessionResult(persisted, cookieValue, deps, now, outcome);
+}
+
+/**
+ * First-join issuance (PIN-91): the signed record goes through
+ * the repository's atomic cap-checked create. Null = the roster
+ * filled between the caller's pre-check and this create; the
+ * repository wrote nothing, so no cleanup is needed.
+ */
+async function issueNewSession(
+  participant: Participant,
+  deps: BoardSessionDeps,
+  now: number,
+): Promise<JoinBoardResult | null> {
+  const { persisted, cookieValue } = signSession(participant, deps, now);
+  const created = await deps.boards.createParticipantIfBelowCap(
+    persisted,
+    deps.policy.participantsPerBoard,
+  );
+  if (!created) return null;
+  return sessionResult(persisted, cookieValue, deps, now, "created");
 }
 
 /** Resolve the signed cookie to a Participant; null = not joined. */
@@ -326,9 +378,34 @@ export async function joinBoard(
     }
   }
 
-  const roster = await deps.boards.listParticipants(slug);
-  if (roster.length >= deps.policy.participantsPerBoard) {
+  // Cheap pre-check on the counter already fetched: a visibly
+  // full board refuses before any join budget is spent. This is
+  // NOT the cap enforcement — the atomic create below is, so two
+  // joins racing past this line cannot both land (PIN-91).
+  if (board.counters.participantCount >= deps.policy.participantsPerBoard) {
     throw new BoardApiError("This board is full.", 409);
+  }
+
+  // Roster-fill brake: only fresh creations consume the per-IP
+  // budget, so existing members behind the same NAT IP (updates
+  // and reclaims above) are never charged for it.
+  if (context?.clientIp) {
+    const allowed = await deps.boards.tryRecordJoin(
+      slug,
+      joinIpKey(slug, context.clientIp),
+      now,
+      {
+        maxJoins: deps.policy.joinMaxNewPerIp,
+        windowMs: deps.policy.joinNewWindowMs,
+      },
+    );
+    if (!allowed) {
+      throw new BoardApiError(
+        "Too many new joins from this connection. Please try again later.",
+        429,
+        "join_rate_limited",
+      );
+    }
   }
 
   const participant: Participant = {
@@ -341,7 +418,9 @@ export async function joinBoard(
       : {}),
     createdAt: now,
   };
-  return issueSession(participant, deps, now, "created");
+  const created = await issueNewSession(participant, deps, now);
+  if (!created) throw new BoardApiError("This board is full.", 409);
+  return created;
 }
 
 export function buildParticipantCookieHeader(

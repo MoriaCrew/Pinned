@@ -311,6 +311,141 @@ describe("reclaim hardening (PIN-90)", () => {
   });
 });
 
+describe("roster-fill hardening (PIN-91)", () => {
+  it("concurrent first joins cannot race past the Policy roster cap", async () => {
+    const h = makeHarness({ participantsPerBoard: 3 });
+    const board = await createBoard({ title: "B" }, h.deps);
+    const settled = await Promise.allSettled(
+      Array.from({ length: 10 }, (_, i) =>
+        joinBoard(board.slug, { displayName: `Racer ${i}` }, null, h.session),
+      ),
+    );
+    const created = settled.filter((r) => r.status === "fulfilled");
+    const refused = settled.filter((r) => r.status === "rejected");
+    expect(created).toHaveLength(3);
+    expect(refused).toHaveLength(7);
+    for (const r of refused) {
+      expect((r as PromiseRejectedResult).reason).toMatchObject({
+        name: "BoardApiError",
+        status: 409,
+      });
+    }
+    // Refused racers wrote nothing: no ghost roster entries.
+    expect(await h.boards.listParticipants(board.slug)).toHaveLength(3);
+    expect((await h.boards.getBoard(board.slug))?.counters.participantCount).toBe(3);
+  });
+
+  it("failed reclaims write no participant, and members reclaim into a full board", async () => {
+    const h = makeHarness({ participantsPerBoard: 1 });
+    const board = await createBoard({ title: "B" }, h.deps);
+    const first = await joinBoard(
+      board.slug,
+      { displayName: "Robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    await expect(
+      joinBoard(board.slug, { displayName: "Robin", reclaimPin: "0000" }, null, h.session),
+    ).rejects.toMatchObject({ status: 401, code: "reclaim_failed" });
+    const roster = await h.boards.listParticipants(board.slug);
+    expect(roster.map((p) => p.id)).toEqual([first.participant.id]);
+    expect((await h.boards.getBoard(board.slug))?.counters.participantCount).toBe(1);
+    expect(
+      (await h.boards.listEvents(board.slug)).filter(
+        (e) => e.type === "participant_joined",
+      ),
+    ).toHaveLength(1);
+
+    // The board is full for NEW names...
+    await expect(
+      joinBoard(board.slug, { displayName: "Aye" }, null, h.session),
+    ).rejects.toMatchObject({ status: 409 });
+    // ...but the existing member still reclaims her own seat.
+    const reclaimed = await joinBoard(
+      board.slug,
+      { displayName: "robin", reclaimPin: "1234" },
+      null,
+      h.session,
+    );
+    expect(reclaimed.outcome).toBe("reclaimed");
+    expect(reclaimed.participant.id).toBe(first.participant.id);
+  });
+
+  it("per-IP new-join budget: creations count, members and reclaims do not", async () => {
+    const h = makeHarness({ joinMaxNewPerIp: 2, joinNewWindowMs: 60_000 });
+    const board = await createBoard({ title: "B" }, h.deps);
+    const home = { clientIp: "192.0.2.10" };
+
+    const mum = await joinBoard(
+      board.slug,
+      { displayName: "Mum", reclaimPin: "1234" },
+      null,
+      h.session,
+      home,
+    );
+    await joinBoard(board.slug, { displayName: "Dad" }, null, h.session, home);
+    // Budget spent: a third NEW name from this connection is 429
+    // and creates nothing.
+    await expect(
+      joinBoard(board.slug, { displayName: "Spam 1" }, null, h.session, home),
+    ).rejects.toMatchObject({ status: 429, code: "join_rate_limited" });
+    expect(await h.boards.listParticipants(board.slug)).toHaveLength(2);
+
+    // NAT family parity: Mum renaming on her own cookie and
+    // reclaiming from the same IP are not new creations.
+    const renamed = await joinBoard(
+      board.slug,
+      { displayName: "Mum (host)" },
+      mum.cookieValue,
+      h.session,
+      home,
+    );
+    expect(renamed.outcome).toBe("updated");
+    // A failed reclaim stays the uniform PIN-90 reclaim failure,
+    // untouched by the join budget, and mints nobody.
+    await expect(
+      joinBoard(
+        board.slug,
+        { displayName: "Mum (host)", reclaimPin: "0000" },
+        null,
+        h.session,
+        home,
+      ),
+    ).rejects.toMatchObject({ status: 401, code: "reclaim_failed" });
+    expect(await h.boards.listParticipants(board.slug)).toHaveLength(2);
+    const reclaimed = await joinBoard(
+      board.slug,
+      { displayName: "Mum (host)", reclaimPin: "1234" },
+      null,
+      h.session,
+      home,
+    );
+    expect(reclaimed.outcome).toBe("reclaimed");
+    expect(reclaimed.participant.id).toBe(mum.participant.id);
+
+    // Another connection has its own budget...
+    const cousin = await joinBoard(
+      board.slug,
+      { displayName: "Cousin" },
+      null,
+      h.session,
+      { clientIp: "198.51.100.4" },
+    );
+    expect(cousin.outcome).toBe("created");
+    // ...and the home budget refills once the Policy window rolls.
+    h.setNow(T0 + 60_000);
+    const gran = await joinBoard(
+      board.slug,
+      { displayName: "Gran" },
+      null,
+      h.session,
+      home,
+    );
+    expect(gran.outcome).toBe("created");
+    expect(await h.boards.listParticipants(board.slug)).toHaveLength(4);
+  });
+});
+
 describe("uploadPhoto -> job -> confirmPins (A6a)", () => {
   it("runs the mock decompose to ready, confirms a subset, drops the rest and deletes the working copy", async () => {
     const h = makeHarness();

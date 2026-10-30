@@ -9,6 +9,7 @@ import "server-only";
  * - boards/{slug}
  * - boards/{slug}/participants|elements|pins|scenes|events/{id}
  * - boards/{slug}/reclaimAttempts/{keyHash} (PIN-90 lockout counters)
+ * - boards/{slug}/joinAttempts/{keyHash} (PIN-91 join-rate counters)
  * - boards/{slug}/jobs/{jobId} is RESERVED for DecomposeJob /
  *   SceneJob docs (§5.3); the BoardRepository port has no job
  *   methods yet, so nothing writes it in this slice.
@@ -55,6 +56,11 @@ import type {
   BoardRepository,
   DeleteElementResult,
 } from "../domain/board-repository";
+import {
+  decideJoin,
+  type JoinAttemptState,
+  type JoinRateParams,
+} from "../domain/join-rate";
 import type { ReclaimAttemptState } from "../domain/reclaim-lockout";
 
 const BOARDS = "boards";
@@ -64,6 +70,7 @@ const PINS = "pins";
 const SCENES = "scenes";
 const EVENTS = "events";
 const RECLAIM_ATTEMPTS = "reclaimAttempts";
+const JOIN_ATTEMPTS = "joinAttempts";
 
 function toFirestoreData<T extends object>(value: T): DocumentData {
   return JSON.parse(JSON.stringify(value)) as DocumentData;
@@ -184,10 +191,35 @@ export class FirestoreBoardRepository implements BoardRepository {
   }
 
   async putParticipant(participant: Participant): Promise<void> {
+    await this.writeParticipant(participant, null);
+  }
+
+  async createParticipantIfBelowCap(
+    participant: Participant,
+    cap: number,
+  ): Promise<boolean> {
+    return this.writeParticipant(participant, cap);
+  }
+
+  /**
+   * Shared participant write. With a cap (PIN-91), the check reads
+   * the board doc's participantCount and the insert increments
+   * that same doc inside this transaction — concurrent creates
+   * contend on the board doc, so Firestore retries the loser and
+   * the check re-evaluates against the winner's increment. A
+   * refused create performs no writes at all.
+   */
+  private async writeParticipant(
+    participant: Participant,
+    cap: number | null,
+  ): Promise<boolean> {
     const ref = this.col(participant.boardId, PARTICIPANTS).doc(participant.id);
-    await this.db.runTransaction(async (tx) => {
+    return this.db.runTransaction(async (tx) => {
       const board = await this.requireBoardTx(tx, participant.boardId);
       const existing = await tx.get(ref);
+      if (!existing.exists && cap !== null && board.counters.participantCount >= cap) {
+        return false;
+      }
       const rows = existing.exists
         ? null
         : rowsFrom<Participant>(await tx.get(this.col(participant.boardId, PARTICIPANTS)));
@@ -213,6 +245,30 @@ export class FirestoreBoardRepository implements BoardRepository {
         };
         tx.set(eventRef, toStored(event, nextSeq(events as StoredRow<BoardEvent>[])));
       }
+      return true;
+    });
+  }
+
+  async tryRecordJoin(
+    boardId: string,
+    key: string,
+    now: number,
+    params: JoinRateParams,
+  ): Promise<boolean> {
+    const ref = this.col(boardId, JOIN_ATTEMPTS).doc(key);
+    return this.db.runTransaction(async (tx) => {
+      await this.requireBoardTx(tx, boardId);
+      const current = fromSnapshot<JoinAttemptState>(await tx.get(ref));
+      const decision = decideJoin(
+        boardId,
+        key,
+        current ? structuredClone(current) : null,
+        now,
+        params,
+      );
+      if (!decision.allowed || decision.next === null) return false;
+      tx.set(ref, toFirestoreData(decision.next));
+      return true;
     });
   }
 
