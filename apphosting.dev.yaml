@@ -31,6 +31,13 @@ env:
   # inherited from apphosting.yaml as Secret Manager references.
   - variable: AUTH_MODE
     value: optional
+  # PIN-163: sign-in on the app's own domain. Proxies /__/auth/* to
+  # the project's firebaseapp host and makes APP_BASE_URL's host the
+  # web authDomain. Requires the OAuth redirect URI
+  # https://<APP_BASE_URL host>/__/auth/handler on the web client.
+  # Read at BUILD (rewrites) and RUNTIME: a plain value is both.
+  - variable: AUTH_SAME_ORIGIN
+    value: "1"
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-dev.firebasestorage.app
   # PIN-153: dev runs real (sandbox) Stripe credit packs. The

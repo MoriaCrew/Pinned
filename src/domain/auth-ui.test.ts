@@ -44,6 +44,20 @@ describe("resolveAuthUi (flag-off parity contract)", () => {
     const derived = resolveAuthUi({ ...full, projectId: null });
     expect(derived.config?.projectId).toBe("synthetic-proj");
   });
+
+  it("same-origin authDomain (PIN-163) keeps the configured project id", () => {
+    const sameOrigin = { ...full, authDomain: "app.example.test" };
+    expect(resolveAuthUi(sameOrigin).config).toEqual({
+      apiKey: "synthetic-web-key",
+      authDomain: "app.example.test",
+      projectId: "synthetic-proj",
+    });
+    // Never derived from the app host: no explicit id, no UI.
+    expect(resolveAuthUi({ ...sameOrigin, projectId: null })).toEqual({
+      enabled: false,
+      config: null,
+    });
+  });
 });
 
 describe("authInitials", () => {

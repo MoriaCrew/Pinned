@@ -1,4 +1,5 @@
 /** Server configuration. Single place that reads process.env. */
+import { isFirebaseProjectId } from "./domain/auth-proxy";
 import type { PlusMode } from "./domain/plus";
 
 export type AuthMode = "link-only" | "optional";
@@ -25,6 +26,14 @@ export type DataBackend = "firestore" | "memory";
 
 export interface AppConfig {
   authMode: AuthMode;
+  /**
+   * PIN-163 (docs/13-auth.md): AUTH_SAME_ORIGIN=1 in optional mode
+   * serves Firebase's sign-in helper from the app's own host:
+   * next.config.ts proxies `/__/auth/*` to the project's
+   * firebaseapp host (src/domain/auth-proxy.ts). False for any
+   * other value and always in link-only mode: nothing is proxied.
+   */
+  authSameOrigin: boolean;
   aiMock: boolean;
   appBaseUrl: string;
   dataBackend: DataBackend;
@@ -43,6 +52,11 @@ export interface AppConfig {
    * AUTH_MODE=optional. Never invent values here.
    */
   firebaseWebApiKey: string | null;
+  /**
+   * NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, except with authSameOrigin,
+   * an https APP_BASE_URL and a valid project id: then the
+   * APP_BASE_URL host, served by the /__/auth proxy (PIN-163).
+   */
   firebaseWebAuthDomain: string | null;
   /**
    * Seeded judge demo board slug (PIN-73). A capability secret:
@@ -129,19 +143,45 @@ function nonEmpty(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/**
+ * PIN-163: the client authDomain moves to the app's own host only
+ * when the /__/auth proxy exists for it (same-origin opt-in and a
+ * valid project id) and APP_BASE_URL is https. Anything else keeps
+ * the configured value, silently.
+ */
+function resolveAuthDomain(input: {
+  sameOrigin: boolean;
+  appBaseUrl: string;
+  projectId: string | null;
+  configured: string | null;
+}): string | null {
+  if (!input.sameOrigin || !isFirebaseProjectId(input.projectId)) return input.configured;
+  try {
+    const url = new URL(input.appBaseUrl);
+    return url.protocol === "https:" && url.hostname ? url.host : input.configured;
+  } catch {
+    return input.configured;
+  }
+}
+
 /** FR8: unknown/missing values fail closed to link-only + mock AI. */
 export function parseConfig(
   env: Readonly<Record<string, string | undefined>>,
 ): AppConfig {
+  const authMode: AuthMode = env.AUTH_MODE === "optional" ? "optional" : "link-only";
+  const authSameOrigin = env.AUTH_SAME_ORIGIN === "1" && authMode === "optional";
+  const appBaseUrl = env.APP_BASE_URL ?? "http://localhost:3000";
+  const firebaseProjectId =
+    nonEmpty(env.FIREBASE_PROJECT_ID) ??
+    nonEmpty(env.GOOGLE_CLOUD_PROJECT) ??
+    nonEmpty(env.GCLOUD_PROJECT);
   return {
-    authMode: env.AUTH_MODE === "optional" ? "optional" : "link-only",
+    authMode,
+    authSameOrigin,
     aiMock: env.AI_MOCK !== "0",
-    appBaseUrl: env.APP_BASE_URL ?? "http://localhost:3000",
+    appBaseUrl,
     dataBackend: parseDataBackend(env),
-    firebaseProjectId:
-      nonEmpty(env.FIREBASE_PROJECT_ID) ??
-      nonEmpty(env.GOOGLE_CLOUD_PROJECT) ??
-      nonEmpty(env.GCLOUD_PROJECT),
+    firebaseProjectId,
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
     aiDailyBudgetUsd: budgetNumber(env.AI_DAILY_BUDGET_USD, 2),
     policyOverridesJson: nonEmpty(env.POLICY_OVERRIDES_JSON),
@@ -149,7 +189,12 @@ export function parseConfig(
     labEnabled: env.PINNED_LAB === "1",
     sessionSecret: nonEmpty(env.SESSION_SECRET),
     firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
-    firebaseWebAuthDomain: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+    firebaseWebAuthDomain: resolveAuthDomain({
+      sameOrigin: authSameOrigin,
+      appBaseUrl,
+      projectId: firebaseProjectId,
+      configured: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+    }),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
     plusMode:
       env.PLUS_MODE === "mock"
