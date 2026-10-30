@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  showTryOnBar,
   activeTryOn,
   canApplyDirectly,
   canBuyPlus,
@@ -216,5 +217,14 @@ describe("look flow reducer", () => {
   it("answers a 402 by keeping the look on locally and offering Plus", () => {
     const state = run([{ type: "applyStart", skin: "postcard" }, { type: "plusRequired", skin: "postcard" }]);
     expect(state).toMatchObject({ applying: null, tryOn: "postcard", sheet: "plus" });
+  });
+});
+
+describe("try-on bar (PIN-115)", () => {
+  it("shows while a look is worn locally, and steps aside while saving or picking", () => {
+    expect(showTryOnBar("marigold", null, false)).toBe(true);
+    expect(showTryOnBar(null, null, false)).toBe(false);
+    expect(showTryOnBar("marigold", "marigold", false)).toBe(false);
+    expect(showTryOnBar("marigold", null, true)).toBe(false);
   });
 });

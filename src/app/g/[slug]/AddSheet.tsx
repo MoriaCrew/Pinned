@@ -25,7 +25,6 @@ import {
   type PendingTapPin,
 } from "../../../domain/add-sheet";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
-import { skinForTheme } from "../../../domain/skins";
 import { t, tCount } from "../../../i18n";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
@@ -254,8 +253,6 @@ export function AddSheet({
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
   const tabsId = useId();
-  // The board's skin (PIN-99): the sheet wears it.
-  const skin = skinForTheme((boardView.board as { themeId?: string | null }).themeId);
 
   function showPreview(file: File) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -648,7 +645,9 @@ export function AddSheet({
   );
 
   return (
-    <div data-theme={skin} className="pn-skin-root pn-add-root">
+    // No own data-theme: the sheet renders inside the board's skin root,
+    // so it wears whatever look the board shows (a try-on included).
+    <div className="pn-add-root">
       <Sheet title={title} onClose={onClose} closeLabel={t("en", "add.close")} footer={footer} className="pn-add-sheet">
         {showLibraryTab ? (
           <>

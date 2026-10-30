@@ -992,6 +992,7 @@ function BoardBody({
             sample={lookSampleUrls}
             foilSrc={lookSampleUrls[0]}
             aboveDock={showDock}
+            picking={pickingNow}
           />
         ) : null}
       </main>

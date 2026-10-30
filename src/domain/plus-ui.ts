@@ -169,6 +169,15 @@ export function urlWithoutTryOn(href: string): string | null {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/**
+ * The try-on bar shows while a look is worn locally, except while its
+ * save runs or while picking things (the tray owns the thumb zone; the
+ * board keeps wearing the look and the bar comes back after).
+ */
+export function showTryOnBar(tryOn: SkinId | null, applying: SkinId | null, picking: boolean): boolean {
+  return tryOn !== null && applying === null && !picking;
+}
+
 // ---------- The flow ----------
 
 /** One line under the flow: a confirmation that fades, or an error that stays until dismissed. */

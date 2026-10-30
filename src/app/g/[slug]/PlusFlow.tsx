@@ -14,6 +14,7 @@ import {
   parseTryOn,
   readCheckoutResponse,
   readSkinResponse,
+  showTryOnBar,
   urlWithoutTryOn,
   type CheckoutResult,
   type LookFlowState,
@@ -260,6 +261,7 @@ export function PlusFlow({
   sample,
   foilSrc,
   aboveDock,
+  picking = false,
 }: {
   look: LookFlow;
   boardSkin: SkinId;
@@ -269,10 +271,12 @@ export function PlusFlow({
   foilSrc?: string;
   /** The dock is on screen: sit above it. */
   aboveDock: boolean;
+  /** Picking things: the tray owns the thumb zone, so the try-on bar steps aside. */
+  picking?: boolean;
 }) {
   const { state } = look;
   const notice = state.notice;
-  const showBar = look.tryOn !== null && state.applying === null;
+  const showBar = showTryOnBar(look.tryOn, state.applying, picking);
   const failed =
     notice?.kind === "lookFailed" || notice?.kind === "grantedLookFailed" || notice?.kind === "plusFailed";
   const available = canBuyPlus(plus) && !state.unavailable;
