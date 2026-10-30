@@ -153,6 +153,12 @@ export interface Scene {
   refusalReason?: string;
   /** Set by the delete cascade when a used element is deleted (§5.4). */
   hidden?: boolean;
+  /**
+   * Tombstone (PIN-142): its maker or the board host deleted it. Always
+   * with `hidden: true`; the repository never rewrites a tombstone.
+   */
+  deletedAt?: number;
+  deletedBy?: "maker" | "host";
   createdAt: number;
 }
 

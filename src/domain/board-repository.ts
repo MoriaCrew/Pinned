@@ -188,7 +188,11 @@ export interface BoardRepository {
   setPinStatus(pinId: string, status: PinStatus, now: number): Promise<Pin | null>;
   deletePin(pinId: string): Promise<boolean>;
 
-  /** Upsert; sceneCount tracks non-hidden scenes. */
+  /**
+   * Upsert; sceneCount tracks non-hidden scenes. A stored tombstone
+   * (`deletedAt`, PIN-142) is final: a later put is ignored, so no
+   * stale full write (a job sync) can bring a deleted scene back.
+   */
   putScene(scene: Scene): Promise<void>;
   getScene(sceneId: string): Promise<Scene | null>;
   listScenes(boardId: string, opts?: { includeHidden?: boolean }): Promise<Scene[]>;
@@ -504,6 +508,7 @@ export class InMemoryBoardRepository implements BoardRepository {
     if (before && before.boardId !== scene.boardId) {
       throw new RangeError(`Scene ${scene.id} belongs to board ${before.boardId}`);
     }
+    if (before?.deletedAt !== undefined) return;
     const wasVisible = before ? !before.hidden : false;
     const isVisible = !scene.hidden;
     this.scenes.set(scene.id, clone(scene));
