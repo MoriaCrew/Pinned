@@ -17,6 +17,7 @@ import { getBoardRepository } from "../../../../server/board-repository";
 import { BoardApiError } from "../../../../server/board-session";
 import { hostTokenFrom } from "../../../../server/host-session";
 import { getUserRepository } from "../../../../server/user-repository";
+import { logServerError } from "../../../../server/safe-log";
 import { isCrossSite, rateLimit, rejectCrossSite } from "../request-guards";
 import {
   JSON_HEADERS,
@@ -94,7 +95,7 @@ export async function GET(
           viewer = await linkParticipantToUser(viewer, user, deps);
         }
       } catch (error) {
-        console.error("board auth restore failed", error);
+        logServerError("board auth restore failed", error);
       }
     }
     // PIN-103: additive viewer.isHost + plus. The host cookie is

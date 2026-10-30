@@ -15,6 +15,7 @@ import {
 import { getConfig } from "../../../../../config";
 import { linkParticipantOnJoin } from "../../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../../auth-shared";
+import { logServerError } from "../../../../../server/safe-log";
 import { rejectCrossSite, requireJson } from "../../request-guards";
 import {
   JSON_HEADERS,
@@ -108,7 +109,7 @@ export async function POST(
           );
         }
       } catch (error) {
-        console.error("join auto-link failed", error);
+        logServerError("join auto-link failed", error);
       }
     }
     return NextResponse.json(

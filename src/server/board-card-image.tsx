@@ -33,6 +33,7 @@ import {
   type BoardCardData,
 } from "./board-card";
 import type { DerivativeStore } from "./derivative-store";
+import { logServerError } from "./safe-log";
 
 /** What one card draws, resolved from a board or the generic card. */
 export interface CardView {
@@ -249,12 +250,12 @@ export async function boardCardImage(slug: string, deps: BoardCardImageDeps): Pr
     if (data?.policyOverrides) policy = deps.policyFor(data.policyOverrides);
     return pngResponse(await renderCardPng(data ? boardCardView(data) : genericCardView()), policy);
   } catch (error) {
-    console.error("board card render failed", error instanceof Error ? error.message : "unknown");
+    logServerError("board card render failed", error);
   }
   try {
     return pngResponse(await renderCardPng(genericCardView()), policy);
   } catch (error) {
-    console.error("generic card render failed", error instanceof Error ? error.message : "unknown");
+    logServerError("generic card render failed", error);
   }
   return pngResponse(await staticFallbackCard(), policy);
 }

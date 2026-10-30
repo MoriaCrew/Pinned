@@ -34,7 +34,11 @@ export async function deleteBoardForEveryone(
   if (!board || !verifyHostToken(board, hostToken, deps.policy, now)) {
     throw new BoardApiError("Board not found.", 404);
   }
-  await deps.boards.deleteBoard(slug, now);
+  // Only the call that set the tombstone answers 204; a concurrent
+  // second delete gets the same 404 as an unknown board.
+  if (!(await deps.boards.deleteBoard(slug, now))) {
+    throw new BoardApiError("Board not found.", 404);
+  }
   const uids = new Set(
     (await deps.boards.listParticipants(slug)).flatMap((p) =>
       p.userId && isSafeUid(p.userId) ? [p.userId] : [],

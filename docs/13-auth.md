@@ -308,9 +308,17 @@ participant cookie resolves on it, and nothing on it is anyone's
 (My pins thumbnail, pin-from-library source). Each linked member's
 `users/{uid}/boards/{slug}` row is deleted; the index writer skips a
 deleted board and re-checks after writing, and My boards skips one
-anyway. Jobs in flight are not waited for: their late writes are
-refused and they end quietly. The records and stored objects stay
-until storage clean-up (PIN-169).
+anyway. Jobs in flight are not waited for: their board-record writes
+(elements, pins, scenes, events) are refused and they end quietly,
+but a job already running can still finish its AI call, update its
+own job doc, write storage objects with no record, and debit one make
+from the board's credit account. Records and stored objects stay
+until storage clean-up (PIN-169). A library copy of a thing made on
+another live board before the delete keeps working for its owner
+(it shares the original's bytes). Concurrent deletes: only the call
+that set the tombstone gets 204; the other gets the uniform 404.
+Errors on these paths are logged with slug-shaped tokens blanked
+(`src/server/safe-log.ts`).
 
 ## Thing rename (PIN-156, parent PIN-134)
 

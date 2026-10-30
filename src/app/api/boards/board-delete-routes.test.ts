@@ -201,6 +201,14 @@ describe("DELETE /api/boards/{slug} (PIN-167)", () => {
     expect(await repo().getBoard(other.slug)).not.toBeNull();
   });
 
+  it("two deletes at once: only the call that set the tombstone gets 204, the other the one 404", async () => {
+    const { slug, host } = await newBoard();
+    const results = await Promise.all([del(slug, host), del(slug, host)]);
+    expect(results.map((r) => r.status).sort()).toEqual([204, 404]);
+    expect(await results.find((r) => r.status === 404)!.json()).toEqual(NOT_FOUND);
+    expect(await repo().getBoard(slug)).toBeNull();
+  });
+
   it("board GET checks the board first: a stale My boards row restores and links nothing", async () => {
     const alice = await signIn("token-alice");
     const { slug, host } = await newBoard();

@@ -20,6 +20,7 @@ import { getChipsCacheStore } from "../../../server/chips-cache-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { getCreditLedgerStore } from "../../../server/credit-ledger-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
+import { logServerError } from "../../../server/safe-log";
 
 export const JSON_HEADERS = { "Cache-Control": "no-store" };
 
@@ -102,7 +103,7 @@ export function errorResponse(error: unknown, fallback: string): NextResponse {
       { status: error.status, headers: JSON_HEADERS },
     );
   }
-  console.error(fallback, error);
+  logServerError(fallback, error);
   return NextResponse.json(
     { error: fallback },
     { status: 500, headers: JSON_HEADERS },
