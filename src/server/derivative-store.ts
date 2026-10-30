@@ -14,6 +14,13 @@ export interface DerivativeStore {
   put(ref: string, bytes: Uint8Array, contentType: string): Promise<void>;
   get(ref: string): Promise<Buffer | null>;
   delete(ref: string): Promise<void>;
+  /**
+   * Every stored ref under `prefix` (PIN-169). The prefix must be a
+   * valid ref ending in "/", so a whole-bucket or partial-name
+   * listing is refused. Board clean-up only: callers go through
+   * board-storage.ts, which builds each prefix from a valid slug.
+   */
+  listPrefix(prefix: string): Promise<string[]>;
 }
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
@@ -30,6 +37,11 @@ export function assertDerivativeRef(ref: string): string {
     throw new Error("Invalid derivative reference.");
   }
   return ref;
+}
+
+function assertDerivativePrefix(prefix: string): string {
+  if (!prefix.endsWith("/")) throw new Error("Invalid derivative prefix.");
+  return assertDerivativeRef(prefix);
 }
 
 export class InMemoryDerivativeStore implements DerivativeStore {
@@ -49,6 +61,11 @@ export class InMemoryDerivativeStore implements DerivativeStore {
 
   async delete(ref: string): Promise<void> {
     this.objects.delete(assertDerivativeRef(ref));
+  }
+
+  async listPrefix(prefix: string): Promise<string[]> {
+    const checked = assertDerivativePrefix(prefix);
+    return [...this.objects.keys()].filter((ref) => ref.startsWith(checked)).sort();
   }
 }
 
@@ -91,6 +108,14 @@ export class GcsDerivativeStore implements DerivativeStore {
       if ((error as { code?: number }).code === 404) return;
       throw error;
     }
+  }
+
+  async listPrefix(prefix: string): Promise<string[]> {
+    const checked = assertDerivativePrefix(prefix);
+    const [files] = await this.storage
+      .bucket(this.bucketName)
+      .getFiles({ prefix: checked, autoPaginate: true });
+    return files.map((file) => file.name).filter((name) => name.startsWith(checked));
   }
 }
 

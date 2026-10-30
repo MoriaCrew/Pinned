@@ -15,6 +15,7 @@ import { getPolicy } from "../../../../policy/server";
 import { deleteBoardForEveryone } from "../../../../server/board-delete";
 import { getBoardRepository } from "../../../../server/board-repository";
 import { BoardApiError } from "../../../../server/board-session";
+import { getDerivativeStore } from "../../../../server/derivative-store";
 import { hostTokenFrom } from "../../../../server/host-session";
 import { getUserRepository } from "../../../../server/user-repository";
 import { logServerError } from "../../../../server/safe-log";
@@ -140,6 +141,7 @@ export async function DELETE(
     await deleteBoardForEveryone(slug, hostToken, {
       boards: getBoardRepository(),
       users: getUserRepository(),
+      store: getDerivativeStore(),
       policy: await policyForBoard(slug),
     });
     return new NextResponse(null, { status: 204, headers: JSON_HEADERS });

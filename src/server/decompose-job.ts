@@ -49,6 +49,7 @@ import {
   assertDerivativeRef,
   type DerivativeStore,
 } from "./derivative-store";
+import { ELEMENT_CUTOUT_FILE, sweepDeletedBoardStorage } from "./board-storage";
 import { processPhoto } from "./photo-intake";
 import {
   decodeSegment,
@@ -123,7 +124,7 @@ export function buildBoardWorkingRef(boardId: string, jobId: string): string {
 }
 
 export function buildElementCutoutRef(boardId: string, elementId: string): string {
-  return assertDerivativeRef(`elements/boards/${boardId}/${elementId}/cutout.png`);
+  return assertDerivativeRef(`elements/boards/${boardId}/${elementId}/${ELEMENT_CUTOUT_FILE}`);
 }
 
 export function buildElementFlattenedRef(boardId: string, elementId: string): string {
@@ -281,6 +282,9 @@ async function finish(
     updatedAt: (deps.now ?? Date.now)(),
   };
   await deps.jobs.update(done);
+  // PIN-169: on a board deleted mid-run the records were refused, but
+  // objects may have landed after the delete's sweep. A live board: no-op.
+  await sweepDeletedBoardStorage(done.boardId, deps);
   return cloneJob(done);
 }
 
@@ -716,6 +720,9 @@ export async function addTapElement(
     };
     await deps.boards.createPin(pin);
   } catch {
+    // PIN-169: a board deleted mid-tap refuses the records after the
+    // objects landed; sweep them (a no-op on a live board).
+    await sweepDeletedBoardStorage(job.boardId, deps);
     return { status: "failed", errorCode: "tap_add_failed" };
   }
 

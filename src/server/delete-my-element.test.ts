@@ -238,6 +238,7 @@ describe("deleteMyElement (PIN-77)", () => {
     const flaky: DerivativeStore = {
       put: (ref, bytes, type) => h.store.put(ref, bytes, type),
       get: (ref) => h.store.get(ref),
+      listPrefix: (prefix) => h.store.listPrefix(prefix),
       delete: async (ref) => {
         if (ref === "elements/el-f/flattened.jpg") throw new Error("gcs down");
         return h.store.delete(ref);
@@ -258,6 +259,7 @@ describe("deleteMyElement (PIN-77)", () => {
     const flaky: DerivativeStore = {
       put: (ref, bytes, type) => h.store.put(ref, bytes, type),
       get: (ref) => h.store.get(ref),
+      listPrefix: (prefix) => h.store.listPrefix(prefix),
       delete: async (ref) => {
         if (ref === full1) throw new Error("gcs down");
         return h.store.delete(ref);

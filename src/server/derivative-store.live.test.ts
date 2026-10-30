@@ -12,14 +12,17 @@ const bucket = process.env.PINNED_LIVE_STORAGE_BUCKET;
 const project = process.env.PINNED_LIVE_STORAGE_PROJECT;
 
 describe.skipIf(!bucket)("GcsDerivativeStore (live)", () => {
-  it("puts, gets, and deletes a derivative", async () => {
+  it("puts, lists, gets, and deletes a derivative", async () => {
     const store = new GcsDerivativeStore(bucket as string, project ?? null);
-    const ref = `tmp/pinned-live-test/${randomUUID()}/working.webp`;
+    const folder = `tmp/pinned-live-test/${randomUUID()}/`;
+    const ref = `${folder}working.webp`;
     const payload = Buffer.from("pinned live derivative probe");
     await store.put(ref, payload, "image/webp");
     const got = await store.get(ref);
     expect(got?.equals(payload)).toBe(true);
+    expect(await store.listPrefix(folder)).toEqual([ref]);
     await store.delete(ref);
     expect(await store.get(ref)).toBeNull();
+    expect(await store.listPrefix(folder)).toEqual([]);
   }, 60_000);
 });

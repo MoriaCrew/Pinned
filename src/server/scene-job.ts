@@ -41,6 +41,7 @@ import {
   assertDerivativeRef,
   type DerivativeStore,
 } from "./derivative-store";
+import { sweepDeletedBoardStorage } from "./board-storage";
 import { composeCollage } from "./scene-collage";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
 import {
@@ -596,6 +597,9 @@ async function finish(
     // PIN-167: a board deleted mid-run refuses the gallery writes;
     // the job keeps its end state quietly. Anything else throws.
     if (await isLiveBoard(deps.boards, done.boardId)) throw error;
+    // PIN-169: its image and preview may have landed after the
+    // delete's storage sweep: sweep again before returning.
+    await sweepDeletedBoardStorage(done.boardId, deps);
   }
   return cloneJob(done);
 }

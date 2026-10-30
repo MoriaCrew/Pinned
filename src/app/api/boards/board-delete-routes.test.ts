@@ -22,6 +22,7 @@ const load = async () => ({
   photos: await import("./[slug]/photos/route"),
   scenes: await import("./[slug]/scenes/route"),
   elementImage: await import("./[slug]/elements/[elementId]/image/route"),
+  element: await import("./[slug]/elements/[elementId]/route"),
   sceneImage: await import("./[slug]/scenes/[sceneId]/image/route"),
   job: await import("./[slug]/jobs/[jobId]/route"),
   tap: await import("./[slug]/jobs/[jobId]/tap-add/route"),
@@ -100,6 +101,11 @@ async function upload(slug: string, cookie: string): Promise<Response> {
 
 const del = (slug: string, cookie: string, headers: Record<string, string> = {}) =>
   m.board.DELETE(req(cookie, { method: "DELETE", headers }), p({ slug }));
+
+const store = () => m.store.getDerivativeStore();
+/** Every stored object in the board's three folders (PIN-169). */
+const objectsOf = async (slug: string) =>
+  (await Promise.all(["tmp", "elements", "scenes"].map((root) => store().listPrefix(`${root}/boards/${slug}/`)))).flat();
 
 const myBoards = async (user: string) =>
   ((await (await m.myBoards.GET(req(user))).json()) as { boards: { slug: string }[] }).boards.map((b) => b.slug);
@@ -227,5 +233,83 @@ describe("DELETE /api/boards/{slug} (PIN-167)", () => {
     expect(errors).not.toHaveBeenCalled();
     writes.mockRestore();
     errors.mockRestore();
+  });
+});
+
+describe("board delete storage clean-up (PIN-169)", () => {
+  it("the folders empty out; a cut-out a library copy uses stays and serves until that copy goes", async () => {
+    const alice = await signIn("token-alice");
+    const { slug, host } = await newBoard();
+    const robin = await join(slug, "Robin", alice);
+    const { job } = (await (await upload(slug, robin.cookie)).json()) as { job: { elementIds: string[] } };
+    expect(job.elementIds.length).toBeGreaterThan(1);
+    await store().put(`scenes/boards/${slug}/${slug}-scene/scene.png`, Buffer.from("png-bytes"), "image/png");
+    const other = await newBoard();
+    const robinThere = await join(other.slug, "Robin", alice);
+    const copied = await m.fromLibrary.POST(
+      req(`${robinThere.cookie}; ${alice}`, { method: "POST", body: { elementId: job.elementIds[0] } }),
+      p({ slug: other.slug }),
+    );
+    const copyId = ((await copied.json()) as { elementId: string }).elementId;
+    const before = await objectsOf(slug);
+    for (const root of ["tmp/", "elements/", "scenes/"]) expect(before.some((ref) => ref.startsWith(root))).toBe(true);
+    const otherBefore = await objectsOf(other.slug);
+
+    expect((await del(slug, host)).status).toBe(204);
+    const kept = before.filter((ref) => ref.startsWith(`elements/boards/${slug}/${job.elementIds[0]}/`));
+    expect(kept).toHaveLength(2);
+    expect(await objectsOf(slug)).toEqual(kept);
+    expect(await objectsOf(other.slug)).toEqual(otherBefore);
+    const image = () => m.elementImage.GET(req("", { url: "http://t/x?kind=cutout" }), p({ slug: other.slug, elementId: copyId }));
+    expect((await image()).status).toBe(200);
+
+    // The last live copy goes, and the bytes with it.
+    const res = await m.element.DELETE(req(robinThere.cookie, { method: "DELETE" }), p({ slug: other.slug, elementId: copyId }));
+    expect(await res.json()).toMatchObject({ deleted: true, storageDeleted: true });
+    expect(await objectsOf(slug)).toEqual([]);
+    expect((await image()).status).toBe(404);
+  });
+
+  it("a decompose, tap or scene job writing after the delete leaves nothing behind", async () => {
+    /** The real DELETE (tombstone + sweep) lands just before the job's first write under `root`. */
+    const deleteBeforeFirstPut = (slug: string, host: string, root: string) => {
+      const real = store().put.bind(store());
+      let armed = true;
+      return vi.spyOn(store(), "put").mockImplementation(async (ref, bytes, type) => {
+        if (armed && ref.startsWith(`${root}/boards/${slug}/`)) {
+          armed = false;
+          expect((await del(slug, host)).status).toBe(204);
+        }
+        return real(ref, bytes, type);
+      });
+    };
+    const uploaded = async (slug: string, cookie: string) =>
+      ((await (await upload(slug, cookie)).json()) as { job: { id: string; pinIds: string[]; elementIds: string[] } }).job;
+    const cases: [string, (slug: string, cookie: string, host: string) => Promise<Response>][] = [
+      ["decompose", async (slug, cookie, host) => {
+        const spy = deleteBeforeFirstPut(slug, host, "elements");
+        return upload(slug, cookie).finally(() => spy.mockRestore());
+      }],
+      ["tap-add", async (slug, cookie, host) => {
+        const job = await uploaded(slug, cookie);
+        const spy = deleteBeforeFirstPut(slug, host, "elements");
+        const body = { x: 0.5, y: 0.5 };
+        return m.tap.POST(req(cookie, { method: "POST", body }), p({ slug, jobId: job.id })).finally(() => spy.mockRestore());
+      }],
+      ["scene", async (slug, cookie, host) => {
+        const job = await uploaded(slug, cookie);
+        await m.confirm.POST(req(cookie, { method: "POST", body: { jobId: job.id, pinIds: job.pinIds } }), p({ slug }));
+        const spy = deleteBeforeFirstPut(slug, host, "scenes");
+        const body = { elementIds: [job.elementIds[0]], prompt: "late" };
+        return m.scenes.POST(req(cookie, { method: "POST", body }), p({ slug })).finally(() => spy.mockRestore());
+      }],
+    ];
+    for (const [name, run] of cases) {
+      const { slug, host } = await newBoard();
+      const robin = await join(slug, "Robin");
+      const res = await run(slug, robin.cookie, host);
+      expect({ name, gone: await repo().getBoard(slug), status: res.status }).toMatchObject({ name, gone: null });
+      expect({ name, left: await objectsOf(slug) }).toEqual({ name, left: [] });
+    }
   });
 });
