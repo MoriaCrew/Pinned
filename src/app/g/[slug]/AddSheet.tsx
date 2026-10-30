@@ -29,6 +29,7 @@ import {
 } from "../../../domain/add-sheet";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
+import { isPoolEmptyCode } from "../../../domain/makes-ui";
 import { t, tCount } from "../../../i18n";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
@@ -53,6 +54,8 @@ interface PublicJob {
   pinIds: string[];
   elementIds?: string[];
   workingCopyGone?: boolean;
+  /** PIN-151: typed failure code, e.g. the empty makes pool. */
+  errorCode?: string;
 }
 
 /** The public element payload carries its maskBox (PIN-99); library copies may not. */
@@ -267,6 +270,7 @@ export function AddSheet({
   libraryStripMax,
   resumeJobId = null,
   photoMemory,
+  onAddMakes,
   onClose,
 }: {
   slug: string;
@@ -281,6 +285,8 @@ export function AddSheet({
   /** Open at this photo job's review (PIN-122 leftovers). */
   resumeJobId?: string | null;
   photoMemory?: PhotoMemory;
+  /** PIN-152: out of makes — open the buy sheet (only passed while buying can work). */
+  onAddMakes?: () => void;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -302,6 +308,8 @@ export function AddSheet({
   }, [seeAll, seeAllId]);
   const [jobId, setJobId] = useState<string | null>(resumeJobId);
   const [uploadError, setUploadError] = useState("");
+  // PIN-152: the upload stopped at the empty makes pool (429).
+  const [uploadPoolEmpty, setUploadPoolEmpty] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dropped, setDropped] = useState<ReadonlySet<string>>(new Set());
   const [dismissedFaceJobId, setDismissedFaceJobId] = useState<string | null>(null);
@@ -402,6 +410,7 @@ export function AddSheet({
   const upload = useMutation({
     mutationFn: async (file: File) => {
       showPreview(file);
+      setUploadPoolEmpty(false);
       setTapError("");
       const blob = await downscalePhoto(file, uploadMaxPx, uploadJpegQuality);
       const form = new FormData();
@@ -410,7 +419,8 @@ export function AddSheet({
         method: "POST",
         body: form,
       });
-      const data = (await response.json()) as { job?: PublicJob; error?: string };
+      const data = (await response.json()) as { job?: PublicJob; error?: string; code?: string };
+      if (!response.ok && isPoolEmptyCode(data.code)) setUploadPoolEmpty(true);
       if (!response.ok || !data.job) throw new Error(data.error || t("en", "add.failed"));
       return data.job;
     },
@@ -710,6 +720,20 @@ export function AddSheet({
     );
   }
 
+  // PIN-152: out of makes — the copy names the fix, and the
+  // button opens the buy sheet while buying can work.
+  const jobPoolEmpty = job?.status === "failed" && isPoolEmptyCode(job.errorCode);
+  const outOfMakes = (
+    <>
+      <SheetLine tone="error">{t("en", "makes.poolEmptyPhoto")}</SheetLine>
+      {onAddMakes ? (
+        <Button variant="primary" onClick={onAddMakes}>
+          {t("en", "makes.add")}
+        </Button>
+      ) : null}
+    </>
+  );
+
   const photoContent = (
     <>
       {stage === "pick" ? <PhotoPick onFile={(file) => upload.mutate(file)} /> : null}
@@ -809,10 +833,10 @@ export function AddSheet({
 
       {/* Failed after some things landed: the review offers those, no error line. */}
       {job?.status === "failed" && candidatePins.length === 0 ? (
-        <SheetLine tone="error">{t("en", "add.failed")}</SheetLine>
+        jobPoolEmpty ? outOfMakes : <SheetLine tone="error">{t("en", "add.failed")}</SheetLine>
       ) : null}
       {job?.status === "refused" ? <SheetLine>{t("en", "add.refused")}</SheetLine> : null}
-      {uploadError ? <SheetLine tone="error">{uploadError}</SheetLine> : null}
+      {uploadError ? (uploadPoolEmpty ? outOfMakes : <SheetLine tone="error">{uploadError}</SheetLine>) : null}
     </>
   );
 

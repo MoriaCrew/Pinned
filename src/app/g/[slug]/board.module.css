@@ -401,6 +401,101 @@
   gap: var(--space-2);
 }
 
+/* ---------- Makes (PIN-152) ---------- */
+
+/* Makes left for the whole board, under the header. Low/empty
+   states come from data-state (Policy.credits.lowMakesWarning):
+   the count stays --ink, the frame and note carry the warning. */
+.makes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.makes[data-state="low"],
+.makes[data-state="empty"] {
+  border-color: var(--danger);
+}
+
+.makesCount {
+  margin: 0;
+  color: var(--ink);
+  font: 700 16px/22px var(--font-ui);
+}
+
+.makesNote {
+  flex: 1 1 16ch;
+  margin: 0;
+  color: var(--danger);
+  font: 650 14px/19px var(--font-ui);
+}
+
+.makes > button {
+  margin-left: auto;
+}
+
+/* Billing-return banner: one transient line, same card shape. */
+.billingBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.billingBanner p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* Buy sheet: lead, quiet notes, and an error line that keeps its
+   height so the sheet never jumps when a line lands. */
+.makesLead {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-muted);
+  font: 400 16px/24px var(--font-ui);
+}
+
+.makesSheetNote {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-muted);
+  font: 500 14px/19px var(--font-ui);
+  text-align: center;
+}
+
+.makesError {
+  min-height: 20px;
+  margin: var(--space-2) 0 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* Out-of-makes outcome (photo/scene): the line and the way in. */
+.makesPoolEmpty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.makesPoolEmpty p {
+  flex: 1 1 20ch;
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
 .viewerConfirm > p {
   margin: 0;
   font: 650 15px/20px var(--font-ui);
