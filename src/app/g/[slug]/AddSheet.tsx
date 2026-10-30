@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addSheetStage,
@@ -16,6 +16,7 @@ import {
   newCandidatePins,
   normalizedTapPoint,
   overlayRect,
+  reviewHelp,
   selectionWithCandidates,
   shouldShowFaceNote,
   spreadLabels,
@@ -24,6 +25,7 @@ import {
   type MaskBoxLike,
   type OverlayRect,
   type PendingTapPin,
+  type ReviewHelp,
 } from "../../../domain/add-sheet";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
@@ -33,6 +35,16 @@ import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
 import { LibraryList, LibraryStrip, useLibraryPins } from "./LibraryPins";
 import { PhotoPick } from "./PhotoPick";
+import {
+  claimStashedPhoto,
+  dropStashedPhoto,
+  photoForJob,
+  rememberJobPhoto,
+  stashUploadingPhoto,
+  type PhotoMemoryStore,
+} from "./photo-memory";
+
+const revokeUrl = (url: string) => URL.revokeObjectURL(url);
 
 interface PublicJob {
   id: string;
@@ -54,6 +66,13 @@ interface JobView {
 
 export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
+/** The review's help line (PIN-126). */
+export function reviewHelpLine(help: ReviewHelp): string {
+  if (help.kind === "noneKept") return t("en", "add.noneKept");
+  if (help.kind === "someLeftOut") return tCount("en", "add.leftOut", help.n);
+  return t("en", "add.tapDrop");
+}
+
 /**
  * The last uploaded photo's LOCAL preview (an object URL of the
  * picked file, never uploaded as-is), kept by the board page across
@@ -61,9 +80,15 @@ export const boardQueryKey = (slug: string) => ["board", slug] as const;
  * the same visit. A reload forgets it: the review then shows the
  * stickers only.
  */
-export interface PhotoMemory {
-  current: { jobId: string; url: string } | null;
-}
+/**
+ * The board page's memory of the last photo's local preview
+ * (`createPhotoMemory`). `jobId` is null while its upload is still in
+ * flight after the sheet closed (PIN-126); the upload's success fills
+ * it in, a failure releases the URL. Open sheets are told on change.
+ */
+export type PhotoMemory = PhotoMemoryStore;
+
+const noSubscribe = () => () => {};
 
 /**
  * Client downscale before upload (docs/11 section 5.8): decode,
@@ -286,8 +311,15 @@ export function AddSheet({
   // its own stripped working copy). Photo intake auto-rotates and
   // browsers apply EXIF orientation to <img>, so normalized tap
   // points line up with the working copy's frame.
-  const remembered =
-    resumeJobId !== null && photoMemory?.current?.jobId === resumeJobId ? photoMemory.current.url : null;
+  const remembered = photoForJob(photoMemory?.current ?? null, resumeJobId);
+  // Read live too: a photo stashed mid-upload gets its job only when
+  // that upload returns, possibly after this sheet opened (PIN-126).
+  const memorySlot = useSyncExternalStore(
+    photoMemory?.subscribe ?? noSubscribe,
+    () => photoMemory?.current ?? null,
+    () => null,
+  );
+  const rememberedLive = photoForJob(memorySlot, resumeJobId);
   const [previewUrl, setPreviewUrl] = useState<string | null>(remembered);
   const previewRef = useRef<string | null>(remembered);
   const [tapError, setTapError] = useState("");
@@ -307,10 +339,14 @@ export function AddSheet({
 
   function rememberPhoto(forJobId: string) {
     const url = previewRef.current;
-    if (!photoMemory || !url || !mounted.current) return;
-    const old = photoMemory.current;
-    photoMemory.current = { jobId: forJobId, url };
-    if (old && old.url !== url) URL.revokeObjectURL(old.url);
+    if (!photoMemory || !url) return;
+    if (!mounted.current) {
+      // Closed mid-upload (PIN-126): the board page took the preview
+      // at unmount; give it its job now (unless a newer photo won).
+      photoMemory.current = claimStashedPhoto(photoMemory.current, url, forJobId);
+      return;
+    }
+    photoMemory.current = rememberJobPhoto(photoMemory.current, forJobId, url, revokeUrl);
   }
 
   function showPreview(file: File) {
@@ -327,11 +363,23 @@ export function AddSheet({
     setLastTap(null);
   }
 
+  // Set while an upload is in flight, so the unmount below can hand
+  // its preview to the board page instead of revoking it.
+  const uploading = useRef(false);
+
   useEffect(
     () => {
       mounted.current = true;
       return () => {
         mounted.current = false;
+        const url = previewRef.current;
+        if (uploading.current && url && photoMemory) {
+          // Closed mid-upload (PIN-126): keep the local preview for
+          // "Pin them" on the leftovers line. Same visit only, never
+          // uploaded or stored; the board page revokes it.
+          photoMemory.current = stashUploadingPhoto(photoMemory.current, url, revokeUrl);
+          return;
+        }
         releasePreview();
       };
     },
@@ -339,6 +387,17 @@ export function AddSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // "Pin them" opened before a mid-upload photo learned its job: show
+  // it once it does, while this sheet is still on that photo.
+  useEffect(() => {
+    if (rememberedLive && previewRef.current === null && jobId === resumeJobId) {
+      previewRef.current = rememberedLive;
+      setPreviewUrl(rememberedLive);
+    }
+    // Only when the remembered photo changes, not on later resets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rememberedLive]);
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -356,6 +415,7 @@ export function AddSheet({
       return data.job;
     },
     onMutate: () => {
+      uploading.current = true;
       const current = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
       knownPinIds.current = new Set((current ?? boardView).pins.map((p) => p.id));
       setUploadError("");
@@ -367,8 +427,17 @@ export function AddSheet({
       setJobId(job.id);
       rememberPhoto(job.id);
     },
-    onError: (cause) =>
-      setUploadError(cause instanceof Error ? cause.message : t("en", "add.failed")),
+    onError: (cause) => {
+      setUploadError(cause instanceof Error ? cause.message : t("en", "add.failed"));
+      // Closed mid-upload and it failed: nothing to resume, drop the preview.
+      const url = previewRef.current;
+      if (!mounted.current && url && photoMemory) {
+        photoMemory.current = dropStashedPhoto(photoMemory.current, url, revokeUrl);
+      }
+    },
+    onSettled: () => {
+      uploading.current = false;
+    },
   });
 
   const jobQuery = useQuery({
@@ -732,7 +801,9 @@ export function AddSheet({
               );
             })}
           </ul>
-          <p className="pn-add-help">{t("en", "add.tapDrop")}</p>
+          <p className="pn-add-help" aria-live="polite">
+            {reviewHelpLine(reviewHelp(candidatePins.length, candidatePins.filter((pin) => dropped.has(pin.id)).length))}
+          </p>
         </div>
       ) : null}
 
