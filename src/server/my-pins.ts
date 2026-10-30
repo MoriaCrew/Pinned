@@ -30,7 +30,7 @@ import "server-only";
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { Element, Participant, Pin } from "../domain/board";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import {
   clampLibraryLimit,
   sortMyPins,
@@ -123,12 +123,17 @@ export async function listMyElements(
   return { elements: sorted.slice(0, limit), total: sorted.length, limit };
 }
 
-/** True when `element`'s owner participant is claimed by `user`. */
+/**
+ * True when `element`'s owner participant is claimed by `user`.
+ * Nothing on a deleted board belongs to anyone (PIN-167): no
+ * library thumbnail, no copy onto another board.
+ */
 async function ownsElement(
   user: UserProfile,
   element: Element,
   boards: BoardRepository,
 ): Promise<boolean> {
+  if (!(await isLiveBoard(boards, element.boardId))) return false;
   const owner = await boards.getParticipant(element.boardId, element.ownerId);
   return owner !== null && owner.userId === user.uid;
 }
