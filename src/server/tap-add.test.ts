@@ -320,6 +320,9 @@ describe("addTapElement point -> pin (PIN-78)", () => {
     expect(outcome.element.label).toBe("Spotted Plant");
     expect(outcome.element.description).toBe("speckled green leaves");
     expect(outcome.element.faceFlag).toBe(true);
+    // The consent-note flag the Add sheet reads is raised too.
+    expect(outcome.job.faceNote).toBe(true);
+    expect((await h.jobs.get(job.id))?.faceNote).toBe(true);
     // The namer saw the flattened JPEG crop with Policy limits.
     expect(seen).toHaveLength(1);
     expect(seen[0].imageRef.startsWith("data:image/jpeg;base64,")).toBe(true);

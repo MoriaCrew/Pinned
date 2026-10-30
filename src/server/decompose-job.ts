@@ -648,6 +648,10 @@ export async function addTapElement(
   }
   const updated: DecomposeJob = {
     ...fresh,
+    // PIN-117: a tapped face raises the same consent note the
+    // concept pass sets (runDecomposeJob); the Add sheet banner
+    // reads job.faceNote, not the element flag.
+    faceNote: fresh.faceNote || (policy.faces === "note" && element.faceFlag),
     elementIds: fresh.elementIds.includes(elementId)
       ? fresh.elementIds
       : [...fresh.elementIds, elementId],
