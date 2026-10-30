@@ -4,24 +4,34 @@ import type { MyPinCard } from "../../domain/my-pins";
 import { skinForTheme } from "../../domain/skins";
 import { t } from "../../i18n";
 import { Pin, Wordmark } from "../../ui";
+import { You } from "../auth/You";
 import { PinToBoardButton } from "./pins/PinToBoardButton";
 import { boardCardMeta } from "./library-format";
 
-/** Top of My boards / My pins: wordmark, optional action, the page name, a mono count. */
+/**
+ * Top of My boards / My pins: wordmark, optional action and the
+ * "you" button (PIN-120), the page name, a mono count.
+ */
 export function LibraryHeader({
   title,
   meta,
   action,
+  offerSignIn = true,
 }: {
   title: string;
   meta?: string;
   action?: ReactNode;
+  /** False when the page itself is the sign-in prompt (no second "Sign in" up top). */
+  offerSignIn?: boolean;
 }) {
   return (
     <header className="pn-head">
       <div className="pn-head-row">
         <Wordmark size={22} href="/" />
-        {action ? <div className="pn-head-right">{action}</div> : null}
+        <div className="pn-head-right">
+          {action}
+          <You offerSignIn={offerSignIn} />
+        </div>
       </div>
       <h1 className="pn-board-title">{title}</h1>
       {meta ? <p className="pn-board-meta">{meta}</p> : null}

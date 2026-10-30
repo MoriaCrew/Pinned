@@ -5,7 +5,6 @@ import type { PinCard } from "../../../domain/board-view";
 import type { PlusView } from "../../../domain/plus";
 import { initialLookFlow, type LookFlowState } from "../../../domain/plus-ui";
 import { PlusSheet } from "../../../ui";
-import { BoardMore } from "./BoardMore";
 import { BoardThings, type DeleteControls } from "./BoardThings";
 import { ChangeLookSheet } from "./ChangeLookSheet";
 import { PlusFlow, type LookFlow } from "./PlusFlow";
@@ -58,16 +57,6 @@ describe("Change look sheet (PIN-111)", () => {
     expect(open.match(/>Plus</g)).toHaveLength(3);
     expect(open.match(LOCK_ICON)).toBeNull();
     expect(open).toMatch(/checked="" value="marigold"/);
-  });
-});
-
-describe("host More (PIN-111)", () => {
-  it("is a labelled menu button, closed at first", () => {
-    const out = html(h(BoardMore, { onChangeLook: noop }));
-    expect(out).toContain('aria-label="Board options"');
-    expect(out).toContain('aria-haspopup="menu"');
-    expect(out).toContain('aria-expanded="false"');
-    expect(out).not.toContain("Change look");
   });
 });
 

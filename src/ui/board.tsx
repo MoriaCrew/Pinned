@@ -20,40 +20,53 @@ export function boardMetaLine(counts: BoardCounts): string {
   return parts.join(" · ");
 }
 
-/** Top of a board: wordmark, who's here, share, the name in the skin's display face, counts. */
+/**
+ * Top of a board: wordmark, share and the viewer's own "you" button
+ * (PIN-120), the name in the skin's display face, then who's here as
+ * a small stack at the start of the counts line.
+ */
 export function BoardHeader({
   title,
   people,
+  peopleLabel,
   counts,
   onShare,
   shareLabel = t("en", "ui.shareBoard"),
   homeHref,
-  actions,
+  you,
   className,
 }: {
   title: string;
+  /** Who's here (on a live board: everyone but the viewer, who has `you`). */
   people?: Person[];
+  /** Spoken name of the people stack (default: the count and every name). */
+  peopleLabel?: string;
   counts?: BoardCounts;
   onShare?: () => void;
   shareLabel?: string;
   homeHref?: string;
-  /** Extra header controls (e.g. the board's More menu). */
-  actions?: ReactNode;
+  /** The viewer's own button, last in the top row. */
+  you?: ReactNode;
   className?: string;
 }) {
   const meta = counts ? boardMetaLine(counts) : "";
+  const stack = people && people.length > 0 ? <AvatarStack people={people} max={3} size="sm" label={peopleLabel} /> : null;
   return (
     <header className={cx("pn-head", className)}>
       <div className="pn-head-row">
         <Wordmark size={22} href={homeHref} />
         <div className="pn-head-right">
-          {people && people.length > 0 ? <AvatarStack people={people} max={3} /> : null}
           {onShare ? <IconButton icon="share" label={shareLabel} onClick={onShare} /> : null}
-          {actions}
+          {you}
         </div>
       </div>
       <h1 className="pn-board-title">{title}</h1>
-      {meta ? <p className="pn-board-meta">{meta}</p> : null}
+      {meta || stack ? (
+        <p className="pn-board-meta pn-head-meta">
+          {stack}
+          {meta ? <span>{meta}</span> : null}
+        </p>
+      ) : null}
     </header>
   );
 }
@@ -277,17 +290,28 @@ export function EmptyState({
 export function Menu({
   items,
   label,
+  note,
   className,
   style,
 }: {
   /** An item with `href` is a real link (client-side navigation); onSelect still runs on click. */
   items: { label: string; onSelect?: () => void; href?: string; danger?: boolean; disabled?: boolean }[];
   label: string;
+  /**
+   * A quiet line above the items (e.g. "You're Sam here"). Shown, not
+   * spoken: say the same thing in `label` so screen readers hear it.
+   */
+  note?: string;
   className?: string;
   style?: CSSProperties;
 }) {
   return (
     <div className={cx("pn-menu", className)} role="menu" aria-label={label} style={style}>
+      {note ? (
+        <p className="pn-menu-note" aria-hidden="true">
+          {note}
+        </p>
+      ) : null}
       {items.map((item) =>
         item.href && !item.disabled ? (
           <Link

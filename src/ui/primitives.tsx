@@ -206,7 +206,7 @@ export function Avatar({
   id?: string;
   name: string;
   src?: string;
-  size?: "md" | "lg" | "dot";
+  size?: "sm" | "md" | "lg" | "dot";
   label?: string;
   className?: string;
 }) {
@@ -230,15 +230,28 @@ export function Avatar({
   );
 }
 
-/** Who's on the board, as overlapping avatars with a "+n". */
-export function AvatarStack({ people, max = 4, className }: { people: Person[]; max?: number; className?: string }) {
+/** Who's on the board, as overlapping avatars with a "+n". `sm` sits inline on the meta line. */
+export function AvatarStack({
+  people,
+  max = 4,
+  size = "md",
+  label,
+  className,
+}: {
+  people: Person[];
+  max?: number;
+  size?: "sm" | "md";
+  /** Spoken name of the stack (default: the count and every name). */
+  label?: string;
+  className?: string;
+}) {
   const shown = people.slice(0, max);
   const extra = people.length - shown.length;
-  const label = `${tCount("en", "meta.people", people.length)}: ${people.map((p) => p.name).join(", ")}`;
+  const spoken = label ?? `${tCount("en", "meta.people", people.length)}: ${people.map((p) => p.name).join(", ")}`;
   return (
-    <span className={cx("pn-avatars", className)} role="img" aria-label={label}>
+    <span className={cx("pn-avatars", size === "sm" && "pn-avatars-sm", className)} role="img" aria-label={spoken}>
       {shown.map((p) => (
-        <Avatar key={p.id} id={p.id} name={p.name} src={p.src} />
+        <Avatar key={p.id} id={p.id} name={p.name} src={p.src} size={size} />
       ))}
       {extra > 0 ? (
         <span className="pn-avatar pn-avatars-more" aria-hidden="true">

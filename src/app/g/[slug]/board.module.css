@@ -160,15 +160,6 @@
   font: 650 14px/18px var(--font-ui);
 }
 
-/* "You're Sam · Edit" at the foot of the board. */
-.me {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-5) var(--space-4) 0;
-  color: var(--ink-muted);
-}
-
 /* Fade under the floating dock so the last row reads as scrolling under it. */
 .fade {
   position: fixed;
@@ -195,17 +186,6 @@
 /* The dock's fade reaches up behind the TryOnBar or a line above the dock. */
 .fadeTall {
   height: calc(var(--space-8) * 2 + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
-}
-
-/* The host's More beside Share, and its menu under it. */
-.boardMore {
-  position: relative;
-  display: inline-flex;
-}
-
-.boardMenu {
-  top: calc(100% + var(--space-1));
-  right: 0;
 }
 
 /* Change look: seven mini boards are taller than a small phone, so the

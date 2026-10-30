@@ -5,7 +5,6 @@ import { getConfig } from "../config";
 import { resolveAuthUi } from "../domain/auth-ui";
 import { DEFAULT_SKIN } from "../domain/skins";
 import { t } from "../i18n";
-import { AuthControl } from "./auth/AuthControl";
 import { AuthProvider } from "./auth/AuthProvider";
 // Tokens, then components, then the small global reset (docs/14).
 import "../ui/tokens.css";
@@ -31,11 +30,12 @@ export const viewport: Viewport = {
 };
 
 /**
- * Sign-in shell (PIN-84): the provider + header control exist
- * only when resolveAuthUi enables them (AUTH_MODE=optional and
- * the public web config is set — both build-time facts, since
- * NEXT_PUBLIC_* inline at build). Link-only renders exactly the
- * pre-PIN-84 layout: no header, no provider, no auth DOM.
+ * Sign-in shell (PIN-84): the provider exists only when
+ * resolveAuthUi enables it (AUTH_MODE=optional and the public web
+ * config is set — both build-time facts, since NEXT_PUBLIC_*
+ * inline at build). No bar of its own (PIN-120): each page's
+ * header carries the "you" button. Link-only renders no provider
+ * and no auth DOM.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   const cfg = getConfig();
@@ -51,16 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme={DEFAULT_SKIN}>
       <body>
-        {ui.enabled ? (
-          <AuthProvider config={ui.config}>
-            <header className="pn-skin-root pn-lib-header" data-theme={DEFAULT_SKIN}>
-              <AuthControl />
-            </header>
-            {children}
-          </AuthProvider>
-        ) : (
-          children
-        )}
+        {ui.enabled ? <AuthProvider config={ui.config}>{children}</AuthProvider> : children}
       </body>
     </html>
   );

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { getConfig } from "../config";
 import { t, tf } from "../i18n";
 import { ButtonLink, Sticker, Tag, Wordmark } from "../ui";
+import { You } from "./auth/You";
 
 // DEMO_BOARD_SLUG is a runtime env value (PIN-73); render per
 // request so setting it needs no rebuild.
@@ -40,6 +41,8 @@ export default function HomePage() {
   return (
     <main className="pn-skin-root pn-lib-page pn-landing" data-theme="paper">
       <div className="pn-landing-inner">
+        {/* Top right, over the hero (PIN-120); nothing at all when sign-in is off. */}
+        <You className="pn-landing-you" />
         <div className="pn-landing-brand">
           <Wordmark size="clamp(72px, 9vw, 104px)" />
         </div>
