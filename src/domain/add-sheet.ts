@@ -359,3 +359,19 @@ export function maskBoxOf(element: unknown): MaskBoxLike | null {
   }
   return { x1, y1, x2, y2 };
 }
+
+/**
+ * The review's help line follows the selection (PIN-126): all kept
+ * says how to leave one out; some left out says how many and how to
+ * bring one back; none kept says how to keep one.
+ */
+export type ReviewHelp =
+  | { kind: "allKept" }
+  | { kind: "someLeftOut"; n: number }
+  | { kind: "noneKept" };
+
+export function reviewHelp(total: number, leftOut: number): ReviewHelp {
+  if (leftOut <= 0) return { kind: "allKept" };
+  if (leftOut >= total) return { kind: "noneKept" };
+  return { kind: "someLeftOut", n: leftOut };
+}

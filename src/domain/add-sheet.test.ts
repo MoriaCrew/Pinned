@@ -17,6 +17,7 @@ import {
   selectionWithCandidates,
   shouldShowFaceNote,
   spreadLabels,
+  reviewHelp,
 } from "./add-sheet";
 import type { BoardViewLike } from "./board-view";
 
@@ -279,5 +280,15 @@ describe("cut-out moment (PIN-99)", () => {
     expect(maskBoxOf({ id: "e1", maskBox: null })).toBeNull();
     expect(maskBoxOf({ id: "e1", maskBox: { x1: "0", y1: 0, x2: 1, y2: 1 } })).toBeNull();
     expect(maskBoxOf(undefined)).toBeNull();
+  });
+});
+
+describe("review help line (PIN-126)", () => {
+  it("follows the selection: all kept, some left out, none kept", () => {
+    expect(reviewHelp(3, 0)).toEqual({ kind: "allKept" });
+    expect(reviewHelp(3, 1)).toEqual({ kind: "someLeftOut", n: 1 });
+    expect(reviewHelp(3, 2)).toEqual({ kind: "someLeftOut", n: 2 });
+    expect(reviewHelp(3, 3)).toEqual({ kind: "noneKept" });
+    expect(reviewHelp(1, 1)).toEqual({ kind: "noneKept" });
   });
 });

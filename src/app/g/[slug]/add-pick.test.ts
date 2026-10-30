@@ -57,3 +57,13 @@ describe("add-photo pick actions (PIN-118)", () => {
     expect(onFile).not.toHaveBeenCalled();
   });
 });
+
+describe("review help line words (PIN-126)", () => {
+  it("says what a tap does next", async () => {
+    const { reviewHelpLine } = await import("./AddSheet");
+    expect(reviewHelpLine({ kind: "allKept" })).toBe("All kept. Tap one to leave it out.");
+    expect(reviewHelpLine({ kind: "someLeftOut", n: 1 })).toBe("1 left out. Tap it to keep it.");
+    expect(reviewHelpLine({ kind: "someLeftOut", n: 2 })).toBe("2 left out. Tap one to keep it.");
+    expect(reviewHelpLine({ kind: "noneKept" })).toBe("None kept. Tap one to keep it.");
+  });
+});
