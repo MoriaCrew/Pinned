@@ -76,6 +76,11 @@ describe("design tokens (PIN-96)", () => {
     expect(failures).toEqual([]);
   });
 
+  it("keeps muted ink readable on the darkroom print paper (the Nº under the picture)", () => {
+    // Darkroom prints are drawn on surface-sunk, which the pair list above does not cover.
+    expect(contrast(color("ink-muted", "darkroom"), color("surface-sunk", "darkroom"))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("defines every colour role in every skin", () => {
     for (const token of colorTokens) {
       if (typeof token.value === "string") continue;

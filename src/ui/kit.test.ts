@@ -131,6 +131,49 @@ describe("SceneCard body (PIN-100)", () => {
   });
 });
 
+describe("SceneCard print paper (PIN-128)", () => {
+  // The frame holds the picture only, so it has no nested div to stop the lazy match early.
+  const frameOf = (markup: string) => markup.match(/<div class="pn-print-frame"[^>]*>[^]*?<\/div>/)?.[0] ?? "";
+  const metaOf = (markup: string) => markup.match(/<div class="pn-print-meta">[^]*?<\/div>/)?.[0] ?? "";
+
+  it("puts the Remix tag and the number on the paper under the picture, not on it", () => {
+    const markup = html(h(SceneCard, { src: "/s.webp", idea: "A picnic", kind: "remix", number: 5 }));
+    const frame = frameOf(markup);
+    expect(frame).toContain("<img");
+    expect(frame).not.toContain("Remix");
+    expect(frame).not.toContain("pn-tag");
+    expect(frame).not.toContain("pn-print-no");
+    expect(frame).not.toContain("Nº");
+    const meta = metaOf(markup);
+    expect(meta).toContain("pn-tag-mark");
+    expect(meta).toContain("Remix");
+    expect(meta).toContain("Nº 05");
+    expect(meta.indexOf("Remix")).toBeLessThan(meta.indexOf("Nº 05"));
+    // Picture, then the row, then the idea.
+    expect(markup.indexOf("pn-print-frame")).toBeLessThan(markup.indexOf("pn-print-meta"));
+    expect(markup.indexOf("pn-print-meta")).toBeLessThan(markup.indexOf("pn-print-body"));
+  });
+
+  it("does the same for a collage, and for a number with no tag", () => {
+    const collage = html(h(SceneCard, { src: "/s.webp", kind: "collage", number: 2 }));
+    expect(frameOf(collage)).not.toContain("Collage");
+    expect(metaOf(collage)).toContain("pn-tag-ink");
+    expect(metaOf(collage)).toContain("Collage");
+    const plain = html(h(SceneCard, { src: "/s.webp", number: 7 }));
+    expect(frameOf(plain)).not.toContain("Nº");
+    expect(metaOf(plain)).toContain("Nº 07");
+    expect(metaOf(plain)).not.toContain("pn-tag");
+  });
+
+  it("adds no row when there is neither a tag nor a number, and leaves Developing with its own status tag", () => {
+    expect(html(h(SceneCard, { src: "/s.webp", idea: "A picnic" }))).not.toContain("pn-print-meta");
+    const developing = html(h(Developing, { stickers: [{ src: "/a.webp" }], idea: "A picnic" }));
+    expect(developing).not.toContain("pn-print-meta");
+    expect(developing).toContain("pn-develop-status");
+    expect(developing).toContain("Developing");
+  });
+});
+
 describe("BoardHeader with the you button (PIN-120)", () => {
   const people = [
     { id: "p2", name: "Sam" },

@@ -9,9 +9,11 @@ import { CreditLine, type Credit } from "./stickers";
 export type SceneKind = "scene" | "collage" | "remix";
 
 /**
- * A scene as a print: image, the idea in quotes, credits, then
- * Remix / Share / More. The skin draws the print (white border,
- * pinned card, film frame, stamp edges…).
+ * A scene as a print: the picture alone in its frame, then one small
+ * row on the paper (Remix / Collage tag left, Nº right), the idea in
+ * quotes, credits, then Remix / Share / More. Nothing sits on the
+ * picture, so it never covers a face. The skin draws the print (white
+ * border, pinned card, film frame, stamp edges…).
  */
 export function SceneCard({
   src,
@@ -57,14 +59,14 @@ export function SceneCard({
   const style = { "--t": tilt ?? stickerTilt(seed ?? idea ?? src) } as CSSProperties;
   const tag =
     kind === "collage" ? (
-      <Tag tone="ink" className="pn-print-kind">
-        {t("en", "ui.collage")}
-      </Tag>
+      <Tag tone="ink">{t("en", "ui.collage")}</Tag>
     ) : kind === "remix" ? (
-      <Tag tone="mark" icon="remix" className="pn-print-kind">
+      <Tag tone="mark" icon="remix">
         {t("en", "ui.remixTag")}
       </Tag>
     ) : null;
+  const no =
+    number !== undefined ? <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: String(number).padStart(2, "0") })}</span> : null;
   const hasActions = Boolean(onRemix || onShare || onMore);
   const hasCredits = Boolean(credits && credits.length > 0);
   const hasBody = Boolean(idea || hasCredits || hasActions || footer);
@@ -78,9 +80,13 @@ export function SceneCard({
         <div className="pn-print-frame" style={{ aspectRatio: ratio }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked scene image */}
           <img src={src} alt={alt} loading="lazy" />
-          {tag}
-          {number !== undefined ? <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: String(number).padStart(2, "0") })}</span> : null}
         </div>
+        {tag || no ? (
+          <div className="pn-print-meta">
+            {tag}
+            {no}
+          </div>
+        ) : null}
         {hasBody ? (
           <div className="pn-print-body">
             {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
