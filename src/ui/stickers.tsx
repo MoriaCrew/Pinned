@@ -99,7 +99,11 @@ export function Pin({
 }) {
   const picked = state === "picked";
   const sticker = <Sticker src={src} seed={seed ?? label} state={state} pickIndex={pickIndex} size={size} foil={foil} />;
-  const tag = <span className="pn-pin-tag">{label}</span>;
+  const tag = (
+    <span className="pn-pin-tag">
+      <span className="pn-pin-tag-text">{label}</span>
+    </span>
+  );
   const who = owner ? (
     <span className="pn-pin-owner">
       <Avatar id={owner.id} name={owner.name} size="dot" />
