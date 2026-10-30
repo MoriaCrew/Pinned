@@ -542,6 +542,29 @@ describe("uploadPhoto -> job -> confirmPins (A6a)", () => {
     expect(again.droppedPinIds).toEqual([]);
   });
 
+  it("refuses to confirm or clear a photo that is still cutting (409), touching nothing (PIN-122)", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    const stored = await h.jobs.get(job.id);
+    if (!stored) throw new Error("job missing");
+    for (const status of ["running", "pending"] as const) {
+      await h.jobs.update({ ...stored, status });
+      for (const pinIds of [[], [job.pinIds[0]]]) {
+        const err = await confirmPins(board.slug, owner, { jobId: job.id, pinIds }, h.deps).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(BoardApiError);
+        expect((err as BoardApiError).status).toBe(409);
+      }
+    }
+    // Candidates and the working copy are untouched.
+    for (const pinId of job.pinIds) expect((await h.boards.getPin(pinId))?.status).toBe("candidate");
+    expect(await h.store.get(job.workingRef)).not.toBeNull();
+    // Once it finishes, Clear works.
+    await h.jobs.update({ ...stored, status: "ready" });
+    const result = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: [] }, h.deps);
+    expect([...result.droppedPinIds].sort()).toEqual([...job.pinIds].sort());
+  });
+
   it("still pins leftovers once the working copy is gone (TTL sweep, PIN-122)", async () => {
     const h = makeHarness({ workingCopyTtlHours: 1 });
     const { board, owner } = await makeBoardWithTwo(h);

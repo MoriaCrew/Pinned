@@ -28,7 +28,7 @@ export function LeftoversLine({
   stickers,
   confirming,
   clearing,
-  failed,
+  error,
   focusClear = false,
   onPin,
   onAskClear,
@@ -40,7 +40,8 @@ export function LeftoversLine({
   stickers: { src: string; seed: string }[];
   confirming: boolean;
   clearing: boolean;
-  failed: boolean;
+  /** The Clear error line (still cutting, or a failed call); null when fine. */
+  error: string | null;
   /** Back from the confirm step: focus returns to Clear. */
   focusClear?: boolean;
   onPin: () => void;
@@ -82,10 +83,10 @@ export function LeftoversLine({
           </>
         )}
       </div>
-      {failed ? (
+      {error ? (
         <p className="pn-leftovers-error" role="alert">
           <Icon name="info" size={16} />
-          {t("en", "leftovers.clearFailed")}
+          {error}
         </p>
       ) : null}
     </div>
@@ -117,6 +118,8 @@ export function BoardLeftovers({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ jobId: group.jobId, pinIds: [] }),
           });
+          // 409: that photo is still being cut, so it cannot be cleared yet.
+          if (response.status === 409) throw new Error(t("en", "leftovers.clearBusy"));
           if (!response.ok) throw new Error(t("en", "leftovers.clearFailed"));
         }),
       );
@@ -148,7 +151,7 @@ export function BoardLeftovers({
       stickers={stickers}
       confirming={confirming}
       clearing={clear.isPending}
-      failed={clear.isError}
+      error={clear.isError ? clear.error.message || t("en", "leftovers.clearFailed") : null}
       focusClear={keptOnce}
       onPin={() => onPin(newest)}
       onAskClear={() => {

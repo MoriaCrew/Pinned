@@ -591,6 +591,14 @@ export async function confirmPins(
   if (!job || job.boardId !== slug || job.participantId !== participant.id) {
     throw new BoardApiError("Job not found.", 404);
   }
+  // Only a finished photo can be confirmed (PIN-122 Bugbot): a job
+  // still cutting keeps adding candidates from its in-memory photo,
+  // so a Clear (or pin) now would not stick. The review only offers
+  // Pin once the job is ready; the leftovers line says "still
+  // cutting" on this 409 and the next poll brings the rest.
+  if (job.status === "pending" || job.status === "running") {
+    throw new BoardApiError("Still cutting this photo. Try again in a moment.", 409);
+  }
   const now = deps.now?.() ?? Date.now();
   const jobPinIds = new Set(job.pinIds);
 

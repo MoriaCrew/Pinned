@@ -20,7 +20,7 @@ const line = (props: Partial<Parameters<typeof LeftoversLine>[0]> = {}) =>
       stickers: [{ src: "/a.png", seed: "a" }],
       confirming: false,
       clearing: false,
-      failed: false,
+      error: null,
       onPin: noop,
       onAskClear: noop,
       onClear: noop,
@@ -60,8 +60,11 @@ describe("leftovers line (PIN-122)", () => {
     const busy = line({ confirming: true, clearing: true });
     expect(busy).toContain("Clearing…");
     expect(busy.match(/disabled=""/g)).toHaveLength(2);
-    const failed = line({ confirming: true, failed: true });
+    const failed = line({ confirming: true, error: "Couldn't clear. Try again." });
     expect(failed).toContain("Couldn&#x27;t clear. Try again.");
     expect(failed).toContain('role="alert"');
+    // A photo still being cut says so (the confirm route's 409).
+    const cutting = line({ confirming: true, error: "Still cutting that photo. Try again in a moment." });
+    expect(cutting).toContain("Still cutting that photo. Try again in a moment.");
   });
 });

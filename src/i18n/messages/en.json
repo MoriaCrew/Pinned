@@ -262,6 +262,7 @@
   "leftovers.keep": "Keep",
   "leftovers.clearing": "Clearing…",
   "leftovers.clearFailed": "Couldn't clear. Try again.",
+  "leftovers.clearBusy": "Still cutting that photo. Try again in a moment.",
   "myPins.title": "My pins",
   "myPins.empty": "No pins yet",
   "myPins.emptyBody": "Add a photo on a board and your things land here.",
