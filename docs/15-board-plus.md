@@ -8,8 +8,10 @@ credits themselves land by webhook only, PIN-150).
 
 ## What it is
 
-- The core loop is always free: uploads, cut-outs, pins, scenes
-  and the AI budget are unchanged and never gated. **Guests never
+- The core loop is free while `Policy.credits.enabled` is off
+  (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
+  and the AI budget are unchanged. With credits on, AI makes
+  spend the board pool instead (PIN-151 below); **guests never
   pay.**
 - Board Plus is bought by the board's **host** (the browser that
   created the board) and today unlocks the Plus skins.
@@ -152,6 +154,9 @@ later.
   - `viewer: { isHost: boolean }`
   - `plus: { active: boolean, plan?: "board" | "host", mode:
     "off" | "mock" | "stripe", priceLabels: { board, host } }`
+  - `credits: { availableMakes: number }` (PIN-151, only while
+    `Policy.credits.enabled`; absent otherwise, so the disabled
+    shape is unchanged)
 
   The entitlement's `source` and `grantedAt` and the host hash
   never leave the server.
@@ -273,8 +278,9 @@ PIN-149 (below).
 
 ## Credit ledger (PIN-147)
 
-`src/domain/credit-ledger.ts` is the pure per-board makes ledger:
-no Stripe calls and no board-loop wiring yet — checkout/webhook
+`src/domain/credit-ledger.ts` is the pure per-board makes ledger
+(board-loop debit wiring lands in PIN-151, below):
+no Stripe calls in the domain — checkout/webhook
 slices translate Stripe events into its operations, taking amounts
 from `Policy.credits` (packs pinned to the PIN-146 catalog by a
 test, `starterMakes` 25 granted once per board, paid makes never
@@ -562,6 +568,95 @@ and `reinstated_after_final_clawback`. Records carry ids
 only - no payloads, no secrets. Plus-plan (board/host)
 Stripe sales stay unbuilt: the draft `pinneds_host_monthly`
 price is seeded only (PIN-146).
+
+## Pool debit on makes (PIN-151)
+
+`src/server/credit-pool.ts` is the one place the board loop
+touches the ledger. Everything sits behind
+**`Policy.credits.enabled`, default `false`** (deep-overridable
+via env `POLICY_OVERRIDES_JSON` or per board, like every other
+credits key). While off, no ledger method is ever called — no
+starter grants, no debits, no pool gate, no `credits` field in
+the board view — so `AUTH_MODE=link-only` behaviour is exactly
+the pre-credit behaviour, and the untouched existing suites
+prove it. Flipping the flag off mid-life restores that at once.
+No hosted backend enables it in this slice (activation is
+PIN-153). While on but unwired (no store in deps — only
+possible in a test harness) the pool reads empty and debits
+refuse: fail closed, never gift a make.
+
+**Starter timing.** The once-per-board starter pool
+(`Policy.credits.starterMakes`, default 25) is granted by
+board creation when credits are on, under the deterministic
+ledger event id `starter:{boardId}`; it never blocks creation.
+Pre-existing boards get it lazily on the first credit touch —
+a board-view balance read, a photo preflight or a scene run —
+through the ledger's once-only `grantStarter`, so any number
+of touches and replays still grant exactly once.
+
+**What a make is.** Exactly one successful AI production:
+
+| Flow | Debits 1 | Never debits |
+| --- | --- | --- |
+| Photo (`DecomposeJob`) | the job finishing `ready` (one completed job per photo, any element count) | failures/refusals, cap denies, tap-adds and tap naming on its working copy |
+| Scene/remix (`SceneJob`) | a ready scene recorded kind `ai` | refusals/failures, any collage (`AI_MOCK`, over-budget fallback, pool-empty lane) |
+| Riders | — | suggestion chips, dictation: still only Policy-capped |
+
+**Debit points (exact seams).** Debit event ids are
+`debit:photo:{jobId}` / `debit:scene:{jobId}`, so a retry or
+replay of the same job can never double-debit (and the job
+claim gates already refuse a second run).
+
+- Photo: inside `runDecomposeJob`, after at least one
+  candidate pin has landed and before the job may finish
+  `ready`. `uploadPhoto` preflights first (after the Policy
+  daily photo cap): an empty pool gets the board API's typed
+  429 `{ code: "credits_pool_empty" }` before intake or any AI
+  call, so the happy path never starts unpaid.
+- Scene: inside `runSceneJob`, after the composed image is
+  stored and before the terminal `finish` syncs a `ready`
+  Scene — the only state the image route serves.
+
+**Race rule.** The ledger debit is one atomic per-board
+read-modify-write, so two makes racing for the last credit
+cannot both debit. The loser never exposes its AI result: a
+photo's candidate pins/elements are discarded while its job is
+still `running` (unconfirmable, untappable) and the job fails
+`credits_pool_empty`; a scene's just-stored image is deleted
+and its job/scene fail the same way, before any `ready` sync.
+Once a debit lands the make is
+paid: the ready outcome is recorded on the job first, and if
+the terminal write itself throws it is retried once instead of
+discarding or overwriting the result. A non-pool ledger failure at the seam fails the job
+`credit_debit_failed` with the same discard/delete — failing
+closed without claiming the pool was empty. An exception in
+the photo run before the seam also discards landed candidates
+while credits are on (off, the keep-what-landed PIN-64 rule
+stands).
+
+**Pool-empty lanes.** Photo: the 429 above, no AI spend.
+Scene: the existing free collage lane composes instead (the
+composer port is never called, the scene is honestly kind
+`collage` at $0, nothing debits) — decided inside
+`runSceneJob` before composing, exactly like the budget
+fallback it joins. The Policy daily caps and the PIN-61 AI
+budget gates keep applying in every mode; a pool-empty collage
+still counts against the scene day caps, as every collage
+always has.
+
+**Board API.** `GET /api/boards/{slug}` adds
+`credits: { availableMakes }` while credits are on (the read
+PIN-152 renders; no money or per-person fields ever) and omits
+it while off. A ledger failure on that read omits the field
+instead of failing the board page, logged without the slug.
+
+Tests: `src/server/credit-pool.test.ts` (disabled = zero
+ledger writes; starter once at create/lazy/replay; debit on
+photo and AI-scene success only; no debit on failure, refusal,
+collage or riders; pool-empty photo/scene lanes; the photo
+drain and concurrent scene last-make races; kill flag off
+mid-life) plus the `credits.enabled` cases in
+`src/policy/policy.test.ts`.
 
 ## Follow-ups
 

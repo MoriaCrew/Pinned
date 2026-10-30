@@ -166,6 +166,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
 
   it("credits: packs mirror the PIN-146 catalog, starter/intent defaults, deep-overridable (PIN-147)", () => {
     expect(DEFAULT_POLICY.credits).toEqual({
+      enabled: false,
       packs: [
         { lookupKey: "pinneds_credits_25", credits: 25, eurCents: 499, label: "25 makes · €4.99" },
         { lookupKey: "pinneds_credits_60", credits: 60, eurCents: 999, label: "60 makes · €9.99" },
@@ -198,6 +199,15 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([5, 900, 1]);
     expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
     expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
+    // PIN-151 kill flag: env and per-board layers both flip it, board wins.
+    expect(resolvePolicy({ credits: { enabled: true } }).credits.enabled).toBe(true);
+    expect(resolvePolicy(null, { credits: { enabled: true } }).credits.enabled).toBe(true);
+    expect(
+      resolvePolicy({ credits: { enabled: true } }, { credits: { enabled: false } }).credits.enabled,
+    ).toBe(false);
+    expect(parsePolicyOverridesJson('{"credits":{"enabled":true}}')).toEqual({
+      credits: { enabled: true },
+    });
     const pack = DEFAULT_POLICY.credits.packs[0];
     expect(
       resolvePolicy({ credits: { packs: [{ ...pack, label: "Starter pack" }] } }).credits.packs,

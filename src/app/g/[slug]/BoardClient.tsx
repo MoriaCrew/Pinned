@@ -76,6 +76,8 @@ export interface BoardClientView extends BoardViewLike {
   viewer?: { isHost: boolean };
   /** PIN-103: the board's Plus state, billing mode and Policy price labels. */
   plus?: PlusView;
+  /** PIN-151: present only while credits are enabled; PIN-152 renders it. */
+  credits?: { availableMakes: number };
 }
 
 export interface BoardClientPolicy {

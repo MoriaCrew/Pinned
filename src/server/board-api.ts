@@ -45,6 +45,12 @@ import {
 } from "./scene-job";
 import { InMemoryChipsCacheStore, type ChipsCacheStore } from "./chips-cache";
 import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
+import type { CreditLedgerStore } from "../domain/credit-ledger";
+import {
+  CREDITS_POOL_EMPTY,
+  ensureStarterMakes,
+  readAvailableMakes,
+} from "./credit-pool";
 
 export interface BoardApiDeps {
   boards: BoardRepository;
@@ -62,6 +68,8 @@ export interface BoardApiDeps {
   chipsCache?: ChipsCacheStore;
   /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
   collageMode?: boolean;
+  /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
+  credits?: CreditLedgerStore;
   policy: Policy;
   /** PLUS_MODE (PIN-103): Plus offer in the view + which grants count. Default "off". */
   plusMode?: PlusMode;
@@ -263,6 +271,10 @@ export async function createBoardWithHost(
     };
     try {
       await deps.boards.createBoard(board);
+      // PIN-151: with credits on, a new board's starter pool
+      // lands with it. Never blocks creation — the same
+      // once-only grant retries lazily on the first credit touch.
+      await ensureStarterMakes(board.slug, deps).catch(() => undefined);
       return { board, hostToken: credential.token };
     } catch (error) {
       if (error instanceof RangeError && attempt < MAX_SLUG_ATTEMPTS - 1) continue;
@@ -326,6 +338,21 @@ export async function getBoardView(
   const visibleElementIds = new Set(pins.map((pin) => pin.elementId));
   const elementsById = new Map(elements.map((element) => [element.id, element]));
   const isHost = verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now());
+  // PIN-151: the makes pool for the balance UI (PIN-152) — the
+  // starter grant lands lazily on this read for boards that
+  // predate the flag. Only `availableMakes` leaves the server
+  // (no money, no per-person data), and only while credits are
+  // enabled; disabled keeps the exact pre-credit shape. A
+  // ledger failure omits the field rather than failing the
+  // board page (logged without the slug, a capability secret).
+  let availableMakes: number | null = null;
+  try {
+    availableMakes = await readAvailableMakes(slug, deps);
+  } catch (error) {
+    console.error("Credit balance read failed; omitting makes from the board view.", {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
   return {
     board: publicBoard(board),
     me: viewer ? publicParticipant(viewer) : null,
@@ -348,6 +375,7 @@ export async function getBoardView(
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
     viewer: { isHost },
+    ...(availableMakes !== null ? { credits: { availableMakes } } : {}),
     plus: plusView(board, {
       mode: deps.plusMode ?? "off",
       priceLabels: deps.policy.plus.priceLabels,
@@ -428,6 +456,16 @@ export async function uploadPhoto(
     throw new BoardApiError("Daily photo limit reached for this board.", 429, "photos_per_day");
   }
 
+  // PIN-151 preflight (after the Policy daily cap above, which
+  // keeps applying): with credits on and an empty pool the
+  // photo AI path refuses here — the same 429 deny shape as the
+  // cap — before intake, any job or any AI spend. The starter
+  // pool lands lazily inside this read for older boards.
+  const availableMakes = await readAvailableMakes(slug, deps);
+  if (availableMakes !== null && availableMakes < 1) {
+    throw new BoardApiError("This board is out of makes.", 429, CREDITS_POOL_EMPTY);
+  }
+
   // Opportunistic A6a sweep; never blocks the upload itself.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
 
@@ -439,6 +477,7 @@ export async function uploadPhoto(
       store: deps.store,
       namer: deps.namer,
       segmenter: deps.segmenter,
+      ...(deps.credits ? { credits: deps.credits } : {}),
       policy: deps.policy,
       now: deps.now,
       newId: deps.newId,
@@ -955,6 +994,7 @@ export async function requestScene(
         store: deps.store,
         composer,
         collageMode: deps.collageMode ?? false,
+        ...(deps.credits ? { credits: deps.credits } : {}),
         policy: deps.policy,
         now: deps.now,
         newId: deps.newId,

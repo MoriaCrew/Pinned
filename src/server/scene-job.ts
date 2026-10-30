@@ -42,6 +42,14 @@ import {
   type DerivativeStore,
 } from "./derivative-store";
 import { composeCollage } from "./scene-collage";
+import type { CreditLedgerStore } from "../domain/credit-ledger";
+import {
+  CREDIT_DEBIT_FAILED,
+  CREDITS_POOL_EMPTY,
+  readAvailableMakes,
+  sceneDebitEventId,
+  tryDebitMake,
+} from "./credit-pool";
 
 /** Request-time denial, mapped to an HTTP status by board-api. */
 export class SceneJobRequestError extends Error {
@@ -238,6 +246,8 @@ export interface SceneJobDeps {
    * and the Scene is recorded kind "collage", never as AI output.
    */
   collageMode?: boolean;
+  /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
+  credits?: CreditLedgerStore;
   policy: Policy;
   now?: () => number;
   newId?: () => string;
@@ -702,6 +712,9 @@ export async function runSceneJob(
     return existing; // already claimed or finished: no duplicate work
   }
   const { policy } = deps;
+  // PIN-151: set the moment this job's make is spent, so a later
+  // terminal-write failure never overwrites a paid scene.
+  let makeDebited = false;
 
   try {
     await syncScene(deps, job); // status running, for the gallery poll
@@ -720,6 +733,18 @@ export async function runSceneJob(
     // Offline/demo mode (PIN-71): the collage is the composer; the
     // SceneComposer port (and its budget reserve) is never called.
     if (deps.collageMode) return finishCollage(deps, job, records);
+
+    // PIN-151 pool-empty lane (exact seam): with credits on and
+    // no make available, the free collage composes instead and
+    // the SceneComposer port is never called — the scene stays
+    // honestly kind "collage" and nothing debits. The Policy
+    // daily caps already ran at request time, so a pool-empty
+    // collage still counts against them like any scene job.
+    // Disabled (null) skips the ledger entirely.
+    const availableMakes = await readAvailableMakes(boardId, deps);
+    if (availableMakes !== null && availableMakes < 1) {
+      return finishCollage(deps, job, records);
+    }
 
     const elements: ComposeSceneElement[] = [];
     for (const element of records) {
@@ -803,18 +828,52 @@ export async function runSceneJob(
     const kind = sniffSceneImage(bytes);
     const imageRef = buildSceneImageRef(boardId, job.id, kind.ext);
     await deps.store.put(imageRef, bytes, kind.contentType);
-    Object.assign(job, await storedImageSize(bytes));
-    await storeScenePreview(deps, job, bytes);
+    // PIN-151 debit seam (exact): the one make for this AI scene
+    // is debited after its image is stored but before `finish`
+    // syncs a ready Scene (the only state the image route
+    // serves), under the job's deterministic debit event id. If
+    // a concurrent make drained the last credit while this scene
+    // composed, the debit refuses atomically: the stored image
+    // is deleted and the job fails `credits_pool_empty` — the
+    // AI result is never exposed as a free make. Collages take
+    // finishCollage above and never reach this debit.
+    let debit: Awaited<ReturnType<typeof tryDebitMake>>;
+    try {
+      debit = await tryDebitMake(boardId, sceneDebitEventId(job.id), deps);
+    } catch {
+      await deps.store.delete(imageRef).catch(() => undefined);
+      job.status = "failed";
+      job.errorCode = CREDIT_DEBIT_FAILED;
+      return finish(deps, job);
+    }
+    if (debit === "pool_empty") {
+      await deps.store.delete(imageRef).catch(() => undefined);
+      job.status = "failed";
+      job.errorCode = CREDITS_POOL_EMPTY;
+      return finish(deps, job);
+    }
+    makeDebited = debit === "debited";
+    // Record the ready AI outcome on the job before any further
+    // step, so the catch below can retry the terminal write of
+    // a paid scene instead of overwriting it as failed.
     job.status = "ready";
     job.kind = "ai";
     job.imageRef = imageRef;
+    Object.assign(job, await storedImageSize(bytes));
+    await storeScenePreview(deps, job, bytes);
     // Gateway reserve proxy (Spark-token estimate until /responses
     // prices publish); the provider dashboard is authoritative.
     job.costUsd = estimateReserveUsd("composeScene", {
       sparkElementsMaxTokens: policy.maxTokens.sparkElements,
     });
-    return finish(deps, job);
+    // awaited (not bare return) so a terminal-write failure
+    // reaches the paid-make retry in the catch below.
+    return await finish(deps, job);
   } catch {
+    // PIN-151: a paid make is never overwritten as failed — if
+    // the ready write itself threw, retry it once here; a second
+    // throw propagates with the stored image still on disk.
+    if (makeDebited) return finish(deps, job);
     job.status = "failed";
     job.errorCode = "scene_failed";
     return finish(deps, job);
