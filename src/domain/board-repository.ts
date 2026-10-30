@@ -172,6 +172,12 @@ export interface BoardRepository {
    * delete guard consults — immune to copy-chain shape.
    */
   listElementsByCutoutRef(cutoutRef: string): Promise<Element[]>;
+  /**
+   * Set the label only (PIN-156): every other field, the order and
+   * the counters stay; no event. Missing element -> null; otherwise
+   * an isolated copy of the stored element.
+   */
+  renameElement(elementId: string, label: string): Promise<Element | null>;
   /** Cascade delete; see the contract notes above. */
   deleteElement(elementId: string): Promise<DeleteElementResult>;
 
@@ -404,6 +410,14 @@ export class InMemoryBoardRepository implements BoardRepository {
         .filter((e) => e.sourceElementId === sourceElementId)
         .map(clone),
     );
+  }
+
+  async renameElement(elementId: string, label: string): Promise<Element | null> {
+    const element = this.elements.get(elementId);
+    if (!element) return null;
+    // Same Map key, so iteration (createdAt order for ties) is unchanged.
+    this.elements.set(elementId, { ...clone(element), label });
+    return clone(this.elements.get(elementId)!);
   }
 
   async deleteElement(elementId: string): Promise<DeleteElementResult> {

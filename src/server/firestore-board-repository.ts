@@ -393,6 +393,19 @@ export class FirestoreBoardRepository implements BoardRepository {
     return sortedValues(rowsFrom<Element>(snap));
   }
 
+  async renameElement(elementId: string, label: string): Promise<Element | null> {
+    const found = await this.findOneById<Element>(ELEMENTS, elementId);
+    if (!found) return null;
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(found.ref);
+      if (!snap.exists) return null;
+      const row = rowFrom<Element>(found.ref, snap.data() as DocumentData);
+      const renamed: Element = { ...row.value, label };
+      tx.set(found.ref, toStored(renamed, row.seq));
+      return structuredClone(renamed);
+    });
+  }
+
   async deleteElement(elementId: string): Promise<DeleteElementResult> {
     const found = await this.findOneById<Element>(ELEMENTS, elementId);
     if (!found) return { deleted: false, removedPinIds: [], hiddenSceneIds: [] };
