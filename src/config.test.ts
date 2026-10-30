@@ -43,6 +43,14 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.stripeSecretKey).toBe("rk_test_x");
     expect(cfg.stripeApiVersion).toBe(STRIPE_API_VERSION);
     expect(STRIPE_API_VERSION).toBe("2026-10-28.endive");
+    // Webhook signing secret (PIN-150): trimmed passthrough,
+    // null when unset/empty, and never enables stripe by itself.
+    expect(cfg.stripeWebhookSecret).toBeNull();
+    expect(
+      parseConfig({ STRIPE_WEBHOOK_SECRET: " whsec_test_x " }).stripeWebhookSecret,
+    ).toBe("whsec_test_x");
+    expect(parseConfig({ STRIPE_WEBHOOK_SECRET: "  " }).stripeWebhookSecret).toBeNull();
+    expect(parseConfig({ STRIPE_WEBHOOK_SECRET: "whsec_test_x" }).plusMode).toBe("off");
     // The key alone never enables billing without the mode.
     expect(parseConfig({ STRIPE_SECRET_KEY: "rk_test_x" }).plusMode).toBe("off");
   });

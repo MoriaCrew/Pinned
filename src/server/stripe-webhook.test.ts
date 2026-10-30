@@ -1,0 +1,605 @@
+import Stripe from "stripe";
+import { describe, expect, it } from "vitest";
+import type { StripeWebhookClientLike } from "../billing/stripe-webhook";
+import { CONTRACT_SLUG as SLUG, seedBoard } from "../billing/mock-checkout.contract";
+import { STRIPE_API_VERSION } from "../config";
+import { InMemoryBoardRepository } from "../domain/board-repository";
+import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
+import { resolvePolicy, DEFAULT_POLICY } from "../policy/policy";
+import { InMemoryCheckoutIntentStore, type CheckoutIntent } from "./checkout-intent";
+import {
+  StripeWebhookConfigError,
+  StripeWebhookSignatureError,
+  handleStripeWebhook,
+  makesFloorForCents,
+  makesFreezeForCents,
+  STRIPE_WEBHOOK_EVENT_TYPES,
+  type StripeWebhookDeps,
+} from "./stripe-webhook";
+import { InMemoryStripeWebhookRecordStore } from "./stripe-webhook-records";
+
+/**
+ * Webhook service (PIN-150): payloads are signed with the real
+ * SDK's test-header signer and verified by the real
+ * `constructEvent`; only the retrieval calls are faked, so no
+ * network and no real keys. All Stripe ids below are obviously
+ * fake test ids. NOW tracks the wall clock (second precision)
+ * because SDK signature verification applies a timestamp
+ * tolerance to the generated header.
+ */
+const SECRET = "whsec_test_fake_signing_secret";
+const NOW = Math.floor(Date.now() / 1000) * 1000;
+const PACK = "pinneds_credits_25";
+const SESSION_ID = "cs_test_fake_1";
+const PAYMENT_INTENT_ID = "pi_test_fake_1";
+const CHARGE_ID = "ch_test_fake_1";
+const sdk = new Stripe("sk_test_fake", { apiVersion: STRIPE_API_VERSION });
+
+class FakeWebhookClient implements StripeWebhookClientLike {
+  readonly retrievedSessions: string[] = [];
+  readonly retrievedPaymentIntents: string[] = [];
+  sessions: Record<string, unknown> = {};
+  paymentIntents: Record<string, unknown> = {
+    [PAYMENT_INTENT_ID]: { id: PAYMENT_INTENT_ID, latest_charge: CHARGE_ID },
+  };
+  charges: Record<string, unknown> = {
+    [CHARGE_ID]: { id: CHARGE_ID, balance_transaction: "txn_test_fake_charge" },
+  };
+  balanceTransactions: Record<string, unknown> = {
+    txn_test_fake_charge: { id: "txn_test_fake_charge", amount: 499, currency: "eur" },
+    txn_test_fake_refund_eur: { id: "txn_test_fake_refund_eur", amount: -499, currency: "eur" },
+  };
+
+  constructEvent(rawBody: string, signature: string, secret: string): unknown {
+    return sdk.webhooks.constructEvent(rawBody, signature, secret);
+  }
+  async retrieveCheckoutSession(sessionId: string): Promise<unknown> {
+    this.retrievedSessions.push(sessionId);
+    return this.sessions[sessionId] ?? null;
+  }
+  async retrievePaymentIntent(paymentIntentId: string): Promise<unknown> {
+    this.retrievedPaymentIntents.push(paymentIntentId);
+    return this.paymentIntents[paymentIntentId] ?? null;
+  }
+  async retrieveCharge(chargeId: string): Promise<unknown> {
+    return this.charges[chargeId] ?? null;
+  }
+  async retrieveBalanceTransaction(id: string): Promise<unknown> {
+    return this.balanceTransactions[id] ?? null;
+  }
+}
+
+async function harness() {
+  const boards = new InMemoryBoardRepository();
+  await seedBoard(boards);
+  const intents = new InMemoryCheckoutIntentStore();
+  const ledger = new InMemoryCreditLedgerStore();
+  const records = new InMemoryStripeWebhookRecordStore();
+  const client = new FakeWebhookClient();
+  let nowMs = NOW;
+  const deps: StripeWebhookDeps = {
+    plusMode: "stripe",
+    webhookSecret: SECRET,
+    client,
+    intents,
+    ledger,
+    records,
+    boards,
+    policy: resolvePolicy(null),
+    now: () => nowMs,
+  };
+  async function createIntent(): Promise<CheckoutIntent> {
+    const intent = await intents.create({
+      boardId: SLUG,
+      packLookupKey: PACK,
+      credits: 25,
+      at: NOW,
+      intentTtlSeconds: 1_800,
+      pendingIntentCapPerBoard: 10,
+    });
+    await ledger.recordPurchase(SLUG, { purchaseId: intent.purchaseId, credits: 25 });
+    return intent;
+  }
+  async function deliver(event: unknown, secret = SECRET) {
+    const payload = JSON.stringify(event);
+    const header = sdk.webhooks.generateTestHeaderString({ payload, secret });
+    return handleStripeWebhook(payload, header, deps);
+  }
+  return {
+    boards,
+    intents,
+    ledger,
+    records,
+    client,
+    deps,
+    createIntent,
+    deliver,
+    setNow: (ms: number) => {
+      nowMs = ms;
+    },
+  };
+}
+
+function evt(id: string, type: string, object: unknown, atMs = NOW + 60_000) {
+  return { id, object: "event", type, created: Math.floor(atMs / 1000), data: { object } };
+}
+
+function session(intentId: string, over: Record<string, unknown> = {}) {
+  return {
+    id: SESSION_ID,
+    object: "checkout.session",
+    mode: "payment",
+    status: "complete",
+    payment_status: "paid",
+    amount_total: 499,
+    currency: "eur",
+    client_reference_id: intentId,
+    metadata: { checkout_intent_id: intentId, pack_lookup_key: PACK, credits: "25" },
+    payment_intent: PAYMENT_INTENT_ID,
+    ...over,
+  };
+}
+
+function refund(over: Record<string, unknown> = {}) {
+  return {
+    id: "re_test_fake_1",
+    object: "refund",
+    amount: 499,
+    currency: "eur",
+    status: "succeeded",
+    charge: CHARGE_ID,
+    payment_intent: PAYMENT_INTENT_ID,
+    ...over,
+  };
+}
+
+function dispute(over: Record<string, unknown> = {}) {
+  return {
+    id: "du_test_fake_1",
+    object: "dispute",
+    amount: 499,
+    currency: "eur",
+    status: "needs_response",
+    charge: CHARGE_ID,
+    payment_intent: PAYMENT_INTENT_ID,
+    balance_transactions: [],
+    ...over,
+  };
+}
+
+describe("money -> makes formula (PIN-150)", () => {
+  const pack = DEFAULT_POLICY.credits.packs[0];
+  it("floor for clawbacks, ceil for freezes, capped at the pack", () => {
+    expect(pack).toMatchObject({ credits: 25, eurCents: 499 });
+    expect(makesFloorForCents(499, pack)).toBe(25);
+    expect(makesFloorForCents(250, pack)).toBe(12);
+    expect(makesFloorForCents(10, pack)).toBe(0);
+    expect(makesFloorForCents(99_999, pack)).toBe(25);
+    expect(makesFreezeForCents(499, pack)).toBe(25);
+    expect(makesFreezeForCents(250, pack)).toBe(13);
+    expect(makesFreezeForCents(10, pack)).toBe(1);
+    expect(makesFreezeForCents(99_999, pack)).toBe(25);
+  });
+
+  it("registers exactly the handled event list for PIN-153", () => {
+    expect(STRIPE_WEBHOOK_EVENT_TYPES).toEqual([
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "checkout.session.async_payment_failed",
+      "checkout.session.expired",
+      "refund.created",
+      "refund.updated",
+      "refund.failed",
+      "charge.dispute.created",
+      "charge.dispute.funds_withdrawn",
+      "charge.dispute.funds_reinstated",
+      "charge.dispute.closed",
+    ]);
+  });
+});
+
+describe("handleStripeWebhook gates (PIN-150)", () => {
+  it("missing secret, off mode, and a missing client fail closed before any parsing", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const payload = JSON.stringify(evt("evt_cfg", "checkout.session.completed", session(intent.id)));
+    const header = sdk.webhooks.generateTestHeaderString({ payload, secret: SECRET });
+    await expect(
+      handleStripeWebhook(payload, header, { ...h.deps, webhookSecret: null }),
+    ).rejects.toBeInstanceOf(StripeWebhookConfigError);
+    await expect(
+      handleStripeWebhook(payload, header, { ...h.deps, plusMode: "off" }),
+    ).rejects.toBeInstanceOf(StripeWebhookConfigError);
+    await expect(
+      handleStripeWebhook(payload, header, { ...h.deps, plusMode: "mock" }),
+    ).rejects.toBeInstanceOf(StripeWebhookConfigError);
+    await expect(
+      handleStripeWebhook(payload, header, { ...h.deps, client: null }),
+    ).rejects.toBeInstanceOf(StripeWebhookConfigError);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+  });
+
+  it("a bad signature and a missing header are rejected and grant nothing", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const event = evt("evt_sig", "checkout.session.completed", session(intent.id));
+    await expect(h.deliver(event, "whsec_test_wrong_secret")).rejects.toBeInstanceOf(
+      StripeWebhookSignatureError,
+    );
+    await expect(handleStripeWebhook(JSON.stringify(event), null, h.deps)).rejects.toBeInstanceOf(
+      StripeWebhookSignatureError,
+    );
+    // A body tampered after signing fails too.
+    const payload = JSON.stringify(event);
+    const header = sdk.webhooks.generateTestHeaderString({ payload, secret: SECRET });
+    const tampered = payload.replace("499", "1");
+    await expect(handleStripeWebhook(tampered, header, h.deps)).rejects.toBeInstanceOf(
+      StripeWebhookSignatureError,
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(await h.records.getProcessed("evt_sig")).toBeNull();
+  });
+
+  it("unhandled event types are acked, recorded once, and touch nothing", async () => {
+    const h = await harness();
+    const event = evt("evt_other", "payment_intent.succeeded", { id: PAYMENT_INTENT_ID });
+    expect(await h.deliver(event)).toEqual({
+      eventId: "evt_other",
+      outcome: "unhandled",
+      duplicate: false,
+    });
+    expect(await h.deliver(event)).toMatchObject({ outcome: "duplicate", duplicate: true });
+  });
+});
+
+describe("checkout fulfilment (PIN-150)", () => {
+  it("an unpaid completed grants nothing but persists the session mapping", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const result = await h.deliver(
+      evt("evt_unpaid", "checkout.session.completed", session(intent.id, { payment_status: "unpaid" })),
+    );
+    expect(result.outcome).toBe("ignored_unpaid");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, available: 0 });
+    expect(await h.ledger.listEntries(SLUG)).toEqual([]);
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      status: "pending",
+      stripeSessionId: SESSION_ID,
+      stripePaymentIntentId: PAYMENT_INTENT_ID,
+    });
+  });
+
+  it("paid completed grants exactly once: duplicate delivery and async success stay at one grant", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const completed = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(completed)).outcome).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, available: 25 });
+    // Mapping persisted at grant time, charge resolved via the PaymentIntent.
+    expect(h.client.retrievedPaymentIntents).toEqual([PAYMENT_INTENT_ID]);
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      status: "closed",
+      stripeSessionId: SESSION_ID,
+      stripePaymentIntentId: PAYMENT_INTENT_ID,
+      stripeChargeId: CHARGE_ID,
+      grantedAt: NOW + 60_000,
+    });
+    expect(await h.intents.findByStripeIds({ chargeId: CHARGE_ID })).toMatchObject({
+      id: intent.id,
+    });
+    // Same event replayed (durable processed record) + the async twin event.
+    expect(await h.deliver(completed)).toMatchObject({ duplicate: true });
+    expect(
+      (await h.deliver(evt("evt_async", "checkout.session.async_payment_succeeded", session(intent.id))))
+        .outcome,
+    ).toBe("duplicate_grant");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(await h.ledger.listEntries(SLUG)).toHaveLength(1);
+  });
+
+  it("grants from a retrieved session when the snapshot lacks payment/amount fields", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    h.client.sessions[SESSION_ID] = session(intent.id);
+    const thin = {
+      id: SESSION_ID,
+      object: "checkout.session",
+      client_reference_id: intent.id,
+      metadata: { checkout_intent_id: intent.id, pack_lookup_key: PACK, credits: "25" },
+    };
+    expect(
+      (await h.deliver(evt("evt_thin", "checkout.session.completed", thin))).outcome,
+    ).toBe("granted");
+    expect(h.client.retrievedSessions).toEqual([SESSION_ID]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+  });
+
+  it("amount mismatch and unknown intents dead-letter with 200 semantics and no grant", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    expect(
+      (await h.deliver(
+        evt("evt_mismatch", "checkout.session.completed", session(intent.id, { amount_total: 498 })),
+      )).outcome,
+    ).toBe("dead_letter");
+    expect(
+      (await h.deliver(
+        evt("evt_unknown", "checkout.session.completed", session("00000000-0000-4000-8000-000000000000")),
+      )).outcome,
+    ).toBe("dead_letter");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    const dead = await h.records.listDeadLetters();
+    expect(dead.map((d) => d.reason).sort()).toEqual(["amount_mismatch", "unknown_intent"]);
+    expect(dead.every((d) => d.operatorFlag)).toBe(true);
+    expect(dead.find((d) => d.reason === "amount_mismatch")).toMatchObject({
+      intentId: intent.id,
+      eventId: "evt_mismatch",
+    });
+    // The real paid event still grants afterwards.
+    expect(
+      (await h.deliver(evt("evt_real", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+  });
+
+  it("a paid session for an intent past its TTL dead-letters as dead_intent", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const late = evt(
+      "evt_late",
+      "checkout.session.completed",
+      session(intent.id),
+      NOW + 1_800_000,
+    );
+    expect((await h.deliver(late)).outcome).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["dead_intent"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+  });
+
+  it("async_payment_failed and expired close the intent and purchase without granting", async () => {
+    const h = await harness();
+    const failed = await h.createIntent();
+    expect(
+      (await h.deliver(
+        evt("evt_failed", "checkout.session.async_payment_failed", session(failed.id, { payment_status: "unpaid" })),
+      )).outcome,
+    ).toBe("closed");
+    expect(await h.intents.get(failed.id)).toMatchObject({ status: "closed" });
+    const accountAfterFail = await h.ledger.getAccount(SLUG);
+    expect(accountAfterFail?.purchases[failed.id]).toMatchObject({ state: "closed" });
+
+    const expired = await h.createIntent();
+    expect(
+      (await h.deliver(
+        evt("evt_expired", "checkout.session.expired", session(expired.id, { payment_status: "unpaid", status: "expired" }), NOW + 1_800_000),
+      )).outcome,
+    ).toBe("closed");
+    expect(await h.intents.get(expired.id)).toMatchObject({ status: "expired" });
+    const account = await h.ledger.getAccount(SLUG);
+    expect(account?.purchases[expired.id]).toMatchObject({ state: "closed" });
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(await h.ledger.listEntries(SLUG)).toEqual([]);
+  });
+});
+
+describe("refunds (PIN-150)", () => {
+  async function granted() {
+    const h = await harness();
+    const intent = await h.createIntent();
+    await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)));
+    return { h, intent };
+  }
+
+  it("two partial refunds sum to the full pack with no drift; a duplicate refund id is a no-op", async () => {
+    const { h, intent } = await granted();
+    expect(
+      (await h.deliver(evt("evt_re1", "refund.created", refund({ id: "re_test_fake_a", amount: 250 })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+    // Same refund id under a new event id (created + updated both delivered).
+    expect(
+      (await h.deliver(evt("evt_re1b", "refund.updated", refund({ id: "re_test_fake_a", amount: 250 })))).outcome,
+    ).toBe("duplicate_refund");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+    expect(
+      (await h.deliver(evt("evt_re2", "refund.created", refund({ id: "re_test_fake_b", amount: 249 })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, available: 0 });
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      refundedEurCents: 499,
+      refundClawedMakes: 25,
+      countedRefundIds: ["re_test_fake_a", "re_test_fake_b"],
+    });
+  });
+
+  it("a sub-make refund records its cents (zero makes) so the next partial sums correctly", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(evt("evt_tiny", "refund.created", refund({ id: "re_test_fake_tiny", amount: 10 })))).outcome,
+    ).toBe("refund_recorded_zero_makes");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(
+      (await h.deliver(evt("evt_rest", "refund.created", refund({ id: "re_test_fake_rest", amount: 489 })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+  });
+
+  it("a pending refund waits; only succeeded (via refund.updated) claws back", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(evt("evt_pend", "refund.created", refund({ status: "pending" })))).outcome,
+    ).toBe("refund_ignored_status");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(
+      (await h.deliver(evt("evt_settled", "refund.updated", refund({ status: "succeeded" })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(
+      (await h.deliver(evt("evt_failed_re", "refund.failed", refund({ id: "re_test_fake_x", status: "failed" })))).outcome,
+    ).toBe("refund_ignored_status");
+  });
+
+  it("refund-before-grant nets to exactly zero at grant time", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    // Session ids already known (an earlier session event), refund lands first.
+    await h.intents.recordStripeMapping(
+      intent.id,
+      { sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT_ID, chargeId: CHARGE_ID },
+      NOW,
+    );
+    expect((await h.deliver(evt("evt_re_first", "refund.created", refund()))).outcome).toBe(
+      "refund_clawed",
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(
+      (await h.deliver(evt("evt_paid_late", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, available: 0 });
+    const account = await h.ledger.getAccount(SLUG);
+    expect(account?.purchases[intent.id]).toMatchObject({ state: "clawed_back", clawedCredits: 25 });
+  });
+
+  it("a foreign-presentment refund claws back by its settled EUR BalanceTransaction", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(
+        evt("evt_fx", "refund.created", refund({
+          currency: "usd",
+          amount: 540,
+          balance_transaction: "txn_test_fake_refund_eur",
+        })),
+      )).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+  });
+
+  it("unknown-mapping refunds and unverifiable FX dead-letter with no clawback", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(evt("evt_no_map", "refund.created", refund({ id: "re_test_fake_orphan", charge: "ch_test_unknown", payment_intent: "pi_test_unknown" })))).outcome,
+    ).toBe("dead_letter");
+    expect(
+      (await h.deliver(
+        evt("evt_no_fx", "refund.created", refund({ id: "re_test_fake_fx", currency: "usd", amount: 540, balance_transaction: null })),
+      )).outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason).sort()).toEqual([
+      "fx_unverifiable",
+      "unknown_mapping",
+    ]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+  });
+});
+
+describe("disputes (PIN-150)", () => {
+  async function granted() {
+    const h = await harness();
+    const intent = await h.createIntent();
+    await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)));
+    return { h, intent };
+  }
+
+  it("a partial dispute freezes ceil makes; funds_reinstated restores them", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 13, available: 12 });
+    expect(
+      (await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute({ amount: 250 })))).outcome,
+    ).toBe("restored");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+    // A late duplicate freeze for the resolved dispute is a no-op (tombstone).
+    expect(
+      (await h.deliver(evt("evt_du_late", "charge.dispute.created", dispute({ amount: 250 })))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ frozen: 0, available: 25 });
+  });
+
+  it("closed lost claws back the frozen makes", async () => {
+    const { h } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute()));
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ frozen: 25, available: 0 });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ status: "lost" })))).outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
+  });
+
+  it("funds_withdrawn final-claws the floor amount; closed lost restores only the ceil excess", async () => {
+    const { h, intent } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
+    expect(
+      (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 })))).outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 1, available: 12 });
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      finalDisputeClawbacks: { du_test_fake_1: 12 },
+    });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" })))).outcome,
+    ).toBe("final_clawback_duplicate_excess_restored");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+  });
+
+  it("a reinstate after a final clawback dead-letters for an operator instead of un-clawing", async () => {
+    const { h } = await granted();
+    await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute()));
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(
+      (await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute()))).outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual([
+      "reinstated_after_final_clawback",
+    ]);
+  });
+
+  it("a pre-grant dispute freeze defers and lands capped at the grant", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    await h.intents.recordStripeMapping(
+      intent.id,
+      { sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT_ID, chargeId: CHARGE_ID },
+      NOW,
+    );
+    expect(
+      (await h.deliver(evt("evt_du_early", "charge.dispute.created", dispute({ amount: 9_999 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0 });
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 25, available: 0 });
+  });
+
+  it("an early restore tombstones the dispute so a later freeze is a no-op", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    await h.intents.recordStripeMapping(
+      intent.id,
+      { sessionId: SESSION_ID, paymentIntentId: PAYMENT_INTENT_ID, chargeId: CHARGE_ID },
+      NOW,
+    );
+    expect(
+      (await h.deliver(evt("evt_du_restore_first", "charge.dispute.funds_reinstated", dispute()))).outcome,
+    ).toBe("restored");
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(
+      (await h.deliver(evt("evt_du_late_freeze", "charge.dispute.created", dispute()))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+  });
+
+  it("an unknown dispute charge dead-letters with no freeze", async () => {
+    const { h } = await granted();
+    expect(
+      (await h.deliver(
+        evt("evt_du_orphan", "charge.dispute.created", dispute({ charge: "ch_test_unknown", payment_intent: null })),
+      )).outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["unknown_mapping"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ frozen: 0, available: 25 });
+  });
+});

@@ -43,6 +43,31 @@ export interface CheckoutIntent {
   expiresAt: number;
   /** Set when the intent leaves `pending` (closed or expired). */
   closedAt?: number;
+  /**
+   * Stripe object mapping persisted by the webhook (PIN-150) at
+   * grant time (or on any earlier session event), server-only:
+   * later refund/dispute events carry charge/payment_intent ids,
+   * never the intent id, so this is how they resolve back to
+   * this purchase. Never enters the public shape.
+   */
+  stripeSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  /** Epoch ms when the webhook granted this purchase (PIN-150). */
+  grantedAt?: number;
+  /**
+   * Cumulative settled-EUR refund accounting (PIN-150): minor
+   * units refunded across every counted per-refund delta, and
+   * the makes those refunds have clawed back so far. The
+   * webhook's cumulative money->makes formula reads both, so
+   * partial refunds sum to the whole pack without drift.
+   */
+  refundedEurCents?: number;
+  refundClawedMakes?: number;
+  /** Refund ids whose EUR amount is already inside `refundedEurCents` (including zero-make deltas the ledger never saw). */
+  countedRefundIds?: string[];
+  /** Makes finally clawed back per dispute id (PIN-150): a second final-clawback event for the same dispute is a no-op. */
+  finalDisputeClawbacks?: Record<string, number>;
 }
 
 /** Everything a checkout/browser surface may see. No board identifier beyond the opaque `id`. */
@@ -91,12 +116,58 @@ export interface CreateCheckoutIntentInput {
  * still payable": it lazily expires a stale pending intent and
  * answers `null` for anything not resolvable.
  */
+/** Stripe ids the webhook may learn for one purchase (PIN-150). Any subset; set fields never change to a different value. */
+export interface StripeIntentMapping {
+  sessionId?: string;
+  paymentIntentId?: string;
+  chargeId?: string;
+}
+
+/** The Stripe ids a refund/dispute event carries (PIN-150). At least one is expected. */
+export interface StripeIntentLookup {
+  chargeId?: string;
+  paymentIntentId?: string;
+  sessionId?: string;
+}
+
 export interface CheckoutIntentStore {
   create(input: CreateCheckoutIntentInput): Promise<CheckoutIntent>;
   get(intentId: string): Promise<CheckoutIntent | null>;
   resolvePending(intentId: string, at: number): Promise<CheckoutIntent | null>;
   close(intentId: string, at: number): Promise<CheckoutIntent | null>;
   expire(intentId: string, at: number): Promise<CheckoutIntent | null>;
+  /**
+   * Persist Stripe ids on the intent (PIN-150), idempotently:
+   * re-recording the same ids is a no-op, and a conflicting id
+   * for an already-set field throws RangeError (the webhook
+   * dead-letters it) rather than silently remapping a purchase.
+   * `grantedAt`, when passed, stamps the fulfilment instant.
+   */
+  recordStripeMapping(
+    intentId: string,
+    mapping: StripeIntentMapping,
+    at: number,
+    grantedAt?: number,
+  ): Promise<CheckoutIntent | null>;
+  /** Resolve a later refund/dispute back to its intent by charge, then payment_intent, then session id (PIN-150). Closed intents still resolve. */
+  findByStripeIds(lookup: StripeIntentLookup): Promise<CheckoutIntent | null>;
+  /**
+   * Count one per-refund EUR delta + the makes it clawed back
+   * (PIN-150), atomically and once per refund id: a repeat
+   * returns `applied: false` with the stored record unchanged.
+   */
+  applyRefundAccounting(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    clawedMakesDelta: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }>;
+  /** Record a dispute's final clawback makes once per dispute id (PIN-150); a repeat returns `applied: false`. */
+  recordFinalDisputeClawback(
+    intentId: string,
+    disputeId: string,
+    makes: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }>;
 }
 
 export interface CheckoutIntentStoreOptions {
@@ -174,6 +245,75 @@ export function capExceededError(boardId: string, cap: number): RangeError {
 }
 
 /** In-memory store: the test double and the port's contract. Method bodies never await between read and write, so each call is atomic. */
+/** Merge a Stripe mapping into a clone of the intent (PIN-150): set ids never change to a different value. Shared by both stores. */
+export function mergeStripeMapping(
+  intent: CheckoutIntent,
+  mapping: StripeIntentMapping,
+  grantedAt?: number,
+): CheckoutIntent {
+  const next: CheckoutIntent = { ...intent };
+  const fields: Array<[keyof StripeIntentMapping, "stripeSessionId" | "stripePaymentIntentId" | "stripeChargeId"]> = [
+    ["sessionId", "stripeSessionId"],
+    ["paymentIntentId", "stripePaymentIntentId"],
+    ["chargeId", "stripeChargeId"],
+  ];
+  for (const [from, to] of fields) {
+    const value = mapping[from];
+    if (value === undefined) continue;
+    assertId(value, from);
+    if (next[to] && next[to] !== value) {
+      throw new RangeError(
+        `CheckoutIntent ${intent.id} already mapped to a different ${to}`,
+      );
+    }
+    next[to] = value;
+  }
+  if (grantedAt !== undefined) {
+    assertAt(grantedAt);
+    next.grantedAt ??= grantedAt;
+  }
+  return next;
+}
+
+/** Count one refund delta on a clone (PIN-150). Returns null when the refund id is already counted. Shared by both stores. */
+export function applyRefundAccountingToIntent(
+  intent: CheckoutIntent,
+  refundId: string,
+  refundEurCents: number,
+  clawedMakesDelta: number,
+): CheckoutIntent | null {
+  assertId(refundId, "refundId");
+  if (!Number.isInteger(refundEurCents) || refundEurCents < 0) {
+    throw new RangeError(`refundEurCents must be a non-negative integer, got ${refundEurCents}`);
+  }
+  if (!Number.isInteger(clawedMakesDelta) || clawedMakesDelta < 0) {
+    throw new RangeError(`clawedMakesDelta must be a non-negative integer, got ${clawedMakesDelta}`);
+  }
+  const counted = intent.countedRefundIds ?? [];
+  if (counted.includes(refundId)) return null;
+  return {
+    ...intent,
+    refundedEurCents: (intent.refundedEurCents ?? 0) + refundEurCents,
+    refundClawedMakes: (intent.refundClawedMakes ?? 0) + clawedMakesDelta,
+    countedRefundIds: [...counted, refundId],
+  };
+}
+
+/** Record a dispute final clawback on a clone (PIN-150). Returns null when that dispute is already recorded. Shared by both stores. */
+export function recordFinalDisputeClawbackOnIntent(
+  intent: CheckoutIntent,
+  disputeId: string,
+  makes: number,
+): CheckoutIntent | null {
+  assertId(disputeId, "disputeId");
+  if (!Number.isInteger(makes) || makes < 0) {
+    throw new RangeError(`makes must be a non-negative integer, got ${makes}`);
+  }
+  const finals = intent.finalDisputeClawbacks ?? {};
+  if (disputeId in finals) return null;
+  return { ...intent, finalDisputeClawbacks: { ...finals, [disputeId]: makes } };
+}
+
 export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
   private readonly intents = new Map<string, CheckoutIntent>();
 
@@ -226,6 +366,65 @@ export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
     const next: CheckoutIntent = { ...intent, status: "closed", closedAt: at };
     this.intents.set(intentId, next);
     return structuredClone(next);
+  }
+
+  async recordStripeMapping(
+    intentId: string,
+    mapping: StripeIntentMapping,
+    at: number,
+    grantedAt?: number,
+  ): Promise<CheckoutIntent | null> {
+    assertId(intentId, "intentId");
+    assertAt(at);
+    const intent = this.intents.get(intentId);
+    if (!intent) return null;
+    const next = mergeStripeMapping(intent, mapping, grantedAt);
+    this.intents.set(intentId, structuredClone(next));
+    return structuredClone(next);
+  }
+
+  async findByStripeIds(lookup: StripeIntentLookup): Promise<CheckoutIntent | null> {
+    const all = [...this.intents.values()];
+    const found =
+      (lookup.chargeId
+        ? all.find((intent) => intent.stripeChargeId === lookup.chargeId)
+        : undefined) ??
+      (lookup.paymentIntentId
+        ? all.find((intent) => intent.stripePaymentIntentId === lookup.paymentIntentId)
+        : undefined) ??
+      (lookup.sessionId
+        ? all.find((intent) => intent.stripeSessionId === lookup.sessionId)
+        : undefined);
+    return found ? structuredClone(found) : null;
+  }
+
+  async applyRefundAccounting(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    clawedMakesDelta: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertId(intentId, "intentId");
+    const intent = this.intents.get(intentId);
+    if (!intent) return { intent: null, applied: false };
+    const next = applyRefundAccountingToIntent(intent, refundId, refundEurCents, clawedMakesDelta);
+    if (!next) return { intent: structuredClone(intent), applied: false };
+    this.intents.set(intentId, structuredClone(next));
+    return { intent: structuredClone(next), applied: true };
+  }
+
+  async recordFinalDisputeClawback(
+    intentId: string,
+    disputeId: string,
+    makes: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertId(intentId, "intentId");
+    const intent = this.intents.get(intentId);
+    if (!intent) return { intent: null, applied: false };
+    const next = recordFinalDisputeClawbackOnIntent(intent, disputeId, makes);
+    if (!next) return { intent: structuredClone(intent), applied: false };
+    this.intents.set(intentId, structuredClone(next));
+    return { intent: structuredClone(next), applied: true };
   }
 
   async expire(intentId: string, at: number): Promise<CheckoutIntent | null> {

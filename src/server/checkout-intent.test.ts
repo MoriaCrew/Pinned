@@ -57,7 +57,19 @@ class FakeFirestore {
 
   collection(name: string) {
     const db = this;
-    return { doc: (id: string) => new FakeDocRef(db, `${name}/${id}`) };
+    return {
+      doc: (id: string) => new FakeDocRef(db, `${name}/${id}`),
+      where: (field: string, _op: string, value: unknown) => ({
+        limit: (n: number) => ({
+          get: async () => ({
+            docs: [...db.store.entries()]
+              .filter(([path, data]) => path.startsWith(`${name}/`) && data[field] === value)
+              .slice(0, n)
+              .map(([, data]) => new FakeSnapshot(data)),
+          }),
+        }),
+      }),
+    };
   }
   async runTransaction<T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> {
     const run = async () => {
@@ -177,6 +189,74 @@ function describeCheckoutIntentStore(
       expect(await store.resolvePending(b.id, AT + 12)).toBeNull();
       expect(await store.close("nope", AT)).toBeNull();
       expect(await store.resolvePending("nope", AT)).toBeNull();
+    });
+
+    it("records the Stripe mapping idempotently, refuses a conflicting remap, and resolves by Stripe ids (PIN-150)", async () => {
+      const { store } = make();
+      const intent = await store.create(createInput());
+      const mapped = await store.recordStripeMapping(
+        intent.id,
+        { sessionId: "cs_test_fake_1", paymentIntentId: "pi_test_fake_1" },
+        AT + 1,
+      );
+      expect(mapped).toMatchObject({
+        stripeSessionId: "cs_test_fake_1",
+        stripePaymentIntentId: "pi_test_fake_1",
+      });
+      const granted = await store.recordStripeMapping(
+        intent.id,
+        { sessionId: "cs_test_fake_1", chargeId: "ch_test_fake_1" },
+        AT + 2,
+        AT + 2,
+      );
+      expect(granted).toMatchObject({ stripeChargeId: "ch_test_fake_1", grantedAt: AT + 2 });
+      await expect(
+        store.recordStripeMapping(intent.id, { chargeId: "ch_test_other" }, AT + 3),
+      ).rejects.toThrow(RangeError);
+      expect((await store.get(intent.id))?.stripeChargeId).toBe("ch_test_fake_1");
+      expect((await store.findByStripeIds({ chargeId: "ch_test_fake_1" }))?.id).toBe(intent.id);
+      expect((await store.findByStripeIds({ paymentIntentId: "pi_test_fake_1" }))?.id).toBe(intent.id);
+      expect((await store.findByStripeIds({ sessionId: "cs_test_fake_1" }))?.id).toBe(intent.id);
+      expect(await store.findByStripeIds({ chargeId: "ch_test_unknown" })).toBeNull();
+      expect(await store.recordStripeMapping("nope", { chargeId: "ch_x" }, AT)).toBeNull();
+      // Closed intents still resolve: refunds land long after the grant closed it.
+      await store.close(intent.id, AT + 4);
+      expect((await store.findByStripeIds({ chargeId: "ch_test_fake_1" }))?.status).toBe("closed");
+    });
+
+    it("counts refund accounting and final dispute clawbacks exactly once per id (PIN-150)", async () => {
+      const { store } = make();
+      const intent = await store.create(createInput());
+      expect(await store.applyRefundAccounting(intent.id, "re_test_fake_1", 250, 12)).toMatchObject({
+        applied: true,
+        intent: { refundedEurCents: 250, refundClawedMakes: 12 },
+      });
+      expect(await store.applyRefundAccounting(intent.id, "re_test_fake_1", 250, 12)).toMatchObject({
+        applied: false,
+        intent: { refundedEurCents: 250, refundClawedMakes: 12 },
+      });
+      expect(await store.applyRefundAccounting(intent.id, "re_test_fake_2", 249, 13)).toMatchObject({
+        applied: true,
+        intent: {
+          refundedEurCents: 499,
+          refundClawedMakes: 25,
+          countedRefundIds: ["re_test_fake_1", "re_test_fake_2"],
+        },
+      });
+      expect(await store.applyRefundAccounting("nope", "re_x", 1, 0)).toEqual({
+        intent: null,
+        applied: false,
+      });
+      expect(await store.recordFinalDisputeClawback(intent.id, "du_test_fake_1", 12)).toMatchObject({
+        applied: true,
+        intent: { finalDisputeClawbacks: { du_test_fake_1: 12 } },
+      });
+      expect(await store.recordFinalDisputeClawback(intent.id, "du_test_fake_1", 12)).toMatchObject({
+        applied: false,
+      });
+      await expect(store.applyRefundAccounting(intent.id, "re_bad", -1, 0)).rejects.toThrow(
+        RangeError,
+      );
     });
 
     it("rejects invalid create inputs with RangeError and stores nothing resolvable", async () => {
