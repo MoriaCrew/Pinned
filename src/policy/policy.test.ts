@@ -44,6 +44,11 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       expect(() => resolvePolicy({ elementLabelMaxChars: bad })).toThrow();
       expect(() => resolvePolicy(null, { elementLabelMaxChars: bad })).toThrow();
     }
+    // PIN-156 rename body cap: same layering, fails closed below 1 byte.
+    expect(DEFAULT_POLICY.elementRenameMaxBytes).toBe(1024);
+    expect(resolvePolicy({ elementRenameMaxBytes: 512 }).elementRenameMaxBytes).toBe(512);
+    expect(resolvePolicy(null, { elementRenameMaxBytes: 256 }).elementRenameMaxBytes).toBe(256);
+    for (const bad of [0, 1.5]) expect(() => resolvePolicy({ elementRenameMaxBytes: bad })).toThrow();
     // PIN-75 generated chips: TTL/cap/token budget/prompt version.
     expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
     expect(DEFAULT_POLICY.chipsMax).toBe(4);

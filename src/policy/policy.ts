@@ -53,6 +53,8 @@ export const PolicySchema = z
     boardTitleMaxChars: z.number().int().min(1).default(80),
     /** Thing label cap in code points (PIN-155): the gateway normalizers and (PIN-156) rename read this one value. */
     elementLabelMaxChars: z.number().int().min(1).default(60),
+    /** JSON body cap of the element rename PATCH (PIN-156); read from the env-level Policy before any board read. */
+    elementRenameMaxBytes: z.number().int().min(1).default(1024),
     participantCookieDays: z.number().int().min(1).default(30),
     /** Reclaim-PIN brute-force lockout (PIN-90): failed attempts per
      * (board, name) and per (board, IP) counted in the board store
@@ -276,6 +278,7 @@ export const PolicyOverridesSchema = z.object({
   chipsMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
   elementLabelMaxChars: z.number().int().min(1).optional(),
+  elementRenameMaxBytes: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
   reclaimMaxFailuresPerName: z.number().int().min(1).optional(),
   reclaimMaxFailuresPerIp: z.number().int().min(1).optional(),
