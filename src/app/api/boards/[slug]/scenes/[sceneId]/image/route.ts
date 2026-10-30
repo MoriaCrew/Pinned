@@ -17,16 +17,20 @@ export const dynamic = "force-dynamic";
  * Chat crawlers fetching og:image (PIN-72) may cache privately
  * for Policy.sceneImageCacheMaxAgeSeconds; no-store would make
  * some crawlers drop the preview, and shared caches stay out.
+ * `?size=preview` (PIN-133) serves the board strip's phone-sized
+ * WebP with the same checks, 404 and cache header; without it the
+ * full image, as share, link cards and downloads expect.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slug: string; sceneId: string }> },
 ): Promise<NextResponse> {
   const { slug, sceneId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
+  const size = new URL(request.url).searchParams.get("size") === "preview" ? "preview" : "full";
   const policy = await policyForBoard(slug);
-  const image = await resolveSceneImage(slug, sceneId, boardApiDeps(policy));
+  const image = await resolveSceneImage(slug, sceneId, boardApiDeps(policy), size);
   if (!image) return notFound();
   return new NextResponse(new Uint8Array(image.bytes), {
     headers: {

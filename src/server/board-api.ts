@@ -35,7 +35,10 @@ import {
 } from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
 import {
+  SCENE_PREVIEW_FILE,
   SceneJobRequestError,
+  buildScenePreviewRef,
+  renderScenePreview,
   startSceneJob,
   type SceneJobStore,
 } from "./scene-job";
@@ -79,6 +82,7 @@ export function sceneImageUrl(slug: string, sceneId: string): string {
 }
 
 export function publicScene(slug: string, scene: Scene) {
+  const imageUrl = scene.status === "ready" && scene.imageRef ? sceneImageUrl(slug, scene.id) : null;
   return {
     id: scene.id,
     boardId: scene.boardId,
@@ -93,10 +97,9 @@ export function publicScene(slug: string, scene: Scene) {
     ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
     // Stored pixel size (PIN-129): the print frame takes this shape.
     ...(validSceneSize(scene) ?? {}),
-    imageUrl:
-      scene.status === "ready" && scene.imageRef
-        ? sceneImageUrl(slug, scene.id)
-        : null,
+    imageUrl,
+    // Phone-sized strip image (PIN-133); viewer, share and og:image keep imageUrl.
+    previewUrl: imageUrl ? `${imageUrl}?size=preview` : null,
     createdAt: scene.createdAt,
   };
 }
@@ -998,14 +1001,14 @@ export async function deleteScene(
 
 /**
  * The one place that knows a scene's stored objects: its full image
- * (PIN-133 adds the preview). Only refs inside the scene's own folder
- * (the store's assertDerivativeRef also refuses `..`). Best-effort:
- * the tombstone already hides it, so a failure is logged by scene id
- * only (no ref, URL or env).
+ * and its strip preview (PIN-133). Only refs inside the scene's own
+ * folder (the store's assertDerivativeRef also refuses `..`).
+ * Best-effort: the scene is already hidden, so a failure is logged by
+ * scene id only (no ref, URL or env).
  */
 export async function deleteSceneObjects(scene: Scene, store: DerivativeStore): Promise<void> {
   const folder = `scenes/boards/${scene.boardId}/${scene.id}/`;
-  for (const ref of [scene.imageRef]) {
+  for (const ref of [scene.imageRef, `${folder}${SCENE_PREVIEW_FILE}`]) {
     if (!ref || !ref.startsWith(folder)) continue;
     try {
       await store.delete(ref);
@@ -1050,11 +1053,14 @@ const SCENE_IMAGE_TYPES: Record<string, string> = {
  * resolveElementImage: missing board/scene, another board's
  * scene, a hidden (element-deleted) scene, a not-ready scene, a
  * non-scenes/ ref and a missing object all return null -> 404.
+ * "preview" (PIN-133) passes the same checks first, then serves the
+ * strip preview; any preview failure serves the full image.
  */
 export async function resolveSceneImage(
   slug: string,
   sceneId: string,
   deps: BoardApiDeps,
+  size: "full" | "preview" = "full",
 ): Promise<{ bytes: Buffer; contentType: string } | null> {
   const board = await deps.boards.getBoard(slug);
   if (!board) return null;
@@ -1072,7 +1078,38 @@ export async function resolveSceneImage(
   const ext = scene.imageRef.split(".").at(-1) ?? "";
   const contentType = SCENE_IMAGE_TYPES[ext.toLowerCase()];
   if (!contentType) return null;
+  if (size === "preview") {
+    const preview = await scenePreview(scene, scene.imageRef, deps);
+    if (preview) return { bytes: preview, contentType: "image/webp" };
+  }
   const bytes = await deps.store.get(scene.imageRef);
   if (!bytes) return null;
   return { bytes, contentType };
+}
+
+/**
+ * The stored preview, or — for a scene stored before previews
+ * existed — made once from the full image, stored and returned.
+ * Only reached past resolveSceneImage's checks, so a hidden or
+ * deleted scene never gets one. Two concurrent first requests render
+ * identical bytes, so the second put is a harmless overwrite (no
+ * precondition needed). Any failure is null: serve the full image.
+ */
+async function scenePreview(scene: Scene, imageRef: string, deps: BoardApiDeps): Promise<Buffer | null> {
+  try {
+    const ref = buildScenePreviewRef(scene.boardId, scene.id);
+    const stored = await deps.store.get(ref);
+    if (stored) return stored;
+    const full = await deps.store.get(imageRef);
+    if (!full) return null;
+    const preview = await renderScenePreview(full, deps.policy);
+    await deps.store.put(ref, preview, "image/webp");
+    return preview;
+  } catch (error) {
+    console.error("Scene preview failed; serving the full image.", {
+      sceneId: scene.id,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    return null;
+  }
 }
