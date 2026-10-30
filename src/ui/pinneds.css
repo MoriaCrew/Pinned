@@ -255,8 +255,10 @@
 /* ---------- Pin (sticker + name tag) ---------- */
 .pn-pin { display: grid; justify-items: center; gap: var(--space-2); margin: 0; min-width: 0; text-align: center; }
 .pn-pin-hit { display: grid; justify-items: center; gap: var(--space-2); padding: 6px 4px; margin: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: var(--radius-md); -webkit-tap-highlight-color: transparent; }
-.pn-pin-tag { display: inline-block; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
-  font: 650 var(--tag-size)/1.25 var(--tag-font); letter-spacing: var(--tag-tracking); text-transform: var(--tag-transform); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The whole name on up to 3 lines (PIN-164); "…" only past that. Every
+   parent is a centring grid, so the box still hugs its text. */
+.pn-pin-tag { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
+  font: 650 var(--tag-size)/1.25 var(--tag-font); letter-spacing: var(--tag-tracking); text-transform: var(--tag-transform); overflow: hidden; overflow-wrap: break-word; text-wrap: balance; }
 .pn-pin-tag { text-decoration: var(--tag-deco); text-underline-offset: 4px; }
 .pn-pin-owner { display: inline-flex; align-items: center; gap: 6px; margin-top: -2px; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pn-pin[data-state="dropped"] .pn-pin-tag { text-decoration: line-through; opacity: .7; }

@@ -197,3 +197,4 @@ No pins yet: three dashed ghost outlines.
 | Oct 29 | Atkinson Hyperlegible for reading | Usable by anyone from day one |
 | Oct 30 | First-generation `globals.css` removed (PIN-114); only a reset remains | Its `:root` tokens and bare `main`/`h1`/`footer` rules fought the skins; `/lab/sam` keeps its styles in a CSS module |
 | Oct 30 | The Things grid shows pinned things only; a photo's unpinned candidates get one line above it (Pin them reopens that photo's review, Clear asks once) (PIN-122) | "Not pinned yet" stickers in the grid read as things from other boards |
+| Oct 30 | A thing's name tag wraps to up to 3 lines, "…" only past that (PIN-164) | One line cut most names after ~9 letters in the wide uppercase looks |
