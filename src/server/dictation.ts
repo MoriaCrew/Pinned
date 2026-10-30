@@ -149,6 +149,7 @@ export async function transcribeDictation(
     timeoutMs: policy.timeoutsMs.voice,
     boardId: slug,
     participantId: viewer.id,
+    userIdAtCall: viewer.userId ?? null,
   });
   if (outcome.status === "ready") {
     if (!outcome.value.text) {

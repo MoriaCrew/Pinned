@@ -30,7 +30,9 @@ import {
 } from "./budget";
 import {
   estimateMetaCostUsd,
+  estimateReserveMicroUsd,
   estimateReserveUsd,
+  usdToMicroUsd,
   type PortOperation,
 } from "./costs";
 import type { MetaCallLog } from "./meta-gateway";
@@ -76,6 +78,10 @@ interface CallMeta {
   timeoutMs: number;
   boardId?: string;
   participantId?: string;
+  /** PIN-137 attribution for AiCallLog v2. */
+  userIdAtCall?: string | null;
+  sceneId?: string;
+  jobId?: string;
   /** PIN-136: photo (ElementNamer) vs scene (SceneComposer) caps use separate counters. */
   participantPhotoCap?: number;
   participantSceneCap?: number;
@@ -175,18 +181,72 @@ async function runDecorated<T>(
   const boardId = safeId(meta.boardId);
   const participantId = safeId(meta.participantId);
   const photoId = safeId(meta.photoId);
+  const sceneId = safeId(meta.sceneId);
+  const jobId = safeId(meta.jobId);
+  const userIdAtCall = meta.userIdAtCall ? safeId(meta.userIdAtCall) ?? null : null;
+  const reserveLimits = {
+    sparkElementsMaxTokens: policy.maxTokens.sparkElements,
+    sparkChipsMaxTokens: policy.maxTokens.sparkChips,
+    sparkTapNameMaxTokens: policy.maxTokens.sparkTapName,
+    voiceMaxSeconds: policy.dictationMaxSeconds,
+    voiceSeconds: meta.audioSeconds,
+  };
+  const reservedPerReserveMicroUsd = estimateReserveMicroUsd(meta.operation, reserveLimits);
+  let reservedMicroUsd = 0;
+  let denialReason: string | undefined;
+
+  const writeLog = async (partial: {
+    outcome: AiCallLog["outcome"];
+    attempt: number;
+    attempts: number;
+    costEstimateUsd: number;
+    collected: MetaCallLog[];
+    reservedMicroUsd: number;
+    denialReason?: string;
+  }): Promise<void> => {
+    const finishedAt = deps.now();
+    const sum = (pick: (e: MetaCallLog) => number | undefined) =>
+      partial.collected.reduce((acc, e) => acc + (pick(e) ?? 0), 0);
+    const audioSeconds = sum((e) => e.audioSeconds) || (meta.audioSeconds ? Math.ceil(meta.audioSeconds) : undefined);
+    try {
+      await deps.appendLog({
+        id: deps.newId(),
+        schemaVersion: 2,
+        ...(boardId ? { gameId: boardId, boardId } : {}),
+        ...(participantId ? { participantId } : {}),
+        userIdAtCall,
+        ...(sceneId ? { sceneId } : {}),
+        ...(photoId ? { photoId } : {}),
+        ...(jobId ? { jobId } : {}),
+        operation: meta.operation,
+        model: partial.collected[0]?.model ?? meta.model,
+        ...(meta.promptVersion ? { promptVersion: meta.promptVersion } : {}),
+        inputTokens: sum((e) => e.inputTokens) || undefined,
+        outputTokens: sum((e) => e.outputTokens) || undefined,
+        images: sum((e) => e.images) || undefined,
+        ...(audioSeconds ? { audioSeconds } : {}),
+        latencyMs: Math.max(0, finishedAt - startedAt),
+        costEstimateUsd: partial.costEstimateUsd,
+        costMicroUsdEst: usdToMicroUsd(partial.costEstimateUsd),
+        reservedMicroUsd: partial.reservedMicroUsd,
+        attempt: partial.attempt,
+        attempts: partial.attempts,
+        ...(partial.denialReason ? { denialReason: partial.denialReason } : {}),
+        outcome: partial.outcome,
+        dayBucket,
+        createdAt: finishedAt,
+        expireAt: finishedAt + policy.aiCallLogRetentionDays * 86_400_000,
+      });
+    } catch (cause) {
+      deps.onLogError(cause);
+    }
+  };
 
   const tryReserve = async (): Promise<ReserveResult | "unavailable"> => {
     try {
       return await deps.budget.reserve({
         dayBucket,
-        estimatedCostUsd: estimateReserveUsd(meta.operation, {
-          sparkElementsMaxTokens: policy.maxTokens.sparkElements,
-          sparkChipsMaxTokens: policy.maxTokens.sparkChips,
-          sparkTapNameMaxTokens: policy.maxTokens.sparkTapName,
-          voiceMaxSeconds: policy.dictationMaxSeconds,
-          voiceSeconds: meta.audioSeconds,
-        }),
+        estimatedCostUsd: estimateReserveUsd(meta.operation, reserveLimits),
         budgetUsd: policy.dailyBudgetUsd,
         callLimit: policy.dailyCallLimit,
         participantId,
@@ -201,7 +261,6 @@ async function runDecorated<T>(
         photoCap: photoId ? meta.photoCap : undefined,
       });
     } catch {
-      // Fail closed: the loop below turns this into no provider call.
       return "unavailable";
     }
   };
@@ -209,21 +268,35 @@ async function runDecorated<T>(
   const collected: MetaCallLog[] = [];
   let outcome: PortOutcome<T> = { status: "failed", errorCode: "not_run" };
   let attemptsRun = 0;
+  let lastAttempt = 0;
   for (let attempt = 0; attempt <= policy.retries; attempt += 1) {
+    lastAttempt = attempt;
     if (attempt > 0) await deps.sleep(policy.retryBackoffMs);
     if (attempt === 0 || meta.reservePerAttempt) {
       const reserve = await tryReserve();
       if (reserve === "unavailable" || !reserve.ok) {
+        denialReason = reserve === "unavailable" ? "budget_unavailable" : reserve.reason;
         const denied = deniedOutcome<T>(
           reserve === "unavailable" ? "budget_unavailable" : reserve.reason,
         );
-        // Before any provider call: fail closed, no log (PIN-61). A
-        // mid-retry denial falls through so the attempts that did
-        // reach the provider still get their AiCallLog.
-        if (attemptsRun === 0) return denied;
+        // PIN-137: denials are logged (one denied_* record) even
+        // before any provider call; the outcome stays fail-closed.
+        if (attemptsRun === 0) {
+          await writeLog({
+            outcome: denialReason === "off" ? "denied_off" : (`denied_${denialReason}` as AiCallLog["outcome"]),
+            attempt,
+            attempts: 0,
+            costEstimateUsd: 0,
+            collected,
+            reservedMicroUsd: 0,
+            denialReason,
+          });
+          return denied;
+        }
         outcome = denied;
         break;
       }
+      reservedMicroUsd += reserve.estimatedMicroUsd ?? reservedPerReserveMicroUsd;
     }
     attemptsRun += 1;
     outcome = await metaLogCollector.run(collected, () =>
@@ -232,36 +305,23 @@ async function runDecorated<T>(
     if (outcome.status !== "failed" || !isRetryable(outcome)) break;
   }
 
-  const finishedAt = deps.now();
-  const sum = (pick: (e: MetaCallLog) => number | undefined) =>
-    collected.reduce((acc, e) => acc + (pick(e) ?? 0), 0);
-  try {
-    await deps.appendLog({
-      id: deps.newId(),
-      ...(boardId ? { gameId: boardId } : {}),
-      operation: meta.operation,
-      model: collected[0]?.model ?? meta.model,
-      ...(meta.promptVersion ? { promptVersion: meta.promptVersion } : {}),
-      inputTokens: sum((e) => e.inputTokens) || undefined,
-      outputTokens: sum((e) => e.outputTokens) || undefined,
-      images: sum((e) => e.images) || undefined,
-      latencyMs: Math.max(0, finishedAt - startedAt),
-      costEstimateUsd: collected.reduce(
-        (acc, e) => acc + estimateMetaCostUsd(e),
-        0,
-      ),
-      outcome:
-        outcome.status === "ready"
+  const costEstimateUsd = collected.reduce((acc, e) => acc + estimateMetaCostUsd(e), 0);
+  await writeLog({
+    outcome:
+      denialReason && attemptsRun > 0
+        ? (denialReason === "off" ? "denied_off" : (`denied_${denialReason}` as AiCallLog["outcome"]))
+        : outcome.status === "ready"
           ? "ok"
           : outcome.status === "refused"
             ? "refused"
             : "error",
-      dayBucket,
-      createdAt: finishedAt,
-    });
-  } catch (cause) {
-    deps.onLogError(cause);
-  }
+    attempt: lastAttempt,
+    attempts: attemptsRun,
+    costEstimateUsd,
+    collected,
+    reservedMicroUsd,
+    ...(denialReason ? { denialReason } : {}),
+  });
   return outcome;
 }
 
@@ -303,6 +363,9 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
+            photoId: input.photoId,
+            jobId: input.jobId,
             participantPhotoCap: policy.photosPerParticipantPerDay,
           },
           () => base.elementNamer.nameElements(input),
@@ -322,6 +385,8 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
+            jobId: input.jobId,
           },
           () => base.segmenter.segment(input),
         ),
@@ -340,6 +405,9 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
+            sceneId: input.sceneId,
+            jobId: input.jobId,
             participantSceneCap: policy.scenesPerParticipantPerDay,
             boardCap: policy.scenesPerBoardPerDay,
           },
@@ -360,6 +428,7 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
           },
           () => suggester.suggestChips(input),
         ),
@@ -378,6 +447,9 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
+            photoId: input.photoId,
+            jobId: input.jobId,
             participantTapNameCap: policy.tapNamesPerParticipantPerDay,
           },
           () => tapNamer.nameOne(input),
@@ -396,6 +468,7 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
+            userIdAtCall: input.userIdAtCall,
             participantTranscriptionCap: policy.dictationsPerParticipantPerDay,
             audioSeconds: input.durationSeconds,
           },

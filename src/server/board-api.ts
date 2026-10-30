@@ -507,6 +507,7 @@ export async function tapAddPin(
     throw new BoardApiError("Job not found.", 404);
   }
   const outcome = await addTapElement(jobId, point, t("en", "add.tapLabel"), {
+    userIdAtCall: participant.userId ?? null,
     ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
     boards: deps.boards,
     jobs: deps.jobs,

@@ -294,8 +294,10 @@ describe("addTapElement point -> pin (PIN-78)", () => {
     expect(h.prompts.filter((p) => p.kind === "point")).toHaveLength(2);
     expect(budget.snapshot(dayBucketFor(T0)).photos).toEqual({ [job.id]: 3 });
     expect(budget.snapshot(dayBucketFor(T0)).participantSegments).toEqual({ p1: 3 });
-    // Every provider call (concept + both taps) has an AiCallLog.
-    expect(logs.filter((l) => l.operation === "segment")).toHaveLength(3);
+    // Every provider call (concept + both taps) has an AiCallLog,
+    // plus PIN-137's denied_* record for the capped 3rd tap.
+    expect(logs.filter((l) => l.operation === "segment")).toHaveLength(4);
+    expect(logs.filter((l) => l.operation === "segment").at(-1)).toMatchObject({ outcome: "denied_photo_cap" });
   });
 
   it("names the crop via TapNamer: label, description and faceFlag land on the Element (PIN-117)", async () => {

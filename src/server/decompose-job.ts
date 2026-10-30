@@ -170,6 +170,8 @@ export interface DecomposeDeps {
   policy: Policy;
   now?: () => number;
   newId?: () => string;
+  /** PIN-137: signed-in user snapshot resolved at request time (null = link-only). */
+  userIdAtCall?: string | null;
 }
 
 export interface StartDecomposeInput {
@@ -227,7 +229,7 @@ export async function startDecomposeJob(
     await deps.store.delete(workingRef).catch(() => undefined);
     throw cause;
   }
-  return runDecomposeJob(jobId, deps);
+  return runDecomposeJob(jobId, { ...deps, userIdAtCall: participant.userId ?? null });
 }
 
 async function finish(
@@ -285,6 +287,9 @@ export async function runDecomposeJob(
       promptVersion: policy.promptVersions.elements,
       boardId: job.boardId,
       participantId: job.participantId,
+      userIdAtCall: deps.userIdAtCall ?? null,
+      photoId: job.id,
+      jobId: job.id,
     });
     if (named.status !== "ready") {
       return finish(
@@ -329,6 +334,8 @@ export async function runDecomposeJob(
         timeoutMs: policy.timeoutsMs.sam,
         boardId: job.boardId,
         participantId: job.participantId,
+        userIdAtCall: deps.userIdAtCall ?? null,
+        jobId: job.id,
       });
       if (outcome.status !== "ready") {
         if (outcome.status === "refused") refusedCount += 1;
@@ -533,6 +540,8 @@ export async function addTapElement(
     timeoutMs: policy.timeoutsMs.sam,
     boardId: job.boardId,
     participantId: job.participantId,
+    userIdAtCall: deps.userIdAtCall ?? null,
+    jobId: job.id,
   });
   if (outcome.status !== "ready") {
     // PIN-92: a segment-cap denial is the same friendly stop as
@@ -593,6 +602,9 @@ export async function addTapElement(
           promptVersion: policy.promptVersions.tapName,
           boardId: job.boardId,
           participantId: job.participantId,
+          userIdAtCall: deps.userIdAtCall ?? null,
+          photoId: job.id,
+          jobId: job.id,
         });
         if (named.status === "ready" && named.value.name.label) {
           label = named.value.name.label;

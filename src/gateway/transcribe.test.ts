@@ -239,11 +239,14 @@ describe("decorated SpeechTranscriber (PIN-119)", () => {
   });
 
   it("denies at the Policy dictation cap before any provider call", async () => {
-    const { ports, calls } = decorated(resolvePolicy({ dictationsPerParticipantPerDay: 1 }));
+    const { ports, calls, logs } = decorated(resolvePolicy({ dictationsPerParticipantPerDay: 1 }));
     const input = transcribeInput({ participantId: "p1" });
     expect((await ports.speechTranscriber!.transcribe(input)).status).toBe("ready");
     const denied = await ports.speechTranscriber!.transcribe(input);
     expect(denied).toMatchObject({ status: "failed", errorCode: "participant_cap" });
     expect(calls()).toBe(1);
+    // PIN-137: the denial is logged; ready calls carry audioSeconds.
+    expect(logs[0]).toMatchObject({ operation: "transcribe", outcome: "ok", audioSeconds: 3 });
+    expect(logs.at(-1)).toMatchObject({ operation: "transcribe", outcome: "denied_participant_cap", attempts: 0 });
   });
 });

@@ -56,4 +56,23 @@ describe("AI usage guardrails", () => {
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 1 })).toBe(true);
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 200 })).toBe(false);
   });
+
+  it("PIN-137: denied rows do not count as billed calls; lab sink sets expireAt", async () => {
+    const repository = new InMemoryGameRepository();
+    const now = Date.UTC(2026, 9, 27, 12, 0, 0);
+    const sink = createMetaLogSink(repository, () => now, 30);
+    await sink({ operation: "segmentObject", model: "sam-3.1", latencyMs: 1, outcome: "ok", images: 1 });
+    const [labLog] = await repository.listAiCallLogs("2026-10-27");
+    expect(labLog.expireAt).toBe(now + 30 * 86_400_000);
+    await repository.appendAiCallLog({
+      id: "denied-1", operation: "nameElements", model: "m", latencyMs: 0,
+      outcome: "denied_budget", dayBucket: "2026-10-27", createdAt: now,
+      costMicroUsdEst: 0, attempts: 0,
+    });
+    const usage = await getTodayAiUsage(repository, now);
+    expect(usage.callCount).toBe(1);
+    expect(usage.deniedCount).toBe(1);
+    expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 1 })).toBe(true);
+    expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 2 })).toBe(false);
+  });
 });

@@ -7,6 +7,7 @@ import {
   isAiBudgetExhausted,
 } from "../../../../server/ai-usage";
 import { MAX_PHOTO_BYTES, PhotoIntakeError } from "../../../../server/photo-intake";
+import { getPolicy } from "../../../../policy/server";
 import { getGameRepository } from "../../../../server/repository";
 import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../../server/rate-limit";
 import { SamLabError, parseSamLabInput, runSamLab } from "../../../../server/sam-lab";
@@ -79,7 +80,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // (explicit config, reported via `mock`); over budget the lab
     // pauses with a 429 instead of swapping silently (PIN-61).
     const gateway = getModelGateway({
-      onLog: cfg.aiMock ? undefined : createMetaLogSink(repository),
+      onLog: cfg.aiMock ? undefined : createMetaLogSink(repository, Date.now, getPolicy().aiCallLogRetentionDays),
     });
     const mock = cfg.aiMock;
     if (!cfg.aiMock) {

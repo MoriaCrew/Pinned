@@ -181,6 +181,8 @@ export interface SceneJobDeps {
   policy: Policy;
   now?: () => number;
   newId?: () => string;
+  /** PIN-137: signed-in user snapshot resolved at request time (null = link-only). */
+  userIdAtCall?: string | null;
 }
 
 export interface StartSceneInput {
@@ -402,7 +404,7 @@ export async function startSceneJob(
           "scene_id_conflict",
         );
       }
-      return runSceneJob(input.boardId, sceneId, deps);
+      return runSceneJob(input.boardId, sceneId, { ...deps, userIdAtCall: participant.userId ?? null });
     }
     // Scene ids are global in BoardRepository: an id already used
     // by a Scene on any board (with no matching job here) conflicts.
@@ -485,7 +487,7 @@ export async function startSceneJob(
         raced.prompt === prompt &&
         sameStringList(raced.elementIds, elementIds)
       ) {
-        return runSceneJob(input.boardId, jobId, deps);
+        return runSceneJob(input.boardId, jobId, { ...deps, userIdAtCall: participant.userId ?? null });
       }
       if (raced) {
         throw new SceneJobRequestError(
@@ -498,7 +500,7 @@ export async function startSceneJob(
   }
   await syncScene(deps, job);
   await appendSceneEvent(deps, job, "scene_requested", "requested");
-  return runSceneJob(input.boardId, jobId, deps);
+  return runSceneJob(input.boardId, jobId, { ...deps, userIdAtCall: participant.userId ?? null });
 }
 
 async function finish(
@@ -698,6 +700,9 @@ export async function runSceneJob(
       sceneInputMode: policy.sceneInputMode,
       boardId,
       participantId: job.participantId,
+      userIdAtCall: deps.userIdAtCall ?? null,
+      sceneId: job.id,
+      jobId: job.id,
     });
 
     if (outcome.status === "refused") {

@@ -102,4 +102,29 @@ describe("FirestoreGameRepository (fake Firestore, PIN-93)", () => {
     expect((await repo.listAiCallLogs("2026-10-27")).map((log) => log.id)).toEqual(["today"]);
     expect(await repo.listAiCallLogs("2026-10-29")).toEqual([]);
   });
+
+  it("PIN-137: writes expireAtTs Timestamp mirror, strips it on read, normalizes old rows", async () => {
+    const fake = new FakeFirestore();
+    const repo = new FirestoreGameRepository(fake as unknown as Firestore);
+    await repo.appendAiCallLog({
+      id: "v2", operation: "segment", model: "sam-3.1", latencyMs: 1,
+      outcome: "ok", dayBucket: "2026-10-27", createdAt: 1_000,
+      boardId: "synthetic-board-fs", expireAt: 1_000 + 90 * 86_400_000,
+    });
+    const stored = fake.store.get("aiCallLogs/v2")!;
+    expect(stored.expireAtTs).toMatchObject({ toMillis: expect.any(Function) });
+    expect((stored.expireAtTs as { toMillis(): number }).toMillis()).toBe(1_000 + 90 * 86_400_000);
+    // Seed an old-shape doc directly (pre-v2 write).
+    fake.store.set("aiCallLogs/old", {
+      id: "old", operation: "nameObject", model: "m", latencyMs: 1,
+      outcome: "ok", dayBucket: "2026-10-27", createdAt: 5,
+      gameId: "synthetic-board-fs", costEstimateUsd: 0.0025,
+    });
+    const rows = await repo.listAiCallLogs("2026-10-27");
+    const v2 = rows.find((r) => r.id === "v2")!;
+    expect(v2).not.toHaveProperty("expireAtTs");
+    const old = rows.find((r) => r.id === "old")!;
+    expect(old.boardId).toBe("synthetic-board-fs");
+    expect(old.costMicroUsdEst).toBe(2500);
+  });
 });

@@ -9,9 +9,9 @@ import "server-only";
  * field values. (The `GameRepository` name predates the Studio
  * pivot and is kept to avoid a repo-wide rename.)
  */
-import { Firestore, type DocumentData } from "@google-cloud/firestore";
+import { Firestore, Timestamp, type DocumentData } from "@google-cloud/firestore";
 import type { GameRepository } from "../domain/repository";
-import type { AiCallLog } from "../domain/types";
+import { normalizeAiCallLog, type AiCallLog } from "../domain/types";
 
 const AI_CALL_LOGS = "aiCallLogs";
 
@@ -23,7 +23,15 @@ export class FirestoreGameRepository implements GameRepository {
   constructor(private readonly db: Firestore) {}
 
   async appendAiCallLog(log: AiCallLog): Promise<void> {
-    await this.db.collection(AI_CALL_LOGS).doc(log.id).set(toFirestoreData(log));
+    // PIN-137: expireAtTs mirrors expireAt as a Firestore Timestamp
+    // so the operator can enable a TTL policy on it console-side
+    // (Firestore TTL requires a timestamp field). The TTL policy
+    // itself is NOT created here; readers strip this helper field.
+    const data = toFirestoreData(log);
+    if (typeof log.expireAt === "number") {
+      data.expireAtTs = Timestamp.fromMillis(log.expireAt);
+    }
+    await this.db.collection(AI_CALL_LOGS).doc(log.id).set(data);
   }
 
   async listAiCallLogs(dayBucket: string): Promise<AiCallLog[]> {
@@ -31,7 +39,11 @@ export class FirestoreGameRepository implements GameRepository {
       .collection(AI_CALL_LOGS)
       .where("dayBucket", "==", dayBucket)
       .get();
-    return snapshot.docs.map((doc) => structuredClone(doc.data() as AiCallLog));
+    return snapshot.docs.map((doc) => {
+      const raw = { ...(doc.data() as AiCallLog & { expireAtTs?: unknown }) };
+      delete raw.expireAtTs;
+      return normalizeAiCallLog(structuredClone(raw));
+    });
   }
 
   /** Release the underlying gRPC client in scripts and tests. */
