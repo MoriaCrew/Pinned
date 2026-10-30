@@ -35,6 +35,7 @@ import {
   type TapPoint,
 } from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
+import { elementBytesStillNeeded } from "./board-storage";
 import {
   SCENE_PREVIEW_FILE,
   SceneJobRequestError,
@@ -845,12 +846,11 @@ export async function deleteMyElement(
   // either record must leave storage alone while a live element
   // on the other side still points at the same refs — the copy
   // (and its scenes on its board) keeps working, and the last
-  // record out deletes the objects.
-  const othersSharingRefs = (
-    await deps.boards.listElementsByCutoutRef(element.cutoutRef)
-  ).filter((other) => other.id !== elementId);
-  const sharedRefs: string[] =
-    othersSharingRefs.length > 0 ? [] : [element.cutoutRef, element.flattenedRef];
+  // record out deletes the objects. Records on a deleted board
+  // never count (PIN-169): they would keep the bytes forever.
+  const sharedRefs: string[] = (await elementBytesStillNeeded(element.cutoutRef, deps.boards, elementId))
+    ? []
+    : [element.cutoutRef, element.flattenedRef];
 
   let storageDeleted = false;
   for (const ref of sharedRefs) {

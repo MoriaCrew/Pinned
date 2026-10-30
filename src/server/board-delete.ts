@@ -6,19 +6,23 @@ import "server-only";
  * reads the board as missing and every write to it is refused —
  * nothing racing the row clean-up below can bring it back (the
  * index writer re-checks too). Jobs in flight are not waited for
- * (a stuck job must never block a delete); stored objects stay
- * until storage clean-up (PIN-169).
+ * (a stuck job must never block a delete). Last, the board's stored
+ * objects go (PIN-169, board-storage.ts): best-effort, never thrown
+ * to the caller, and a job that outlives the board sweeps again.
  */
 import type { BoardRepository } from "../domain/board-repository";
 import type { UserRepository } from "../domain/user-repository";
 import type { Policy } from "../policy/policy";
 import { BoardApiError } from "./board-session";
+import { sweepDeletedBoardStorage } from "./board-storage";
+import type { DerivativeStore } from "./derivative-store";
 import { verifyHostToken } from "./host-session";
 import { isSafeUid } from "./user-session";
 
 export interface DeleteBoardDeps {
   boards: BoardRepository;
   users: UserRepository;
+  store: DerivativeStore;
   /** The board's effective Policy (host token age). */
   policy: Policy;
   now?: () => number;
@@ -55,4 +59,5 @@ export async function deleteBoardForEveryone(
       });
     }
   }
+  await sweepDeletedBoardStorage(slug, deps);
 }

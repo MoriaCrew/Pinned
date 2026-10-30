@@ -49,6 +49,7 @@ import {
   assertDerivativeRef,
   type DerivativeStore,
 } from "./derivative-store";
+import { ELEMENT_CUTOUT_FILE } from "./board-storage";
 import { processPhoto } from "./photo-intake";
 import {
   decodeSegment,
@@ -123,7 +124,7 @@ export function buildBoardWorkingRef(boardId: string, jobId: string): string {
 }
 
 export function buildElementCutoutRef(boardId: string, elementId: string): string {
-  return assertDerivativeRef(`elements/boards/${boardId}/${elementId}/cutout.png`);
+  return assertDerivativeRef(`elements/boards/${boardId}/${elementId}/${ELEMENT_CUTOUT_FILE}`);
 }
 
 export function buildElementFlattenedRef(boardId: string, elementId: string): string {
