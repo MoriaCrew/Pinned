@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         {ui.enabled ? (
           <AuthProvider config={ui.config}>
-            <header className="site-header">
+            <header className="pn-skin-root pn-lib-header" data-theme={DEFAULT_SKIN}>
               <AuthControl />
             </header>
             {children}

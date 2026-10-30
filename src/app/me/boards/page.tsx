@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { getConfig } from "../../../config";
 import { resolveAuthUi } from "../../../domain/auth-ui";
-import { t } from "../../../i18n";
+import { t, tCount } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
 import { getBoardRepository } from "../../../server/board-repository";
 import { listMyBoards } from "../../../server/my-boards";
@@ -11,6 +11,9 @@ import {
   resolveUserSession,
   USER_COOKIE_NAME,
 } from "../../../server/user-session";
+import { ButtonLink } from "../../../ui";
+import { SignInButton } from "../../auth/SignInButton";
+import { BoardCards, LibraryEmpty, LibraryHeader } from "../LibraryParts";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +21,10 @@ export const dynamic = "force-dynamic";
  * My boards (PIN-84): every board this signed-in user has
  * claimed, newest activity first. The route does not exist in
  * link-only mode (uniform 404, like the auth API routes).
- * Signed-out visitors in optional mode get an honest prompt —
- * the header sign-in button is right there when configured.
+ * Signed-out visitors in optional mode get one line and a Sign in
+ * button (or an honest "not set up" line when sign-in is not
+ * configured). PIN-104: restyled on the design system; each board
+ * is a mini board in its own skin.
  */
 export default async function MyBoardsPage() {
   const cfg = getConfig();
@@ -41,67 +46,64 @@ export default async function MyBoardsPage() {
   ).catch(() => null);
 
   return (
-    <main className="board-main">
-      <p className="eyebrow">
-        <a href="/">📌 Pinneds</a>
-      </p>
-      <h1>{t("en", "myBoards.title")}</h1>
+    <main className="pn-skin-root pn-lib-page" data-theme="paper">
       {!user ? (
-        <p className="lede">
-          {ui.enabled
-            ? t("en", "myBoards.signInPrompt")
-            : t("en", "auth.notConfigured")}
-        </p>
+        <SignedOut enabled={ui.enabled} />
       ) : (
-        <MyBoardsList uid={user.uid} />
+        <MyBoardsList uid={user.uid} signInEnabled={ui.enabled} />
       )}
     </main>
   );
 }
 
-async function MyBoardsList({ uid }: { uid: string }) {
+function SignedOut({ enabled }: { enabled: boolean }) {
+  return (
+    <>
+      <LibraryHeader title={t("en", "myBoards.title")} />
+      {enabled ? (
+        <LibraryEmpty title={t("en", "myBoards.signInPrompt")}>
+          <SignInButton variant="primary" size="lg" stacked />
+        </LibraryEmpty>
+      ) : (
+        <LibraryEmpty title={t("en", "auth.notConfigured")}>
+          <ButtonLink variant="secondary" size="lg" href="/">
+            {t("en", "notFound.home")}
+          </ButtonLink>
+        </LibraryEmpty>
+      )}
+    </>
+  );
+}
+
+async function MyBoardsList({
+  uid,
+  signInEnabled,
+}: {
+  uid: string;
+  signInEnabled: boolean;
+}) {
   const users = getUserRepository();
   const profile = await users.getUser(uid);
-  if (!profile) return <p className="lede">{t("en", "myBoards.signInPrompt")}</p>;
+  if (!profile) return <SignedOut enabled={signInEnabled} />;
   const boards = await listMyBoards(profile, {
     boards: getBoardRepository(),
     users,
   });
-  if (boards.length === 0) {
-    return <p className="lede">{t("en", "myBoards.empty")}</p>;
-  }
   return (
-    <ul className="my-boards">
-      {boards.map((board) => (
-        <li key={board.slug} className="card my-board-card">
-          <a href={`/g/${board.slug}`}>
-            {board.latestSceneImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- board-link-checked image route
-              <img
-                className="my-board-thumb"
-                src={board.latestSceneImageUrl}
-                alt=""
-                width={512}
-                height={512}
-              />
-            ) : null}
-            <span className="my-board-title">{board.title}</span>
-            {board.themeLabel ? (
-              <span className="fact-chip">
-                {board.themeMotif} {board.themeLabel}
-              </span>
-            ) : null}
-            <span className="my-board-meta">
-              📌 {board.myPinCount} {t("en", "myBoards.myPins")} ·{" "}
-              {t("en", "myBoards.lastActive")}{" "}
-              {new Date(board.lastActivityAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          </a>
-        </li>
-      ))}
-    </ul>
+    <>
+      <LibraryHeader
+        title={t("en", "myBoards.title")}
+        meta={boards.length > 0 ? tCount("en", "myBoards.count", boards.length) : undefined}
+      />
+      {boards.length === 0 ? (
+        <LibraryEmpty title={t("en", "myBoards.empty")} body={t("en", "myBoards.emptyBody")}>
+          <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
+            {t("en", "myBoards.emptyAction")}
+          </ButtonLink>
+        </LibraryEmpty>
+      ) : (
+        <BoardCards boards={boards} />
+      )}
+    </>
   );
 }
