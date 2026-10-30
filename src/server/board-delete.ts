@@ -1,19 +1,13 @@
 import "server-only";
 /**
  * Delete a board for everyone (PIN-167, docs/13-auth.md "Board
- * delete"). The host only: every other caller — no or bad host
- * token, another board's host, an unknown or already deleted
- * board — gets the one 404, so the answer reveals nothing.
- *
- * The repository tombstone comes first. From then on every route
- * reads the board as missing and every repository write to it is
- * refused, so nothing racing the steps below can bring it back.
- * Then each signed-in member's users/{uid}/boards/{slug} row goes
- * (writeBoardIndex re-checks the board, so a racing link cannot
- * leave one behind; My boards also skips a deleted board). Jobs in
- * flight are not waited for — a stuck job must never block a
- * delete — their late writes are refused instead. Stored objects
- * stay until storage cleanup (PIN-169).
+ * delete"): the host only; any other caller gets the one 404. The
+ * repository tombstone comes first, so from then on every route
+ * reads the board as missing and every write to it is refused —
+ * nothing racing the row clean-up below can bring it back (the
+ * index writer re-checks too). Jobs in flight are not waited for
+ * (a stuck job must never block a delete); stored objects stay
+ * until storage clean-up (PIN-169).
  */
 import type { BoardRepository } from "../domain/board-repository";
 import type { UserRepository } from "../domain/user-repository";

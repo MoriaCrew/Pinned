@@ -13,62 +13,40 @@ process.env.AI_MOCK = "1";
 process.env.DATA_BACKEND = "memory";
 process.env.AUTH_MODE = "optional";
 
-let m: {
-  create: typeof import("./route");
-  board: typeof import("./[slug]/route");
-  participants: typeof import("./[slug]/participants/route");
-  claim: typeof import("./[slug]/claim/route");
-  photos: typeof import("./[slug]/photos/route");
-  scenes: typeof import("./[slug]/scenes/route");
-  elementImage: typeof import("./[slug]/elements/[elementId]/image/route");
-  sceneImage: typeof import("./[slug]/scenes/[sceneId]/image/route");
-  job: typeof import("./[slug]/jobs/[jobId]/route");
-  tap: typeof import("./[slug]/jobs/[jobId]/tap-add/route");
-  confirm: typeof import("./[slug]/pins/confirm/route");
-  transcribe: typeof import("./[slug]/transcribe/route");
-  fromLibrary: typeof import("./[slug]/pins/from-library/route");
-  skin: typeof import("./[slug]/skin/route");
-  session: typeof import("../auth/session/route");
-  myBoards: typeof import("../me/boards/route");
-  myImage: typeof import("../me/elements/[elementId]/image/route");
-  shared: typeof import("./shared");
-  api: typeof import("../../../server/board-api");
-  repos: typeof import("../../../server/board-repository");
-  users: typeof import("../../../server/user-repository");
-  jobs: typeof import("../../../server/decompose-job-store");
-  store: typeof import("../../../server/derivative-store");
-};
+/** Route and store modules, loaded after the env above is set. */
+const load = async () => ({
+  create: await import("./route"),
+  board: await import("./[slug]/route"),
+  participants: await import("./[slug]/participants/route"),
+  claim: await import("./[slug]/claim/route"),
+  photos: await import("./[slug]/photos/route"),
+  scenes: await import("./[slug]/scenes/route"),
+  elementImage: await import("./[slug]/elements/[elementId]/image/route"),
+  sceneImage: await import("./[slug]/scenes/[sceneId]/image/route"),
+  job: await import("./[slug]/jobs/[jobId]/route"),
+  tap: await import("./[slug]/jobs/[jobId]/tap-add/route"),
+  confirm: await import("./[slug]/pins/confirm/route"),
+  transcribe: await import("./[slug]/transcribe/route"),
+  fromLibrary: await import("./[slug]/pins/from-library/route"),
+  skin: await import("./[slug]/skin/route"),
+  session: await import("../auth/session/route"),
+  myBoards: await import("../me/boards/route"),
+  myImage: await import("../me/elements/[elementId]/image/route"),
+  shared: await import("./shared"),
+  api: await import("../../../server/board-api"),
+  repos: await import("../../../server/board-repository"),
+  users: await import("../../../server/user-repository"),
+  jobs: await import("../../../server/decompose-job-store"),
+  store: await import("../../../server/derivative-store"),
+});
+let m: Awaited<ReturnType<typeof load>>;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } = await import("../../../server/token-verifier");
   setTokenVerifierForTests(
     new FakeTokenVerifier({ "token-alice": { uid: "synthetic-alice" }, "token-bob": { uid: "synthetic-bob" } }),
   );
-  m = {
-    create: await import("./route"),
-    board: await import("./[slug]/route"),
-    participants: await import("./[slug]/participants/route"),
-    claim: await import("./[slug]/claim/route"),
-    photos: await import("./[slug]/photos/route"),
-    scenes: await import("./[slug]/scenes/route"),
-    elementImage: await import("./[slug]/elements/[elementId]/image/route"),
-    sceneImage: await import("./[slug]/scenes/[sceneId]/image/route"),
-    job: await import("./[slug]/jobs/[jobId]/route"),
-    tap: await import("./[slug]/jobs/[jobId]/tap-add/route"),
-    confirm: await import("./[slug]/pins/confirm/route"),
-    transcribe: await import("./[slug]/transcribe/route"),
-    fromLibrary: await import("./[slug]/pins/from-library/route"),
-    skin: await import("./[slug]/skin/route"),
-    session: await import("../auth/session/route"),
-    myBoards: await import("../me/boards/route"),
-    myImage: await import("../me/elements/[elementId]/image/route"),
-    shared: await import("./shared"),
-    api: await import("../../../server/board-api"),
-    repos: await import("../../../server/board-repository"),
-    users: await import("../../../server/user-repository"),
-    jobs: await import("../../../server/decompose-job-store"),
-    store: await import("../../../server/derivative-store"),
-  };
+  m = await load();
 });
 
 let ipSeq = 0;
