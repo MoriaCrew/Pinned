@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import {
+  PLUS_SKIN_IDS,
+  canUseSkin,
+  decideMockGrant,
+  grantPlus,
+  hasPlus,
+  isPlusMode,
+  isPlusPlan,
+  isPlusSkin,
+  planCovers,
+  plusView,
+  type BoardPlus,
+} from "./plus";
+import { DEFAULT_SKIN, SKINS, SKIN_IDS, getSkin, isPlusSkinId } from "./skins";
+
+const LABELS = { board: "$3.99", host: "$4.99/month" };
+const MOCK: BoardPlus = { plan: "board", source: "mock", grantedAt: 1_000 };
+const PAID: BoardPlus = { plan: "board", source: "stripe", grantedAt: 1_000 };
+
+describe("Board Plus domain (PIN-103)", () => {
+  it("Plus membership agrees with the skins catalogue exactly", () => {
+    expect(PLUS_SKIN_IDS).toEqual(SKINS.filter((skin) => skin.plus).map((skin) => skin.id));
+    for (const id of SKIN_IDS) {
+      expect(isPlusSkin(id)).toBe(getSkin(id).plus);
+      expect(isPlusSkin(id)).toBe(isPlusSkinId(id));
+    }
+    expect(PLUS_SKIN_IDS.length).toBeGreaterThan(0);
+    expect(isPlusSkin(DEFAULT_SKIN)).toBe(false);
+    for (const id of ["Darkroom", "helpdesk", "", null, 3]) expect(isPlusSkin(id)).toBe(false);
+  });
+
+  it("validates plans and modes by exact id", () => {
+    expect(isPlusPlan("board")).toBe(true);
+    expect(isPlusPlan("host")).toBe(true);
+    expect(isPlusPlan("Board")).toBe(false);
+    expect(isPlusPlan(undefined)).toBe(false);
+    expect(isPlusMode("off")).toBe(true);
+    expect(isPlusMode("mock")).toBe(true);
+    expect(isPlusMode("stripe")).toBe(false);
+  });
+
+  it("hasPlus is null-safe and counts mock grants only in mock mode", () => {
+    expect(hasPlus({}, "mock")).toBe(false);
+    expect(hasPlus({ plus: null }, "mock")).toBe(false);
+    expect(hasPlus({ plus: MOCK }, "mock")).toBe(true);
+    expect(hasPlus({ plus: MOCK }, "off")).toBe(false);
+    expect(hasPlus({ plus: PAID }, "off")).toBe(true);
+    expect(hasPlus({ plus: PAID }, "mock")).toBe(true);
+    // A malformed stored plan never counts as Plus.
+    expect(hasPlus({ plus: { ...PAID, plan: "gold" as never } }, "off")).toBe(false);
+  });
+
+  it("gates Plus skins on an entitlement that counts; free skins stay free", () => {
+    const plusSkin = PLUS_SKIN_IDS[0];
+    const freeSkin = DEFAULT_SKIN;
+    expect(canUseSkin({}, freeSkin, "off")).toBe(true);
+    expect(canUseSkin({ plus: null }, plusSkin, "mock")).toBe(false);
+    expect(canUseSkin({ plus: MOCK }, plusSkin, "mock")).toBe(true);
+    expect(canUseSkin({ plus: MOCK }, plusSkin, "off")).toBe(false);
+    expect(canUseSkin({ plus: PAID }, plusSkin, "off")).toBe(true);
+  });
+
+  it("host plan covers the board plan, not the other way round", () => {
+    expect(planCovers("board", "board")).toBe(true);
+    expect(planCovers("host", "host")).toBe(true);
+    expect(planCovers("host", "board")).toBe(true);
+    expect(planCovers("board", "host")).toBe(false);
+  });
+
+  it("mock grant decision: keep covering grants, never replace a paid one", () => {
+    expect(grantPlus("host", "mock", 42)).toEqual({ plan: "host", source: "mock", grantedAt: 42 });
+    expect(decideMockGrant(undefined, "board", 5)).toEqual({ kind: "grant", plus: grantPlus("board", "mock", 5) });
+    expect(decideMockGrant(null, "host", 5)).toEqual({ kind: "grant", plus: grantPlus("host", "mock", 5) });
+    expect(decideMockGrant({ ...MOCK, plan: "host" }, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(MOCK, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(MOCK, "host", 5)).toEqual({ kind: "grant", plus: grantPlus("host", "mock", 5) });
+    expect(decideMockGrant(PAID, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(PAID, "host", 5)).toEqual({ kind: "blocked" });
+  });
+
+  it("view exposes state, mode and labels — never source or grant time", () => {
+    expect(plusView({}, { mode: "off", priceLabels: LABELS })).toEqual({
+      active: false,
+      mode: "off",
+      priceLabels: LABELS,
+    });
+    expect(plusView({ plus: null }, { mode: "mock", priceLabels: LABELS }).active).toBe(false);
+    expect(plusView({ plus: MOCK }, { mode: "off", priceLabels: LABELS })).toEqual({
+      active: false,
+      mode: "off",
+      priceLabels: LABELS,
+    });
+    const view = plusView({ plus: MOCK }, { mode: "mock", priceLabels: LABELS });
+    expect(view).toEqual({ active: true, plan: "board", mode: "mock", priceLabels: LABELS });
+    expect(JSON.stringify(view)).not.toMatch(/source|grantedAt/);
+  });
+});

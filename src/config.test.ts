@@ -23,6 +23,15 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     ).toBeNull();
   });
 
+  it("PLUS_MODE: off by default, mock only on the exact value (PIN-103)", () => {
+    expect(parseConfig({}).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "" }).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "off" }).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "MOCK" }).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "stripe" }).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "mock" }).plusMode).toBe("mock");
+  });
+
   it("passes Firebase web config through, empty fails to null (PIN-83)", () => {
     expect(parseConfig({}).firebaseWebApiKey).toBeNull();
     expect(parseConfig({}).firebaseWebAuthDomain).toBeNull();

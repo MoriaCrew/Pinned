@@ -299,7 +299,11 @@ describe("user session (PIN-83)", () => {
       "elements",
       "scenes",
       "activity",
+      // PIN-103 (additive, not auth): host bit + Plus offer.
+      "viewer",
+      "plus",
     ]);
+    expect(view!.viewer).toEqual({ isHost: false });
     expect(view!.me).toEqual({
       id: "part-fixed",
       boardId: SLUG,

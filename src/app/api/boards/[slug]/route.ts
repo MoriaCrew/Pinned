@@ -12,6 +12,7 @@ import {
   isFreshAuth,
 } from "../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../auth-shared";
+import { hostTokenFrom } from "../../../../server/host-session";
 import {
   JSON_HEADERS,
   boardApiDeps,
@@ -87,7 +88,11 @@ export async function GET(
         console.error("board auth restore failed", error);
       }
     }
-    const view = await getBoardView(slug, viewer, boardApiDeps(policy));
+    // PIN-103: additive viewer.isHost + plus. The host cookie is
+    // Path-scoped to /api/boards/<slug>, so it reaches this route.
+    const view = await getBoardView(slug, viewer, boardApiDeps(policy), {
+      hostToken: hostTokenFrom(request, slug),
+    });
     if (!view) return notFound();
     return NextResponse.json(view, {
       headers: restoredCookie

@@ -18,10 +18,13 @@ import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type P
 import { activityLines } from "../domain/board-activity";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
+import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
+import { plusRequiredError } from "./board-plus";
+import { issueHostCredential, verifyHostToken } from "./host-session";
 import { t } from "../i18n";
 import {
   addTapElement,
@@ -53,9 +56,13 @@ export interface BoardApiDeps {
   /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
   collageMode?: boolean;
   policy: Policy;
+  /** PLUS_MODE (PIN-103): Plus offer in the view + which grants count. Default "off". */
+  plusMode?: PlusMode;
   now?: () => number;
   createSlug?: () => string;
   newId?: () => string;
+  /** Host token source (PIN-103); default generateAdminToken. */
+  newHostToken?: () => string;
 }
 
 /** Element image route URL (board-link-checked; never a raw ref). */
@@ -185,6 +192,9 @@ export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoa
     if (!isBoardThemeId(body.themeId)) {
       throw new BoardApiError("That theme is not available.");
     }
+    // PIN-103: a new board holds no entitlement, so a Plus skin
+    // here would bypass the skin gate; the host buys Plus first.
+    if (isPlusSkin(body.themeId)) throw plusRequiredError();
     themeId = body.themeId;
   }
   return { title, ...(themeId ? { themeId } : {}) };
@@ -192,26 +202,39 @@ export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoa
 
 const MAX_SLUG_ATTEMPTS = 5;
 
-export async function createBoard(
+export interface CreatedBoard {
+  board: Board;
+  /** Raw host token for the creator's cookie; only its hash is stored. */
+  hostToken: string;
+}
+
+/**
+ * Create a board with its host credential (PIN-103) in the same
+ * initial write: the Board stores the token hash + issue time,
+ * the caller gets the raw token once, for the creator's cookie.
+ */
+export async function createBoardWithHost(
   rawInput: unknown,
   deps: BoardApiDeps,
-): Promise<Board> {
+): Promise<CreatedBoard> {
   const input = parseCreateBoardInput(rawInput, deps.policy);
   const now = deps.now?.() ?? Date.now();
   const theme = getBoardTheme(input.themeId);
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const credential = issueHostCredential(now, deps.newHostToken);
     const board: Board = {
       slug: deps.createSlug?.() ?? generateSlug(),
       title: input.title,
       ...(input.themeId ? { themeId: input.themeId } : {}),
       ...(theme ? { theme: theme.tokens } : {}),
+      host: credential.record,
       counters: emptyBoardCounters(),
       createdAt: now,
       version: 1,
     };
     try {
       await deps.boards.createBoard(board);
-      return board;
+      return { board, hostToken: credential.token };
     } catch (error) {
       if (error instanceof RangeError && attempt < MAX_SLUG_ATTEMPTS - 1) continue;
       throw error;
@@ -220,15 +243,37 @@ export async function createBoard(
   throw new BoardApiError("Could not create a board. Please try again.", 503);
 }
 
+/** createBoardWithHost for callers that do not hand out the host cookie. */
+export async function createBoard(rawInput: unknown, deps: BoardApiDeps): Promise<Board> {
+  return (await createBoardWithHost(rawInput, deps)).board;
+}
+
+/** Per-request facts the board view needs beyond the participant (PIN-103). */
+export interface BoardViewAccess {
+  /**
+   * The request's host token (shape-checked, from the Path-scoped
+   * host cookie). Absent = not host: the server-rendered board
+   * page never sees that cookie, so its first view says
+   * isHost:false and the client's first poll of the board view
+   * API (under the cookie path) corrects it.
+   */
+  hostToken?: string | null;
+}
+
 /**
  * Board view for the polling board page: pinned pins are public to
  * anyone holding the link; candidate pins only to their uploader.
- * Returns null when the board does not exist.
+ * Returns null when the board does not exist. PIN-103 adds, purely
+ * additively, `viewer.isHost` (host token verified against the
+ * stored hash + age) and `plus` (entitlement state under
+ * deps.plusMode, mode, Policy price labels — no billing source,
+ * time or secret; the host hash never leaves the server).
  */
 export async function getBoardView(
   slug: string,
   viewer: Participant | null,
   deps: BoardApiDeps,
+  access: BoardViewAccess = {},
 ) {
   const board = await deps.boards.getBoard(slug);
   if (!board) return null;
@@ -255,6 +300,13 @@ export async function getBoardView(
     // Activity strip (PIN-74): board-visible BoardEvent lines,
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(events, participants, elements, deps.policy.activityStripMax),
+    viewer: {
+      isHost: verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now()),
+    },
+    plus: plusView(board, {
+      mode: deps.plusMode ?? "off",
+      priceLabels: deps.policy.plus.priceLabels,
+    }),
   };
 }
 

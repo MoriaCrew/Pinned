@@ -65,6 +65,8 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     // PIN-71: under AI_MOCK the sharp collage composes scenes
     // offline; live mode keeps the port (over-budget -> collage).
     collageMode: getConfig().aiMock,
+    // PIN-103: which Plus grants count + the view's Plus offer.
+    plusMode: getConfig().plusMode,
     policy,
   };
 }

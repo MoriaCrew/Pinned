@@ -83,6 +83,32 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(p.timeoutsMs.spark).toBe(30_000);
   });
 
+  it("plus: placeholder price labels + host cookie life, deep-overridable (PIN-103)", () => {
+    expect(DEFAULT_POLICY.plus).toEqual({
+      priceLabels: { board: "$3.99", host: "$4.99/month" },
+      hostCookieDays: 365,
+      requestMaxBytes: 1024,
+      hostRoutesPerIp: { limit: 60, windowMs: 600_000 },
+    });
+    const p = resolvePolicy(
+      { plus: { priceLabels: { host: "€4.99/mo" }, hostRoutesPerIp: { limit: 5 } } },
+      { plus: { hostCookieDays: 90 } },
+    );
+    expect(p.plus).toEqual({
+      priceLabels: { board: "$3.99", host: "€4.99/mo" },
+      hostCookieDays: 90,
+      requestMaxBytes: 1024,
+      hostRoutesPerIp: { limit: 5, windowMs: 600_000 },
+    });
+    expect(() => resolvePolicy({ plus: { hostCookieDays: 0 } })).toThrow();
+    expect(() => resolvePolicy({ plus: { requestMaxBytes: 0 } })).toThrow();
+    expect(() => resolvePolicy({ plus: { hostRoutesPerIp: { limit: 0 } } })).toThrow();
+    expect(() => resolvePolicy({ plus: { priceLabels: { board: "" } } })).toThrow();
+    expect(
+      parsePolicyOverridesJson('{"plus":{"priceLabels":{"board":"$1"}}}'),
+    ).toEqual({ plus: { priceLabels: { board: "$1" } } });
+  });
+
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
     expect(resolvePolicy({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBe(0);
   });

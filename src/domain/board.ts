@@ -12,6 +12,7 @@
  */
 import type { PolicyOverrides } from "../policy/policy";
 import type { BoardThemeTokens } from "./board-themes";
+import type { BoardPlus } from "./plus";
 
 /** Mask bounding box, normalized 0..1 against the source frame
  * (the gateway port convention, ports.ts SegmentPrompt). The
@@ -38,6 +39,17 @@ export function emptyBoardCounters(): BoardCounters {
   return { participantCount: 0, elementCount: 0, pinCount: 0, sceneCount: 0 };
 }
 
+/**
+ * Board host credential (PIN-103, docs/15-board-plus.md): the
+ * domain-separated sha256 of the random host token issued at
+ * create, plus its issue time for the server-side expiry check.
+ * The raw token only ever lives in the creator's cookie.
+ */
+export interface BoardHost {
+  tokenHash: string;
+  issuedAt: number;
+}
+
 export interface Board {
   /** Capability-link slug; also the board id everywhere (`boardId`). */
   slug: string;
@@ -47,6 +59,10 @@ export interface Board {
   theme?: BoardThemeTokens;
   /** Per-board Policy layer (docs/11 §5.1); validated by resolvePolicy. */
   policyOverrides?: PolicyOverrides;
+  /** Board Plus entitlement (PIN-103); absent or null = free board. */
+  plus?: BoardPlus | null;
+  /** Host credential (PIN-103); server-only, never in a response. */
+  host?: BoardHost | null;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter
