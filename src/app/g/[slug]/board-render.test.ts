@@ -76,7 +76,7 @@ describe("board scenes strip (PIN-98)", () => {
     const failed = html(
       h(BoardScenes, {
         count: 0,
-        slots: [{ type: "problem", id: "s1", idea: "A picnic", line: "That scene didn't develop.", onChangeIdea: noop, onTryAgain: noop }],
+        slots: [{ type: "problem", ratio: "2 / 3", id: "s1", idea: "A picnic", line: "That scene didn't develop.", onChangeIdea: noop, onTryAgain: noop }],
       }),
     );
     expect(failed).toContain("Change idea");
@@ -84,7 +84,7 @@ describe("board scenes strip (PIN-98)", () => {
     const refused = html(
       h(BoardScenes, {
         count: 0,
-        slots: [{ type: "problem", id: "s1", idea: "A picnic", line: "Try a different idea.", onChangeIdea: noop }],
+        slots: [{ type: "problem", ratio: "2 / 3", id: "s1", idea: "A picnic", line: "Try a different idea.", onChangeIdea: noop }],
       }),
     );
     expect(refused).toContain("Change idea");
@@ -96,9 +96,10 @@ describe("board scenes strip (PIN-98)", () => {
       h(BoardScenes, {
         count: 1,
         slots: [
-          { type: "developing", id: "d1", stickers: [{ src: "/e1" }], idea: "On the moon", startedAt: null },
+          { type: "developing", ratio: "1024 / 1536", id: "d1", stickers: [{ src: "/e1" }], idea: "On the moon", startedAt: null },
           {
             type: "print",
+            ratio: "1280 / 1920",
             id: "s1",
             src: "/s1",
             alt: "A picnic, with Robin's teal mug",
@@ -117,5 +118,11 @@ describe("board scenes strip (PIN-98)", () => {
     expect(out).toContain("Nº 01");
     expect(out).toContain("Collage");
     expect(out).toContain("teal mug");
+    // PIN-129: each frame takes its slot's shape; the item carries it for the strip width.
+    expect(out).toContain('style="--print-ratio:1024 / 1536"');
+    expect(out).toContain("aspect-ratio:1024 / 1536");
+    expect(out).toContain('style="--print-ratio:1280 / 1920"');
+    expect(out).toContain("aspect-ratio:1280 / 1920");
+    expect(out).not.toContain("4 / 3");
   });
 });

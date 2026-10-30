@@ -38,6 +38,7 @@ import {
 import { chooseShareAction, sceneShareFilename } from "../../../domain/board-preview";
 import type { ActivityLine } from "../../../domain/board-activity";
 import type { PlusView } from "../../../domain/plus";
+import { sceneRatio } from "../../../domain/scene-ratio";
 import { foilPinId, lookSample } from "../../../domain/plus-ui";
 import { skinForTheme, type SkinId } from "../../../domain/skins";
 import { t, tCount, tf } from "../../../i18n";
@@ -78,6 +79,8 @@ export interface BoardClientPolicy {
   pinsPerScene: { min: number; max: number };
   sceneChips: string[];
   scenePromptMaxChars: number;
+  /** Policy sceneSize (PIN-129): the print shape of a scene with no stored size. */
+  sceneSize: string;
   /** Policy elementsPerPhoto.max, tap-adds included (PIN-78). */
   elementsPerPhotoMax: number;
   /** Policy signInNudge (PIN-84). */
@@ -742,11 +745,15 @@ function BoardBody({
       return element ? [{ src: element.imageUrl, seed: id }] : [];
     });
   const numbers = sceneNumbers(scenes);
+  // PIN-129: a print takes its stored shape; a slot with no image yet
+  // takes the Policy shape, so it does not jump when the print lands.
+  const slotRatio = sceneRatio(null, policy.sceneSize);
 
   const slots: SceneSlot[] = [];
   if (attempt && showCooking) {
     slots.push({
       type: "developing",
+      ratio: slotRatio,
       id: attempt.sceneId,
       stickers: stickersFor(attempt.elementIds),
       idea: attempt.prompt,
@@ -755,6 +762,7 @@ function BoardBody({
   } else if (attempt && attemptError && !attemptScene) {
     slots.push({
       type: "problem",
+      ratio: slotRatio,
       id: attempt.sceneId,
       idea: attempt.prompt,
       line: attemptError,
@@ -767,6 +775,7 @@ function BoardBody({
     if (item.mode === "developing") {
       slots.push({
         type: "developing",
+        ratio: slotRatio,
         id: scene.id,
         stickers: stickersFor(scene.elementIds),
         idea: scene.prompt,
@@ -776,6 +785,7 @@ function BoardBody({
       const refused = scene.status === "refused";
       slots.push({
         type: "problem",
+        ratio: slotRatio,
         id: scene.id,
         idea: scene.prompt,
         line: refused ? (scene.refusalReason ?? t("en", "ai.refused")) : t("en", "board.sceneFailed"),
@@ -792,6 +802,7 @@ function BoardBody({
         .join(", ");
       slots.push({
         type: "print",
+        ratio: sceneRatio(scene, policy.sceneSize),
         id: scene.id,
         src: scene.imageUrl,
         alt: things ? tf("en", "board.sceneAlt", { idea: scene.prompt, things }) : scene.prompt,
@@ -1018,7 +1029,12 @@ function BoardBody({
             initialPrompt={sheetPrompt}
             remixParent={
               remixParent?.imageUrl
-                ? { id: remixParent.id, imageUrl: remixParent.imageUrl, prompt: remixParent.prompt }
+                ? {
+                    id: remixParent.id,
+                    imageUrl: remixParent.imageUrl,
+                    prompt: remixParent.prompt,
+                    ratio: sceneRatio(remixParent, policy.sceneSize),
+                  }
                 : null
             }
             onMake={submitScene}
