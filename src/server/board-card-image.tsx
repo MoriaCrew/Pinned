@@ -4,7 +4,7 @@ import "server-only";
  * wordmark, invite line, title in the skin's display face, counts)
  * over an SVG ground; sharp then lays the baked sticker pile on top
  * and re-encodes the PNG. Every failure degrades instead of 500ing:
- * board card -> generic Pinneds card -> public/og-card.png.
+ * board card -> generic Pinneds card -> the static og-card.png.
  */
 import { ImageResponse } from "next/og";
 import sharp from "sharp";
@@ -240,7 +240,7 @@ function pngResponse(bytes: Buffer, policy: Policy): Response {
  * The link card for /g/{slug}. A malformed slug or a missing board
  * gets the generic card (same bytes either way: no existence leak);
  * any failure falls back to the generic card, then to the static
- * public/og-card.png. Always 200 with a PNG.
+ * static og-card.png. Always 200 with a PNG.
  */
 export async function boardCardImage(slug: string, deps: BoardCardImageDeps): Promise<Response> {
   let policy = deps.policyFor(null);
