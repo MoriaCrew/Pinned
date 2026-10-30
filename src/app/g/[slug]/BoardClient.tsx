@@ -443,10 +443,10 @@ function BoardBody({
       const response = await fetch(
         `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}`,
         { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) },
-      );
-      const data = (await response.json().catch(() => ({}))) as { element?: BoardViewElement; error?: string };
-      if (response.status === 400 && data.error) throw new Error(data.error);
-      if (!response.ok || !data.element) throw new Error(t("en", "board.renameFailed"));
+      ).catch(() => null);
+      const data = (await response?.json().catch(() => null)) as { element?: BoardViewElement; error?: string } | null;
+      if (response?.status === 400 && data?.error) throw new Error(data.error);
+      if (!response?.ok || !data?.element) throw new Error(t("en", "board.renameFailed"));
       return data.element;
     },
     onMutate: async ({ elementId, label }) => {
