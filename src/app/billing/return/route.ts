@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { getConfig } from "../../../config";
 import { getCheckoutIntentStore } from "../../../server/checkout-intent-store";
 import { resolveBillingReturn } from "../../../server/credit-checkout";
+import { getPublicOrigin } from "../../../server/public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +23,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     url.searchParams.get("result"),
     { intents: getCheckoutIntentStore() },
   );
-  const response = NextResponse.redirect(new URL(resolved.location, url.origin), 302);
+  // Public origin, never the raw request origin (App Hosting's
+  // internal 0.0.0.0:8080 would strand the payer) - same helper
+  // the buy route hands to Stripe for the return URLs.
+  const origin = getPublicOrigin(request, getConfig().appBaseUrl);
+  const response = NextResponse.redirect(new URL(resolved.location, origin), 302);
   response.headers.set("Cache-Control", "no-store");
   return response;
 }

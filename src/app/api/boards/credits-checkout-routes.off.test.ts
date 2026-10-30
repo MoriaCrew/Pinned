@@ -184,15 +184,15 @@ describe("GET /billing/return (PIN-149)", () => {
       pendingIntentCapPerBoard: 3,
     });
     const back = await returnRoute(
-      new Request(`http://t/billing/return?intent=${intent.id}&result=success`),
+      new Request(`http://localhost:3000/billing/return?intent=${intent.id}&result=success`),
     );
     expect(back.status).toBe(302);
-    expect(back.headers.get("location")).toBe(`http://t/g/${slug}?billing=processing`);
+    expect(back.headers.get("location")).toBe(`http://localhost:3000/g/${slug}?billing=processing`);
     const cancelled = await returnRoute(
-      new Request(`http://t/billing/return?intent=${intent.id}&result=cancel`),
+      new Request(`http://localhost:3000/billing/return?intent=${intent.id}&result=cancel`),
     );
     expect(cancelled.headers.get("location")).toBe(
-      `http://t/g/${slug}?billing=cancelled`,
+      `http://localhost:3000/g/${slug}?billing=cancelled`,
     );
 
     const stale = await getIntents().create({
@@ -204,14 +204,30 @@ describe("GET /billing/return (PIN-149)", () => {
       pendingIntentCapPerBoard: 3,
     });
     for (const target of [
-      "http://t/billing/return",
-      "http://t/billing/return?intent=12345678-1234-4234-8234-1234567890ab&result=success",
-      `http://t/billing/return?intent=${stale.id}&result=success`,
+      "http://localhost:3000/billing/return",
+      "http://localhost:3000/billing/return?intent=12345678-1234-4234-8234-1234567890ab&result=success",
+      `http://localhost:3000/billing/return?intent=${stale.id}&result=success`,
     ]) {
       const res = await returnRoute(new Request(target));
       expect(res.status).toBe(302);
-      expect(res.headers.get("location")).toBe("http://t/");
+      expect(res.headers.get("location")).toBe("http://localhost:3000/");
     }
+    // Regression (Bugbot on PIN-149): behind App Hosting the raw
+    // request origin is the internal 0.0.0.0:8080; the redirect
+    // must use the public origin like the buy route does.
+    const hosted = await returnRoute(
+      new Request(`http://0.0.0.0:8080/billing/return?intent=${intent.id}&result=success`, {
+        headers: {
+          "x-forwarded-proto": "https",
+          "x-forwarded-host": "boards.example",
+          host: "0.0.0.0:8080",
+        },
+      }),
+    );
+    expect(hosted.status).toBe(302);
+    expect(hosted.headers.get("location")).toBe(
+      `https://boards.example/g/${slug}?billing=processing`,
+    );
     // Returning never grants: no account was conjured by any redirect.
     expect(await getLedger().getAccount(slug)).toBeNull();
   });
