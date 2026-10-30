@@ -128,14 +128,6 @@
   color: inherit;
 }
 
-/* "Not pinned yet" wraps inside its cell instead of widening the column. */
-.candidateTag {
-  max-width: 100%;
-  justify-content: center;
-  text-align: center;
-  white-space: normal;
-}
-
 .pinMenu {
   top: calc(var(--tap) - var(--space-1));
   right: 0;

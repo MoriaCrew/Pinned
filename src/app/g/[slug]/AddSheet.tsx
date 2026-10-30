@@ -54,6 +54,17 @@ interface JobView {
 export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
 /**
+ * The last uploaded photo's LOCAL preview (an object URL of the
+ * picked file, never uploaded as-is), kept by the board page across
+ * sheet closes (PIN-122) so "Pin them" can show that photo again in
+ * the same visit. A reload forgets it: the review then shows the
+ * stickers only.
+ */
+export interface PhotoMemory {
+  current: { jobId: string; url: string } | null;
+}
+
+/**
  * Client downscale before upload (docs/11 section 5.8): decode,
  * cap the longest side at Policy.uploadMaxPx and re-encode JPEG.
  * Any decode failure uploads the original file — the server still
@@ -213,7 +224,11 @@ function CutPhoto({
  * face shows the one-line consent note once per photo and never
  * blocks pinning. PIN-121: signed in, the pick step also offers
  * "From your other boards" under the photo target (one tap pins a
- * thing here) with "See all" for the full library list.
+ * thing here) with "See all" for the full library list. PIN-122:
+ * with `resumeJobId` the sheet opens straight at that photo's
+ * review (leftovers): all its candidates kept, the photo shown when
+ * this visit still has it, and a one-line note instead of the photo
+ * once its working copy is gone; "Pin N things" is the same confirm.
  */
 export function AddSheet({
   slug,
@@ -224,6 +239,8 @@ export function AddSheet({
   jobPollIntervalMs,
   elementsPerPhotoMax,
   libraryStripMax,
+  resumeJobId = null,
+  photoMemory,
   onClose,
 }: {
   slug: string;
@@ -235,6 +252,9 @@ export function AddSheet({
   elementsPerPhotoMax: number;
   /** Policy.libraryStripMax (PIN-121). */
   libraryStripMax: number;
+  /** Open at this photo job's review (PIN-122 leftovers). */
+  resumeJobId?: string | null;
+  photoMemory?: PhotoMemory;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -254,7 +274,7 @@ export function AddSheet({
     focusSeeAll.current = false;
     document.getElementById(seeAllId)?.focus();
   }, [seeAll, seeAllId]);
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(resumeJobId);
   const [uploadError, setUploadError] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dropped, setDropped] = useState<ReadonlySet<string>>(new Set());
@@ -265,30 +285,57 @@ export function AddSheet({
   // its own stripped working copy). Photo intake auto-rotates and
   // browsers apply EXIF orientation to <img>, so normalized tap
   // points line up with the working copy's frame.
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const previewRef = useRef<string | null>(null);
+  const remembered =
+    resumeJobId !== null && photoMemory?.current?.jobId === resumeJobId ? photoMemory.current.url : null;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(remembered);
+  const previewRef = useRef<string | null>(remembered);
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
 
+  // The board page's photo memory owns its URL; everything else
+  // this sheet made, it revokes.
+  function releasePreview() {
+    const url = previewRef.current;
+    if (url && photoMemory?.current?.url !== url) URL.revokeObjectURL(url);
+  }
+
+  // False once the sheet is gone: an upload that lands after a close
+  // must not remember a preview the unmount already revoked.
+  const mounted = useRef(true);
+
+  function rememberPhoto(forJobId: string) {
+    const url = previewRef.current;
+    if (!photoMemory || !url || !mounted.current) return;
+    const old = photoMemory.current;
+    photoMemory.current = { jobId: forJobId, url };
+    if (old && old.url !== url) URL.revokeObjectURL(old.url);
+  }
+
   function showPreview(file: File) {
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    releasePreview();
     const url = URL.createObjectURL(file);
     previewRef.current = url;
     setPreviewUrl(url);
   }
 
   function clearPreview() {
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    releasePreview();
     previewRef.current = null;
     setPreviewUrl(null);
     setLastTap(null);
   }
 
   useEffect(
-    () => () => {
-      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    () => {
+      mounted.current = true;
+      return () => {
+        mounted.current = false;
+        releasePreview();
+      };
     },
+    // Unmount only; photoMemory is the board page's stable ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -315,7 +362,10 @@ export function AddSheet({
       setDropped(new Set());
       setPendingTapPin(null);
     },
-    onSuccess: (job) => setJobId(job.id),
+    onSuccess: (job) => {
+      setJobId(job.id);
+      rememberPhoto(job.id);
+    },
     onError: (cause) =>
       setUploadError(cause instanceof Error ? cause.message : t("en", "add.failed")),
   });
@@ -360,10 +410,24 @@ export function AddSheet({
     () => new Map(boardView.elements.map((e) => [e.id, e])),
     [boardView],
   );
+  // PIN-122: reopened from the leftovers line, the board view
+  // already holds this photo's candidates (tagged with its job), so
+  // the review shows them while the job view loads.
+  const resuming = resumeJobId !== null && jobId === resumeJobId;
+  const waitingForResume = resuming && !jobQuery.data;
+  const resumePins = useMemo(
+    () =>
+      resumeJobId === null
+        ? []
+        : boardView.pins
+            .filter((pin) => pin.status === "candidate" && pin.jobId === resumeJobId)
+            .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
+    [boardView, resumeJobId],
+  );
   // Keep the board-poll pop-ins on screen until the job view
   // actually lands; switching on jobId alone would blank the
   // sheet (and the selection) for one fetch.
-  const candidatePins: BoardViewPin[] = jobQuery.data ? jobPins : popInPins;
+  const candidatePins: BoardViewPin[] = jobQuery.data ? jobPins : waitingForResume ? resumePins : popInPins;
   const elementFor = (pin: BoardViewPin): CandidateElement | undefined =>
     jobElements.get(pin.elementId) ?? boardElements.get(pin.elementId);
   const candidateIds = candidatePins.map((p) => p.id);
@@ -400,7 +464,9 @@ export function AddSheet({
       if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
       setUploadError(t("en", "add.pinFailed"));
     },
-    onSuccess: () => {
+    onSuccess: (_data, payload) => {
+      // Pinned: that photo has no leftovers to come back to.
+      if (photoMemory?.current?.jobId === payload.jobId) photoMemory.current = null;
       setJobId(null);
       onClose();
     },
@@ -446,9 +512,12 @@ export function AddSheet({
   const stage = addSheetStage({
     uploadPending: upload.isPending,
     jobId,
-    jobStatus: job?.status ?? null,
+    // A reopened photo is reviewed at once; its job view corrects it.
+    jobStatus: job?.status ?? (waitingForResume ? "ready" : null),
     candidateCount: candidatePins.length,
   });
+  // Its working copy expired or was deleted: no photo, no tap-to-add.
+  const photoGone = job?.workingCopyGone === true;
   const payload = jobId ? confirmPayload(jobId, selected) : null;
   const awaitingTap = isAwaitingTapPin(pendingTapPin, jobId, candidateIds, jobQuery.errorUpdatedAt);
   const canPin =
@@ -592,7 +661,7 @@ export function AddSheet({
         </Hint>
       ) : null}
 
-      {stage !== "pick" && previewUrl ? (
+      {stage !== "pick" && previewUrl && !photoGone ? (
         <CutPhoto
           src={previewUrl}
           stage={stage}
@@ -612,6 +681,10 @@ export function AddSheet({
         />
       ) : null}
 
+      {stage === "review" && photoGone && candidatePins.length > 0 ? <SheetLine>{t("en", "add.photoGone")}</SheetLine> : null}
+      {resuming && jobQuery.isError && !jobQuery.data ? (
+        <SheetLine tone="error">{t("en", "add.resumeFailed")}</SheetLine>
+      ) : null}
       {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t("en", "add.noneFound")}</SheetLine> : null}
       {stage === "finding" ? <CutStatus tag={t("en", "cutout.findingTag")}>{t("en", "add.finding")}</CutStatus> : null}
       {stage === "cutting" ? (
