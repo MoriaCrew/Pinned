@@ -62,7 +62,7 @@
   padding: 0;
 }
 
-.field label {
+.field label:not(.choice) {
   display: block;
   margin-bottom: var(--space-2);
   font-weight: 700;
