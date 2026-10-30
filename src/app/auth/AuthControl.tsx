@@ -62,10 +62,7 @@ export function AuthControl() {
     );
   }
   const label = `${t("en", "auth.signedInAs")} ${user.displayName ?? ""}`.trim();
-  const go = (href: string) => () => {
-    setMenuOpen(false);
-    window.location.assign(href);
-  };
+  const close = () => setMenuOpen(false);
   return (
     <span className="pn-lib-auth" ref={rootRef}>
       <button
@@ -84,8 +81,8 @@ export function AuthControl() {
           label={label}
           className="pn-lib-auth-menu"
           items={[
-            { label: t("en", "auth.myBoards"), onSelect: go("/me/boards") },
-            { label: t("en", "auth.myPins"), onSelect: go("/me/pins") },
+            { label: t("en", "auth.myBoards"), href: "/me/boards", onSelect: close },
+            { label: t("en", "auth.myPins"), href: "/me/pins", onSelect: close },
             {
               label: t("en", "auth.signOut"),
               onSelect: () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { t, tCount } from "../i18n";
 import { AvatarStack, Button, IconButton, Wordmark, cx, pickedCountLabel, type Person } from "./primitives";
@@ -271,26 +272,40 @@ export function Menu({
   className,
   style,
 }: {
-  items: { label: string; onSelect: () => void; danger?: boolean; disabled?: boolean }[];
+  /** An item with `href` is a real link (client-side navigation); onSelect still runs on click. */
+  items: { label: string; onSelect?: () => void; href?: string; danger?: boolean; disabled?: boolean }[];
   label: string;
   className?: string;
   style?: CSSProperties;
 }) {
   return (
     <div className={cx("pn-menu", className)} role="menu" aria-label={label} style={style}>
-      {items.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          role="menuitem"
-          className="pn-menu-item"
-          data-danger={item.danger ? "" : undefined}
-          disabled={item.disabled}
-          onClick={item.onSelect}
-        >
-          {item.label}
-        </button>
-      ))}
+      {items.map((item) =>
+        item.href && !item.disabled ? (
+          <Link
+            key={item.label}
+            href={item.href}
+            role="menuitem"
+            className="pn-menu-item"
+            data-danger={item.danger ? "" : undefined}
+            onClick={item.onSelect}
+          >
+            {item.label}
+          </Link>
+        ) : (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            className="pn-menu-item"
+            data-danger={item.danger ? "" : undefined}
+            disabled={item.disabled}
+            onClick={item.onSelect}
+          >
+            {item.label}
+          </button>
+        ),
+      )}
     </div>
   );
 }

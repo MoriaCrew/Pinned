@@ -593,7 +593,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-plan:has(input:checked) .pn-plan-check { display: grid; }
 .pn-plus-soon { margin: 0; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-align: center; }
 .pn-menu { position: absolute; z-index: 30; min-width: 12rem; display: grid; padding: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-dock); }
-.pn-menu-item { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink); font: 600 15px/20px var(--font-ui); text-align: left; cursor: pointer; }
+.pn-menu-item { display: flex; align-items: center; text-decoration: none; gap: var(--space-2); min-height: var(--tap); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink); font: 600 15px/20px var(--font-ui); text-align: left; cursor: pointer; }
 .pn-menu-item:hover { background: var(--surface-sunk); }
 .pn-menu-item[data-danger] { color: var(--danger); }
 .pn-menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

@@ -7,6 +7,7 @@ import {
   Dock,
   Icon,
   ICON_NAMES,
+  Menu,
   Pin,
   PlusSheet,
   SceneCard,
@@ -124,5 +125,23 @@ describe("SceneCard body (PIN-100)", () => {
   it("drops the print body when there is nothing to put in it", () => {
     expect(html(h(SceneCard, { src: "/s.webp" }))).not.toContain("pn-print-body");
     expect(html(h(SceneCard, { src: "/s.webp", idea: "A picnic" }))).toContain("pn-print-body");
+  });
+});
+
+describe("Menu links (PIN-104)", () => {
+  it("renders href items as real links and the rest as buttons", () => {
+    const markup = html(
+      h(Menu, {
+        label: "Account",
+        items: [
+          { label: "My boards", href: "/me/boards" },
+          { label: "Sign out", onSelect: () => {} },
+        ],
+      }),
+    );
+    const link = markup.match(/<a [^>]*>/)?.[0] ?? "";
+    expect(link).toContain('href="/me/boards"');
+    expect(link).toContain('role="menuitem"');
+    expect(markup).toMatch(/<button[^>]*role="menuitem"[^>]*>Sign out/);
   });
 });
