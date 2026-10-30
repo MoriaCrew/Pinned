@@ -241,6 +241,10 @@ function BoardBody({
   const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
   // PIN-157: the thing whose rename sheet is open (mounted here, not in its More menu).
   const [renamingElementId, setRenamingElementId] = useState<string | null>(null);
+  // Which opening of the sheet this is: a save made in an earlier
+  // opening (even of the same thing) must not close or speak in this one.
+  const [renamingOpenId, setRenamingOpenId] = useState(0);
+  const renameOpens = useRef(0);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   // Join sheet: open while an intent waits for a name (or "edit").
@@ -441,7 +445,7 @@ function BoardBody({
   // showing (the server's own); 404 and the rest are generic. A late
   // answer touches only its own thing and its own sheet.
   const renameElement = useMutation({
-    mutationFn: async ({ elementId, label }: { elementId: string; label: string }) => {
+    mutationFn: async ({ elementId, label }: { elementId: string; label: string; openId: number }) => {
       const response = await fetch(
         `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}`,
         { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) },
@@ -458,12 +462,12 @@ function BoardBody({
       if (current) queryClient.setQueryData(boardQueryKey(slug), withElementLabel(current, elementId, label));
       return { previousLabel };
     },
-    onSuccess: (element) => {
+    onSuccess: (element, { openId }) => {
       queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
         current ? withElementLabel(current, element.id, element.label) : current,
       );
-      // Close only the sheet that made this request.
-      setRenamingElementId((open) => (open === element.id ? null : open));
+      // Close only the opening of the sheet that made this request.
+      if (openId === renameOpens.current) setRenamingElementId((open) => (open === element.id ? null : open));
     },
     onError: (_cause, { elementId, label }, context) => {
       const previousLabel = context?.previousLabel;
@@ -476,7 +480,8 @@ function BoardBody({
   });
   const renamingElement = renamingElementId ? view.elements.find((e) => e.id === renamingElementId) : undefined;
   // The mutation tracks only its latest request: busy and the error line belong to the sheet of that thing.
-  const renameIsForOpenSheet = renameElement.variables?.elementId === renamingElementId;
+  const renameIsForOpenSheet =
+    renameElement.variables?.elementId === renamingElementId && renameElement.variables?.openId === renamingOpenId;
 
   // PIN-143: delete a scene (maker or host; the route enforces). Not
   // optimistic: the viewer stays open with its confirm until the
@@ -1151,6 +1156,8 @@ function BoardBody({
             onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
             onRename={(elementId) => {
               renameElement.reset();
+              renameOpens.current += 1;
+              setRenamingOpenId(renameOpens.current);
               setRenamingElementId(elementId);
             }}
             deletion={{
@@ -1259,7 +1266,7 @@ function BoardBody({
             error={renameIsForOpenSheet ? (renameElement.error?.message ?? "") : ""}
             onSave={(label) => {
               if (label === renamingElement.label) setRenamingElementId(null);
-              else renameElement.mutate({ elementId: renamingElement.id, label });
+              else renameElement.mutate({ elementId: renamingElement.id, label, openId: renamingOpenId });
             }}
             onEdit={() => {
               if (renameElement.isError) renameElement.reset();
