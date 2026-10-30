@@ -153,7 +153,11 @@ gates (404 in link-only mode, 401 signed out):
    participant -> `listElementsByOwner`), newest first,
    capped at Policy `libraryPageSize` (default 60). Cards
    carry the source board's TITLE only — a slug never appears
-   in a library payload or URL.
+   in a library payload or URL. Each card also carries
+   `familyId` (PIN-121): the original element's id for a
+   library copy (`sourceElementId`), else its own id — always
+   one of the caller's own things — so the Add sheet can tell
+   which things already sit on the board it is open on.
 2. Thumbnails: `GET /api/me/elements/{id}/image` authorizes
    by signed-in OWNERSHIP (the element's owner participant
    must be claimed by the caller), not by board link — the
@@ -163,9 +167,12 @@ gates (404 in link-only mode, 401 signed out):
    from-library` needs both cookies (user + a participant on
    the current board) and pins with `pinnedBy` = that
    participant; pinning twice returns `alreadyPinned`, never
-   an error. The board Add sheet has it as the "From my
-   pins" tab; `/me/pins?board=<slug>` offers the same action
-   per card.
+   an error. The board Add sheet shows it under the photo
+   target as the "From your other boards" strip (PIN-121; one
+   sticker per family, things already here greyed as "Already
+   here", capped at Policy `libraryStripMax`, default 12) with
+   "See all" for the full list; `/me/pins?board=<slug>` offers
+   the same action per card.
 4. **Copy-on-pin decision (issue fallback, taken on
    purpose):** elements live in the Firestore subcollection
    under their origin board and `createPin` requires the

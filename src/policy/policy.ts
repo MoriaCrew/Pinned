@@ -113,6 +113,8 @@ export const PolicySchema = z
     signInNudge: z.boolean().default(true),
     /** My pins library page size: newest elements kept per GET (PIN-85). */
     libraryPageSize: z.number().int().min(1).default(60),
+    /** Add sheet "From your other boards" strip: stickers shown before "See all" (PIN-121); 0 hides the strip. */
+    libraryStripMax: z.number().int().min(0).default(12),
     /** Activity strip: latest BoardEvent lines shown (PIN-74). */
     activityStripMax: z.number().int().min(0).default(5),
     /** Generated-chips cache: hours a label-set entry stays fresh (PIN-75). */
@@ -279,6 +281,7 @@ export const PolicyOverridesSchema = z.object({
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),
+  libraryStripMax: z.number().int().min(0).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),
   jobPollIntervalMs: z.number().int().min(250).optional(),
   uploadMaxPx: z.number().int().positive().optional(),

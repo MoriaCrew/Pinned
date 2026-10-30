@@ -98,6 +98,7 @@ export async function listMyElements(
     for (const element of elements) {
       cards.push({
         elementId: element.id,
+        familyId: element.sourceElementId ?? element.id,
         label: element.label,
         description: element.description,
         faceFlag: element.faceFlag,

@@ -25,11 +25,12 @@ import {
   type PendingTapPin,
 } from "../../../domain/add-sheet";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
+import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
 import { t, tCount } from "../../../i18n";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
-import { LibraryTab } from "./LibraryTab";
+import { LibraryList, LibraryStrip, useLibraryPins } from "./LibraryPins";
 import { PhotoPick } from "./PhotoPick";
 
 interface PublicJob {
@@ -210,7 +211,9 @@ function CutPhoto({
  * every thing kept, tap one to drop it, tap the photo to add a
  * missed one (PIN-78) → "Pin N things" with optimistic pins. A
  * face shows the one-line consent note once per photo and never
- * blocks pinning.
+ * blocks pinning. PIN-121: signed in, the pick step also offers
+ * "From your other boards" under the photo target (one tap pins a
+ * thing here) with "See all" for the full library list.
  */
 export function AddSheet({
   slug,
@@ -220,6 +223,7 @@ export function AddSheet({
   uploadJpegQuality,
   jobPollIntervalMs,
   elementsPerPhotoMax,
+  libraryStripMax,
   onClose,
 }: {
   slug: string;
@@ -229,14 +233,27 @@ export function AddSheet({
   uploadJpegQuality: number;
   jobPollIntervalMs: number;
   elementsPerPhotoMax: number;
+  /** Policy.libraryStripMax (PIN-121). */
+  libraryStripMax: number;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  // PIN-85: "From my pins" library tab. Disabled auth (link-only
-  // or signed out) keeps the photo-only sheet.
+  // PIN-121: the library strip and its "See all" list. Disabled auth
+  // (link-only or signed out) keeps the photo-only sheet.
   const auth = useAuth();
-  const [tab, setTab] = useState<"photo" | "library">("photo");
-  const showLibraryTab = auth.enabled && auth.status === "signedIn";
+  const signedIn = auth.enabled && auth.status === "signedIn";
+  const library = useLibraryPins(slug, signedIn, boardView.board.title);
+  const [seeAll, setSeeAll] = useState(false);
+  const stripHeadingId = useId();
+  const seeAllId = `${stripHeadingId}-all`;
+  // Set by the list's Back only: focus returns to "See all" once,
+  // never when the strip remounts later (e.g. after "Add another").
+  const focusSeeAll = useRef(false);
+  useEffect(() => {
+    if (seeAll || !focusSeeAll.current) return;
+    focusSeeAll.current = false;
+    document.getElementById(seeAllId)?.focus();
+  }, [seeAll, seeAllId]);
   const [jobId, setJobId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -253,7 +270,6 @@ export function AddSheet({
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
-  const tabsId = useId();
 
   function showPreview(file: File) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -503,11 +519,25 @@ export function AddSheet({
     upload.reset();
   }
 
-  const onPhotoTab = !showLibraryTab || tab === "photo";
-  const title = onPhotoTab && stage === "review" && candidatePins.length > 0 ? t("en", "add.reviewTitle") : t("en", "add.title");
+  const stripView = libraryStripView({
+    signedIn,
+    status: library.status,
+    cards: library.cards,
+    board: boardView,
+    local: library.states,
+    max: libraryStripMax,
+  });
+  const onBoardFamilies = familiesOnBoard(library.cards ?? [], boardView);
 
+  const title = seeAll
+    ? t("en", "add.allTitle")
+    : stage === "review" && candidatePins.length > 0
+      ? t("en", "add.reviewTitle")
+      : t("en", "add.title");
+
+  // "See all" opens only from the pick step, which has no footer.
   let footer: ReactNode = null;
-  if (onPhotoTab && stage === "review") {
+  if (!seeAll && stage === "review") {
     footer = (
       <>
         {candidatePins.length > 0 ? (
@@ -533,7 +563,7 @@ export function AddSheet({
         </Button>
       </>
     );
-  } else if (onPhotoTab && stage === "ended") {
+  } else if (!seeAll && stage === "ended") {
     footer = (
       <Button variant="primary" size="lg" icon="camera" block onClick={resetForAnother}>
         {t("en", "add.another")}
@@ -544,6 +574,17 @@ export function AddSheet({
   const photoContent = (
     <>
       {stage === "pick" ? <PhotoPick onFile={(file) => upload.mutate(file)} /> : null}
+
+      {stage === "pick" && stripView.kind !== "hidden" ? (
+        <LibraryStrip
+          view={stripView}
+          headingId={stripHeadingId}
+          seeAllId={seeAllId}
+          onPin={library.pin}
+          onSeeAll={() => setSeeAll(true)}
+          onRetry={library.retry}
+        />
+      ) : null}
 
       {showFaceNote ? (
         <Hint point="none" dismissLabel={t("en", "add.gotIt")} onDismiss={() => setDismissedFaceJobId(jobId)}>
@@ -632,42 +673,28 @@ export function AddSheet({
     // so it wears whatever look the board shows (a try-on included).
     <div className="pn-add-root">
       <Sheet title={title} onClose={onClose} closeLabel={t("en", "add.close")} footer={footer} className="pn-add-sheet">
-        {showLibraryTab ? (
+        {seeAll ? (
           <>
-            <div className="pn-add-tabs" role="tablist" aria-label={t("en", "add.tabs")}>
-              <button
-                type="button"
-                role="tab"
-                id={`${tabsId}-photo`}
-                aria-selected={tab === "photo"}
-                aria-controls={`${tabsId}-panel`}
-                className="pn-add-tab"
-                onClick={() => setTab("photo")}
-              >
-                <Icon name="camera" size={18} />
-                {t("en", "add.photoTab")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id={`${tabsId}-library`}
-                aria-selected={tab === "library"}
-                aria-controls={`${tabsId}-panel`}
-                className="pn-add-tab"
-                onClick={() => setTab("library")}
-              >
-                <Icon name="pin" size={18} />
-                {t("en", "add.fromMyPins")}
-              </button>
-            </div>
-            <div
-              className="pn-add-panel"
-              role="tabpanel"
-              id={`${tabsId}-panel`}
-              aria-labelledby={`${tabsId}-${tab}`}
+            <Button
+              variant="quiet"
+              size="sm"
+              icon="back"
+              className="pn-add-back"
+              autoFocus
+              onClick={() => {
+                focusSeeAll.current = true;
+                setSeeAll(false);
+              }}
             >
-              {tab === "library" ? <LibraryTab slug={slug} /> : photoContent}
-            </div>
+              {t("en", "add.back")}
+            </Button>
+            <LibraryList
+              status={library.status}
+              cards={library.cards}
+              stateOf={(card) => libraryPinState(card, library.states, onBoardFamilies)}
+              onPin={library.pin}
+              onRetry={library.retry}
+            />
           </>
         ) : (
           photoContent

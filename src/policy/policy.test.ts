@@ -24,6 +24,11 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
     expect(DEFAULT_POLICY.boardPollIntervalMs).toBe(5_000);
     expect(DEFAULT_POLICY.activityStripMax).toBe(5);
+    // PIN-121 Add sheet strip cap; 0 turns the strip off, negatives fail closed.
+    expect(DEFAULT_POLICY.libraryStripMax).toBe(12);
+    expect(resolvePolicy({ libraryStripMax: 0 }).libraryStripMax).toBe(0);
+    expect(resolvePolicy(null, { libraryStripMax: 6 }).libraryStripMax).toBe(6);
+    expect(() => resolvePolicy({ libraryStripMax: -1 })).toThrow();
     // PIN-75 generated chips: TTL/cap/token budget/prompt version.
     expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
     expect(DEFAULT_POLICY.chipsMax).toBe(4);
