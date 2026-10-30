@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
 import { getConfig } from "../config";
+import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../domain/board-delete-ui";
 import { t, tf } from "../i18n";
 import { ButtonLink, Sticker, Tag, Wordmark } from "../ui";
 import { You } from "./auth/You";
+import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
 
 // DEMO_BOARD_SLUG is a runtime env value (PIN-73); render per
 // request so setting it needs no rebuild.
@@ -36,8 +38,14 @@ const PILE: {
 // The demo action points at the seeded judge board only when
 // DEMO_BOARD_SLUG is set (PIN-73, scripts/seed-demo-board.mjs);
 // unset or invalid shows nothing: no fake functionality.
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const demoSlug = getConfig().demoBoardSlug;
+  // PIN-168: the host lands here after deleting a board while signed out.
+  const boardDeleted = isBoardDeletedFlag((await searchParams)[BOARD_DELETED_PARAM]);
   return (
     <main className="pn-skin-root pn-lib-page pn-landing" data-theme="paper">
       <div className="pn-landing-inner">
@@ -45,6 +53,7 @@ export default function HomePage() {
         <You className="pn-landing-you" />
         <div className="pn-landing-brand">
           <Wordmark size="clamp(72px, 9vw, 104px)" />
+          <BoardDeletedNotice show={boardDeleted} />
         </div>
 
         <div className="pn-landing-pile" aria-hidden="true">

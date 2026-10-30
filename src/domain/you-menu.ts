@@ -27,14 +27,16 @@ export type YouEntry =
   | "myBoards"
   | "myPins"
   | "changeLook"
+  | "deleteBoard"
   | "signIn"
   | "signOut";
 
 /**
  * What the menu offers, in order, each only when it applies: your
- * name here (or Join), your library when signed in, Change look for
- * the host, then Sign in / Sign out. Link-only (auth off) never gets
- * an account entry; nothing account-shaped shows while auth loads.
+ * name here (or Join), your library when signed in, Change look and
+ * Delete board for the host (PIN-168), then Sign in / Sign out.
+ * Link-only (auth off) never gets an account entry; nothing
+ * account-shaped shows while auth loads.
  */
 export function youMenuEntries(state: YouState): YouEntry[] {
   const entries: YouEntry[] = [];
@@ -44,7 +46,7 @@ export function youMenuEntries(state: YouState): YouEntry[] {
   }
   const signedIn = state.authEnabled && state.authStatus === "signedIn";
   if (signedIn) entries.push("myBoards", "myPins");
-  if (state.onBoard && state.isHost) entries.push("changeLook");
+  if (state.onBoard && state.isHost) entries.push("changeLook", "deleteBoard");
   if (state.authEnabled && state.authStatus !== "loading") {
     entries.push(signedIn ? "signOut" : "signIn");
   }

@@ -570,6 +570,9 @@ textarea.pn-input { resize: none; min-height: 88px; }
 .pn-lib-board-menu-start { left: 0; }
 .pn-lib-board-confirm { margin: 0; padding: var(--space-2) var(--space-3); color: var(--ink); font: 650 15px/20px var(--font-ui); }
 .pn-lib-board-error { margin: var(--space-1) 0 0; color: var(--danger); font: 650 14px/18px var(--font-ui); }
+/* PIN-168: "Board deleted" where the host lands (My boards under the header, the landing under the wordmark). */
+.pn-lib-notice { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-4); color: var(--ink); font: 650 15px/20px var(--font-ui); }
+.pn-landing-brand .pn-lib-notice { padding-inline: 0; }
 
 /* My pins: the sticker library. */
 .pn-lib-pins { --sticker: 108px; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); padding: var(--space-3) var(--space-3) 0; }

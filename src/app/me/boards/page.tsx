@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { getConfig } from "../../../config";
 import { resolveAuthUi } from "../../../domain/auth-ui";
+import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../../../domain/board-delete-ui";
 import { t, tCount } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
 import { getBoardRepository } from "../../../server/board-repository";
@@ -13,6 +14,7 @@ import {
 } from "../../../server/user-session";
 import { ButtonLink } from "../../../ui";
 import { SignInButton } from "../../auth/SignInButton";
+import { BoardDeletedNotice } from "../BoardDeletedNotice";
 import { BoardCards, LibraryEmpty, LibraryHeader } from "../LibraryParts";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +28,11 @@ export const dynamic = "force-dynamic";
  * configured). PIN-104: restyled on the design system; each board
  * is a mini board in its own skin.
  */
-export default async function MyBoardsPage() {
+export default async function MyBoardsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const cfg = getConfig();
   if (cfg.authMode !== "optional") notFound();
   const ui = resolveAuthUi({
@@ -50,7 +56,11 @@ export default async function MyBoardsPage() {
       {!user ? (
         <SignedOut enabled={ui.enabled} />
       ) : (
-        <MyBoardsList uid={user.uid} signInEnabled={ui.enabled} />
+        <MyBoardsList
+          uid={user.uid}
+          signInEnabled={ui.enabled}
+          boardDeleted={isBoardDeletedFlag((await searchParams)[BOARD_DELETED_PARAM])}
+        />
       )}
     </main>
   );
@@ -78,9 +88,12 @@ function SignedOut({ enabled }: { enabled: boolean }) {
 async function MyBoardsList({
   uid,
   signInEnabled,
+  boardDeleted,
 }: {
   uid: string;
   signInEnabled: boolean;
+  /** PIN-168: `?deleted=1`, the host just deleted a board. */
+  boardDeleted: boolean;
 }) {
   const users = getUserRepository();
   const profile = await users.getUser(uid);
@@ -95,6 +108,7 @@ async function MyBoardsList({
         title={t("en", "myBoards.title")}
         meta={boards.length > 0 ? tCount("en", "myBoards.count", boards.length) : undefined}
       />
+      <BoardDeletedNotice show={boardDeleted} />
       {boards.length === 0 ? (
         <LibraryEmpty title={t("en", "myBoards.empty")} body={t("en", "myBoards.emptyBody")}>
           <ButtonLink variant="primary" size="lg" icon="plus" href="/new">

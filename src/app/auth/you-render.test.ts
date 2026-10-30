@@ -26,6 +26,7 @@ const board = (over: Partial<YouBoard> = {}): YouBoard => ({
   onJoin: noop,
   onEditName: noop,
   onChangeLook: noop,
+  onDeleteBoard: noop,
   ...over,
 });
 const sam = { id: "p-sam", displayName: "Sam" };
@@ -60,9 +61,14 @@ describe('"you" button on a board (PIN-120)', () => {
     expect(items(out)).toEqual(["Edit name"]);
   });
 
-  it("gives the host Change look", () => {
+  it("gives the host Change look and a danger Delete board; a non-host never sees it (PIN-168)", () => {
     const out = html(h(YouView, { auth: linkOnly, board: board({ me: sam, isHost: true }), initialOpen: true }));
-    expect(items(out)).toEqual(["Edit name", "Change look"]);
+    expect(items(out)).toEqual(["Edit name", "Change look", "Delete board"]);
+    expect(out).toMatch(/<button[^>]*data-danger=""[^>]*>Delete board</);
+    expect(out.match(/data-danger/g)).toHaveLength(1);
+    const guest = html(h(YouView, { auth: linkOnly, board: board({ me: sam }), initialOpen: true }));
+    expect(guest).not.toContain("Delete board");
+    expect(guest).not.toContain("data-danger");
   });
 
   it("offers Sign in with Google when sign-in is on and you are signed out", () => {
@@ -73,7 +79,7 @@ describe('"you" button on a board (PIN-120)', () => {
   it("signed in: the Google photo, the library links, and Sign out last", () => {
     const out = html(h(YouView, { auth: signedIn, board: board({ me: sam, isHost: true }), initialOpen: true }));
     expect(out).toContain('src="https://example.test/robin.jpg"');
-    expect(items(out)).toEqual(["Edit name", "My boards", "My pins", "Change look", "Sign out"]);
+    expect(items(out)).toEqual(["Edit name", "My boards", "My pins", "Change look", "Delete board", "Sign out"]);
     expect(out).toContain('href="/me/boards"');
     expect(out).toContain('href="/me/pins"');
   });

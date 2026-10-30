@@ -338,6 +338,17 @@ returns, so the objects it wrote with no record go too. The sweep is
 a no-op for a bad slug or a live board and can be re-run; nothing
 schedules a re-run yet.
 
+Client (PIN-168): the host's "you" menu has a danger **Delete board**
+(after the first poll says `viewer.isHost`; never for anyone else).
+It opens a sheet that names the board, says it is gone for everyone,
+pictures included, and can't be undone; focus starts on Keep board,
+Escape and the scrim keep the board, and nothing closes it while the
+delete runs. On 204 the page stops polling, clears the board's query
+cache and replaces itself with `/me/boards?deleted=1` (signed in) or
+`/?deleted=1`, which show a one-line "Board deleted" notice and strip
+the flag (no slug travels). A 404 (already deleted, or no longer the
+host) or any other failure keeps the board and says so in the sheet.
+
 ## Thing rename (PIN-156, parent PIN-134)
 
 `PATCH /api/boards/{slug}/elements/{elementId}` with JSON

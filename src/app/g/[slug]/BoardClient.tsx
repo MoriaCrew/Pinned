@@ -64,6 +64,7 @@ import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
+import { DeleteBoardSheet } from "./DeleteBoardSheet";
 import { isPoolEmptyCode, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesBuySheet, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
@@ -262,6 +263,9 @@ function BoardBody({
   // opening (even of the same thing) must not close or speak in this one.
   const [renamingOpenId, setRenamingOpenId] = useState(0);
   const renameOpens = useRef(0);
+  // PIN-168: the host's Delete board confirm, and "the board is gone, we are leaving".
+  const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   // Join sheet: open while an intent waits for a name (or "edit").
@@ -305,6 +309,8 @@ function BoardBody({
       return (await response.json()) as BoardClientView;
     },
     initialData: initialView,
+    // PIN-168: no more polling once our own delete went through.
+    enabled: !leaving,
     refetchInterval: policy.pollIntervalMs,
     refetchIntervalInBackground: false,
   });
@@ -1101,6 +1107,7 @@ function BoardBody({
                 onJoin: () => setJoinIntent({ kind: "join" }),
                 onEditName: () => setJoinIntent({ kind: "edit" }),
                 onChangeLook: look.openLook,
+                onDeleteBoard: () => setDeleteBoardOpen(true),
               }}
             />
           }
@@ -1136,7 +1143,7 @@ function BoardBody({
               {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
             </p>
           ) : null}
-          {boardQuery.isError ? (
+          {boardQuery.isError && !leaving ? (
             <div className={styles.errorRow}>
               <p className={styles.error} role="alert">
                 {t("en", "board.loadError")}
@@ -1353,6 +1360,19 @@ function BoardBody({
             unavailable={makes.unavailable}
             onBuy={makes.buy}
             onClose={makes.closeSheet}
+          />
+        ) : null}
+
+        {isHost && deleteBoardOpen ? (
+          <DeleteBoardSheet
+            slug={slug}
+            title={view.board.title}
+            signedIn={auth.enabled && auth.status === "signedIn"}
+            onDeleted={() => {
+              setLeaving(true);
+              queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === slug });
+            }}
+            onClose={() => setDeleteBoardOpen(false)}
           />
         ) : null}
 
