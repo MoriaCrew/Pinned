@@ -69,6 +69,60 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.firebaseWebAuthDomain).toBe("demo.firebaseapp.com");
   });
 
+  describe("same-origin auth domain (PIN-163)", () => {
+    const configured = "demo-proj.firebaseapp.com";
+    const optionalOn = {
+      AUTH_MODE: "optional",
+      AUTH_SAME_ORIGIN: "1",
+      APP_BASE_URL: "https://app.example.test",
+      FIREBASE_PROJECT_ID: "demo-proj",
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: configured,
+    };
+
+    it("flag off: today's authDomain, nothing proxied", () => {
+      const cfg = parseConfig({ ...optionalOn, AUTH_SAME_ORIGIN: undefined });
+      expect(cfg.authSameOrigin).toBe(false);
+      expect(cfg.firebaseWebAuthDomain).toBe(configured);
+      expect(parseConfig({ ...optionalOn, AUTH_SAME_ORIGIN: "true" }).authSameOrigin).toBe(false);
+      expect(parseConfig({}).authSameOrigin).toBe(false);
+    });
+
+    it("flag on + optional + https APP_BASE_URL: the app host", () => {
+      const cfg = parseConfig(optionalOn);
+      expect(cfg.authSameOrigin).toBe(true);
+      expect(cfg.firebaseWebAuthDomain).toBe("app.example.test");
+      expect(cfg.firebaseProjectId).toBe("demo-proj");
+      expect(
+        parseConfig({ ...optionalOn, APP_BASE_URL: "https://app.example.test:8443/x" })
+          .firebaseWebAuthDomain,
+      ).toBe("app.example.test:8443");
+    });
+
+    it("flag on + link-only: unchanged, nothing proxied", () => {
+      const cfg = parseConfig({ ...optionalOn, AUTH_MODE: "link-only" });
+      expect(cfg.authSameOrigin).toBe(false);
+      expect(cfg.firebaseWebAuthDomain).toBe(configured);
+    });
+
+    it("flag on + non-https, missing or junk APP_BASE_URL: today's value", () => {
+      for (const APP_BASE_URL of ["http://app.example.test", "not a url", "", undefined]) {
+        expect(
+          parseConfig({ ...optionalOn, APP_BASE_URL }).firebaseWebAuthDomain,
+          String(APP_BASE_URL),
+        ).toBe(configured);
+      }
+    });
+
+    it("flag on without a valid project id: today's value (no proxy to serve it)", () => {
+      expect(
+        parseConfig({ ...optionalOn, FIREBASE_PROJECT_ID: "Bad.Id" }).firebaseWebAuthDomain,
+      ).toBe(configured);
+      expect(
+        parseConfig({ ...optionalOn, FIREBASE_PROJECT_ID: undefined }).firebaseWebAuthDomain,
+      ).toBe(configured);
+    });
+  });
+
   it("honours optional + live AI only on exact values", () => {
     const cfg = parseConfig({ AUTH_MODE: "optional", AI_MOCK: "0" });
     expect(cfg.authMode).toBe("optional");
