@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendDictation,
   applyChip,
+  attemptPollInterval,
   chipThumbs,
   chipsForSelection,
   chipsSelectionKey,
@@ -15,6 +16,7 @@ import {
   selectableCards,
   selectedCards,
   togglePinSelection,
+  withPolledScene,
 } from "./make-sheet";
 import type { BoardViewScene, PinCard } from "./board-view";
 
@@ -157,6 +159,21 @@ describe("make sheet logic (PIN-70)", () => {
       "b",
       "a",
     ]);
+  });
+
+  it("my scene poll stops once its scene is gone, and never brings a gone scene back (PIN-143)", () => {
+    expect(attemptPollInterval(undefined, 1500)).toBe(1500);
+    expect(attemptPollInterval({ scene: { status: "running" } }, 1500)).toBe(1500);
+    expect(attemptPollInterval({ scene: { status: "ready" } }, 1500)).toBe(false);
+    expect(attemptPollInterval({ scene: null }, 1500)).toBe(false);
+    const base = { createdBy: "me", elementIds: ["e1"], prompt: "x", imageUrl: "/img", createdAt: 1 };
+    const inView: BoardViewScene = { ...base, id: "s1", status: "running", imageUrl: null, canDelete: true };
+    const other: BoardViewScene = { ...base, id: "s2", status: "ready" };
+    const polled: BoardViewScene = { ...base, id: "s1", status: "ready" };
+    expect(withPolledScene([inView, other], polled)).toEqual([{ ...polled, canDelete: true, parentDeleted: undefined }, other]);
+    // Deleted by the host: the board view dropped it, the cached poll must not resurrect it.
+    expect(withPolledScene([other], polled)).toEqual([other]);
+    expect(withPolledScene([other], null)).toEqual([other]);
   });
 
   it("remix (PIN-79): credits union parent + new owners deduped, new first, chains walked", () => {

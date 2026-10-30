@@ -15,6 +15,7 @@ import {
   type BoardViewScene,
 } from "../../../domain/board-view";
 import {
+  attemptPollInterval,
   isTerminalScene,
   pruneSelection,
   canRemixScene,
@@ -23,6 +24,7 @@ import {
   togglePinSelection,
   chipsForSelection,
   chipsSelectionKey,
+  withPolledScene,
 } from "../../../domain/make-sheet";
 import {
   boardCounts,
@@ -460,17 +462,19 @@ function BoardBody({
 
   // Poll my in-flight scene at job cadence so the strip's print
   // lands faster than the board poll; both share the TanStack
-  // cache and the poll stops at a terminal status.
+  // cache and the poll stops at a terminal status, or at a 404
+  // (scene: null): deleted by the host, or hidden (PIN-143).
   const attemptInView = attempt
     ? view.scenes.find((scene) => scene.id === attempt.sceneId)
     : undefined;
   const scenePoll = useQuery({
     queryKey: ["board-scene", slug, liveSceneId],
-    queryFn: async (): Promise<{ scene: BoardViewScene }> => {
+    queryFn: async (): Promise<{ scene: BoardViewScene | null }> => {
       const response = await fetch(
         `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(liveSceneId ?? "")}`,
         { cache: "no-store" },
       );
+      if (response.status === 404) return { scene: null };
       const data = (await response.json()) as { scene?: BoardViewScene; error?: string };
       if (!response.ok || !data.scene) throw new Error(data.error || t("en", "board.sceneFailed"));
       return { scene: data.scene };
@@ -480,29 +484,26 @@ function BoardBody({
       attempt?.sceneId === liveSceneId &&
       !makeScene.isPending &&
       !(attemptInView && isTerminalScene(attemptInView.status)),
-    refetchInterval: (query) =>
-      query.state.data && isTerminalScene(query.state.data.scene.status)
-        ? false
-        : policy.jobPollIntervalMs,
+    refetchInterval: (query) => attemptPollInterval(query.state.data, policy.jobPollIntervalMs),
   });
   const polledScene = scenePoll.data?.scene;
   const polledStatus = polledScene?.status;
+  // My scene is gone: drop the attempt and its poll like a pin delete does.
+  const attemptGone = polledScene === null;
+  useEffect(() => {
+    if (!attemptGone || liveSceneId === null) return;
+    queryClient.removeQueries({ queryKey: ["board-scene", slug, liveSceneId] });
+    setAttempt(null);
+    setLiveSceneId(null);
+    setAttemptError("");
+  }, [attemptGone, liveSceneId, queryClient, slug]);
   useEffect(() => {
     if (polledStatus && isTerminalScene(polledStatus)) {
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
     }
   }, [polledStatus, queryClient, slug]);
 
-  // The scene poll has no viewer: keep the board view's per-viewer flags (PIN-143).
-  const polledInView = polledScene ? view.scenes.find((scene) => scene.id === polledScene.id) : undefined;
-  const scenes = scenesNewestFirst(
-    polledScene
-      ? [
-          { ...polledScene, canDelete: polledInView?.canDelete, parentDeleted: polledInView?.parentDeleted },
-          ...view.scenes.filter((scene) => scene.id !== polledScene.id),
-        ]
-      : view.scenes,
-  );
+  const scenes = scenesNewestFirst(withPolledScene(view.scenes, polledScene));
   const attemptScene = attempt ? scenes.find((scene) => scene.id === attempt.sceneId) : undefined;
   const showCooking = makeScene.isPending && !attemptScene;
   const picked = pickedInOrder(cards, selected);
