@@ -446,6 +446,7 @@ function BoardBody({
     setPicking(false);
     setSelected(new Set());
     setRemixOfId(null);
+    setSheetPrompt("");
   }, [empty, picking]);
 
   useEffect(() => {
@@ -559,6 +560,7 @@ function BoardBody({
       } else {
         // A tap on a thing at rest starts picking with that thing.
         setRemixOfId(null);
+        setSheetPrompt("");
         setSelected(togglePinSelection(new Set(), intent.pinId, policy.pinsPerScene.max).next);
         setPicking(true);
         setScrollToPinId(intent.pinId);
