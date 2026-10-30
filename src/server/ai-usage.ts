@@ -12,7 +12,8 @@ import "server-only";
  */
 import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
-import { aiCallCostUsdEst, type AiCallLog } from "../domain/types";
+import { aiCallCostUsdEst, isDeniedOutcome, type AiCallLog } from "../domain/types";
+import { DEFAULT_POLICY } from "../policy/policy";
 import { dayBucketFor } from "../gateway/budget";
 import { estimateMetaCostUsd } from "../gateway/costs";
 import type { MetaCallLog } from "../gateway/meta-gateway";
@@ -21,14 +22,19 @@ export { dayBucketFor, estimateMetaCostUsd };
 
 export interface AiUsageSummary {
   dayBucket: string;
+  /** Provider calls only: denied_* rows (PIN-137) never reached a
+   *  provider, so they must not consume the lab call limit. */
   callCount: number;
+  deniedCount: number;
   estimatedCostUsd: number;
 }
 
 export function summarizeAiUsage(logs: readonly AiCallLog[], dayBucket: string): AiUsageSummary {
+  const deniedCount = logs.filter((log) => isDeniedOutcome(log.outcome)).length;
   return {
     dayBucket,
-    callCount: logs.length,
+    callCount: logs.length - deniedCount,
+    deniedCount,
     estimatedCostUsd: logs.reduce((sum, log) => sum + aiCallCostUsdEst(log), 0),
   };
 }
@@ -52,6 +58,9 @@ export async function getTodayAiUsage(
 export function createMetaLogSink(
   repository: GameRepository,
   now: () => number = Date.now,
+  // PIN-137: retention comes from Policy at the call site; the
+  // default keeps existing callers on the Policy default.
+  retentionDays: number = DEFAULT_POLICY.aiCallLogRetentionDays,
 ): (entry: MetaCallLog) => Promise<void> {
   return async (entry) => {
     const createdAt = now();
@@ -73,6 +82,7 @@ export function createMetaLogSink(
       outcome: entry.outcome,
       dayBucket: dayBucketFor(createdAt),
       createdAt,
+      expireAt: createdAt + retentionDays * 86_400_000,
     });
   };
 }
