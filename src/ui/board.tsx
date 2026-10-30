@@ -170,26 +170,35 @@ export function Sheet({
   const autoId = useId();
   const titleId = labelledBy ?? `${autoId}-title`;
   const ref = useRef<HTMLElement>(null);
+  // Latest onClose without re-running the focus effect: callers pass
+  // inline handlers, and re-running would yank focus out of fields.
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    if (layer === "none") return;
+    onCloseRef.current = onClose;
+  });
+  const modal = layer === "fixed";
+  useEffect(() => {
+    // Only a live, fixed sheet is a modal: it takes focus once when it
+    // opens, closes on Escape and hands focus back when it goes away.
+    if (!modal) return;
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && onClose) onClose();
+      if (event.key === "Escape") onCloseRef.current?.();
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
       previous?.focus?.({ preventScroll: true });
     };
-  }, [layer, onClose]);
+  }, [modal]);
   const sheet = (
     <section
       ref={ref}
       tabIndex={-1}
       className={cx("pn-sheet", className)}
       role="dialog"
-      aria-modal={layer === "none" ? undefined : true}
+      aria-modal={modal ? true : undefined}
       aria-labelledby={titleId}
     >
       <span className="pn-sheet-grab" aria-hidden="true" />

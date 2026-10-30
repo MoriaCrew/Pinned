@@ -356,9 +356,9 @@ textarea.pn-input { resize: none; min-height: 88px; }
 .pn-field-error { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-weight: 650; }
 
 /* ---------- Hint (one coach mark at a time) ---------- */
-.pn-hint { position: relative; display: flex; align-items: center; gap: var(--space-3); width: fit-content; max-width: 100%; padding: 10px 6px 10px var(--space-4); border-radius: var(--radius-md); background: var(--ink); color: var(--surface-raised); font: 650 15px/20px var(--font-ui); }
+.pn-hint { position: relative; display: flex; align-items: center; gap: var(--space-3); width: fit-content; max-width: 100%; padding: 4px 4px 4px var(--space-4); border-radius: var(--radius-md); background: var(--ink); color: var(--surface-raised); font: 650 15px/20px var(--font-ui); }
 .pn-hint p { margin: 0; }
-.pn-hint .pn-btn-quiet { color: var(--surface-raised); min-height: 36px; padding: 0 10px; }
+.pn-hint .pn-btn-quiet { color: var(--surface-raised); min-height: var(--tap); padding: 0 10px; }
 .pn-hint::after { content: ""; position: absolute; left: var(--hint-x, 28px); width: 14px; height: 14px; background: inherit; rotate: 45deg; border-radius: 2px; }
 .pn-hint[data-point="down"]::after { bottom: -6px; }
 .pn-hint[data-point="up"]::after { top: -6px; }

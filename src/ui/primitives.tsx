@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
+import { useId, useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import { personColorIndex } from "../domain/skins";
 import { t, tCount, tf } from "../i18n";
 import { Icon, type IconName } from "./icons";
@@ -292,7 +292,10 @@ export function TextField({
   const autoId = useId();
   const fieldId = id ?? autoId;
   const helpId = `${fieldId}-help`;
-  const length = [...(value ?? defaultValue ?? "")].length;
+  // Uncontrolled fields keep their own copy so the count follows typing.
+  const [uncontrolled, setUncontrolled] = useState(defaultValue ?? "");
+  const current = value ?? uncontrolled;
+  const length = [...current].length;
   const count = maxLength ? `${length}/${maxLength}` : null;
   const shared = {
     id: fieldId,
@@ -306,7 +309,10 @@ export function TextField({
     autoComplete,
     "aria-invalid": error ? true : undefined,
     "aria-describedby": help || error ? helpId : undefined,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange?.(event.target.value, event),
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (value === undefined) setUncontrolled(event.target.value);
+      onChange?.(event.target.value, event);
+    },
   };
   return (
     <div className={cx("pn-field", className)} data-invalid={error ? "" : undefined}>
