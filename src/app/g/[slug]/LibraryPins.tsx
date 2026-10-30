@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { LibraryPinState, LibraryStripView } from "../../../domain/library-strip";
+import { familyOf, type LibraryPinState, type LibraryStripView } from "../../../domain/library-strip";
 import type { MyPinCard } from "../../../domain/my-pins";
 import { t, tf } from "../../../i18n";
 import { Button, Icon, Sticker } from "../../../ui";
@@ -39,7 +39,10 @@ const isInert = (state: LibraryPinState) => state === "pinning" || state === "pi
  * and its "See all" list so both show the same per-thing state.
  * Pinning posts to this board's from-library route and invalidates
  * the board query, so the new pin pops into the grid behind the
- * sheet; a repeat pin reads back as the friendly "Already here".
+ * sheet, and the library, which then holds the new copy (its family
+ * reads "Already here" from then on, also after the sheet reopens).
+ * A repeat pin reads back as the friendly "Already here". State is
+ * kept per family, so every row of the same thing follows the tap.
  * Disabled (signed out or sign-in off) it never fetches.
  */
 export function useLibraryPins(slug: string, enabled: boolean) {
@@ -57,15 +60,15 @@ export function useLibraryPins(slug: string, enabled: boolean) {
     enabled,
   });
 
-  const setState = (elementId: string, value: LibraryPinState) =>
-    setStates((current) => new Map(current).set(elementId, value));
+  const setState = (card: MyPinCard, value: LibraryPinState) =>
+    setStates((current) => new Map(current).set(familyOf(card), value));
 
   const pin = useMutation({
-    mutationFn: async (elementId: string) => {
+    mutationFn: async (card: MyPinCard) => {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/pins/from-library`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ elementId }),
+        body: JSON.stringify({ elementId: card.elementId }),
       });
       const data = (await response.json()) as { alreadyPinned?: boolean; error?: string };
       if (!response.ok) throw new Error(data.error || t("en", "add.pinFailed"));
@@ -73,19 +76,20 @@ export function useLibraryPins(slug: string, enabled: boolean) {
     },
     // Options-level callbacks run for every tap, so several stickers
     // can be in flight at once.
-    onMutate: (elementId) => setState(elementId, "pinning"),
-    onSuccess: (data, elementId) => {
-      setState(elementId, data.alreadyPinned ? "already" : "pinned");
+    onMutate: (card) => setState(card, "pinning"),
+    onSuccess: (data, card) => {
+      setState(card, data.alreadyPinned ? "already" : "pinned");
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["my-pins"] });
     },
-    onError: (_cause, elementId) => setState(elementId, "failed"),
+    onError: (_cause, card) => setState(card, "failed"),
   });
 
   return {
     status: library.status,
     cards: library.data?.elements,
     states,
-    pin: (elementId: string) => pin.mutate(elementId),
+    pin: (card: MyPinCard) => pin.mutate(card),
     retry: () => void library.refetch(),
   };
 }
@@ -116,16 +120,16 @@ function LibraryProblem({ onRetry }: { onRetry: () => void }) {
 export function LibraryStrip({
   view,
   headingId,
-  seeAllFocus = false,
+  seeAllId,
   onPin,
   onSeeAll,
   onRetry,
 }: {
   view: Exclude<LibraryStripView, { kind: "hidden" }>;
   headingId: string;
-  /** Put focus back on "See all" (coming back from the full list). */
-  seeAllFocus?: boolean;
-  onPin: (elementId: string) => void;
+  /** Id of "See all", so the sheet can put focus back on it after Back. */
+  seeAllId?: string;
+  onPin: (card: MyPinCard) => void;
   onSeeAll: () => void;
   onRetry: () => void;
 }) {
@@ -136,7 +140,7 @@ export function LibraryStrip({
           {t("en", "add.stripTitle")}
         </h3>
         {view.kind === "items" ? (
-          <Button variant="quiet" size="sm" className="pn-add-strip-all" autoFocus={seeAllFocus} onClick={onSeeAll}>
+          <Button variant="quiet" size="sm" className="pn-add-strip-all" id={seeAllId} onClick={onSeeAll}>
             {t("en", "add.seeAll")}
           </Button>
         ) : null}
@@ -170,7 +174,7 @@ export function LibraryStrip({
                   aria-label={spoken}
                   aria-disabled={isInert(state) || undefined}
                   onClick={() => {
-                    if (!isInert(state)) onPin(card.elementId);
+                    if (!isInert(state)) onPin(card);
                   }}
                 >
                   <span className="pn-add-strip-sticker">
@@ -222,7 +226,7 @@ export function LibraryList({
   status: "pending" | "error" | "success";
   cards: readonly MyPinCard[] | undefined;
   stateOf: (card: MyPinCard) => LibraryPinState;
-  onPin: (elementId: string) => void;
+  onPin: (card: MyPinCard) => void;
   onRetry: () => void;
 }) {
   if (status === "pending") {
@@ -266,7 +270,7 @@ export function LibraryList({
                 icon={state === "failed" ? "undo" : "pin"}
                 disabled={state === "pinning"}
                 aria-label={`${libraryPinLabel(state)}: ${card.label}`}
-                onClick={() => onPin(card.elementId)}
+                onClick={() => onPin(card)}
               >
                 {libraryPinLabel(state)}
               </Button>

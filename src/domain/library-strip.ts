@@ -28,7 +28,13 @@ export interface StripBoardLike {
   elements: readonly { id: string }[];
 }
 
-/** Library families that already have a pinned member on this board. */
+/**
+ * Library families that already have a pinned member on this board.
+ * A cross-board pin lands as a COPY with a new id, so this matches
+ * on family: once the library is refetched it holds the copy (same
+ * familyId as the original), and every member of that family (the
+ * original on board A, an earlier copy on board B) reads as here.
+ */
 export function familiesOnBoard(
   cards: readonly MyPinCard[],
   board: StripBoardLike,
@@ -44,16 +50,18 @@ export function familiesOnBoard(
 }
 
 /**
- * What a library thing shows: what this sheet just did to it wins
- * (so "Pinned" stays "Pinned" after the board refetch adds the
- * copy), else "Already here" when its family is pinned on the board.
+ * What a library thing shows: what this sheet just did to its family
+ * wins (so "Pinned" stays "Pinned" after the refetches add the copy,
+ * and a sibling row of the same thing reads "Pinned" too instead of
+ * staying tappable), else "Already here" when its family is pinned
+ * on the board. `local` is keyed by family (familyOf).
  */
 export function libraryPinState(
   card: MyPinCard,
   local: ReadonlyMap<string, LibraryPinState>,
   onBoard: ReadonlySet<string>,
 ): LibraryPinState {
-  const mine = local.get(card.elementId);
+  const mine = local.get(familyOf(card));
   if (mine) return mine;
   return onBoard.has(familyOf(card)) ? "already" : "idle";
 }

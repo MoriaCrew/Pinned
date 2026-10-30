@@ -149,6 +149,31 @@ describe("library pin state helpers (PIN-121)", () => {
     expect([...familiesOnBoard(cards, board)]).toEqual(["root"]);
   });
 
+  it("matches a cross-board pin by family: the new copy id marks the original as here once the library holds it", () => {
+    // Pinning "lamp" here made a copy with a NEW id, pinned on this board.
+    const board: StripBoardLike = {
+      elements: [{ id: "lib-copy-of-lamp" }],
+      pins: [{ elementId: "lib-copy-of-lamp", status: "pinned" }],
+    };
+    const before = [card("lamp", { familyId: "lamp" }), card("copy-on-b", { familyId: "lamp" })];
+    // The stale library has no card for the copy: nothing can tell.
+    expect([...familiesOnBoard(before, board)]).toEqual([]);
+    // Refetched (the sheet invalidates the library after a pin), it does.
+    const after = [card("lib-copy-of-lamp", { familyId: "lamp" }), ...before];
+    const onBoard = familiesOnBoard(after, board);
+    expect([...onBoard]).toEqual(["lamp"]);
+    // Every other member of the family reads as already here.
+    expect(after.map((c) => libraryPinState(c, none, onBoard))).toEqual(["already", "already", "already"]);
+  });
+
+  it("keys this sheet's state by family, so sibling rows of one thing follow the tap", () => {
+    const local = new Map<string, LibraryPinState>([["hat", "pinned"]]);
+    const onBoard = new Set<string>();
+    expect(libraryPinState(card("hat", { familyId: "hat" }), local, onBoard)).toBe("pinned");
+    expect(libraryPinState(card("copy-on-b", { familyId: "hat" }), local, onBoard)).toBe("pinned");
+    expect(libraryPinState(card("mug"), local, onBoard)).toBe("idle");
+  });
+
   it("marks the full list's rows: local state, then already here, else idle", () => {
     const onBoard = new Set(["lamp"]);
     const local = new Map<string, LibraryPinState>([["mug", "pinning"]]);

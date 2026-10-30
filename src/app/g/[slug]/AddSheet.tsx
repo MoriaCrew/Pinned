@@ -244,9 +244,16 @@ export function AddSheet({
   const signedIn = auth.enabled && auth.status === "signedIn";
   const library = useLibraryPins(slug, signedIn);
   const [seeAll, setSeeAll] = useState(false);
-  // Focus goes back to "See all" after the list's Back, not on first open.
-  const [backFromList, setBackFromList] = useState(false);
   const stripHeadingId = useId();
+  const seeAllId = `${stripHeadingId}-all`;
+  // Set by the list's Back only: focus returns to "See all" once,
+  // never when the strip remounts later (e.g. after "Add another").
+  const focusSeeAll = useRef(false);
+  useEffect(() => {
+    if (seeAll || !focusSeeAll.current) return;
+    focusSeeAll.current = false;
+    document.getElementById(seeAllId)?.focus();
+  }, [seeAll, seeAllId]);
   const [jobId, setJobId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -572,7 +579,7 @@ export function AddSheet({
         <LibraryStrip
           view={stripView}
           headingId={stripHeadingId}
-          seeAllFocus={backFromList}
+          seeAllId={seeAllId}
           onPin={library.pin}
           onSeeAll={() => setSeeAll(true)}
           onRetry={library.retry}
@@ -675,8 +682,8 @@ export function AddSheet({
               className="pn-add-back"
               autoFocus
               onClick={() => {
+                focusSeeAll.current = true;
                 setSeeAll(false);
-                setBackFromList(true);
               }}
             >
               {t("en", "add.back")}
