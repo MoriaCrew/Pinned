@@ -14,7 +14,7 @@ jobs:
     env:
       AI_MOCK: "1" # CI never makes paid model calls (see AGENTS.md)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Docs sanity (required files present)
         run: |
@@ -26,7 +26,7 @@ jobs:
           echo "Docs sanity OK"
 
       # App checks activate automatically once PIN-2 scaffolds package.json.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: hashFiles('package.json') != ''
         with:
           node-version: "20"
