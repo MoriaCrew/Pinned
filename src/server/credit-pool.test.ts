@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { emptyBoardCounters, type Element, type SceneJob } from "../domain/board";
+import { emptyBoardCounters, type DecomposeJob, type Element, type SceneJob } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import {
@@ -586,5 +586,58 @@ describe("kill flag off mid-life (PIN-151)", () => {
     const view = await getBoardView(slug, owner, offApi);
     expect(view).not.toHaveProperty("credits");
     expect(await entriesOf(h, slug)).toEqual(entriesBefore);
+  });
+});
+
+describe("paid make survives a failed terminal write (PIN-151)", () => {
+  class FlakyReadyPhotoStore extends InMemoryDecomposeJobStore {
+    private thrown = false;
+    async update(job: DecomposeJob): Promise<void> {
+      if (job.status === "ready" && !this.thrown) {
+        this.thrown = true;
+        throw new Error("transient write failure");
+      }
+      return super.update(job);
+    }
+  }
+
+  class FlakyReadySceneStore extends InMemorySceneJobStore {
+    private thrown = false;
+    async update(job: SceneJob): Promise<void> {
+      if (job.status === "ready" && !this.thrown) {
+        this.thrown = true;
+        throw new Error("transient write failure");
+      }
+      return super.update(job);
+    }
+  }
+
+  it("photo: the ready write retries, candidates stay, exactly one debit", async () => {
+    const h = makeHarness(ENABLED(2));
+    const { slug, owner } = await boardWithOwner(h);
+    const api: BoardApiDeps = { ...h.api, jobs: new FlakyReadyPhotoStore() };
+    const job = await uploadPhoto(slug, owner, await photoBytes(), api);
+    expect(job.status).toBe("ready");
+    expect(job.pinIds.length).toBeGreaterThan(0);
+    expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
+  it("scene: the ready write retries, the paid AI scene stays ready", async () => {
+    const h = makeHarness(ENABLED(2));
+    const { slug, participant } = await seedSceneBoard(h);
+    const api: BoardApiDeps = { ...h.api, sceneJobs: new FlakyReadySceneStore() };
+    const { job, scene } = await requestScene(
+      slug,
+      participant,
+      { elementIds: ["el1"], prompt: "on a picnic blanket" },
+      api,
+    );
+    expect(scene.status).toBe("ready");
+    expect(scene.kind).toBe("ai");
+    expect(await h.store.get(buildSceneImageRef(slug, job.id, "png"))).not.toBeNull();
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
   });
 });

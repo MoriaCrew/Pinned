@@ -302,6 +302,9 @@ export async function runDecomposeJob(
     return existing; // already claimed or finished: no duplicate work
   }
   const { policy } = deps;
+  // PIN-151: set the moment this job's make is spent, so a later
+  // terminal-write failure never discards a paid result.
+  let makeDebited = false;
 
   try {
     const working = await deps.store.get(job.workingRef);
@@ -482,11 +485,14 @@ export async function runDecomposeJob(
         await discardJobCandidates(deps, job);
         return finish(deps, job, "failed", CREDIT_DEBIT_FAILED);
       }
+      makeDebited = debit === "debited";
       if (debit === "pool_empty") {
         await discardJobCandidates(deps, job);
         return finish(deps, job, "failed", CREDITS_POOL_EMPTY);
       }
-      return finish(deps, job, "ready");
+      // awaited (not bare return) so a terminal-write failure
+      // reaches the paid-make retry in the catch below.
+      return await finish(deps, job, "ready");
     }
     if (refusedCount > 0 && refusedCount === kept.length) {
       return finish(deps, job, "refused", "segment_refused");
@@ -495,6 +501,10 @@ export async function runDecomposeJob(
   } catch {
     // Unexpected service failure: typed terminal state, and any
     // candidate pins already persisted above stay persisted.
+    // PIN-151: a paid make is never discarded — if the ready
+    // write itself threw, retry it once here; a second throw
+    // propagates with the job and its pins still stored.
+    if (makeDebited) return finish(deps, job, "ready");
     // PIN-151: while credits are on, candidates from a job that
     // never reached the debit seam are not left confirmable for
     // free; while off, the PIN-64 keep-what-landed rule stands.

@@ -712,6 +712,9 @@ export async function runSceneJob(
     return existing; // already claimed or finished: no duplicate work
   }
   const { policy } = deps;
+  // PIN-151: set the moment this job's make is spent, so a later
+  // terminal-write failure never overwrites a paid scene.
+  let makeDebited = false;
 
   try {
     await syncScene(deps, job); // status running, for the gallery poll
@@ -849,18 +852,28 @@ export async function runSceneJob(
       job.errorCode = CREDITS_POOL_EMPTY;
       return finish(deps, job);
     }
-    Object.assign(job, await storedImageSize(bytes));
-    await storeScenePreview(deps, job, bytes);
+    makeDebited = debit === "debited";
+    // Record the ready AI outcome on the job before any further
+    // step, so the catch below can retry the terminal write of
+    // a paid scene instead of overwriting it as failed.
     job.status = "ready";
     job.kind = "ai";
     job.imageRef = imageRef;
+    Object.assign(job, await storedImageSize(bytes));
+    await storeScenePreview(deps, job, bytes);
     // Gateway reserve proxy (Spark-token estimate until /responses
     // prices publish); the provider dashboard is authoritative.
     job.costUsd = estimateReserveUsd("composeScene", {
       sparkElementsMaxTokens: policy.maxTokens.sparkElements,
     });
-    return finish(deps, job);
+    // awaited (not bare return) so a terminal-write failure
+    // reaches the paid-make retry in the catch below.
+    return await finish(deps, job);
   } catch {
+    // PIN-151: a paid make is never overwritten as failed — if
+    // the ready write itself threw, retry it once here; a second
+    // throw propagates with the stored image still on disk.
+    if (makeDebited) return finish(deps, job);
     job.status = "failed";
     job.errorCode = "scene_failed";
     return finish(deps, job);

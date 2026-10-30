@@ -624,7 +624,10 @@ photo's candidate pins/elements are discarded while its job is
 still `running` (unconfirmable, untappable) and the job fails
 `credits_pool_empty`; a scene's just-stored image is deleted
 and its job/scene fail the same way, before any `ready` sync.
-A non-pool ledger failure at the seam fails the job
+Once a debit lands the make is
+paid: the ready outcome is recorded on the job first, and if
+the terminal write itself throws it is retried once instead of
+discarding or overwriting the result. A non-pool ledger failure at the seam fails the job
 `credit_debit_failed` with the same discard/delete — failing
 closed without claiming the pool was empty. An exception in
 the photo run before the seam also discards landed candidates
