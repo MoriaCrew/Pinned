@@ -35,7 +35,8 @@ describe("evaluateReserve (PIN-61)", () => {
     const state = {
       calls: 200,
       reservedMicroUsd: 0,
-      participants: {},
+      participantPhotos: {},
+      participantScenes: {},
       boards: {},
       participantSegments: {},
       participantTapNames: {},
@@ -51,11 +52,11 @@ describe("evaluateReserve (PIN-61)", () => {
     ).toMatchObject({ ok: false, reason: "budget" });
     const capped = {
       ...emptyBudgetDay(),
-      participants: { p1: 20 },
+      participantPhotos: { p1: 20 },
       boards: { b1: 40 },
     };
     expect(
-      evaluateReserve(capped, req({ participantId: "p1", participantCap: 20 })),
+      evaluateReserve(capped, req({ participantId: "p1", participantPhotoCap: 20 })),
     ).toMatchObject({ ok: false, reason: "participant_cap" });
     expect(
       evaluateReserve(capped, req({ boardId: "b1", boardCap: 40 })),
@@ -64,7 +65,7 @@ describe("evaluateReserve (PIN-61)", () => {
     expect(
       evaluateReserve(
         capped,
-        req({ participantId: "p2", participantCap: 20, boardId: "b2", boardCap: 40 }),
+        req({ participantId: "p2", participantPhotoCap: 20, boardId: "b2", boardCap: 40 }),
       ).ok,
     ).toBe(true);
   });
@@ -92,7 +93,7 @@ describe("segment caps (PIN-92)", () => {
     ).toBe(true);
     // Segment spend does not trip the namer photo quota.
     expect(
-      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+      evaluateReserve(state, req({ participantId: "p1", participantPhotoCap: 20 })).ok,
     ).toBe(true);
   });
 
@@ -112,7 +113,7 @@ describe("segment caps (PIN-92)", () => {
     });
     const snap = store.snapshot(DAY);
     expect(snap.calls).toBe(2);
-    expect(snap.participants).toEqual({});
+    expect(snap.participantPhotos).toEqual({});
     expect(snap.participantSegments).toEqual({ p1: 2 });
     expect(snap.photos).toEqual({ "job-1": 2 });
   });
@@ -133,7 +134,7 @@ describe("tap-name caps (PIN-117)", () => {
     ).toBe(true);
     // Tap-name spend does not trip the namer photo quota.
     expect(
-      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+      evaluateReserve(state, req({ participantId: "p1", participantPhotoCap: 20 })).ok,
     ).toBe(true);
   });
 
@@ -148,7 +149,7 @@ describe("tap-name caps (PIN-117)", () => {
     });
     const snap = store.snapshot(DAY);
     expect(snap.calls).toBe(2);
-    expect(snap.participants).toEqual({});
+    expect(snap.participantPhotos).toEqual({});
     expect(snap.participantSegments).toEqual({});
     expect(snap.participantTapNames).toEqual({ p1: 2 });
   });
@@ -164,7 +165,7 @@ describe("transcription caps (PIN-119)", () => {
       evaluateReserve(state, req({ participantId: "p2", participantTranscriptionCap: 50 })).ok,
     ).toBe(true);
     expect(
-      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+      evaluateReserve(state, req({ participantId: "p1", participantPhotoCap: 20 })).ok,
     ).toBe(true);
   });
 
@@ -174,8 +175,41 @@ describe("transcription caps (PIN-119)", () => {
     expect((await store.reserve(dictation)).ok).toBe(true);
     expect(await store.reserve(dictation)).toEqual({ ok: false, reason: "participant_cap" });
     const snap = store.snapshot(DAY);
-    expect(snap.participants).toEqual({});
+    expect(snap.participantPhotos).toEqual({});
     expect(snap.participantTranscriptions).toEqual({ p1: 1 });
+  });
+});
+
+describe("photo/scene cap independence (PIN-136)", () => {
+  it("evaluateReserve: a full scene quota does not trip the photo cap and vice versa", () => {
+    const sceneFull = { ...emptyBudgetDay(), participantScenes: { p1: 10 } };
+    expect(
+      evaluateReserve(sceneFull, req({ participantId: "p1", participantSceneCap: 10 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    expect(
+      evaluateReserve(sceneFull, req({ participantId: "p1", participantPhotoCap: 20 })).ok,
+    ).toBe(true);
+    const photoFull = { ...emptyBudgetDay(), participantPhotos: { p1: 20 } };
+    expect(
+      evaluateReserve(photoFull, req({ participantId: "p1", participantPhotoCap: 20 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    expect(
+      evaluateReserve(photoFull, req({ participantId: "p1", participantSceneCap: 10 })).ok,
+    ).toBe(true);
+  });
+
+  it("store: 10 scenes leave the full photo quota; 20 photos leave the full scene quota", async () => {
+    const store = new InMemoryBudgetStore();
+    const scene = req({ participantId: "p1", participantSceneCap: 10 });
+    for (let i = 0; i < 10; i += 1) expect((await store.reserve(scene)).ok).toBe(true);
+    expect(await store.reserve(scene)).toEqual({ ok: false, reason: "participant_cap" });
+    const photo = req({ participantId: "p1", participantPhotoCap: 20 });
+    for (let i = 0; i < 20; i += 1) expect((await store.reserve(photo)).ok).toBe(true);
+    expect(await store.reserve(photo)).toEqual({ ok: false, reason: "participant_cap" });
+    const snap = store.snapshot(DAY);
+    expect(snap.participantScenes).toEqual({ p1: 10 });
+    expect(snap.participantPhotos).toEqual({ p1: 20 });
+    expect(snap.calls).toBe(30);
   });
 });
 
@@ -183,13 +217,14 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
   it("counts calls, reserved micro-USD and per-id counters per day", async () => {
     const store = new InMemoryBudgetStore();
     const r = await store.reserve(
-      req({ participantId: "p1", participantCap: 20, boardId: "b1", boardCap: 40 }),
+      req({ participantId: "p1", participantPhotoCap: 20, boardId: "b1", boardCap: 40 }),
     );
     expect(r).toEqual({ ok: true, estimatedMicroUsd: 10_000 });
     expect(store.snapshot(DAY)).toEqual({
       calls: 1,
       reservedMicroUsd: 10_000,
-      participants: { p1: 1 },
+      participantPhotos: { p1: 1 },
+      participantScenes: {},
       boards: { b1: 1 },
       participantSegments: {},
       participantTapNames: {},

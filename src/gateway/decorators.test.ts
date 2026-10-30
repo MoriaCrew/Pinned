@@ -140,6 +140,56 @@ describe("decorator chain: budget (PIN-61)", () => {
     expect(other.status).toBe("ready");
   });
 
+  it("PIN-136: scenes do not consume the photo quota and vice versa", async () => {
+    const composer: SceneComposer = {
+      async composeScene(input) {
+        return { status: "ready", value: { imageBase64: "x", promptVersion: input.promptVersion } };
+      },
+    };
+    const budget = new InMemoryBudgetStore();
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        budget,
+        composer,
+        policy: resolvePolicy({
+          photosPerParticipantPerDay: 2,
+          scenesPerParticipantPerDay: 2,
+          scenesPerBoardPerDay: 100,
+        }),
+      },
+    );
+    const sceneInput = {
+      elements: [],
+      prompt: "s",
+      size: "1024x1536",
+      store: false,
+      timeoutMs: 120_000,
+      promptVersion: "scene.v1",
+      boardId: "b1",
+      participantId: "p1",
+    };
+    // Exhaust scenes; photos still have their full quota.
+    expect((await ports.sceneComposer!.composeScene(sceneInput)).status).toBe("ready");
+    expect((await ports.sceneComposer!.composeScene(sceneInput)).status).toBe("ready");
+    expect(await ports.sceneComposer!.composeScene(sceneInput)).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(
+      (await ports.elementNamer.nameElements(namerInput({ participantId: "p1", boardId: "b1" }))).status,
+    ).toBe("ready");
+    expect(
+      (await ports.elementNamer.nameElements(namerInput({ participantId: "p1", boardId: "b1" }))).status,
+    ).toBe("ready");
+    expect(
+      await ports.elementNamer.nameElements(namerInput({ participantId: "p1", boardId: "b1" })),
+    ).toMatchObject({ status: "failed", errorCode: "participant_cap" });
+    const snap = budget.snapshot(DAY);
+    expect(snap.participantScenes).toEqual({ p1: 2 });
+    expect(snap.participantPhotos).toEqual({ p1: 2 });
+  });
+
   it("RACE: reservation holds while the first call is still pending -> exactly 1 proceeds", async () => {
     let release!: (out: PortOutcome<ElementsOut>) => void;
     const gate = new Promise<PortOutcome<ElementsOut>>((r) => {
@@ -382,7 +432,8 @@ describe("decorator chain: Segmenter caps (PIN-92)", () => {
       (await ports.segmenter.segment(segInput({ participantId: "p2" }))).status,
     ).toBe("ready");
     const snap = budget.snapshot(DAY);
-    expect(snap.participants).toEqual({ p1: 1 });
+    expect(snap.participantPhotos).toEqual({ p1: 1 });
+    expect(snap.participantScenes).toEqual({});
     expect(snap.participantSegments).toEqual({ p1: 2, p2: 1 });
     expect(snap.photos).toEqual({ "job-1": 3 });
     expect(snap.calls).toBe(4);

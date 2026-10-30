@@ -40,7 +40,10 @@ function stateFrom(data: DocumentData | undefined): BudgetDayState {
     calls: typeof data.calls === "number" ? data.calls : 0,
     reservedMicroUsd:
       typeof data.reservedMicroUsd === "number" ? data.reservedMicroUsd : 0,
-    participants: numRecord(data.participants),
+    // PIN-136: legacy day docs have only the old shared `participants`
+    // field; missing new fields read as {} (= 0) via numRecord.
+    participantPhotos: numRecord(data.participantPhotos),
+    participantScenes: numRecord(data.participantScenes),
     boards: numRecord(data.boards),
     participantSegments: numRecord(data.participantSegments),
     participantTapNames: numRecord(data.participantTapNames),
@@ -70,8 +73,12 @@ export class FirestoreBudgetStore implements BudgetStore {
         calls: FieldValue.increment(1),
         reservedMicroUsd: FieldValue.increment(result.estimatedMicroUsd),
       };
-      if (request.participantId && request.participantCap !== undefined) {
-        updates[`participants.${request.participantId}`] =
+      if (request.participantId && request.participantPhotoCap !== undefined) {
+        updates[`participantPhotos.${request.participantId}`] =
+          FieldValue.increment(1);
+      }
+      if (request.participantId && request.participantSceneCap !== undefined) {
+        updates[`participantScenes.${request.participantId}`] =
           FieldValue.increment(1);
       }
       if (request.boardId && request.boardCap !== undefined) {

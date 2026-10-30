@@ -76,7 +76,9 @@ interface CallMeta {
   timeoutMs: number;
   boardId?: string;
   participantId?: string;
-  participantCap?: number;
+  /** PIN-136: photo (ElementNamer) vs scene (SceneComposer) caps use separate counters. */
+  participantPhotoCap?: number;
+  participantSceneCap?: number;
   boardCap?: number;
   /** PIN-117: TapNamer-only per-participant cap (own counter). */
   participantTapNameCap?: number;
@@ -188,7 +190,8 @@ async function runDecorated<T>(
         budgetUsd: policy.dailyBudgetUsd,
         callLimit: policy.dailyCallLimit,
         participantId,
-        participantCap: participantId ? meta.participantCap : undefined,
+        participantPhotoCap: participantId ? meta.participantPhotoCap : undefined,
+        participantSceneCap: participantId ? meta.participantSceneCap : undefined,
         boardId,
         boardCap: boardId ? meta.boardCap : undefined,
         participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
@@ -300,7 +303,7 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
-            participantCap: policy.photosPerParticipantPerDay,
+            participantPhotoCap: policy.photosPerParticipantPerDay,
           },
           () => base.elementNamer.nameElements(input),
         ),
@@ -337,7 +340,7 @@ export function decoratePorts(
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,
-            participantCap: policy.scenesPerParticipantPerDay,
+            participantSceneCap: policy.scenesPerParticipantPerDay,
             boardCap: policy.scenesPerBoardPerDay,
           },
           () => composer.composeScene(input),
