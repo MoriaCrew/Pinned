@@ -143,7 +143,7 @@ export default async function BoardPage({
       slug={slug}
       initialView={view as BoardClientView}
       tryOnSkin={tryOnSkin}
-      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge }}
+      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax }}
     />
   );
 }

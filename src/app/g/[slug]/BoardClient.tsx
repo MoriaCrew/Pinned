@@ -79,6 +79,8 @@ export interface BoardClientPolicy {
   elementsPerPhotoMax: number;
   /** Policy signInNudge (PIN-84). */
   signInNudge: boolean;
+  /** Policy libraryStripMax: the Add sheet's "From your other boards" cap (PIN-121). */
+  libraryStripMax: number;
 }
 
 interface SceneAttempt {
@@ -960,6 +962,7 @@ function BoardBody({
             uploadJpegQuality={policy.uploadJpegQuality}
             jobPollIntervalMs={policy.jobPollIntervalMs}
             elementsPerPhotoMax={policy.elementsPerPhotoMax}
+            libraryStripMax={policy.libraryStripMax}
             onClose={() => setAddOpen(false)}
           />
         ) : null}
