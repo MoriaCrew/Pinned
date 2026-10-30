@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Element, Scene } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
@@ -75,6 +75,11 @@ function scene(over: Partial<Scene>): Scene {
   };
 }
 
+/** A scene's two stored objects in its own folder: full image, strip preview (PIN-133). */
+function sceneObjects(slug: string, id: string): [string, string] {
+  return [`scenes/boards/${slug}/${id}/scene.png`, `scenes/boards/${slug}/${id}/preview.webp`];
+}
+
 async function seed(h: Harness) {
   const board = await createBoard({ title: "Delete test" }, h.deps);
   const slug = board.slug;
@@ -94,9 +99,9 @@ async function seed(h: Harness) {
   await h.boards.createElement(el2);
   await h.boards.createPin({ id: "pin-1", boardId: slug, elementId: "el-1", pinnedBy: owner.id, status: "pinned", createdAt: T0 });
   await h.boards.createPin({ id: "pin-2", boardId: slug, elementId: "el-2", pinnedBy: owner.id, status: "pinned", createdAt: T0 + 1 });
-  await h.boards.putScene(scene({ id: "scene-1", boardId: slug, createdBy: owner.id, elementIds: ["el-1"] }));
-  await h.boards.putScene(scene({ id: "scene-2", boardId: slug, createdBy: owner.id, elementIds: ["el-2"], imageRef: "scenes/scene-2.png", createdAt: T0 + 1 }));
-  for (const ref of [el1.cutoutRef, el1.flattenedRef, el2.cutoutRef, el2.flattenedRef, "scenes/scene-1.png", "scenes/scene-2.png"]) {
+  await h.boards.putScene(scene({ id: "scene-1", boardId: slug, createdBy: owner.id, elementIds: ["el-1"], imageRef: sceneObjects(slug, "scene-1")[0] }));
+  await h.boards.putScene(scene({ id: "scene-2", boardId: slug, createdBy: owner.id, elementIds: ["el-2"], imageRef: sceneObjects(slug, "scene-2")[0], createdAt: T0 + 1 }));
+  for (const ref of [el1.cutoutRef, el1.flattenedRef, el2.cutoutRef, el2.flattenedRef, ...sceneObjects(slug, "scene-1"), ...sceneObjects(slug, "scene-2")]) {
     await h.store.put(ref, Buffer.from(`bytes:${ref}`), "image/png");
   }
   return { slug, owner, other, el1, el2 };
@@ -128,11 +133,13 @@ describe("deleteMyElement (PIN-77)", () => {
       pinCount: 1,
       sceneCount: 1,
     });
-    // Element objects deleted; hidden scene image object kept
-    // (hidden, never served) and the surviving element intact.
+    // Element objects deleted; the hidden scene's full image and
+    // preview deleted too (PIN-133; before, they stayed, hidden and
+    // never served); the surviving element and scene intact.
     expect(await h.store.get(el1.cutoutRef)).toBeNull();
     expect(await h.store.get(el1.flattenedRef)).toBeNull();
-    expect(await h.store.get("scenes/scene-1.png")).not.toBeNull();
+    for (const ref of sceneObjects(slug, "scene-1")) expect(await h.store.get(ref)).toBeNull();
+    for (const ref of sceneObjects(slug, "scene-2")) expect(await h.store.get(ref)).not.toBeNull();
     expect(await h.store.get("elements/el-2/cutout.png")).not.toBeNull();
 
     // Hidden everywhere: gallery, single scene, scene image, element image.
@@ -210,6 +217,8 @@ describe("deleteMyElement (PIN-77)", () => {
     expect(await h.boards.getPin("pin-x")).not.toBeNull();
     expect(await h.store.get(el1.cutoutRef)).not.toBeNull();
     expect(await getSceneView(slug, "scene-1", h.deps)).toBeNull();
+    // This board's hidden scene loses its objects on this path too (PIN-133).
+    for (const ref of sceneObjects(slug, "scene-1")) expect(await h.store.get(ref)).toBeNull();
   });
 
   it("storage cleanup is best-effort and never touches refs outside elements/", async () => {
@@ -238,5 +247,29 @@ describe("deleteMyElement (PIN-77)", () => {
     expect(result.deleted).toBe(true);
     expect(await h.store.get("tmp/boards/secret/working.webp")).not.toBeNull();
     expect(await h.boards.getElement("el-f")).toBeNull();
+  });
+
+  it("hidden scenes' objects go best-effort, only inside each scene's own folder (PIN-133)", async () => {
+    const h = makeHarness();
+    const { slug, owner } = await seed(h);
+    // A forged scene using el-1 whose ref points at scene-2's image: never touched.
+    await h.boards.putScene(scene({ id: "scene-f", boardId: slug, createdBy: owner.id, imageRef: sceneObjects(slug, "scene-2")[0] }));
+    const [full1, preview1] = sceneObjects(slug, "scene-1");
+    const flaky: DerivativeStore = {
+      put: (ref, bytes, type) => h.store.put(ref, bytes, type),
+      get: (ref) => h.store.get(ref),
+      delete: async (ref) => {
+        if (ref === full1) throw new Error("gcs down");
+        return h.store.delete(ref);
+      },
+    };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await deleteMyElement(slug, owner, "el-1", { ...h.deps, store: flaky });
+    vi.restoreAllMocks();
+    expect(result).toMatchObject({ deleted: true, hiddenSceneIds: ["scene-1", "scene-f"] });
+    expect(await h.store.get(full1)).not.toBeNull(); // failed, the request still succeeded
+    expect(await h.store.get(preview1)).toBeNull();
+    for (const ref of sceneObjects(slug, "scene-2")) expect(await h.store.get(ref)).not.toBeNull();
+    expect(JSON.stringify(log.mock.calls)).not.toContain("scenes/");
   });
 });

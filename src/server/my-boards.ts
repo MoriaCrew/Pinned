@@ -59,7 +59,7 @@ export async function listMyBoards(
       themeMotif: theme?.motif ?? null,
       myPinCount,
       latestSceneImageUrl: latestScene
-        ? `/api/boards/${encodeURIComponent(board.slug)}/scenes/${encodeURIComponent(latestScene.id)}/image`
+        ? `/api/boards/${encodeURIComponent(board.slug)}/scenes/${encodeURIComponent(latestScene.id)}/image?size=preview`
         : null,
       lastActivityAt,
       claimedAt: entry.claimedAt,

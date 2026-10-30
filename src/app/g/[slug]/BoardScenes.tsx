@@ -15,7 +15,10 @@ export type SceneSlot =
       /** Frame shape, CSS aspect-ratio "w / h" (PIN-129, domain/scene-ratio). */
       ratio: string;
       id: string;
+      /** Full image: the viewer and Share. */
       src: string;
+      /** Phone-sized preview the strip loads (PIN-133). */
+      previewSrc: string;
       alt: string;
       idea: string;
       credits: Credit[];
@@ -83,7 +86,7 @@ function Slot({ slot }: { slot: SceneSlot }) {
   if (slot.type === "print") {
     return (
       <SceneCard
-        src={slot.src}
+        src={slot.previewSrc}
         alt={slot.alt}
         idea={slot.idea}
         credits={slot.credits}

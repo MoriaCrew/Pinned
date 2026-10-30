@@ -32,6 +32,7 @@ import {
   InMemorySceneJobStore,
   SceneJobRequestError,
   buildSceneImageRef,
+  buildScenePreviewRef,
   runSceneJob,
   sniffSceneImage,
   startSceneJob,
@@ -1072,5 +1073,93 @@ describe("scene delete (PIN-142)", () => {
     vi.restoreAllMocks();
     await deleteScene("board-1", job.id, p1, noHost, h.api);
     expect(await h.store.get(job.imageRef as string)).toBeNull();
+  });
+});
+
+describe("scene previews (PIN-133)", () => {
+  // A real-sized 1280x1920 PNG scene, from a synthetic model output (eval/fixtures, PIN-50 spike).
+  const realScene = () =>
+    sharp(`${process.cwd()}/eval/fixtures/studio/scenes/C1-size-1024x1536.jpg`).resize(1280, 1920).png().toBuffer();
+  const start = (h: Harness, collageMode = false) =>
+    startSceneJob({ boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "picnic" }, { ...h.deps, collageMode });
+  const preview = (h: Harness, id: string, slug = "board-1") => resolveSceneImage(slug, id, h.api, "preview");
+
+  it("store time writes a WebP within the cap beside the full image on both paths; scene delete removes both", async () => {
+    const h = await makeHarness();
+    const full = await realScene();
+    h.setBehavior({ kind: "image", base64: full.toString("base64") });
+    const model = await start(h);
+    // The collage path needs a decodable cut-out (the harness 1x1 is header-only).
+    const cutout = await sharp({ create: { width: 30, height: 20, channels: 4, background: "#1ea0c8" } }).png().toBuffer();
+    await h.store.put("elements/boards/board-1/el1/cutout.png", cutout, "image/png");
+    const collage = await start(h, true);
+    for (const job of [model, collage]) {
+      expect(job.status).toBe("ready");
+      const meta = await sharp((await h.store.get(buildScenePreviewRef("board-1", job.id)))!).metadata();
+      expect(meta.format).toBe("webp");
+      expect(Math.max(meta.width!, meta.height!)).toBe(h.deps.policy.scenePreviewMaxPx);
+    }
+    // The full image is stored as returned; the preview is a small fraction of it.
+    const small = (await h.store.get(buildScenePreviewRef("board-1", model.id)))!;
+    expect(small.length * 10).toBeLessThan(full.length);
+    expect(await preview(h, model.id)).toEqual({ bytes: small, contentType: "image/webp" });
+    const served = await resolveSceneImage("board-1", model.id, h.api);
+    expect(served?.contentType).toBe("image/png");
+    expect(served?.bytes.equals(full)).toBe(true); // toEqual walks 5 MB byte by byte
+    const p1 = await h.boards.getParticipant("board-1", "p1");
+    await deleteScene("board-1", model.id, p1, { hostToken: null }, h.api);
+    expect(await h.store.get(model.imageRef!)).toBeNull();
+    expect(await h.store.get(buildScenePreviewRef("board-1", model.id))).toBeNull();
+  });
+
+  it("an older scene's preview is made on first request, stored once, then reused", async () => {
+    const h = await makeHarness();
+    h.setBehavior({ kind: "image", base64: (await realScene()).toString("base64") });
+    const job = await start(h);
+    const ref = buildScenePreviewRef("board-1", job.id);
+    await h.store.delete(ref); // stored before previews existed
+    const puts = vi.spyOn(h.store, "put");
+    const gets = vi.spyOn(h.store, "get");
+    const first = await preview(h, job.id);
+    const second = await preview(h, job.id);
+    expect(first?.contentType).toBe("image/webp");
+    expect(second).toEqual(first);
+    // One render and put; the second request reads only the stored preview.
+    expect(puts.mock.calls.map(([putRef]) => putRef)).toEqual([ref]);
+    expect(gets.mock.calls.filter(([getRef]) => getRef === job.imageRef)).toHaveLength(1);
+    // Two concurrent first requests render the same bytes: a harmless overwrite.
+    await h.store.delete(ref);
+    const [a, b] = await Promise.all([preview(h, job.id), preview(h, job.id)]);
+    expect(a).toEqual(first);
+    expect(b).toEqual(first);
+    expect(await h.store.get(ref)).toEqual(first?.bytes);
+    vi.restoreAllMocks();
+  });
+
+  it("a preview that cannot be made never fails the scene and serves the full image with its own type", async () => {
+    const h = await makeHarness(); // the mock's header-only PNG: sharp cannot decode it
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const job = await start(h);
+    expect(job.status).toBe("ready");
+    expect(await preview(h, job.id)).toEqual({ bytes: Buffer.from(PNG_B64, "base64"), contentType: "image/png" });
+    expect(await h.store.get(buildScenePreviewRef("board-1", job.id))).toBeNull();
+    expect(log).toHaveBeenCalled();
+    expect(JSON.stringify(log.mock.calls)).not.toContain("scenes/");
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the uniform misses and never makes a preview for a hidden or deleted scene", async () => {
+    const h = await makeHarness();
+    h.setBehavior({ kind: "image", base64: (await realScene()).toString("base64") });
+    const [ok, hidden, deleted] = [await start(h), await start(h), await start(h)];
+    for (const job of [ok, hidden, deleted]) await h.store.delete(buildScenePreviewRef("board-1", job.id));
+    // Full images left in storage, as after a failed best-effort delete.
+    await h.boards.putScene({ ...(await h.boards.getScene(hidden.id))!, hidden: true });
+    await h.boards.putScene({ ...(await h.boards.getScene(deleted.id))!, hidden: true, deletedAt: T0, deletedBy: "maker" });
+    expect(await preview(h, hidden.id)).toBeNull();
+    expect(await preview(h, deleted.id)).toBeNull();
+    expect(await preview(h, ok.id, "board-2")).toBeNull();
+    expect(await preview(h, "missing")).toBeNull();
+    for (const job of [ok, hidden, deleted]) expect(await h.store.get(buildScenePreviewRef("board-1", job.id))).toBeNull();
   });
 });

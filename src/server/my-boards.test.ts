@@ -109,7 +109,7 @@ describe("listMyBoards", () => {
     const old = cards[0];
     expect(old.myPinCount).toBe(1); // only my own element's pinned pin
     expect(old.lastActivityAt).toBe(900);
-    expect(old.latestSceneImageUrl).toBe("/api/boards/board-old/scenes/s1/image");
+    expect(old.latestSceneImageUrl).toBe("/api/boards/board-old/scenes/s1/image?size=preview");
     expect(cards[1].latestSceneImageUrl).toBeNull();
     expect(cards[1].myPinCount).toBe(1);
   });

@@ -1,5 +1,9 @@
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
+import { emptyBoardCounters } from "../../../domain/board";
 import { generateSlug, isValidSlug } from "../../../domain/tokens";
+import { getBoardRepository } from "../../../server/board-repository";
+import { getDerivativeStore } from "../../../server/derivative-store";
 import { POST as createBoardRoute } from "./route";
 import { GET as getBoardRoute } from "./[slug]/route";
 import {
@@ -149,6 +153,34 @@ describe("uniform 404: unknown board / element / job are indistinguishable", () 
       const res = await miss;
       expect(res.status).toBe(404);
       expect(await bodyOf(res)).toEqual({ error: "Not found." });
+    }
+  });
+});
+
+describe("scene image ?size=preview (PIN-133)", () => {
+  it("serves the WebP preview with the full's cache header; the full is unchanged; misses are the same 404", async () => {
+    const slug = generateSlug();
+    const boards = getBoardRepository();
+    await boards.createBoard({ slug, title: "Preview route", counters: emptyBoardCounters(), createdAt: 1, version: 1 });
+    const imageRef = `scenes/boards/${slug}/s1/scene.png`;
+    const full = await sharp({ create: { width: 1280, height: 1920, channels: 3, background: "#c8785a" } }).png().toBuffer();
+    await getDerivativeStore().put(imageRef, full, "image/png");
+    await boards.putScene({ id: "s1", boardId: slug, createdBy: "p1", elementIds: [], prompt: "x", status: "ready", imageRef, promptVersion: "scene.v1", createdAt: 1 });
+    const get = (s: string, sceneId: string, query = "") =>
+      sceneImageRoute(req(`http://t/x${query}`), { params: Promise.resolve({ slug: s, sceneId }) });
+
+    const preview = await get(slug, "s1", "?size=preview");
+    const whole = await get(slug, "s1");
+    expect(preview.headers.get("content-type")).toBe("image/webp");
+    expect(preview.headers.get("cache-control")).toBe(whole.headers.get("cache-control"));
+    expect(preview.headers.get("cache-control")).toMatch(/^private, max-age=\d+$/);
+    const meta = await sharp(Buffer.from(await preview.arrayBuffer())).metadata();
+    expect([meta.format, meta.width, meta.height]).toEqual(["webp", 683, 1024]);
+    expect(whole.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await whole.arrayBuffer()).equals(full)).toBe(true);
+    for (const miss of [await get(generateSlug(), "s1", "?size=preview"), await get(slug, "missing", "?size=preview")]) {
+      expect(miss.status).toBe(404);
+      expect(await bodyOf(miss)).toEqual({ error: "Not found." });
     }
   });
 });

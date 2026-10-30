@@ -156,6 +156,45 @@ export function buildSceneImageRef(
   return assertDerivativeRef(`scenes/boards/${boardId}/${sceneId}/scene.${ext}`);
 }
 
+/** A scene's strip preview file, beside its full image (PIN-133). */
+export const SCENE_PREVIEW_FILE = "preview.webp";
+
+/** Deterministic preview ref in the scene's own folder: never stored on the Scene. */
+export function buildScenePreviewRef(boardId: string, sceneId: string): string {
+  return assertDerivativeRef(`scenes/boards/${boardId}/${sceneId}/${SCENE_PREVIEW_FILE}`);
+}
+
+/**
+ * Phone-sized strip preview (PIN-133): long side at most
+ * Policy.scenePreviewMaxPx (never enlarged), WebP at
+ * Policy.scenePreviewQuality. The same image and Policy give the
+ * same bytes, so two writers of one preview race harmlessly.
+ */
+export async function renderScenePreview(bytes: Buffer, policy: Policy): Promise<Buffer> {
+  const max = policy.scenePreviewMaxPx;
+  return sharp(bytes, { failOn: "error" })
+    .resize({ width: max, height: max, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: policy.scenePreviewQuality })
+    .toBuffer();
+}
+
+/**
+ * Store-time preview, best-effort: a preview failure never fails a
+ * good scene (the image route makes it on first request instead).
+ * Logs the scene id only — no ref, URL or env.
+ */
+async function storeScenePreview(deps: SceneJobDeps, job: SceneJob, bytes: Buffer): Promise<void> {
+  try {
+    const preview = await renderScenePreview(bytes, deps.policy);
+    await deps.store.put(buildScenePreviewRef(job.boardId, job.id), preview, "image/webp");
+  } catch (error) {
+    console.error("Scene preview failed; the image route will make it.", {
+      sceneId: job.id,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+}
+
 /**
  * Pixel size of a stored scene image (PIN-129), read with sharp so
  * the print frame takes its real shape. Unreadable or zero-sized
@@ -636,6 +675,7 @@ async function finishCollage(
   const imageRef = buildSceneImageRef(job.boardId, job.id, "png");
   await deps.store.put(imageRef, png, "image/png");
   Object.assign(job, await storedImageSize(png));
+  await storeScenePreview(deps, job, png);
   job.status = "ready";
   job.kind = "collage";
   job.imageRef = imageRef;
@@ -763,6 +803,7 @@ export async function runSceneJob(
     const imageRef = buildSceneImageRef(boardId, job.id, kind.ext);
     await deps.store.put(imageRef, bytes, kind.contentType);
     Object.assign(job, await storedImageSize(bytes));
+    await storeScenePreview(deps, job, bytes);
     job.status = "ready";
     job.kind = "ai";
     job.imageRef = imageRef;

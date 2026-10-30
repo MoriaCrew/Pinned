@@ -205,8 +205,9 @@ gates (404 in link-only mode, 401 signed out):
 or garbled cookies, unknown board or scene, another board's scene,
 anyone else. Only the maker or host can see a 409 (still developing)
 or the 204; a repeat is a 204 no-op for them, a 404 for others.
-The image is deleted (best-effort, only inside the scene's own
-`scenes/boards/{slug}/{sceneId}/` folder); the Scene stays as a
+The full image and its preview are deleted (best-effort, only inside
+the scene's own `scenes/boards/{slug}/{sceneId}/` folder); the Scene
+stays as a
 tombstone (`hidden`, `deletedAt`, `deletedBy: "maker" | "host"`) so
 remix chains hold, and the repository never rewrites a tombstone.
 Browsers that already fetched the image may keep it until the image

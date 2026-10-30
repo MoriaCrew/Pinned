@@ -917,6 +917,7 @@ function BoardBody({
         ratio: sceneRatio(scene, policy.sceneSize),
         id: scene.id,
         src: scene.imageUrl,
+        previewSrc: scene.previewUrl ?? scene.imageUrl,
         alt: things ? tf("en", "board.sceneAlt", { idea: scene.prompt, things }) : scene.prompt,
         idea: scene.prompt,
         credits,
@@ -1173,7 +1174,7 @@ function BoardBody({
               remixParent?.imageUrl
                 ? {
                     id: remixParent.id,
-                    imageUrl: remixParent.imageUrl,
+                    imageUrl: remixParent.previewUrl ?? remixParent.imageUrl,
                     prompt: remixParent.prompt,
                     ratio: sceneRatio(remixParent, policy.sceneSize),
                   }
