@@ -118,6 +118,8 @@ describe("UI kit components (PIN-97)", () => {
       h(PlusSheet, { plan: "host", onPlanChange: () => {}, prices: { board: "$3.99", host: "$4.99" }, available: true, layer: "none" }),
     );
     expect(on).toContain("Get Plus · $4.99");
+    // Perks that aren't built yet say so.
+    expect((on.match(/pn-perk-soon/g) ?? []).length).toBe(2);
   });
 });
 

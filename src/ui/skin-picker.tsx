@@ -167,11 +167,13 @@ export function PlusSheet({
   onClose?: () => void;
   layer?: "fixed" | "absolute" | "none";
 }) {
-  const perks: { icon?: "skin" | "scene" | "download"; foil?: boolean; title: MessageKey; body: MessageKey }[] = [
+  // `soon`: planned, not built yet. The sheet says so instead of
+  // promising it (docs/15: the demo stays honest).
+  const perks: { icon?: "skin" | "scene" | "download"; foil?: boolean; soon?: boolean; title: MessageKey; body: MessageKey }[] = [
     { icon: "skin", title: "ui.plusPerkSkins", body: "ui.plusPerkSkinsBody" },
     { foil: true, title: "ui.plusPerkFoil", body: "ui.plusPerkFoilBody" },
-    { icon: "scene", title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
-    { icon: "download", title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
+    { icon: "scene", soon: true, title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
+    { icon: "download", soon: true, title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
   ];
   const price = plan === "board" ? prices.board : prices.host;
   // One radio group per sheet: two open sheets never share a name.
@@ -211,7 +213,10 @@ export function PlusSheet({
               </span>
             )}
             <span>
-              <b>{t("en", perk.title)}</b>
+              <b>
+                {t("en", perk.title)}
+                {perk.soon ? <Tag className="pn-perk-soon">{t("en", "ui.perkSoon")}</Tag> : null}
+              </b>
               <small>{t("en", perk.body)}</small>
             </span>
           </li>
