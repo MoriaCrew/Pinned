@@ -35,6 +35,8 @@ export function AuthControl() {
         return;
       }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      // Arrows belong to the menu only while focus is in it.
+      if (!rootRef.current?.contains(document.activeElement)) return;
       const list = items();
       if (list.length === 0) return;
       event.preventDefault();
@@ -42,11 +44,17 @@ export function AuthControl() {
       const next = event.key === "ArrowDown" ? (at + 1) % list.length : (at - 1 + list.length) % list.length;
       list[next].focus({ preventScroll: true });
     };
+    // Tabbing out of the menu closes it, like a click outside.
+    const onFocus = (event: FocusEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
     return () => {
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
     };
   }, [menuOpen]);
 
