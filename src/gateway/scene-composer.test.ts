@@ -52,6 +52,7 @@ function composeInput(over: Partial<ComposeSceneInput> = {}): ComposeSceneInput 
     store: p.sceneStore,
     timeoutMs: p.timeoutsMs.scene,
     promptVersion: p.promptVersions.scene,
+    labelMaxChars: p.elementLabelMaxChars,
     sceneInputMode: p.sceneInputMode,
     boardId: "board-1",
     participantId: "participant-1",
@@ -221,6 +222,7 @@ describe("scene builder (PIN-68, docs/11 sections 3 + 5.6)", () => {
       sceneElementLabel(
         { label: "Teal Mug", description: "teal mug", imageRef: "x" },
         0,
+        DEFAULT_POLICY.elementLabelMaxChars,
       ),
     ).toBe("Element 1: Teal Mug");
     expect(scenePromptText("  on a boat  ")).toBe(

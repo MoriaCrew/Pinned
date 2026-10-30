@@ -124,8 +124,9 @@ export function buildElementFlattenedRef(boardId: string, elementId: string): st
 /**
  * Re-validate namer output against Policy (ports already normalize;
  * the service never trusts a port blindly): cap at
- * elementsPerPhoto.max, truncate concepts to conceptMaxWords,
- * dedupe by concept, drop concept-less rows.
+ * elementsPerPhoto.max, truncate concepts to conceptMaxWords and
+ * labels to elementLabelMaxChars, dedupe by concept, drop
+ * concept-less rows.
  */
 export function validateNamedElements(
   raw: readonly NamedElement[],
@@ -134,6 +135,7 @@ export function validateNamedElements(
   return normalizeElements(raw, {
     maxElements: policy.elementsPerPhoto.max,
     conceptMaxWords: policy.conceptMaxWords,
+    labelMaxChars: policy.elementLabelMaxChars,
   });
 }
 
@@ -282,6 +284,7 @@ export async function runDecomposeJob(
       minElements: policy.elementsPerPhoto.min,
       maxElements: policy.elementsPerPhoto.max,
       conceptMaxWords: policy.conceptMaxWords,
+      labelMaxChars: policy.elementLabelMaxChars,
       maxTokens: policy.maxTokens.sparkElements,
       timeoutMs: policy.timeoutsMs.spark,
       promptVersion: policy.promptVersions.elements,
@@ -597,6 +600,7 @@ export async function addTapElement(
         const named = await deps.tapNamer.nameOne({
           imageRef: `data:image/jpeg;base64,${Buffer.from(flattened).toString("base64")}`,
           conceptMaxWords: policy.conceptMaxWords,
+          labelMaxChars: policy.elementLabelMaxChars,
           maxTokens: policy.maxTokens.sparkTapName,
           timeoutMs: policy.timeoutsMs.spark,
           promptVersion: policy.promptVersions.tapName,

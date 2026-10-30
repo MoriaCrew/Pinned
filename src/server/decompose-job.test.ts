@@ -171,6 +171,12 @@ describe("validators vs Policy (PIN-64)", () => {
     );
     expect(out.map((e) => e.concept)).toEqual(["big red", "teal mug"]);
     expect(out[0].faceFlag).toBe(true);
+    // PIN-155: the service re-caps labels at the Policy value too.
+    const [lamp] = validateNamedElements(
+      [{ label: "Brass Desk Lamp", concept: "lamp", description: "d", faceFlag: false }],
+      resolvePolicy({ elementLabelMaxChars: 5 }),
+    );
+    expect(lamp.label).toBe("Brass");
   });
 
   it("usable-mask window is the PIN-50 0.5%-60% by default and Policy-driven", () => {

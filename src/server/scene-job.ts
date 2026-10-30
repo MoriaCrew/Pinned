@@ -761,6 +761,7 @@ export async function runSceneJob(
       store: parentSceneImageRef ? false : policy.sceneStore,
       timeoutMs: policy.timeoutsMs.scene,
       promptVersion: policy.promptVersions.scene,
+      labelMaxChars: policy.elementLabelMaxChars,
       sceneInputMode: policy.sceneInputMode,
       boardId,
       participantId: job.participantId,

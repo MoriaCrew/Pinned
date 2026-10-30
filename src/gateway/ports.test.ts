@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_POLICY } from "../policy/policy";
+import { DEFAULT_POLICY, resolvePolicy } from "../policy/policy";
 import {
   fixtureChipSuggester,
   fixtureElementNamer,
@@ -18,6 +18,8 @@ import {
   chipsSystemPrompt,
   normalizeChips,
   normalizeElements,
+  normalizeTapName,
+  sceneElementLabel,
   type SuggestChipsInput,
   sceneImageOutcome,
   type NameElementsInput,
@@ -37,6 +39,7 @@ function namerInput(over: Partial<NameElementsInput> = {}): NameElementsInput {
     minElements: p.elementsPerPhoto.min,
     maxElements: p.elementsPerPhoto.max,
     conceptMaxWords: p.conceptMaxWords,
+    labelMaxChars: p.elementLabelMaxChars,
     maxTokens: p.maxTokens.sparkElements,
     timeoutMs: p.timeoutsMs.spark,
     promptVersion: p.promptVersions.elements,
@@ -71,6 +74,8 @@ function metaGateway(handler: (url: string, body: Record<string, unknown>) => un
 }
 
 describe("normalizeElements", () => {
+  const LABEL_CAP = DEFAULT_POLICY.elementLabelMaxChars;
+
   it("caps count, truncates concepts to the Policy word cap, dedupes", () => {
     const out = normalizeElements(
       [
@@ -79,7 +84,7 @@ describe("normalizeElements", () => {
         { label: "C", concept: "", description: "drop" },
         { label: "D", concept: "teal mug", description: "d" },
       ],
-      { maxElements: 2, conceptMaxWords: 3 },
+      { maxElements: 2, conceptMaxWords: 3, labelMaxChars: LABEL_CAP },
     );
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({ concept: "big red alarm", faceFlag: true });
@@ -87,9 +92,24 @@ describe("normalizeElements", () => {
   });
 
   it("falls back to concept for empty label/description and caps at zero", () => {
-    const out = normalizeElements([{ label: "", concept: "teal mug", description: "" }], { maxElements: 6, conceptMaxWords: 3 });
+    const out = normalizeElements([{ label: "", concept: "teal mug", description: "" }], { maxElements: 6, conceptMaxWords: 3, labelMaxChars: LABEL_CAP });
     expect(out[0]).toMatchObject({ label: "teal mug", description: "teal mug" });
-    expect(normalizeElements([{ concept: "teal mug" }], { maxElements: 0, conceptMaxWords: 3 })).toEqual([]);
+    expect(normalizeElements([{ concept: "teal mug" }], { maxElements: 0, conceptMaxWords: 3, labelMaxChars: LABEL_CAP })).toEqual([]);
+  });
+
+  it("cuts labels at a lowered Policy elementLabelMaxChars in all three normalizers, by code point (PIN-155)", () => {
+    const labelMaxChars = resolvePolicy(null, { elementLabelMaxChars: 5 }).elementLabelMaxChars;
+    const astral = "\u{1D49C}"; // one code point, two UTF-16 units
+    const [mug, letters] = normalizeElements(
+      [{ label: "Rustic Teal Mug", concept: "teal mug" }, { label: astral.repeat(6), concept: "letters" }],
+      { maxElements: 6, conceptMaxWords: 3, labelMaxChars },
+    );
+    expect(mug.label).toBe("Rusti");
+    expect(letters.label).toBe(astral.repeat(5));
+    expect(normalizeTapName({ label: "Rustic Teal Mug" }, { conceptMaxWords: 3, labelMaxChars })?.label).toBe("Rusti");
+    expect(sceneElementLabel({ label: "Rustic  Teal Mug", description: "", imageRef: "x" }, 0, labelMaxChars)).toBe(
+      "Element 1: Rusti",
+    );
   });
 
   it("substitutes Policy numbers into the elements prompt", () => {
