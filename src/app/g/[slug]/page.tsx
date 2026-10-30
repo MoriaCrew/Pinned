@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { buildBoardPreview } from "../../../domain/board-preview";
+import { parseSceneParam } from "../../../domain/scene-viewer";
 import { isSkinId } from "../../../domain/skins";
 import { isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
@@ -106,7 +107,8 @@ async function publicOrigin(): Promise<string | null> {
  * carries `data-theme` from `skinForTheme(board.themeId)`, so
  * first-generation theme ids map onto a free skin. PIN-111:
  * `?tryon=<skin>` becomes the host's Plus try-on once the first poll
- * confirms the host (guests ignore it).
+ * confirms the host (guests ignore it). PIN-131: `?scene=<id>` opens
+ * the scene viewer on that print (the client checks it is viewable).
  */
 export default async function BoardPage({
   params,
@@ -133,8 +135,8 @@ export default async function BoardPage({
   if (!view) notFound();
 
   const resolved = getPolicy(board.policyOverrides ?? null);
-  const tryOnParam = (await searchParams).tryon;
-  const tryOnSkin = isSkinId(tryOnParam) ? tryOnParam : null;
+  const query = await searchParams;
+  const tryOnSkin = isSkinId(query.tryon) ? query.tryon : null;
 
   // The client renders the skin root (data-theme from the board's
   // themeId), so a look change or a host try-on switches it at once.
@@ -143,6 +145,7 @@ export default async function BoardPage({
       slug={slug}
       initialView={view as BoardClientView}
       tryOnSkin={tryOnSkin}
+      initialSceneId={parseSceneParam(query.scene)}
       policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0 }}
     />
   );

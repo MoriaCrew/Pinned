@@ -13,7 +13,9 @@ export type SceneKind = "scene" | "collage" | "remix";
  * row on the paper (Remix / Collage tag left, Nº right), the idea in
  * quotes, the compact credits row (PIN-130: stickers only, the full
  * list lives in the scene viewer), then Remix / Share / More. Nothing
- * sits on the picture, so it never covers a face. The skin draws the
+ * sits on the picture, so it never covers a face. `onOpen` (PIN-131)
+ * makes the picture (named by the idea) and the credits row buttons
+ * that open the scene viewer. The skin draws the
  * print (white border, pinned card, film frame, stamp edges…).
  */
 export function SceneCard({
@@ -30,6 +32,7 @@ export function SceneCard({
   onRemix,
   onShare,
   onMore,
+  onOpen,
   remixLabel = t("en", "ui.remix"),
   sharing,
   footer,
@@ -48,6 +51,7 @@ export function SceneCard({
   onRemix?: () => void;
   onShare?: () => void;
   onMore?: () => void;
+  onOpen?: () => void;
   remixLabel?: string;
   /** Share in progress: the share control is disabled. */
   sharing?: boolean;
@@ -69,6 +73,12 @@ export function SceneCard({
   const hasActions = Boolean(onRemix || onShare || onMore);
   const hasCredits = Boolean(credits && credits.length > 0);
   const hasBody = Boolean(idea || hasCredits || hasActions || footer);
+  const frame = (
+    <div className="pn-print-frame" style={{ aspectRatio: ratio }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked scene image */}
+      <img src={src} alt={alt} loading="lazy" />
+    </div>
+  );
   return (
     <article
       className={cx("pn-print-wrap", className)}
@@ -76,10 +86,13 @@ export function SceneCard({
       aria-label={idea ? `${t("en", "ui.scene")}: ${idea}` : t("en", "ui.scene")}
     >
       <div className="pn-print">
-        <div className="pn-print-frame" style={{ aspectRatio: ratio }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked scene image */}
-          <img src={src} alt={alt} loading="lazy" />
-        </div>
+        {onOpen ? (
+          <button type="button" className="pn-print-open" aria-label={idea || t("en", "ui.scene")} aria-haspopup="dialog" onClick={onOpen}>
+            {frame}
+          </button>
+        ) : (
+          frame
+        )}
         {tag || no ? (
           <div className="pn-print-meta">
             {tag}
@@ -89,7 +102,7 @@ export function SceneCard({
         {hasBody ? (
           <div className="pn-print-body">
             {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
-            {hasCredits ? <CreditLine compact items={credits ?? []} remixOf={remixOf} /> : null}
+            {hasCredits ? <CreditLine compact items={credits ?? []} remixOf={remixOf} onOpen={onOpen} /> : null}
             {hasActions ? (
               <div className="pn-print-actions">
                 {onRemix ? (

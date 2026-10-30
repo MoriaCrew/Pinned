@@ -210,6 +210,7 @@
   "board.stop": "Stop",
   "board.thingActions": "More for {thing}",
   "board.sceneAlt": "{idea}, with {things}",
+  "board.sceneMissing": "That scene isn't here any more.",
   "auth.signIn": "Sign in",
   "auth.signingIn": "Signing in…",
   "auth.signOut": "Sign out",

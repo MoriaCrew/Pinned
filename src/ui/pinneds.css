@@ -24,6 +24,7 @@
   --edge-w: 0px; --edge: transparent; --control-radius: 50%; --dock-radius: var(--radius-lg);
   --secondary-edge: var(--line-strong); --tag-deco: none; --print-pad-top: var(--print-pad);
   --develop-bg: color-mix(in srgb, var(--ink) 88%, var(--accent)); --band-show: none; --sheet-radius: var(--radius-lg);
+  --viewer-bg: var(--ink);
 }
 [data-theme="cork"] {
   --skin-display: var(--font-display-cork);
@@ -108,6 +109,7 @@
   --chip-radius: var(--radius-pill);
   --print-pad-top: 16px; --print-pad-bottom: 16px;
   --develop-bg: color-mix(in srgb, var(--surface-sunk) 70%, var(--accent));
+  --viewer-bg: var(--surface-sunk);
 }
 [data-theme="postcard"] {
   --skin-display: var(--font-display-postcard);
@@ -157,7 +159,7 @@
 [class^="pn-"], [class*=" pn-"], [class^="pn-"]::before, [class*=" pn-"]::before, [class^="pn-"]::after, [class*=" pn-"]::after { box-sizing: border-box; }
 .pn-skin-root { background-color: var(--surface); background-image: var(--board-pattern); background-size: var(--board-pattern-size); color: var(--ink); font-family: var(--font-ui); font-size: 16px; line-height: 24px; }
 .pn-sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.pn-focusable:focus-visible, .pn-wordmark:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-credit-open:focus-visible, .pn-input:focus-visible {
+.pn-focusable:focus-visible, .pn-wordmark:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-credit-open:focus-visible, .pn-print-open:focus-visible, .pn-input:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 
@@ -284,6 +286,8 @@
   border-radius: var(--print-radius); box-shadow: var(--shadow-print); -webkit-mask: var(--print-mask); mask: var(--print-mask); padding-top: var(--print-pad-top); }
 .pn-print-frame { position: relative; overflow: hidden; border-radius: 2px; background: var(--surface-sunk); }
 .pn-print-frame > img:not(.pn-develop-cut) { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* PIN-131: with onOpen the frame sits in a bare button that opens the scene viewer (no box of its own, so no shift). */
+.pn-print-open { display: block; width: 100%; padding: 0; border: 0; border-radius: 2px; background: none; color: inherit; cursor: zoom-in; -webkit-tap-highlight-color: transparent; }
 /* Kind tag and Nº sit on the paper under the picture, never on it (the tag has its own fill, the Nº is muted ink on the paper). */
 .pn-print-meta { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 2px 0; }
 .pn-print-no { margin-left: auto; font: 650 11px/14px var(--font-mono); letter-spacing: .08em; color: var(--ink-muted); white-space: nowrap; }

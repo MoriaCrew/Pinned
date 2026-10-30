@@ -73,6 +73,12 @@ Principles:
   thing ("Made from teal mug, rubber duck and succulent"); `onOpen`
   makes it one button, 44px or taller. How many stickers fit
   (`COMPACT_CREDIT_SLOTS`) is layout, not Policy.
+- `SceneCard` `onOpen` (PIN-131) wraps the frame in a bare button
+  named by the idea (`.pn-print-open`, no box of its own, so nothing
+  shifts) and passes `onOpen` to the compact credits row; both say
+  `aria-haspopup="dialog"`. The board's scene viewer shows the whole
+  picture contained on `--viewer-bg` (the skin's dark ground), then
+  the full `CreditLine` on a sheet panel with Share first.
 - Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
   paints the ground, ink and reading face, and lets a board wear a
   different skin than `<html>`. `src/app/globals.css` is only a reset

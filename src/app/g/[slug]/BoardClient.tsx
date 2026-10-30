@@ -40,6 +40,7 @@ import type { ActivityLine } from "../../../domain/board-activity";
 import type { PlusView } from "../../../domain/plus";
 import { sceneRatio } from "../../../domain/scene-ratio";
 import { foilPinId, lookSample } from "../../../domain/plus-ui";
+import { sceneIdInUrl, stepScene, urlWithScene, viewerSceneIds } from "../../../domain/scene-viewer";
 import { skinForTheme, type SkinId } from "../../../domain/skins";
 import { t, tCount, tf } from "../../../i18n";
 import {
@@ -52,12 +53,13 @@ import { You } from "../../auth/You";
 import { AddSheet, boardQueryKey, type PhotoMemory } from "./AddSheet";
 import { createPhotoMemory } from "./photo-memory";
 import { MakeSheet } from "./MakeSheet";
-import { BoardScenes, type SceneSlot } from "./BoardScenes";
+import { BoardScenes, type PrintSlot, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
 import { BoardLeftovers } from "./Leftovers";
 import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
+import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
 export interface BoardClientView extends BoardViewLike {
@@ -162,12 +164,15 @@ export function BoardClient({
   initialView,
   policy,
   tryOnSkin = null,
+  initialSceneId = null,
 }: {
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
   /** `?tryon=<skin>`: the host's Plus try-on from the start flow (PIN-111). */
   tryOnSkin?: SkinId | null;
+  /** `?scene=<id>`: the scene viewer opens on it (PIN-131). */
+  initialSceneId?: string | null;
 }) {
   const [queryClient] = useState(
     () =>
@@ -177,7 +182,7 @@ export function BoardClient({
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} />
+      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} initialSceneId={initialSceneId} />
     </QueryClientProvider>
   );
 }
@@ -187,11 +192,13 @@ function BoardBody({
   initialView,
   policy,
   tryOnSkin,
+  initialSceneId,
 }: {
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
   tryOnSkin: SkinId | null;
+  initialSceneId: string | null;
 }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -233,6 +240,29 @@ function BoardBody({
   const [pickHintSeen, setPickHintSeen] = useState<boolean>(() => readFlag(PICK_HINT_STORAGE_KEY));
   // After a tap on a thing at rest starts picking, keep that thing in view.
   const [scrollToPinId, setScrollToPinId] = useState<string | null>(null);
+  // PIN-131: the scene viewer. `?scene=` is its state: opening pushes
+  // it, Back pops it, and a link that carries it opens the viewer.
+  const [viewerId, setViewerId] = useState<string | null>(initialSceneId);
+  const [sceneMissing, setSceneMissing] = useState(false);
+  // While true, the entry is the one we pushed, so closing goes Back.
+  const viewerPushed = useRef(false);
+  // Runs once that entry has popped (Remix scrolls the board after it).
+  const afterViewer = useRef<(() => void) | null>(null);
+  // The print whose picture takes focus back when the viewer closes.
+  const viewerReturnId = useRef(initialSceneId);
+  useEffect(() => {
+    const onPop = () => {
+      viewerPushed.current = false;
+      const id = sceneIdInUrl(window.location.href);
+      // Forward can reopen the viewer: its print gets focus back again.
+      if (id) viewerReturnId.current = id;
+      setViewerId(id);
+      afterViewer.current?.();
+      afterViewer.current = null;
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const boardQuery = useQuery({
     queryKey: boardQueryKey(slug),
     queryFn: async (): Promise<BoardClientView> => {
@@ -663,7 +693,8 @@ function BoardBody({
     if (!scene.imageUrl || sharingSceneId) return;
     setSharingSceneId(scene.id);
     setShareErrorSceneId(null);
-    const pageUrl = window.location.href.split("#")[0] ?? window.location.href;
+    // The link opens this scene's viewer (PIN-131).
+    const pageUrl = urlWithScene(window.location.href, scene.id).split("#")[0] ?? window.location.href;
     const shareText = scene.prompt;
     let blob: Blob | null = null;
     let file: File | null = null;
@@ -724,6 +755,39 @@ function BoardBody({
     }
   }
 
+  // History data is null so Next's router copies its own state and
+  // learns the new URL (with its state passed in, it would not).
+  function openViewer(sceneId: string) {
+    if (viewerPushed.current) return; // a second tap before the viewer renders
+    viewerReturnId.current = sceneId;
+    setSceneMissing(false);
+    window.history.pushState(null, "", urlWithScene(window.location.href, sceneId));
+    viewerPushed.current = true;
+    setViewerId(sceneId);
+  }
+
+  // Stepping replaces the entry, so Back still closes the viewer.
+  function stepViewer(step: 1 | -1) {
+    const next = viewerId ? stepScene(viewerIds, viewerId, step) : null;
+    if (!next) return;
+    window.history.replaceState(null, "", urlWithScene(window.location.href, next));
+    viewerReturnId.current = next;
+    setViewerId(next);
+  }
+
+  function closeViewer(then?: () => void) {
+    setViewerId(null);
+    if (then) viewerReturnId.current = null;
+    if (viewerPushed.current) {
+      viewerPushed.current = false;
+      afterViewer.current = then ?? null;
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(null, "", urlWithScene(window.location.href, null));
+    then?.();
+  }
+
   // ---------- View model for rendering ----------
 
   const counts = boardCounts(view);
@@ -770,7 +834,9 @@ function BoardBody({
       onTryAgain: tryAgain,
     });
   }
-  for (const item of stripItems(scenes, attempt?.sceneId ?? null)) {
+  const strip = stripItems(scenes, attempt?.sceneId ?? null);
+  const viewerIds = viewerSceneIds(strip);
+  for (const item of strip) {
     const scene = item.scene;
     if (item.mode === "developing") {
       slots.push({
@@ -813,6 +879,7 @@ function BoardBody({
         number: numbers.get(scene.id),
         onRemix: canRemixScene(scene) ? () => requireJoin({ kind: "remix", scene }) : undefined,
         onShare: () => void shareScene(scene),
+        onOpen: () => openViewer(scene.id),
         sharing: sharingSceneId === scene.id,
         footer:
           shareErrorSceneId === scene.id ? (
@@ -823,6 +890,25 @@ function BoardBody({
       });
     }
   }
+
+  const viewerSlot = slots.find((slot): slot is PrintSlot => slot.type === "print" && slot.id === viewerId);
+  const viewerOpen = viewerSlot !== undefined;
+  // An unknown, hidden or deleted scene: the board with one quiet line,
+  // and no `?scene=` left for Back to reopen.
+  useEffect(() => {
+    if (viewerId === null || viewerIds.includes(viewerId)) return;
+    viewerReturnId.current = null;
+    setSceneMissing(true);
+    closeViewer();
+    // viewerIds' content is keyed by its join; closeViewer reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerId, viewerIds.join(",")]);
+  useEffect(() => {
+    const id = viewerReturnId.current;
+    if (viewerOpen || !id) return;
+    viewerReturnId.current = null;
+    document.querySelector<HTMLElement>(`[data-scene-id="${CSS.escape(id)}"] .pn-print-open`)?.focus();
+  }, [viewerOpen]);
 
   const showNudge = shouldShowSignInNudge({
     authEnabled: auth.enabled,
@@ -843,7 +929,7 @@ function BoardBody({
 
   return (
     <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>
-      <main className={cx(styles.board, !showDock && styles.boardRest, look.tryOn && styles.boardTryOn)}>
+      <main className={cx(styles.board, !showDock && styles.boardRest, look.tryOn && styles.boardTryOn)} inert={viewerOpen}>
         <BoardHeader
           title={view.board.title}
           people={people}
@@ -869,6 +955,11 @@ function BoardBody({
             <p className={cx("pn-board-meta", styles.latest)}>
               <span className="pn-sr">{t("en", "board.activity")}: </span>
               {latestLine}
+            </p>
+          ) : null}
+          {sceneMissing ? (
+            <p className="pn-board-meta" role="status">
+              {t("en", "board.sceneMissing")}
             </p>
           ) : null}
           {shareNotice ? (
@@ -1064,6 +1155,14 @@ function BoardBody({
           />
         ) : null}
       </main>
+      {viewerSlot ? (
+        <SceneViewer
+          slot={viewerSlot}
+          onClose={() => closeViewer()}
+          onStep={stepViewer}
+          onRemix={viewerSlot.onRemix ? () => closeViewer(viewerSlot.onRemix) : undefined}
+        />
+      ) : null}
     </div>
   );
 }
