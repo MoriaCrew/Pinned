@@ -9,6 +9,7 @@ import { AuthProvider } from "./auth/AuthProvider";
 // Design tokens first (PIN-96); first-generation styles still load
 // after them until every screen is rebuilt (PIN-95 children).
 import "../ui/tokens.css";
+import "../ui/pinneds.css";
 import "./globals.css";
 
 /** Faces every page uses: the reading face and the default display face. */
