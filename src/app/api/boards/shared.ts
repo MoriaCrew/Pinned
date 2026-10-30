@@ -18,6 +18,7 @@ import { getDecomposeJobStore } from "../../../server/decompose-job-store";
 import { getSceneJobStore } from "../../../server/scene-job-store";
 import { getChipsCacheStore } from "../../../server/chips-cache-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
+import { getCreditLedgerStore } from "../../../server/credit-ledger-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
 
 export const JSON_HEADERS = { "Cache-Control": "no-store" };
@@ -68,6 +69,8 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     collageMode: getConfig().aiMock,
     // PIN-103: which Plus grants count + the view's Plus offer.
     plusMode: getConfig().plusMode,
+    // PIN-151: the makes ledger; inert until Policy.credits.enabled.
+    credits: getCreditLedgerStore(),
     policy,
   };
 }

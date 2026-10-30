@@ -37,6 +37,14 @@ import {
 } from "../gateway/ports";
 import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
+import type { CreditLedgerStore } from "../domain/credit-ledger";
+import {
+  CREDIT_DEBIT_FAILED,
+  CREDITS_POOL_EMPTY,
+  creditsEnabled,
+  photoDebitEventId,
+  tryDebitMake,
+} from "./credit-pool";
 import {
   assertDerivativeRef,
   type DerivativeStore,
@@ -173,6 +181,8 @@ export interface DecomposeDeps {
   policy: Policy;
   now?: () => number;
   newId?: () => string;
+  /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
+  credits?: CreditLedgerStore;
   /** PIN-137: signed-in user snapshot resolved at request time (null = link-only). */
   userIdAtCall?: string | null;
 }
@@ -233,6 +243,29 @@ export async function startDecomposeJob(
     throw cause;
   }
   return runDecomposeJob(jobId, { ...deps, userIdAtCall: participant.userId ?? null });
+}
+
+/**
+ * Remove this job's candidate pins + elements before a failed
+ * terminal write (PIN-151): a photo whose make could not be
+ * debited must not stay confirmable for free. Runs while the
+ * stored job is still `running` (confirm 409s, taps refuse), so
+ * nothing can pin mid-cleanup. Storage deletes are best-effort
+ * per object, like deleteMyElement: once the records are gone an
+ * orphaned object is unreachable through any route.
+ */
+async function discardJobCandidates(deps: DecomposeDeps, job: DecomposeJob): Promise<void> {
+  for (const elementId of job.elementIds) {
+    const element = await deps.boards.getElement(elementId).catch(() => null);
+    await deps.boards.deleteElement(elementId).catch(() => undefined);
+    if (!element) continue;
+    for (const ref of [element.cutoutRef, element.flattenedRef]) {
+      if (!ref.startsWith("elements/")) continue;
+      await deps.store.delete(ref).catch(() => undefined);
+    }
+  }
+  job.elementIds = [];
+  job.pinIds = [];
 }
 
 async function finish(
@@ -431,7 +464,30 @@ export async function runDecomposeJob(
     await Promise.all(workers);
     await persistChain.catch(() => undefined);
 
-    if (job.pinIds.length > 0) return finish(deps, job, "ready");
+    if (job.pinIds.length > 0) {
+      // PIN-151 debit seam (exact): the one make for this photo is
+      // debited here — after at least one candidate pin landed,
+      // before the job may finish `ready`, under the job's
+      // deterministic debit event id. The preflight in board-api
+      // uploadPhoto keeps an empty pool from ever reaching this
+      // run; if a concurrent make drained the last credit while
+      // this job ran, the debit refuses atomically, the candidate
+      // pins are discarded (still `running`, so unconfirmable)
+      // and the job fails `credits_pool_empty` instead of
+      // exposing a free make. Disabled = no ledger call at all.
+      let debit: Awaited<ReturnType<typeof tryDebitMake>>;
+      try {
+        debit = await tryDebitMake(job.boardId, photoDebitEventId(job.id), deps);
+      } catch {
+        await discardJobCandidates(deps, job);
+        return finish(deps, job, "failed", CREDIT_DEBIT_FAILED);
+      }
+      if (debit === "pool_empty") {
+        await discardJobCandidates(deps, job);
+        return finish(deps, job, "failed", CREDITS_POOL_EMPTY);
+      }
+      return finish(deps, job, "ready");
+    }
     if (refusedCount > 0 && refusedCount === kept.length) {
       return finish(deps, job, "refused", "segment_refused");
     }
@@ -439,6 +495,12 @@ export async function runDecomposeJob(
   } catch {
     // Unexpected service failure: typed terminal state, and any
     // candidate pins already persisted above stay persisted.
+    // PIN-151: while credits are on, candidates from a job that
+    // never reached the debit seam are not left confirmable for
+    // free; while off, the PIN-64 keep-what-landed rule stands.
+    if (creditsEnabled(deps.policy) && job.pinIds.length > 0) {
+      await discardJobCandidates(deps, job);
+    }
     return finish(deps, job, "failed", "decompose_failed");
   }
 }

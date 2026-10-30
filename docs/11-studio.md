@@ -159,6 +159,7 @@ object. The defaults below are proposals; tune them from evidence.
 | Daily AI budget | the existing `AI_DAILY_BUDGET_USD` (see A2) |
 | Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0` |
 | Prompt versions | `elements.v1`, `scene.v1` |
+| `credits.enabled` / `credits.starterMakes` | `false` / 25 (PIN-151: the makes pool, docs/15; off = pre-credit behaviour exactly, on = 1 make per successful photo or AI scene, collage stays free) |
 
 > **A2 (budget):** hosted `AI_DAILY_BUDGET_USD=2` / 200 calls
 > (`apphosting.dev.yaml`, `apphosting.prod.yaml`, `.env.example`) is

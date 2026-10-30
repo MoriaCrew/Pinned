@@ -42,6 +42,14 @@ import {
   type DerivativeStore,
 } from "./derivative-store";
 import { composeCollage } from "./scene-collage";
+import type { CreditLedgerStore } from "../domain/credit-ledger";
+import {
+  CREDIT_DEBIT_FAILED,
+  CREDITS_POOL_EMPTY,
+  readAvailableMakes,
+  sceneDebitEventId,
+  tryDebitMake,
+} from "./credit-pool";
 
 /** Request-time denial, mapped to an HTTP status by board-api. */
 export class SceneJobRequestError extends Error {
@@ -238,6 +246,8 @@ export interface SceneJobDeps {
    * and the Scene is recorded kind "collage", never as AI output.
    */
   collageMode?: boolean;
+  /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
+  credits?: CreditLedgerStore;
   policy: Policy;
   now?: () => number;
   newId?: () => string;
@@ -721,6 +731,18 @@ export async function runSceneJob(
     // SceneComposer port (and its budget reserve) is never called.
     if (deps.collageMode) return finishCollage(deps, job, records);
 
+    // PIN-151 pool-empty lane (exact seam): with credits on and
+    // no make available, the free collage composes instead and
+    // the SceneComposer port is never called — the scene stays
+    // honestly kind "collage" and nothing debits. The Policy
+    // daily caps already ran at request time, so a pool-empty
+    // collage still counts against them like any scene job.
+    // Disabled (null) skips the ledger entirely.
+    const availableMakes = await readAvailableMakes(boardId, deps);
+    if (availableMakes !== null && availableMakes < 1) {
+      return finishCollage(deps, job, records);
+    }
+
     const elements: ComposeSceneElement[] = [];
     for (const element of records) {
       const composed = await composeElement(deps, element);
@@ -803,6 +825,30 @@ export async function runSceneJob(
     const kind = sniffSceneImage(bytes);
     const imageRef = buildSceneImageRef(boardId, job.id, kind.ext);
     await deps.store.put(imageRef, bytes, kind.contentType);
+    // PIN-151 debit seam (exact): the one make for this AI scene
+    // is debited after its image is stored but before `finish`
+    // syncs a ready Scene (the only state the image route
+    // serves), under the job's deterministic debit event id. If
+    // a concurrent make drained the last credit while this scene
+    // composed, the debit refuses atomically: the stored image
+    // is deleted and the job fails `credits_pool_empty` — the
+    // AI result is never exposed as a free make. Collages take
+    // finishCollage above and never reach this debit.
+    let debit: Awaited<ReturnType<typeof tryDebitMake>>;
+    try {
+      debit = await tryDebitMake(boardId, sceneDebitEventId(job.id), deps);
+    } catch {
+      await deps.store.delete(imageRef).catch(() => undefined);
+      job.status = "failed";
+      job.errorCode = CREDIT_DEBIT_FAILED;
+      return finish(deps, job);
+    }
+    if (debit === "pool_empty") {
+      await deps.store.delete(imageRef).catch(() => undefined);
+      job.status = "failed";
+      job.errorCode = CREDITS_POOL_EMPTY;
+      return finish(deps, job);
+    }
     Object.assign(job, await storedImageSize(bytes));
     await storeScenePreview(deps, job, bytes);
     job.status = "ready";

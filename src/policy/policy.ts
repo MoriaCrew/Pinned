@@ -155,6 +155,8 @@ export const PolicySchema = z
      */
     credits: z
       .object({
+        /** Kill/enable flag for pool debit (PIN-151): false (default) keeps the credits loop inert in the board flow — no starter grants, no debits, no pool gate, no balance in the board view. Ships disabled; activation is a later operator flip (env/per-board override), never a deploy. */
+        enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(25),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
@@ -168,6 +170,7 @@ export const PolicySchema = z
           .default({ limit: 20, windowMs: 600_000 }),
       })
       .default({
+        enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 25,
         pendingIntentCapPerBoard: 3,
@@ -369,6 +372,7 @@ export const PolicyOverridesSchema = z.object({
     .optional(),
   credits: z
     .object({
+      enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
