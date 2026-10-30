@@ -42,6 +42,8 @@ function stateFrom(data: DocumentData | undefined): BudgetDayState {
       typeof data.reservedMicroUsd === "number" ? data.reservedMicroUsd : 0,
     participants: numRecord(data.participants),
     boards: numRecord(data.boards),
+    participantSegments: numRecord(data.participantSegments),
+    photos: numRecord(data.photos),
   };
 }
 
@@ -72,6 +74,13 @@ export class FirestoreBudgetStore implements BudgetStore {
       }
       if (request.boardId && request.boardCap !== undefined) {
         updates[`boards.${request.boardId}`] = FieldValue.increment(1);
+      }
+      if (request.participantId && request.participantSegmentCap !== undefined) {
+        updates[`participantSegments.${request.participantId}`] =
+          FieldValue.increment(1);
+      }
+      if (request.photoId && request.photoCap !== undefined) {
+        updates[`photos.${request.photoId}`] = FieldValue.increment(1);
       }
       transaction.update(ref, updates);
       return result;

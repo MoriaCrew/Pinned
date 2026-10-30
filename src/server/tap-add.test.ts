@@ -1,8 +1,11 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { emptyBoardCounters } from "../domain/board";
+import type { AiCallLog } from "../domain/types";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import type { SamSegment } from "../gateway/model-gateway";
+import { InMemoryBudgetStore, dayBucketFor } from "../gateway/budget";
+import { decoratePorts } from "../gateway/decorators";
 import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
 import type {
   ElementNamer,
@@ -57,11 +60,13 @@ interface ServiceHarness {
   jobs: InMemoryDecomposeJobStore;
   store: InMemoryDerivativeStore;
   prompts: SegmentPrompt[];
+  segmenter: Segmenter;
   setNow(now: number): void;
 }
 
 async function makeServiceHarness(opts: {
   pointSegments?: SamSegment[];
+  pointOutcome?: { status: "failed" | "refused"; errorCode?: string };
   policyOverrides?: PolicyOverrides;
 } = {}): Promise<ServiceHarness> {
   const boards = new InMemoryBoardRepository();
@@ -99,6 +104,7 @@ async function makeServiceHarness(opts: {
   const segmenter: Segmenter = {
     async segment(input) {
       prompts.push(input.prompt);
+      if (input.prompt.kind === "point" && opts.pointOutcome) return opts.pointOutcome;
       const segments =
         input.prompt.kind === "point" ? (opts.pointSegments ?? [DOCS_SEGMENT]) : [DOCS_SEGMENT];
       return { status: "ready", value: { segments } };
@@ -110,6 +116,7 @@ async function makeServiceHarness(opts: {
     jobs,
     store,
     prompts,
+    segmenter,
     setNow(value: number) {
       now = value;
     },
@@ -219,6 +226,73 @@ describe("addTapElement point -> pin (PIN-78)", () => {
     if (first.status !== "ready" || second.status !== "ready") return;
     expect(first.element.id).not.toBe(second.element.id);
     expect(second.job.pinIds).toHaveLength(3);
+  });
+
+  it("segment-cap denials map to the friendly cap_reached stop (PIN-92)", async () => {
+    for (const errorCode of ["participant_cap", "photo_cap"]) {
+      const h = await makeServiceHarness({
+        pointOutcome: { status: "failed", errorCode },
+      });
+      const job = await readyJob(h);
+      const outcome = await addTapElement(job.id, { x: 0.5, y: 0.5 }, "My thing", h.deps);
+      expect(outcome).toEqual({ status: "cap_reached" });
+      expect(await h.boards.listElements("board-1")).toHaveLength(1);
+    }
+    // A provider refusal stays a typed refusal, never a cap or 500.
+    const h = await makeServiceHarness({
+      pointOutcome: { status: "refused", errorCode: "content_policy" },
+    });
+    const job = await readyJob(h);
+    expect(await addTapElement(job.id, { x: 0.5, y: 0.5 }, "My thing", h.deps)).toEqual({
+      status: "refused",
+      errorCode: "content_policy",
+    });
+  });
+
+  it("end to end: decorated per-photo cap bounds failing taps, concept call included (PIN-92)", async () => {
+    // Every tap misses (no segments): without PIN-92 this loop
+    // could burn SAM calls forever on one live working copy.
+    const h = await makeServiceHarness({ pointSegments: [] });
+    const budget = new InMemoryBudgetStore();
+    const logs: AiCallLog[] = [];
+    let logSeq = 0;
+    const policy = resolvePolicy({ segmentsPerPhoto: 3 });
+    const decorated = decoratePorts(
+      { elementNamer: mockElementNamer, segmenter: h.segmenter },
+      {
+        policy,
+        budget,
+        appendLog: async (log) => {
+          logs.push(log);
+        },
+        now: () => T0,
+        sleep: async () => undefined,
+        newId: () => `log-${++logSeq}`,
+        onLogError: () => undefined,
+      },
+    );
+    const deps: DecomposeDeps = { ...h.deps, segmenter: decorated.segmenter, policy };
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      deps,
+    );
+    expect(job.status).toBe("ready"); // 1 concept SAM call used 1 of 3
+    expect(await addTapElement(job.id, { x: 0.5, y: 0.5 }, "My thing", deps)).toEqual({
+      status: "no_usable_mask",
+    });
+    expect(await addTapElement(job.id, { x: 0.4, y: 0.4 }, "My thing", deps)).toEqual({
+      status: "no_usable_mask",
+    });
+    // Photo budget (1 concept + 2 taps) is spent: the 3rd tap is
+    // denied at reserve and never reaches SAM.
+    expect(await addTapElement(job.id, { x: 0.3, y: 0.3 }, "My thing", deps)).toEqual({
+      status: "cap_reached",
+    });
+    expect(h.prompts.filter((p) => p.kind === "point")).toHaveLength(2);
+    expect(budget.snapshot(dayBucketFor(T0)).photos).toEqual({ [job.id]: 3 });
+    expect(budget.snapshot(dayBucketFor(T0)).participantSegments).toEqual({ p1: 3 });
+    // Every provider call (concept + both taps) has an AiCallLog.
+    expect(logs.filter((l) => l.operation === "segment")).toHaveLength(3);
   });
 
   it("unknown job is not_found", async () => {

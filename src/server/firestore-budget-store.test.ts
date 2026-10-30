@@ -136,6 +136,8 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       reservedMicroUsd: 20_000,
       participants: { p1: 2 },
       boards: { b1: 2 },
+      participantSegments: {},
+      photos: {},
     });
   });
 
@@ -152,6 +154,29 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       { ok: false, reason: "call_limit" },
     ]);
     expect(fake.store.get(`aiBudget/${DAY}`)?.calls).toBe(2);
+  });
+
+  it("segment caps (PIN-92): counted in their own maps, denied at cap", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const seg = req({
+      participantId: "p1",
+      participantSegmentCap: 5,
+      photoId: "job-1",
+      photoCap: 1,
+    });
+    expect((await store.reserve(seg)).ok).toBe(true);
+    expect(await store.reserve(seg)).toEqual({ ok: false, reason: "photo_cap" });
+    expect(
+      await store.reserve(
+        req({ participantId: "p1", participantSegmentCap: 1, photoId: "job-2", photoCap: 5 }),
+      ),
+    ).toEqual({ ok: false, reason: "participant_cap" });
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(1);
+    expect(doc?.participants).toEqual({});
+    expect(doc?.participantSegments).toEqual({ p1: 1 });
+    expect(doc?.photos).toEqual({ "job-1": 1 });
   });
 
   it("parity with the memory store: off, budget and caps deny identically", async () => {

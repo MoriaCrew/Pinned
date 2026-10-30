@@ -322,6 +322,7 @@ export async function runDecomposeJob(
       const outcome = await deps.segmenter.segment({
         imageRef,
         prompt: { kind: "concept", concept: element.concept },
+        photoId: job.id,
         timeoutMs: policy.timeoutsMs.sam,
         boardId: job.boardId,
         participantId: job.participantId,
@@ -465,6 +466,12 @@ export type TapAddOutcome =
  * job (concept + tap) and is checked BEFORE any SAM spend, then
  * re-checked against a fresh read before appending; a lost
  * late race cleans up its just-created element/pin/storage.
+ * The element cap alone does not bound SPEND: a tap that fails
+ * or finds no usable mask adds no element. PIN-92 closes that —
+ * the decorated Segmenter reserves every invocation (concept,
+ * tap, retry, failure) against Policy segmentsPerPhoto /
+ * segmentsPerParticipantPerDay before the provider call, and a
+ * cap denial surfaces here as the same `cap_reached` stop.
  *
  * Label: caller-supplied generic i18n label (PIN-78 decision).
  * A second ElementNamer pass on the crop was rejected: the
@@ -514,6 +521,7 @@ export async function addTapElement(
 
   const outcome = await deps.segmenter.segment({
     imageRef,
+    photoId: job.id,
     prompt: {
       kind: "point",
       points: [{ x: point.x, y: point.y, label: "positive" }],
@@ -524,6 +532,11 @@ export async function addTapElement(
     participantId: job.participantId,
   });
   if (outcome.status !== "ready") {
+    // PIN-92: a segment-cap denial is the same friendly stop as
+    // the element cap, not a failure.
+    if (outcome.errorCode === "participant_cap" || outcome.errorCode === "photo_cap") {
+      return { status: "cap_reached" };
+    }
     return {
       status: outcome.status,
       ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),

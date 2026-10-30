@@ -22,6 +22,9 @@ export const PolicySchema = z
     conceptMaxWords: z.number().int().min(1).default(3),
     pinsPerScene: Range.default({ min: 1, max: 4 }),
     photosPerParticipantPerDay: z.number().int().min(0).default(20),
+    /** Segmenter (SAM) caps (PIN-92): every segment invocation — concept, tap-add, retry attempt, failure and refusal alike — reserves against these before the provider call, so failing taps cannot burn the shared daily pool unbounded. Per photo 18 = 3x the 6-element cap (concepts + a retry each + tap misses); per participant 150 covers the legit worst case (20 photos x 6 concepts = 120, + retry/tap headroom) while staying under the 200 global daily call limit. */
+    segmentsPerPhoto: z.number().int().min(0).default(18),
+    segmentsPerParticipantPerDay: z.number().int().min(0).default(150),
     scenesPerParticipantPerDay: z.number().int().min(0).default(10),
     scenesPerBoardPerDay: z.number().int().min(0).default(40),
     /** Scene prompt length cap (PIN-69). */
@@ -178,6 +181,8 @@ export const PolicyOverridesSchema = z.object({
   conceptMaxWords: z.number().int().min(1).optional(),
   pinsPerScene: RangeOverride.optional(),
   photosPerParticipantPerDay: z.number().int().min(0).optional(),
+  segmentsPerPhoto: z.number().int().min(0).optional(),
+  segmentsPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
   scenePromptMaxChars: z.number().int().min(1).optional(),

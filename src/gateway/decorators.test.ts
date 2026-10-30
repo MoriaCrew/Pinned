@@ -47,11 +47,12 @@ function setup(
     onLogError?: (cause: unknown) => void;
     composer?: SceneComposer;
     suggester?: ChipSuggester;
+    segmenter?: Segmenter;
   } = {},
 ) {
   const logs: AiCallLog[] = [];
   const sleeps: number[] = [];
-  const segmenter: Segmenter = {
+  const segmenter: Segmenter = opts.segmenter ?? {
     async segment() {
       return { status: "ready", value: { segments: [] } };
     },
@@ -328,6 +329,174 @@ describe("decorator chain: ChipSuggester (PIN-75)", () => {
     await ports.chipSuggester!.suggestChips(chipsInput);
     // 1200 output tokens at the Spark list rate: $0.0051 < $0.01.
     expect(seen[0].estimatedCostUsd).toBeCloseTo(0.0051, 6);
+  });
+});
+
+describe("decorator chain: Segmenter caps (PIN-92)", () => {
+  const segInput = (over: Record<string, unknown> = {}) => ({
+    imageRef: "x",
+    prompt: { kind: "concept", concept: "teal mug" } as const,
+    timeoutMs: 20_000,
+    boardId: "b1",
+    participantId: "p1",
+    photoId: "job-1",
+    ...over,
+  });
+  const readySegmenter = (counter: { calls: number }): Segmenter => ({
+    async segment() {
+      counter.calls += 1;
+      return { status: "ready", value: { segments: [] } };
+    },
+  });
+
+  it("per-participant segment cap binds SAM calls; the namer photo quota is a separate counter", async () => {
+    const counter = { calls: 0 };
+    const budget = new InMemoryBudgetStore();
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        budget,
+        segmenter: readySegmenter(counter),
+        policy: resolvePolicy({
+          segmentsPerParticipantPerDay: 2,
+          photosPerParticipantPerDay: 1,
+        }),
+      },
+    );
+    expect((await ports.segmenter.segment(segInput())).status).toBe("ready");
+    expect((await ports.segmenter.segment(segInput())).status).toBe("ready");
+    expect(await ports.segmenter.segment(segInput())).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(counter.calls).toBe(2); // denied before the provider
+    // SAM spend did not eat the photo quota, and vice versa.
+    expect(
+      (await ports.elementNamer.nameElements(namerInput({ participantId: "p1", boardId: "b1" }))).status,
+    ).toBe("ready");
+    expect(
+      await ports.elementNamer.nameElements(namerInput({ participantId: "p1", boardId: "b1" })),
+    ).toMatchObject({ status: "failed", errorCode: "participant_cap" });
+    // Another participant still segments.
+    expect(
+      (await ports.segmenter.segment(segInput({ participantId: "p2" }))).status,
+    ).toBe("ready");
+    const snap = budget.snapshot(DAY);
+    expect(snap.participants).toEqual({ p1: 1 });
+    expect(snap.participantSegments).toEqual({ p1: 2, p2: 1 });
+    expect(snap.photos).toEqual({ "job-1": 3 });
+    expect(snap.calls).toBe(4);
+  });
+
+  it("per-photo cap binds concept + tap prompts on one photo; other photos unaffected", async () => {
+    const counter = { calls: 0 };
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        segmenter: readySegmenter(counter),
+        policy: resolvePolicy({ segmentsPerPhoto: 2 }),
+      },
+    );
+    expect((await ports.segmenter.segment(segInput())).status).toBe("ready");
+    const tap = segInput({
+      prompt: {
+        kind: "point",
+        points: [{ x: 0.5, y: 0.5, label: "positive" }],
+        frame: { width: 100, height: 100 },
+      },
+    });
+    expect((await ports.segmenter.segment(tap)).status).toBe("ready");
+    expect(await ports.segmenter.segment(tap)).toMatchObject({
+      status: "failed",
+      errorCode: "photo_cap",
+    });
+    expect(counter.calls).toBe(2);
+    expect(
+      (await ports.segmenter.segment(segInput({ photoId: "job-2" }))).status,
+    ).toBe("ready");
+  });
+
+  it("failures and refusals consume the cap; every provider call is still logged", async () => {
+    const outcomes: PortOutcome<{ segments: never[] }>[] = [
+      { status: "failed", errorCode: "bad_prompt" },
+      { status: "refused", errorCode: "content_policy" },
+      { status: "ready", value: { segments: [] } },
+    ];
+    let calls = 0;
+    const segmenter: Segmenter = {
+      async segment() {
+        const out = outcomes[calls];
+        calls += 1;
+        return out;
+      },
+    };
+    const { ports, logs } = setup(
+      { async nameElements() { return READY; } },
+      { segmenter, policy: resolvePolicy({ segmentsPerParticipantPerDay: 2 }) },
+    );
+    expect(await ports.segmenter.segment(segInput())).toMatchObject({
+      status: "failed",
+      errorCode: "bad_prompt",
+    });
+    // Typed refusal is preserved, never flattened to a failure.
+    expect(await ports.segmenter.segment(segInput())).toMatchObject({
+      status: "refused",
+      errorCode: "content_policy",
+    });
+    expect(await ports.segmenter.segment(segInput())).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(calls).toBe(2);
+    expect(logs.map((l) => [l.operation, l.outcome])).toEqual([
+      ["segment", "error"],
+      ["segment", "refused"],
+    ]);
+  });
+
+  it("retry attempts reserve again: one 429 + retry burns two segment slots", async () => {
+    let attempts = 0;
+    const segmenter: Segmenter = {
+      async segment() {
+        attempts += 1;
+        return attempts === 1
+          ? { status: "failed", errorCode: "http_429", httpStatus: 429 }
+          : { status: "ready", value: { segments: [] } };
+      },
+    };
+    const budget = new InMemoryBudgetStore();
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      { budget, segmenter, policy: resolvePolicy({ segmentsPerParticipantPerDay: 2 }) },
+    );
+    expect((await ports.segmenter.segment(segInput())).status).toBe("ready");
+    expect(attempts).toBe(2);
+    expect(budget.snapshot(DAY).participantSegments).toEqual({ p1: 2 });
+    expect(budget.snapshot(DAY).photos).toEqual({ "job-1": 2 });
+    expect(await ports.segmenter.segment(segInput())).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(attempts).toBe(2);
+  });
+
+  it("a retry denied by the cap returns the friendly denial and still logs the attempt that ran", async () => {
+    let attempts = 0;
+    const segmenter: Segmenter = {
+      async segment() {
+        attempts += 1;
+        return { status: "failed", errorCode: "http_503", httpStatus: 503 };
+      },
+    };
+    const { ports, logs } = setup(
+      { async nameElements() { return READY; } },
+      { segmenter, policy: resolvePolicy({ segmentsPerParticipantPerDay: 1 }) },
+    );
+    const out = await ports.segmenter.segment(segInput());
+    expect(out).toMatchObject({ status: "failed", errorCode: "participant_cap" });
+    if (out.status === "failed") expect(out.message).toContain("limit");
+    expect(attempts).toBe(1);
+    expect(logs).toMatchObject([{ operation: "segment", outcome: "error" }]);
   });
 });
 

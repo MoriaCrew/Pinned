@@ -75,6 +75,7 @@
   "ai.budgetExhausted": "Today's AI budget is used up. Try again tomorrow.",
   "ai.participantCap": "You've reached today's limit. Try again tomorrow.",
   "ai.boardCap": "This board reached today's limit. Try again tomorrow.",
+  "ai.photoCap": "This photo reached its cut-out limit. Keep the pins you have.",
   "ai.timeout": "That took too long. Please try again.",
   "ai.failed": "Something went wrong. Please try again.",
   "ai.refused": "The image model couldn't make that one. Try a different idea.",
