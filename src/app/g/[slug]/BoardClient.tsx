@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -48,10 +48,12 @@ import {
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
-import { AddSheet, boardQueryKey } from "./AddSheet";
+import { AddSheet, boardQueryKey, type PhotoMemory } from "./AddSheet";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
+import { BoardLeftovers } from "./Leftovers";
+import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import styles from "./board.module.css";
@@ -186,6 +188,16 @@ function BoardBody({
 }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  // PIN-122: "Pin them" reopens the Add sheet at this photo's review;
+  // the last photo's local preview survives sheet closes meanwhile.
+  const [resumeJobId, setResumeJobId] = useState<string | null>(null);
+  const photoMemory = useRef<PhotoMemory["current"]>(null);
+  useEffect(
+    () => () => {
+      if (photoMemory.current) URL.revokeObjectURL(photoMemory.current.url);
+    },
+    [],
+  );
   const [makeOpen, setMakeOpen] = useState(false);
   // Picking mode: pins become toggles and the dock becomes the tray.
   const [picking, setPicking] = useState(false);
@@ -459,6 +471,7 @@ function BoardBody({
     ? scenes.find((scene) => scene.id === remixOfId && canRemixScene(scene))
     : undefined;
   const empty = needsEmptyPrompt(view);
+  const leftovers = leftoversOf(view, view.me?.id);
   // Nothing to pick on an empty board: picking ends with it.
   const pickingNow = picking && !empty;
 
@@ -573,6 +586,7 @@ function BoardBody({
 
   function runIntent(intent: JoinIntent) {
     if (intent.kind === "add") {
+      setResumeJobId(null);
       setAddOpen(true);
     } else if (intent.kind === "make") {
       setRemixOfId(null);
@@ -898,11 +912,24 @@ function BoardBody({
 
         {showScenes ? <BoardScenes slots={slots} count={counts.scenes} /> : null}
 
+        {view.me && !addOpen && !pickingNow && leftovers.count > 0 ? (
+          <BoardLeftovers
+            slug={slug}
+            leftovers={leftovers}
+            elements={view.elements}
+            onPin={(group) => {
+              setResumeJobId(group.jobId);
+              setAddOpen(true);
+            }}
+          />
+        ) : null}
+
         {empty && !pickingNow ? (
           <EmptyState onAction={() => requireJoin({ kind: "add" })} onShare={() => void shareBoard()} />
         ) : null}
 
-        {cards.length > 0 ? (
+        {/* Pinned things only; leftovers have their own line (PIN-122). */}
+        {!empty ? (
           <BoardThings
             cards={cards}
             count={counts.things}
@@ -955,6 +982,7 @@ function BoardBody({
 
         {addOpen && view.me ? (
           <AddSheet
+            key={resumeJobId ?? "new"}
             slug={slug}
             meId={view.me.id}
             boardView={view}
@@ -963,7 +991,12 @@ function BoardBody({
             jobPollIntervalMs={policy.jobPollIntervalMs}
             elementsPerPhotoMax={policy.elementsPerPhotoMax}
             libraryStripMax={policy.libraryStripMax}
-            onClose={() => setAddOpen(false)}
+            resumeJobId={resumeJobId}
+            photoMemory={photoMemory}
+            onClose={() => {
+              setAddOpen(false);
+              setResumeJobId(null);
+            }}
           />
         ) : null}
 

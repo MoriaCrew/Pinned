@@ -3,6 +3,7 @@ import {
   LABEL_EDGE_FRACTION,
   addSheetStage,
   applyOptimisticConfirm,
+  canConfirmJob,
   canTapAdd,
   cuttingProgress,
   maskBoxOf,
@@ -156,6 +157,19 @@ describe("cut-out moment (PIN-99)", () => {
   it("ends on failed or refused jobs", () => {
     expect(addSheetStage({ ...base, jobId: "job1", jobStatus: "failed" })).toBe("ended");
     expect(addSheetStage({ ...base, jobId: "job1", jobStatus: "refused", candidateCount: 2 })).toBe("ended");
+  });
+
+  it("reviews what landed before a job failed, so leftovers can still be pinned (PIN-122)", () => {
+    expect(addSheetStage({ ...base, jobId: "job1", jobStatus: "failed", candidateCount: 2 })).toBe("review");
+    expect(canConfirmJob("failed", 2)).toBe(true);
+    expect(canConfirmJob("failed", 0)).toBe(false);
+    expect(canConfirmJob("ready", 0)).toBe(true);
+    expect(canConfirmJob("running", 2)).toBe(false);
+    expect(canConfirmJob("refused", 2)).toBe(false);
+    // Tap-to-add stays off: only a ready job takes taps.
+    expect(
+      canTapAdd({ jobStatus: "failed", workingCopyGone: false, hasPreview: true, elementCount: 2, maxElements: 8, busy: false }),
+    ).toBe(false);
   });
 
   it("draws the newest candidate as cutting only while the job runs", () => {

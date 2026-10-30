@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { canDeleteCard, type PinCard } from "../../../domain/board-view";
 import { t, tf } from "../../../i18n";
-import { IconButton, Menu, Pin, SectionHead, Tag, cx } from "../../../ui";
+import { IconButton, Menu, Pin, SectionHead, cx } from "../../../ui";
 import styles from "./board.module.css";
 
 export interface DeleteControls {
@@ -20,10 +20,11 @@ export interface DeleteControls {
 
 /**
  * Things on the board (PIN-98): the kit's Pin grid, three across,
- * with owner names. Pinned things are pick toggles (tapping one at
- * rest starts picking with it); candidates — only their uploader
- * sees them — carry "Not pinned yet". Own things get a More menu
- * whose Delete asks once more (PIN-77 owner-only delete).
+ * with owner names. Every thing is a pick toggle (tapping one at
+ * rest starts picking with it). Pinned things only: the uploader's
+ * unpinned candidates live in the leftovers line above the grid
+ * (PIN-122), never here. Own things get a More menu whose Delete
+ * asks once more (PIN-77 owner-only delete).
  */
 export function BoardThings({
   cards,
@@ -57,9 +58,8 @@ export function BoardThings({
         </h2>
       )}
       <ul className={cx("pn-pins", styles.pins)}>
-        {cards.map((card) => {
+        {cards.filter((card) => card.status === "pinned").map((card) => {
           const owner = { id: card.ownerId, name: card.ownerName ?? t("en", "board.someone") };
-          const pinned = card.status === "pinned";
           const pickIndex = pickNumbers.get(card.pinId);
           const mine = canDeleteCard(card, meId);
           return (
@@ -72,14 +72,8 @@ export function BoardThings({
                 state={picking && pickIndex !== undefined ? "picked" : "rest"}
                 pickIndex={pickIndex}
                 foil={card.pinId === foilPinId}
-                onToggle={pinned ? () => onTapPin(card.pinId) : undefined}
-              >
-                {pinned ? null : (
-                  <Tag tone="outline" className={styles.candidateTag}>
-                    {t("en", "board.candidate")}
-                  </Tag>
-                )}
-              </Pin>
+                onToggle={() => onTapPin(card.pinId)}
+              />
               {mine && !picking ? <PinMore card={card} deletion={deletion} /> : null}
             </li>
           );

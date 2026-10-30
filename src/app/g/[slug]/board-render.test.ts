@@ -33,12 +33,14 @@ describe("board things grid (PIN-98)", () => {
     card({ pinId: "cand", status: "candidate" }),
   ];
 
-  it("makes pinned things pick toggles and tags candidates without a toggle", () => {
+  it("makes pinned things pick toggles and leaves candidates out of the grid (PIN-122)", () => {
     const out = html(
       h(BoardThings, { cards, count: 2, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion }),
     );
     expect(out.match(/aria-pressed="false"/g)).toHaveLength(2);
-    expect(out).toContain("Not pinned yet");
+    expect(out.match(/data-pin-id=/g)).toHaveLength(2);
+    expect(out).not.toContain('data-pin-id="cand"');
+    expect(out).not.toContain("Not pinned yet");
     expect(out).toContain("Sam");
   });
 
@@ -46,7 +48,7 @@ describe("board things grid (PIN-98)", () => {
     const rest = html(
       h(BoardThings, { cards, count: 2, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion }),
     );
-    expect(rest.match(/More for Teal mug/g)?.length).toBe(4); // aria-label + title, on my pinned thing and my candidate
+    expect(rest.match(/More for Teal mug/g)?.length).toBe(2); // aria-label + title, on my pinned thing
     const picking = html(
       h(BoardThings, { cards, count: 2, meId: "p1", picking: true, pickNumbers: new Map([["theirs", 1]]), onTapPin: noop, deletion }),
     );

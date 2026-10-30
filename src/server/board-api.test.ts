@@ -10,6 +10,7 @@ import {
   createBoard,
   getBoardView,
   getJobView,
+  parseConfirmPinsInput,
   resolveElementImage,
   sweepExpiredWorkingCopies,
   uploadPhoto,
@@ -510,10 +511,135 @@ describe("uploadPhoto -> job -> confirmPins (A6a)", () => {
       confirmPins(board.slug, owner, { jobId: job.id, pinIds: ["not-a-pin"] }, h.deps),
     ).rejects.toMatchObject({ status: 400 });
     await expect(
-      confirmPins(board.slug, owner, { jobId: job.id, pinIds: [] }, h.deps),
+      confirmPins(board.slug, owner, { jobId: job.id, pinIds: "all" }, h.deps),
     ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      confirmPins(board.slug, owner, { jobId: job.id, pinIds: [""] }, h.deps),
+    ).rejects.toMatchObject({ status: 400 });
+    // Clear is uploader-only too: someone else's empty confirm is the same 404.
+    await expect(
+      confirmPins(board.slug, other, { jobId: job.id, pinIds: [] }, h.deps),
+    ).rejects.toMatchObject({ status: 404 });
     // Working copy survives failed confirms (tap-to-add window).
     expect(await h.store.get(job.workingRef)).not.toBeNull();
+    expect(await h.boards.getPin(job.pinIds[0])).not.toBeNull();
+  });
+
+  it("keeps none on an empty confirm (Clear, PIN-122): drops every candidate and the working copy", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    const result = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: [] }, h.deps);
+    expect(result.pinnedPinIds).toEqual([]);
+    expect([...result.droppedPinIds].sort()).toEqual([...job.pinIds].sort());
+    expect(result.workingCopyDeleted).toBe(true);
+    expect(await h.store.get(job.workingRef)).toBeNull();
+    const view = await getBoardView(board.slug, owner, h.deps);
+    expect(view?.pins).toEqual([]);
+    expect(view?.board.counters.pinCount).toBe(0);
+    // A second Clear is a harmless no-op.
+    const again = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: [] }, h.deps);
+    expect(again.droppedPinIds).toEqual([]);
+  });
+
+  it("refuses to confirm or clear a photo that is still cutting (409), touching nothing (PIN-122)", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    const stored = await h.jobs.get(job.id);
+    if (!stored) throw new Error("job missing");
+    for (const status of ["running", "pending"] as const) {
+      await h.jobs.update({ ...stored, status });
+      for (const pinIds of [[], [job.pinIds[0]]]) {
+        const err = await confirmPins(board.slug, owner, { jobId: job.id, pinIds }, h.deps).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(BoardApiError);
+        expect((err as BoardApiError).status).toBe(409);
+      }
+    }
+    // Candidates and the working copy are untouched.
+    for (const pinId of job.pinIds) expect((await h.boards.getPin(pinId))?.status).toBe("candidate");
+    expect(await h.store.get(job.workingRef)).not.toBeNull();
+    // Once it finishes, Clear works.
+    await h.jobs.update({ ...stored, status: "ready" });
+    const result = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: [] }, h.deps);
+    expect([...result.droppedPinIds].sort()).toEqual([...job.pinIds].sort());
+  });
+
+  it("still pins leftovers once the working copy is gone (TTL sweep, PIN-122)", async () => {
+    const h = makeHarness({ workingCopyTtlHours: 1 });
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    h.setNow(T0 + 2 * 60 * 60 * 1000);
+    expect(await sweepExpiredWorkingCopies(board.slug, h.deps)).toBe(1);
+    const jobView = await getJobView(board.slug, job.id, owner, h.deps);
+    expect(jobView?.job.workingCopyGone).toBe(true);
+    expect(jobView?.pins).toHaveLength(3);
+
+    const keep = job.pinIds.slice(0, 2);
+    const result = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: keep }, h.deps);
+    expect(result.pinnedPinIds).toEqual(keep);
+    expect(result.droppedPinIds).toEqual([job.pinIds[2]]);
+    expect(result.workingCopyDeleted).toBe(true);
+    const anon = await getBoardView(board.slug, null, h.deps);
+    expect(anon?.pins.map((p) => p.id).sort()).toEqual([...keep].sort());
+  });
+
+  it("still pins when the working copy object vanished before any sweep marked it", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const job = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    await h.store.delete(job.workingRef);
+    const result = await confirmPins(board.slug, owner, { jobId: job.id, pinIds: job.pinIds }, h.deps);
+    expect(result.pinnedPinIds).toHaveLength(3);
+    expect(result.workingCopyDeleted).toBe(true);
+  });
+});
+
+describe("leftovers in the board view (PIN-122)", () => {
+  it("tags only the viewer's own candidates with their photo's job id", async () => {
+    const h = makeHarness();
+    const { board, owner, other } = await makeBoardWithTwo(h);
+    const first = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    const second = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps);
+    const theirsDone = await uploadPhoto(board.slug, other, await photoBytes(), h.deps);
+    const theirs = await uploadPhoto(board.slug, other, await photoBytes(), h.deps);
+    await confirmPins(board.slug, owner, { jobId: first.id, pinIds: [first.pinIds[0]] }, h.deps);
+    await confirmPins(board.slug, other, { jobId: theirsDone.id, pinIds: [theirsDone.pinIds[0]] }, h.deps);
+
+    const mine = await getBoardView(board.slug, owner, h.deps);
+    const byId = new Map(mine?.pins.map((pin) => [pin.id, pin]));
+    // Own candidates: the job they came from.
+    for (const pinId of second.pinIds) {
+      expect(byId.get(pinId)).toMatchObject({ status: "candidate", jobId: second.id });
+    }
+    // Pinned pins never carry it, mine or theirs.
+    expect(byId.get(first.pinIds[0])).toMatchObject({ status: "pinned" });
+    expect(byId.get(first.pinIds[0])).not.toHaveProperty("jobId");
+    expect(byId.get(theirsDone.pinIds[0])).toMatchObject({ status: "pinned" });
+    expect(byId.get(theirsDone.pinIds[0])).not.toHaveProperty("jobId");
+    // Someone else's candidates stay invisible (no id, no job).
+    for (const pinId of theirs.pinIds) expect(byId.has(pinId)).toBe(false);
+    expect(JSON.stringify(mine)).not.toContain(`"${theirs.id}"`);
+
+    // The other participant sees only their own leftovers; anonymous sees none.
+    const otherView = await getBoardView(board.slug, other, h.deps);
+    const otherCandidates = otherView?.pins.filter((pin) => pin.status === "candidate") ?? [];
+    expect(otherCandidates.map((pin) => pin.id).sort()).toEqual([...theirs.pinIds].sort());
+    expect(otherCandidates.every((pin) => "jobId" in pin && pin.jobId === theirs.id)).toBe(true);
+    expect(JSON.stringify(otherView)).not.toContain(`"${second.id}"`);
+    const anon = await getBoardView(board.slug, null, h.deps);
+    expect(anon?.pins.some((pin) => "jobId" in pin)).toBe(false);
+    expect(JSON.stringify(anon)).not.toContain(`"${second.id}"`);
+  });
+});
+
+describe("confirm input (PIN-122)", () => {
+  it("accepts an empty selection and still rejects malformed ones", () => {
+    const policy = resolvePolicy({});
+    expect(parseConfirmPinsInput({ jobId: "j", pinIds: [] }, policy)).toEqual({ jobId: "j", pinIds: [] });
+    expect(() => parseConfirmPinsInput({ jobId: "j" }, policy)).toThrow(BoardApiError);
+    expect(() => parseConfirmPinsInput({ jobId: "", pinIds: [] }, policy)).toThrow(BoardApiError);
+    expect(() => parseConfirmPinsInput({ jobId: "j", pinIds: [1] }, policy)).toThrow(BoardApiError);
   });
 
   it("enforces Policy.photosPerParticipantPerDay with a 429 before any intake", async () => {

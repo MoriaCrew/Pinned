@@ -25,6 +25,8 @@ export interface BoardViewPin {
   pinnedBy: string;
   status: "candidate" | "pinned";
   createdAt: number;
+  /** The photo job of the viewer's OWN candidate (PIN-122); absent otherwise. */
+  jobId?: string;
 }
 
 export interface BoardViewScene {

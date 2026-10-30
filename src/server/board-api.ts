@@ -156,6 +156,26 @@ export function publicPin(pin: Pin) {
   };
 }
 
+/**
+ * The photo job a viewer's own candidate pin came from (PIN-122),
+ * so the board can offer "Pin them" / "Clear" for leftovers. The
+ * DecomposeJob stores its id on every element it cuts
+ * (Element.sourcePhotoId, concept and tap-add alike), so no extra
+ * read and no new stored field. Undefined for pinned pins and for
+ * anyone else's pin: only the uploader ever sees a candidate, and
+ * nobody needs the job of a pinned thing.
+ */
+export function ownCandidateJobId(
+  pin: Pin,
+  viewer: Participant | null,
+  elementsById: ReadonlyMap<string, Element>,
+): string | undefined {
+  if (pin.status !== "candidate" || viewer === null || pin.pinnedBy !== viewer.id) return undefined;
+  const element = elementsById.get(pin.elementId);
+  if (!element || element.boardId !== pin.boardId) return undefined;
+  return element.sourcePhotoId || undefined;
+}
+
 export function publicJob(job: DecomposeJob) {
   return {
     id: job.id,
@@ -269,7 +289,8 @@ export interface BoardViewAccess {
  * additively, `viewer.isHost` (host token verified against the
  * stored hash + age) and `plus` (entitlement state under
  * deps.plusMode, mode, Policy price labels — no billing source,
- * time or secret; the host hash never leaves the server).
+ * time or secret; the host hash never leaves the server). PIN-122:
+ * the viewer's own candidate pins carry `jobId` (ownCandidateJobId).
  */
 export async function getBoardView(
   slug: string,
@@ -290,11 +311,15 @@ export async function getBoardView(
     (pin) => pin.status === "pinned" || (viewer !== null && pin.pinnedBy === viewer.id),
   );
   const visibleElementIds = new Set(pins.map((pin) => pin.elementId));
+  const elementsById = new Map(elements.map((element) => [element.id, element]));
   return {
     board: publicBoard(board),
     me: viewer ? publicParticipant(viewer) : null,
     participants: participants.map(publicParticipant),
-    pins: pins.map(publicPin),
+    pins: pins.map((pin) => {
+      const jobId = ownCandidateJobId(pin, viewer, elementsById);
+      return jobId ? { ...publicPin(pin), jobId } : publicPin(pin);
+    }),
     elements: elements
       .filter((element) => visibleElementIds.has(element.id))
       .map((element) => publicElement(slug, element)),
@@ -521,6 +546,11 @@ export interface ConfirmPinsInput {
   pinIds: string[];
 }
 
+/**
+ * An empty `pinIds` is allowed (PIN-122 "Clear"): it keeps none, so
+ * every candidate of the job is dropped and the working copy is
+ * deleted, exactly like dropping each one in the review.
+ */
 export function parseConfirmPinsInput(value: unknown, policy: Policy): ConfirmPinsInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new BoardApiError("Choose which pins to keep.");
@@ -529,12 +559,8 @@ export function parseConfirmPinsInput(value: unknown, policy: Policy): ConfirmPi
   if (typeof body.jobId !== "string" || !body.jobId) {
     throw new BoardApiError("Choose which pins to keep.");
   }
-  if (
-    !Array.isArray(body.pinIds) ||
-    body.pinIds.length === 0 ||
-    body.pinIds.some((id) => typeof id !== "string" || !id)
-  ) {
-    throw new BoardApiError("Choose at least one pin.");
+  if (!Array.isArray(body.pinIds) || body.pinIds.some((id) => typeof id !== "string" || !id)) {
+    throw new BoardApiError("Choose which pins to keep.");
   }
   const pinIds = [...new Set(body.pinIds as string[])];
   if (pinIds.length > policy.elementsPerPhoto.max) {
@@ -549,7 +575,10 @@ export function parseConfirmPinsInput(value: unknown, policy: Policy): ConfirmPi
  * deleted. Only the uploader can confirm their own job; anyone
  * else's job id is a 404 (no existence leak). Idempotent: an
  * already-pinned selected pin stays pinned and re-confirming
- * after the working copy is gone is a no-op delete.
+ * after the working copy is gone is a no-op delete. A working
+ * copy that is already gone (confirmed, TTL-swept or missing)
+ * never blocks the pins: the delete is skipped or a no-op.
+ * Keeping none (PIN-122 "Clear") drops every candidate.
  */
 export async function confirmPins(
   slug: string,
@@ -561,6 +590,14 @@ export async function confirmPins(
   const job = await deps.jobs.get(input.jobId);
   if (!job || job.boardId !== slug || job.participantId !== participant.id) {
     throw new BoardApiError("Job not found.", 404);
+  }
+  // Only a finished photo can be confirmed (PIN-122 Bugbot): a job
+  // still cutting keeps adding candidates from its in-memory photo,
+  // so a Clear (or pin) now would not stick. The review only offers
+  // Pin once the job is ready; the leftovers line says "still
+  // cutting" on this 409 and the next poll brings the rest.
+  if (job.status === "pending" || job.status === "running") {
+    throw new BoardApiError("Still cutting this photo. Try again in a moment.", 409);
   }
   const now = deps.now?.() ?? Date.now();
   const jobPinIds = new Set(job.pinIds);
