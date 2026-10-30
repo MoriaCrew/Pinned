@@ -749,3 +749,24 @@ describe("resolveElementImage (board-link-checked, uniform miss)", () => {
     expect(emptyBoardCounters().pinCount).toBe(0);
   });
 });
+
+describe("uploadPhoto racing a board delete (PIN-167)", () => {
+  it("a delete landing after the upload's own board read answers the unknown-board 404, not a 500", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const read = h.boards.getBoard.bind(h.boards);
+    let reads = 0;
+    // The host's delete lands right after uploadPhoto's own read and
+    // before the job starter reads the board again.
+    h.boards.getBoard = async (slug) => {
+      const result = await read(slug);
+      if (++reads === 1) await h.boards.deleteBoard(slug, Date.now());
+      return result;
+    };
+    await expect(uploadPhoto(board.slug, owner, await photoBytes(), h.deps)).rejects.toMatchObject({
+      name: "BoardApiError",
+      status: 404,
+    });
+    expect(await h.deps.jobs.listForBoard(board.slug)).toEqual([]);
+  });
+});

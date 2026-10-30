@@ -469,20 +469,30 @@ export async function uploadPhoto(
   // Opportunistic A6a sweep; never blocks the upload itself.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
 
-  const job = await startDecomposeJob(
-    { boardId: slug, participantId: participant.id, bytes },
-    {
-      boards: deps.boards,
-      jobs: deps.jobs,
-      store: deps.store,
-      namer: deps.namer,
-      segmenter: deps.segmenter,
-      ...(deps.credits ? { credits: deps.credits } : {}),
-      policy: deps.policy,
-      now: deps.now,
-      newId: deps.newId,
-    },
-  );
+  let job: DecomposeJob;
+  try {
+    job = await startDecomposeJob(
+      { boardId: slug, participantId: participant.id, bytes },
+      {
+        boards: deps.boards,
+        jobs: deps.jobs,
+        store: deps.store,
+        namer: deps.namer,
+        segmenter: deps.segmenter,
+        ...(deps.credits ? { credits: deps.credits } : {}),
+        policy: deps.policy,
+        now: deps.now,
+        newId: deps.newId,
+      },
+    );
+  } catch (error) {
+    // PIN-167: deleted between this request's board read and the
+    // job's own — the unknown-board 404, not a 500 (as requestScene).
+    if (error instanceof RangeError && !(await isLiveBoard(deps.boards, slug))) {
+      throw new BoardApiError("Board not found.", 404);
+    }
+    throw error;
+  }
   // PIN-167: a board deleted while the job ran answers like an unknown board.
   if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
   return job;
