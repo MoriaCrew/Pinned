@@ -1,0 +1,225 @@
+/* Board page layout (PIN-98). Token-based only: colours, type, spacing and
+   sizes come from src/ui/tokens.css through the board's skin root. */
+
+/* The first-generation `main { max-width; padding }` rule still loads; this wins. */
+.board {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 0 calc(var(--tap-main) + var(--space-2) * 2 + var(--space-3) + var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.boardRest {
+  padding-bottom: var(--space-6);
+}
+
+/* Lines right under the header: latest activity, share notice, nudge. */
+.under {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+}
+
+.under:empty {
+  display: none;
+}
+
+.latest {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice {
+  margin: 0;
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.errorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* Sign-in nudge: one compact card, two actions. */
+.nudge {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.nudge p {
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}
+
+.nudgeActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hintRow {
+  padding: var(--space-1) var(--space-4) var(--space-3);
+}
+
+.quietLine {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--ink-muted);
+  font: 500 15px/22px var(--font-ui);
+}
+
+/* Scenes strip: the kit's .pn-prints bleeds to the gutter itself. */
+.strip {
+  padding: 0 var(--space-4);
+}
+
+.problem {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--surface-sunk);
+  text-align: center;
+}
+
+.problemLine {
+  margin: 0;
+  max-width: 28ch;
+  color: var(--ink);
+  font: 650 16px/22px var(--font-ui);
+}
+
+.problemActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Things grid. */
+.pins {
+  padding: 0 var(--space-3);
+}
+
+.pinCell {
+  position: relative;
+}
+
+.pinMore {
+  position: absolute;
+  top: calc(-1 * var(--space-3));
+  right: calc(-1 * var(--space-2));
+  z-index: 2;
+  color: var(--ink-muted);
+}
+
+.pinMore > button {
+  color: inherit;
+}
+
+/* "Not pinned yet" wraps inside its cell instead of widening the column. */
+.candidateTag {
+  max-width: 100%;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+}
+
+.pinMenu {
+  top: calc(var(--tap) - var(--space-1));
+  right: 0;
+}
+
+.pinMenuStart {
+  top: calc(var(--tap) - var(--space-1));
+  left: 0;
+}
+
+.menuText {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.menuError {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--danger);
+  font: 650 14px/18px var(--font-ui);
+}
+
+/* "You're Sam · Edit" at the foot of the board. */
+.me {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-4) 0;
+  color: var(--ink-muted);
+}
+
+/* Fade under the floating dock so the last row reads as scrolling under it. */
+.fade {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+  height: calc(var(--space-8) * 2 + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--surface));
+  pointer-events: none;
+}
+
+/* Join sheet. */
+.joinLead {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 16px/24px var(--font-ui);
+}
+
+.disclosure {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  min-height: var(--tap);
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.joinError {
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}

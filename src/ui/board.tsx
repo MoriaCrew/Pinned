@@ -157,6 +157,7 @@ export function Sheet({
   children,
   className,
   labelledBy,
+  initialFocusId,
 }: {
   title: ReactNode;
   onClose?: () => void;
@@ -167,6 +168,8 @@ export function Sheet({
   children?: ReactNode;
   className?: string;
   labelledBy?: string;
+  /** Id of the field to put the caret in when the sheet opens (else the sheet itself). */
+  initialFocusId?: string;
 }) {
   const autoId = useId();
   const titleId = labelledBy ?? `${autoId}-title`;
@@ -174,8 +177,10 @@ export function Sheet({
   // Latest onClose without re-running the focus effect: callers pass
   // inline handlers, and re-running would yank focus out of fields.
   const onCloseRef = useRef(onClose);
+  const initialFocusRef = useRef(initialFocusId);
   useEffect(() => {
     onCloseRef.current = onClose;
+    initialFocusRef.current = initialFocusId;
   });
   const modal = layer === "fixed";
   useEffect(() => {
@@ -183,7 +188,10 @@ export function Sheet({
     // opens, closes on Escape and hands focus back when it goes away.
     if (!modal) return;
     const previous = document.activeElement as HTMLElement | null;
-    ref.current?.focus({ preventScroll: true });
+    // The sheet owns the opening focus so `previous` is always the
+    // control that opened it, never a field inside the sheet.
+    const field = initialFocusRef.current ? document.getElementById(initialFocusRef.current) : null;
+    (field ?? ref.current)?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onCloseRef.current?.();
     };

@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import type { CSSProperties } from "react";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { buildBoardPreview } from "../../../domain/board-preview";
-import { getBoardTheme } from "../../../domain/board-themes";
+import { isSkinId, skinForTheme } from "../../../domain/skins";
 import { isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
@@ -83,29 +82,24 @@ export async function generateMetadata({
   }
 }
 
-function themeVars(
-  theme: { accent: string; accentInk: string; paper: string; line: string } | null | undefined,
-): CSSProperties {
-  if (!theme) return {};
-  return {
-    "--accent": theme.accent,
-    "--accent-ink": theme.accentInk,
-    "--paper": theme.paper,
-    "--line": theme.line,
-  } as CSSProperties;
-}
-
 /**
  * Studio board page (PIN-66, docs/11 section 6). Replaces the
  * game read-path: boards live in `boards/` (PIN-62/63), so an
  * old game slug with no Studio board is a plain 404 here (the
  * accepted post-PIN-52 break). Slug shape is checked before any
  * repository read, mirroring the API slug gate.
+ *
+ * PIN-98: the board renders in its skin (docs/14): the root carries
+ * `data-theme` from `skinForTheme(board.themeId)`, so first-generation
+ * theme ids map onto a free skin. `?tryon=<skin>` is read and passed
+ * through for PIN-103 (no behaviour yet).
  */
 export default async function BoardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug } = await params;
   if (!isValidSlug(slug)) notFound();
@@ -124,31 +118,20 @@ export default async function BoardPage({
   const view = await getBoardView(slug, viewer, boardApiDeps(policy));
   if (!view) notFound();
 
-  const theme = getBoardTheme(board.themeId);
   const resolved = getPolicy(board.policyOverrides ?? null);
+  const skin = skinForTheme(board.themeId);
+  const tryOnParam = (await searchParams).tryon;
+  const tryOnSkin = isSkinId(tryOnParam) ? tryOnParam : null;
 
   return (
-    <div className="theme-bg" style={themeVars(theme?.tokens ?? board.theme)}>
-      <main className="board-main">
-        <p className="eyebrow"><a href="/">📌 Pinneds</a></p>
-        <section className="card">
-          {theme ? (
-            // eslint-disable-next-line @next/next/no-img-element -- static baked asset
-            <img className="theme-art" src={theme.image} alt="" aria-hidden="true" width={512} height={512} />
-          ) : null}
-          <h1 className="challenge">{board.title}</h1>
-          {theme ? (
-            <p className="fact-chips">
-              <span className="fact-chip">{theme.motif} {theme.label}</span>
-            </p>
-          ) : null}
-        </section>
-        <BoardClient
-          slug={slug}
-          initialView={view as BoardClientView}
-          policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge }}
-        />
-      </main>
+    <div className="pn-skin-root" data-theme={skin} style={{ minHeight: "100dvh" }}>
+      <BoardClient
+        slug={slug}
+        initialView={view as BoardClientView}
+        skin={skin}
+        tryOnSkin={tryOnSkin}
+        policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge }}
+      />
     </div>
   );
 }
