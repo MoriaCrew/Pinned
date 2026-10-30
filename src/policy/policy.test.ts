@@ -9,6 +9,12 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
   it("defaults carry the PIN-50 locks", () => {
     expect(DEFAULT_POLICY.sceneInputMode).toBe("flattened");
     expect(DEFAULT_POLICY.sceneSize).toBe("1024x1536");
+    // PIN-129: prints fall back to this shape, so a malformed size fails closed.
+    expect(resolvePolicy(null, { sceneSize: " 1536x1024 " }).sceneSize).toBe("1536x1024");
+    for (const bad of ["portrait", "0x1536", "1024×1536", "auto"]) {
+      expect(() => resolvePolicy({ sceneSize: bad })).toThrow();
+      expect(() => resolvePolicy(null, { sceneSize: bad })).toThrow();
+    }
     expect(DEFAULT_POLICY.sceneStore).toBe(false);
     expect(DEFAULT_POLICY.timeoutsMs).toEqual({
       spark: 30_000,

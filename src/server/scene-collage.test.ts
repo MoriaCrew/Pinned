@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { composeCollage, parseSceneSize } from "./scene-collage";
+import { composeCollage } from "./scene-collage";
 
 /** Solid-colour cut-out stand-in (synthetic, no fixture files). */
 async function swatch(r: number, g: number, b: number): Promise<Buffer> {
@@ -10,15 +10,6 @@ async function swatch(r: number, g: number, b: number): Promise<Buffer> {
     .png()
     .toBuffer();
 }
-
-describe("parseSceneSize (Policy.sceneSize)", () => {
-  it("parses the Policy default and rejects junk", () => {
-    expect(parseSceneSize("1024x1536")).toEqual({ width: 1024, height: 1536 });
-    expect(parseSceneSize("portrait")).toBeNull();
-    expect(parseSceneSize("0x10")).toBeNull();
-    expect(parseSceneSize("1024×1536")).toBeNull();
-  });
-});
 
 describe("composeCollage (PIN-71): N cut-outs -> 1 image, no network", () => {
   const size = { width: 200, height: 300 };

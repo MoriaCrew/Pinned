@@ -23,6 +23,7 @@ import "server-only";
  * provider. HTTP routes live in board-api.ts / the scenes routes.
  */
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 import type {
   BoardEvent,
   BoardEventType,
@@ -31,6 +32,7 @@ import type {
   SceneJob,
 } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
+import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
 import { estimateReserveUsd } from "../gateway/costs";
 import type { ComposeSceneElement, SceneComposer } from "../gateway/ports";
 import { t } from "../i18n";
@@ -39,7 +41,7 @@ import {
   assertDerivativeRef,
   type DerivativeStore,
 } from "./derivative-store";
-import { composeCollage, parseSceneSize } from "./scene-collage";
+import { composeCollage } from "./scene-collage";
 
 /** Request-time denial, mapped to an HTTP status by board-api. */
 export class SceneJobRequestError extends Error {
@@ -149,6 +151,20 @@ export function buildSceneImageRef(
   return assertDerivativeRef(`scenes/boards/${boardId}/${sceneId}/scene.${ext}`);
 }
 
+/**
+ * Pixel size of a stored scene image (PIN-129), read with sharp so
+ * the print frame takes its real shape. Unreadable or zero-sized
+ * bytes give {} (the Policy.sceneSize shape applies) — never a
+ * failed job.
+ */
+async function storedImageSize(bytes: Buffer): Promise<Partial<SceneSize>> {
+  try {
+    return validSceneSize(await sharp(bytes).metadata()) ?? {};
+  } catch {
+    return {};
+  }
+}
+
 /** Magic-byte sniff for the composed image (Meta/mock are PNG). */
 export function sniffSceneImage(bytes: Buffer): {
   ext: string;
@@ -255,6 +271,7 @@ function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
     prompt: job.prompt,
     status: job.status,
     ...(job.imageRef ? { imageRef: job.imageRef } : {}),
+    ...(validSceneSize(job) ?? {}),
     ...(job.kind ? { kind: job.kind } : {}),
     ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
@@ -612,6 +629,7 @@ async function finishCollage(
   }
   const imageRef = buildSceneImageRef(job.boardId, job.id, "png");
   await deps.store.put(imageRef, png, "image/png");
+  Object.assign(job, await storedImageSize(png));
   job.status = "ready";
   job.kind = "collage";
   job.imageRef = imageRef;
@@ -738,6 +756,7 @@ export async function runSceneJob(
     const kind = sniffSceneImage(bytes);
     const imageRef = buildSceneImageRef(boardId, job.id, kind.ext);
     await deps.store.put(imageRef, bytes, kind.contentType);
+    Object.assign(job, await storedImageSize(bytes));
     job.status = "ready";
     job.kind = "ai";
     job.imageRef = imageRef;

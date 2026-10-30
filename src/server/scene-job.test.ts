@@ -48,7 +48,8 @@ type ComposerBehavior =
   | { kind: "refused" }
   | { kind: "cap"; errorCode: string }
   | { kind: "failed" }
-  | { kind: "empty" };
+  | { kind: "empty" }
+  | { kind: "image"; base64: string };
 
 interface Harness {
   deps: SceneJobDeps;
@@ -146,9 +147,10 @@ async function makeHarness(
           value: { promptVersion: input.promptVersion },
         };
       }
+      const imageBase64 = behavior.kind === "image" ? behavior.base64 : PNG_B64;
       return {
         status: "ready",
-        value: { imageBase64: PNG_B64, promptVersion: input.promptVersion },
+        value: { imageBase64, promptVersion: input.promptVersion },
       };
     },
   };
@@ -909,6 +911,19 @@ describe("mock collage fallback (PIN-71)", () => {
     expect(await h.store.get(job.imageRef as string)).not.toBeNull();
   });
 
+  it("records the collage's pixel size on the job, the Scene and the board payload (PIN-129)", async () => {
+    const h = await makeHarness({ sceneSize: "600x900" });
+    await seedCutouts(h);
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "museum" },
+      { ...h.deps, collageMode: true },
+    );
+    expect(job).toMatchObject({ status: "ready", kind: "collage", width: 600, height: 900 });
+    const scene = await h.boards.getScene(job.id);
+    expect(scene).toMatchObject({ width: 600, height: 900 });
+    expect(publicScene("board-1", scene!)).toMatchObject({ width: 600, height: 900 });
+  });
+
   it("an AI ready scene is recorded kind ai (collage is never disguised, and vice versa)", async () => {
     const h = await makeHarness();
     const job = await startSceneJob(
@@ -939,5 +954,44 @@ describe("mock collage fallback (PIN-71)", () => {
     );
     expect(job).toMatchObject({ status: "failed", errorCode: "element_image_missing" });
     expect(job.imageRef).toBeUndefined();
+  });
+});
+
+describe("scene image size (PIN-129)", () => {
+  it("the model path records the stored image's real pixel size, not the Policy hint", async () => {
+    const h = await makeHarness();
+    // A real-sized model image (the mock's 1x1 PNG would prove nothing).
+    const tall = await sharp({
+      create: { width: 1280, height: 1920, channels: 3, background: { r: 200, g: 120, b: 90 } },
+    })
+      .png()
+      .toBuffer();
+    h.setBehavior({ kind: "image", base64: tall.toString("base64") });
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "picnic" },
+      h.deps,
+    );
+    expect(job).toMatchObject({ status: "ready", kind: "ai", width: 1280, height: 1920 });
+    // sceneFromJob copies the size, so every syncScene keeps it.
+    const scene = await h.boards.getScene(job.id);
+    expect(scene).toMatchObject({ width: 1280, height: 1920 });
+    expect(publicScene("board-1", scene!)).toMatchObject({ width: 1280, height: 1920 });
+    expect((await getSceneView("board-1", job.id, h.api))?.scene).toMatchObject({ width: 1280, height: 1920 });
+  });
+
+  it("unreadable image bytes still land ready, with no size (the Policy shape applies)", async () => {
+    const h = await makeHarness();
+    h.setBehavior({ kind: "image", base64: Buffer.from("not an image").toString("base64") });
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "picnic" },
+      h.deps,
+    );
+    expect(job.status).toBe("ready");
+    expect(job).not.toHaveProperty("width");
+    const scene = await h.boards.getScene(job.id);
+    expect(scene).not.toHaveProperty("width");
+    const view = publicScene("board-1", scene!);
+    expect(view).not.toHaveProperty("width");
+    expect(view).not.toHaveProperty("height");
   });
 });
