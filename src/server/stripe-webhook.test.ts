@@ -39,6 +39,7 @@ class FakeWebhookClient implements StripeWebhookClientLike {
   readonly retrievedSessions: string[] = [];
   readonly retrievedPaymentIntents: string[] = [];
   sessions: Record<string, unknown> = {};
+  sessionsByPaymentIntent: Record<string, unknown> = {};
   paymentIntents: Record<string, unknown> = {
     [PAYMENT_INTENT_ID]: { id: PAYMENT_INTENT_ID, latest_charge: CHARGE_ID },
   };
@@ -60,6 +61,9 @@ class FakeWebhookClient implements StripeWebhookClientLike {
   async retrievePaymentIntent(paymentIntentId: string): Promise<unknown> {
     this.retrievedPaymentIntents.push(paymentIntentId);
     return this.paymentIntents[paymentIntentId] ?? null;
+  }
+  async findCheckoutSessionByPaymentIntent(paymentIntentId: string): Promise<unknown> {
+    return this.sessionsByPaymentIntent[paymentIntentId] ?? null;
   }
   async retrieveCharge(chargeId: string): Promise<unknown> {
     return this.charges[chargeId] ?? null;
@@ -675,5 +679,25 @@ describe("disputes (PIN-150)", () => {
     ).toBe("dead_letter");
     expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["unknown_mapping"]);
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ frozen: 0, available: 25 });
+  });
+
+  it("a dispute delivered before the mapping persisted resolves via the Stripe session lookup (PIN-153)", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    // No recordStripeMapping: fulfilment has not persisted it yet,
+    // but the Checkout Session behind the PaymentIntent names the intent.
+    h.client.sessionsByPaymentIntent[PAYMENT_INTENT_ID] = session(intent.id);
+    expect(
+      (await h.deliver(evt("evt_du_fast", "charge.dispute.created", dispute()))).outcome,
+    ).toBe("frozen");
+    expect(await h.records.listDeadLetters()).toEqual([]);
+    const backfilled = await h.intents.get(intent.id);
+    expect(backfilled?.stripeChargeId).toBe(CHARGE_ID);
+    expect(backfilled?.stripePaymentIntentId).toBe(PAYMENT_INTENT_ID);
+    // The late fulfilment then grants into the deferred freeze.
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 25, available: 0 });
   });
 });
