@@ -74,9 +74,14 @@ export const PolicySchema = z
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Price labels
      * are display-only placeholders until Stripe lands — nothing
-     * is ever charged from them. hostCookieDays bounds the host
-     * cookie set on board creation (browsers cap cookie life at
-     * about 400 days regardless).
+     * is ever charged from them. hostCookieDays is the host
+     * credential's life: the server checks it against the stored
+     * issue time with the board's effective Policy (so a per-board
+     * override does apply there), while the cookie's Max-Age is
+     * set once at create from the env-level Policy (browsers cap
+     * cookie life at about 400 days regardless). requestMaxBytes
+     * caps the JSON body of the host-only routes; hostRoutesPerIp
+     * is their in-process per-IP brake.
      */
     plus: z
       .object({
@@ -87,10 +92,19 @@ export const PolicySchema = z
           })
           .default({ board: "$3.99", host: "$4.99/month" }),
         hostCookieDays: z.number().int().min(1).default(365),
+        requestMaxBytes: z.number().int().min(1).default(1024),
+        hostRoutesPerIp: z
+          .object({
+            limit: z.number().int().min(1).default(60),
+            windowMs: z.number().int().min(1).default(600_000),
+          })
+          .default({ limit: 60, windowMs: 600_000 }),
       })
       .default({
         priceLabels: { board: "$3.99", host: "$4.99/month" },
         hostCookieDays: 365,
+        requestMaxBytes: 1024,
+        hostRoutesPerIp: { limit: 60, windowMs: 600_000 },
       }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
@@ -248,6 +262,13 @@ export const PolicyOverridesSchema = z.object({
         })
         .optional(),
       hostCookieDays: z.number().int().min(1).optional(),
+      requestMaxBytes: z.number().int().min(1).optional(),
+      hostRoutesPerIp: z
+        .object({
+          limit: z.number().int().min(1).optional(),
+          windowMs: z.number().int().min(1).optional(),
+        })
+        .optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),

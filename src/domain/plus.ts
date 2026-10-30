@@ -4,15 +4,19 @@
  * gate. The core loop is always free and guests never pay; Plus
  * is bought by the board's host and only unlocks extra skins.
  *
- * Prices are Policy display labels (Policy.plus.priceLabels),
- * never literals here. Billing lives behind the Checkout port in
- * src/billing; this module only describes what an entitlement is.
+ * Which skins need Plus is owned by the skins catalogue
+ * (`./skins`, `Skin.plus`) — this module derives from it and
+ * never keeps its own list. Prices are Policy display labels
+ * (Policy.plus.priceLabels), never literals here. Billing lives
+ * behind the Checkout port in src/billing.
  */
 import type { Board } from "./board";
+import { SKINS, isPlusSkinId, type SkinId } from "./skins";
 
-/** Skins that need Board Plus. Every other skin id is free. */
-export const PLUS_SKIN_IDS = ["darkroom", "postcard", "marigold"] as const;
-export type PlusSkinId = (typeof PLUS_SKIN_IDS)[number];
+/** Skins that need Board Plus, derived from the catalogue. */
+export const PLUS_SKIN_IDS: readonly SkinId[] = SKINS.filter((skin) => skin.plus).map(
+  (skin) => skin.id,
+);
 
 /**
  * "board" = one-time purchase for this board; "host" = monthly
@@ -41,8 +45,9 @@ export interface PlusPriceLabels {
   host: string;
 }
 
-export function isPlusSkin(id: unknown): id is PlusSkinId {
-  return typeof id === "string" && (PLUS_SKIN_IDS as readonly string[]).includes(id);
+/** Plus membership comes from the skins catalogue only. */
+export function isPlusSkin(id: unknown): boolean {
+  return isPlusSkinId(id);
 }
 
 export function isPlusPlan(value: unknown): value is PlusPlan {
@@ -53,13 +58,21 @@ export function isPlusMode(value: unknown): value is PlusMode {
   return typeof value === "string" && (PLUS_MODES as readonly string[]).includes(value);
 }
 
-export function hasPlus(board: Pick<Board, "plus">): boolean {
-  return board.plus !== undefined && isPlusPlan(board.plus.plan);
+/**
+ * The board holds Plus that counts under `mode`. Null-safe (a
+ * stored `plus: null` is a free board), and a `source: "mock"`
+ * grant only counts while PLUS_MODE=mock — switching a backend to
+ * off never leaves demo grants unlocking anything.
+ */
+export function hasPlus(board: Pick<Board, "plus">, mode: PlusMode): boolean {
+  const plus = board.plus;
+  if (plus == null || !isPlusPlan(plus.plan)) return false;
+  return plus.source !== "mock" || mode === "mock";
 }
 
-/** Free skins always; Plus skins only with the board's entitlement. */
-export function canUseSkin(board: Pick<Board, "plus">, skinId: string): boolean {
-  return !isPlusSkin(skinId) || hasPlus(board);
+/** Free skins always; Plus skins only with an entitlement that counts. */
+export function canUseSkin(board: Pick<Board, "plus">, skinId: string, mode: PlusMode): boolean {
+  return !isPlusSkin(skinId) || hasPlus(board, mode);
 }
 
 /** A held plan covers a wanted one: same plan, or host covers board. */
@@ -69,6 +82,33 @@ export function planCovers(held: PlusPlan, wanted: PlusPlan): boolean {
 
 export function grantPlus(plan: PlusPlan, source: PlusSource, now: number): BoardPlus {
   return { plan, source, grantedAt: now };
+}
+
+export type MockGrantDecision =
+  /** Write this mock entitlement. */
+  | { kind: "grant"; plus: BoardPlus }
+  /** The held plan already covers the request: no write. */
+  | { kind: "keep" }
+  /** A paid grant that does not cover the request: never replaced by a mock. */
+  | { kind: "blocked" };
+
+/**
+ * The mock checkout's whole decision, applied inside the
+ * repository write so concurrent requests cannot race it: a
+ * covering grant is kept (host beats board in either order), a
+ * paid (stripe) grant is never overwritten by a mock one, and
+ * anything else gets a fresh mock grant.
+ */
+export function decideMockGrant(
+  current: BoardPlus | null | undefined,
+  plan: PlusPlan,
+  now: number,
+): MockGrantDecision {
+  if (current != null && isPlusPlan(current.plan)) {
+    if (planCovers(current.plan, plan)) return { kind: "keep" };
+    if (current.source === "stripe") return { kind: "blocked" };
+  }
+  return { kind: "grant", plus: grantPlus(plan, "mock", now) };
 }
 
 /**
@@ -88,10 +128,10 @@ export function plusView(
   board: Pick<Board, "plus">,
   offer: { mode: PlusMode; priceLabels: PlusPriceLabels },
 ): PlusView {
-  const active = hasPlus(board);
+  const active = hasPlus(board, offer.mode);
   return {
     active,
-    ...(active && board.plus ? { plan: board.plus.plan } : {}),
+    ...(active && board.plus != null ? { plan: board.plus.plan } : {}),
     mode: offer.mode,
     priceLabels: { board: offer.priceLabels.board, host: offer.priceLabels.host },
   };

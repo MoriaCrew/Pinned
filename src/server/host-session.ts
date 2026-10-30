@@ -1,60 +1,100 @@
 import "server-only";
 /**
  * Board host identity (PIN-103, docs/15-board-plus.md). The host
- * is the browser that created the board: POST /api/boards sets a
- * per-slug host cookie whose value is
- * HMAC-SHA256(SESSION_SECRET, "host:" + slug), base64url. Same
- * secret and minimum length as the participant cookie
- * (board-session.ts), same attributes (httpOnly, SameSite=Lax,
- * Path=/, Secure on https), life from Policy.plus.hostCookieDays.
+ * is the browser that created the board.
  *
- * Domain separation: participant/user cookies sign a base64url
- * JSON body (no ":" can appear) or a "pinned-user-v1:" prefix, so
- * no other cookie this server mints can verify as a host token.
+ * Credential: at create the server draws a random 256-bit token
+ * (generateAdminToken) and stores only its domain-separated sha256
+ * plus the issue time on the Board (`Board.host`). The creator's
+ * cookie carries the raw token behind a version prefix (`h1.`).
+ * - Revocable: replacing or clearing `Board.host` kills the cookie;
+ *   nothing else needs to change.
+ * - Expiring: the stored `issuedAt` is checked server-side against
+ *   Policy.plus.hostCookieDays, whatever the browser keeps.
+ * - Independent of SESSION_SECRET: no HMAC, so rotating the secret
+ *   never strips hosts, and a backend without a secret still has
+ *   hosts.
+ * - Domain-separated: the stored hash covers "pinned-host-v1:" +
+ *   token, so it can never equal an admin-token hash (bare token)
+ *   or a participant cookie hash (HMAC-signed JSON body).
  *
- * Limits (deliberate for v1, see docs/15): the token is
- * stateless and deterministic per (secret, slug) — no record, no
- * server-side expiry, no hand-off. Revoking it means rotating
- * SESSION_SECRET, which also signs every participant out.
- * Without a usable secret nobody is host (verify fails closed).
+ * Cookie scope: Path=/api/boards/<slug> (not "/"), so the token is
+ * only sent to that board's API — never to pages or other boards.
+ * The server-rendered board page therefore cannot see it; the
+ * board view API (under the path) reports `viewer.isHost`.
  */
-import { createHmac, timingSafeEqual } from "node:crypto";
+import type { Board, BoardHost } from "../domain/board";
+import { generateAdminToken, hashToken, verifyToken } from "../domain/tokens";
 import type { Policy } from "../policy/policy";
 import { readCookieValue } from "./board-session";
 
-const HOST_TOKEN_DOMAIN = "host:";
-/** Same floor board-session applies before signing anything. */
-const MIN_SECRET_LENGTH = 32;
+/** Cookie value version; bump with HOST_HASH_DOMAIN on any format change. */
+const HOST_COOKIE_PREFIX = "h1.";
+const HOST_HASH_DOMAIN = "pinned-host-v1:";
+/** Shape of generateAdminToken(): 32 random bytes, base64url. */
+const HOST_TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 const DAY_SECONDS = 24 * 60 * 60;
+const DAY_MS = DAY_SECONDS * 1000;
 
 export function hostCookieName(slug: string): string {
   return `pinned_host_${slug}`;
 }
 
-function usableSecret(secret: string | null | undefined): secret is string {
-  return typeof secret === "string" && secret.length >= MIN_SECRET_LENGTH;
+/** The only path the host cookie is sent to: this board's API. */
+export function hostCookiePath(slug: string): string {
+  return `/api/boards/${slug}`;
 }
 
-/** Host token for a slug; null when sessions are not configured. */
-export function signHostToken(slug: string, secret: string | null): string | null {
-  if (!usableSecret(secret)) return null;
-  return createHmac("sha256", secret)
-    .update(HOST_TOKEN_DOMAIN + slug, "utf8")
-    .digest("base64url");
+function hashHostToken(token: string): string {
+  return hashToken(HOST_HASH_DOMAIN + token);
 }
 
-/** Timing-safe check of a presented token; never throws. */
+export interface IssuedHostCredential {
+  /** Raw token: goes into the creator's cookie only, never stored. */
+  token: string;
+  /** What the Board stores. */
+  record: BoardHost;
+}
+
+export function issueHostCredential(
+  now: number,
+  newToken: () => string = generateAdminToken,
+): IssuedHostCredential {
+  const token = newToken();
+  return { token, record: { tokenHash: hashHostToken(token), issuedAt: now } };
+}
+
+/**
+ * Cheap, I/O-free check of a presented cookie value: the raw token
+ * when it has the current version prefix and token shape, else null.
+ */
+export function parseHostCookie(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith(HOST_COOKIE_PREFIX)) return null;
+  const token = value.slice(HOST_COOKIE_PREFIX.length);
+  return HOST_TOKEN_SHAPE.test(token) ? token : null;
+}
+
+/** This board's host token from the request cookie (shape-checked only). */
+export function hostTokenFrom(request: Request, slug: string): string | null {
+  return parseHostCookie(readCookieValue(request.headers.get("cookie"), hostCookieName(slug)));
+}
+
+/**
+ * Full check against the stored credential: timing-safe hash
+ * compare and server-side age against the board's effective
+ * Policy. Null-safe on every stored field; never throws.
+ */
 export function verifyHostToken(
-  slug: string,
-  token: string | null | undefined,
-  secret: string | null,
+  board: Pick<Board, "host">,
+  token: string | null,
+  policy: Policy,
+  now: number,
 ): boolean {
-  if (!token) return false;
-  const expected = signHostToken(slug, secret);
-  if (!expected) return false;
-  const presented = Buffer.from(token, "utf8");
-  const wanted = Buffer.from(expected, "utf8");
-  return presented.length === wanted.length && timingSafeEqual(presented, wanted);
+  const host = board.host;
+  if (!token || host == null) return false;
+  if (typeof host.tokenHash !== "string" || typeof host.issuedAt !== "number") return false;
+  if (now - host.issuedAt > policy.plus.hostCookieDays * DAY_MS) return false;
+  return verifyToken(HOST_HASH_DOMAIN + token, host.tokenHash);
 }
 
 export function hostCookieMaxAgeSeconds(policy: Policy): number {
@@ -68,42 +108,12 @@ export function buildHostCookieHeader(
   secure: boolean,
 ): string {
   const parts = [
-    `${hostCookieName(slug)}=${encodeURIComponent(token)}`,
-    "Path=/",
+    `${hostCookieName(slug)}=${encodeURIComponent(HOST_COOKIE_PREFIX + token)}`,
+    `Path=${hostCookiePath(slug)}`,
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`,
   ];
   if (secure) parts.push("Secure");
   return parts.join("; ");
-}
-
-export interface HostCookieDeps {
-  sessionSecret: string | null;
-  policy: Policy;
-}
-
-/**
- * Set-Cookie value making this browser the board's host; null
- * when sessions are not configured (the board is still created,
- * it just has no host — same degrade as joining without a secret).
- */
-export function issueHostCookie(
-  slug: string,
-  secure: boolean,
-  deps: HostCookieDeps,
-): string | null {
-  const token = signHostToken(slug, deps.sessionSecret);
-  if (!token) return null;
-  return buildHostCookieHeader(slug, token, hostCookieMaxAgeSeconds(deps.policy), secure);
-}
-
-/** True when the request carries this board's valid host cookie. */
-export function isHostRequest(
-  request: Request,
-  slug: string,
-  sessionSecret: string | null,
-): boolean {
-  const token = readCookieValue(request.headers.get("cookie"), hostCookieName(slug));
-  return verifyHostToken(slug, token, sessionSecret);
 }

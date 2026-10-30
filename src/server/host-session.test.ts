@@ -1,80 +1,97 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { generateSlug, signPlayerCookie, signUserCookie } from "../domain/tokens";
+import {
+  generateAdminToken,
+  generateSlug,
+  hashToken,
+  signPlayerCookie,
+  signUserCookie,
+} from "../domain/tokens";
 import { resolvePolicy } from "../policy/policy";
 import {
   buildHostCookieHeader,
   hostCookieMaxAgeSeconds,
   hostCookieName,
-  isHostRequest,
-  issueHostCookie,
-  signHostToken,
+  hostCookiePath,
+  hostTokenFrom,
+  issueHostCredential,
+  parseHostCookie,
   verifyHostToken,
 } from "./host-session";
 
 const SECRET = "test-secret-test-secret-test-secret-32";
-const OTHER_SECRET = "another-secret-another-secret-another-32";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const T0 = Date.UTC(2026, 9, 30, 12, 0, 0);
+const policy = resolvePolicy({ plus: { hostCookieDays: 2 } });
 
-describe("host token (PIN-103)", () => {
-  const slug = generateSlug();
-
-  it("is HMAC-SHA256 over host:<slug> and verifies for that slug", () => {
-    const token = signHostToken(slug, SECRET);
-    expect(token).toBe(
-      createHmac("sha256", SECRET).update(`host:${slug}`).digest("base64url"),
-    );
-    expect(verifyHostToken(slug, token, SECRET)).toBe(true);
+describe("host credential (PIN-103)", () => {
+  it("issues a random token and stores only its domain-separated hash + issue time", () => {
+    const a = issueHostCredential(T0);
+    const b = issueHostCredential(T0);
+    expect(a.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(a.token).not.toBe(b.token);
+    expect(a.record).toEqual({ tokenHash: hashToken(`pinned-host-v1:${a.token}`), issuedAt: T0 });
+    expect(JSON.stringify(a.record)).not.toContain(a.token);
+    // Never the bare admin-token hash.
+    expect(a.record.tokenHash).not.toBe(hashToken(a.token));
   });
 
-  it("fails for another slug, a tampered token, the wrong secret, or nothing", () => {
-    const token = signHostToken(slug, SECRET) as string;
-    expect(verifyHostToken(generateSlug(), token, SECRET)).toBe(false);
+  it("verifies the issued token within Policy age; fails for anything else", () => {
+    const { token, record } = issueHostCredential(T0);
+    const board = { host: record };
+    expect(verifyHostToken(board, token, policy, T0)).toBe(true);
+    expect(verifyHostToken(board, token, policy, T0 + 2 * DAY_MS)).toBe(true);
+    // Expired server-side, whatever the browser kept.
+    expect(verifyHostToken(board, token, policy, T0 + 2 * DAY_MS + 1)).toBe(false);
+    // Another board's token, a tampered token, no token, no / null / revoked credential.
+    expect(verifyHostToken(board, issueHostCredential(T0).token, policy, T0)).toBe(false);
     const flipped = (token[0] === "A" ? "B" : "A") + token.slice(1);
-    expect(verifyHostToken(slug, flipped, SECRET)).toBe(false);
-    expect(verifyHostToken(slug, token.slice(1), SECRET)).toBe(false);
-    expect(verifyHostToken(slug, `${token}x`, SECRET)).toBe(false);
-    expect(verifyHostToken(slug, token, OTHER_SECRET)).toBe(false);
-    expect(verifyHostToken(slug, null, SECRET)).toBe(false);
-    expect(verifyHostToken(slug, "", SECRET)).toBe(false);
+    expect(verifyHostToken(board, flipped, policy, T0)).toBe(false);
+    expect(verifyHostToken(board, null, policy, T0)).toBe(false);
+    expect(verifyHostToken({}, token, policy, T0)).toBe(false);
+    expect(verifyHostToken({ host: null }, token, policy, T0)).toBe(false);
+    expect(verifyHostToken({ host: issueHostCredential(T0).record }, token, policy, T0)).toBe(false);
+    // Malformed stored record never throws.
+    expect(verifyHostToken({ host: { tokenHash: "zz", issuedAt: T0 } }, token, policy, T0)).toBe(false);
   });
 
-  it("fails closed without a usable secret", () => {
-    expect(signHostToken(slug, null)).toBeNull();
-    expect(signHostToken(slug, "too-short")).toBeNull();
-    const token = signHostToken(slug, SECRET);
-    expect(verifyHostToken(slug, token, null)).toBe(false);
-    expect(verifyHostToken(slug, token, "too-short")).toBe(false);
-  });
-
-  it("no participant or user cookie signature verifies as a host token", () => {
-    const player = signPlayerCookie({ gameId: slug, playerId: "p1", issuedAt: 1 }, SECRET);
-    const user = signUserCookie({ v: 1, uid: "u1", issuedAt: 1 }, SECRET);
-    for (const value of [player, user, player.split(".")[1], user.split(".")[1]]) {
-      expect(verifyHostToken(slug, value, SECRET)).toBe(false);
-    }
+  it("needs no session secret: issue and verify use the stored hash only", () => {
+    const { token, record } = issueHostCredential(T0, () => generateAdminToken());
+    expect(verifyHostToken({ host: record }, token, resolvePolicy(), T0)).toBe(true);
   });
 });
 
 describe("host cookie (PIN-103)", () => {
   const slug = generateSlug();
-  const policy = resolvePolicy({ plus: { hostCookieDays: 2 } });
 
-  it("follows the participant cookie attributes, max age from Policy", () => {
+  it("parses only the versioned token shape (no I/O)", () => {
+    const token = generateAdminToken();
+    expect(parseHostCookie(`h1.${token}`)).toBe(token);
+    for (const value of [token, `h2.${token}`, `h1.${token}x`, `h1.${token.slice(1)}`, "h1.", "", null]) {
+      expect(parseHostCookie(value)).toBeNull();
+    }
+    // Participant / user cookies never parse as host cookies.
+    const player = signPlayerCookie({ gameId: slug, playerId: "p1", issuedAt: 1 }, SECRET);
+    const user = signUserCookie({ v: 1, uid: "u1", issuedAt: 1 }, SECRET);
+    expect(parseHostCookie(player)).toBeNull();
+    expect(parseHostCookie(user)).toBeNull();
+  });
+
+  it("is scoped to this board's API path with participant-cookie attributes", () => {
     expect(hostCookieName(slug)).toBe(`pinned_host_${slug}`);
+    expect(hostCookiePath(slug)).toBe(`/api/boards/${slug}`);
     expect(hostCookieMaxAgeSeconds(policy)).toBe(2 * 24 * 60 * 60);
-    const header = buildHostCookieHeader(slug, "tok", 60, true);
-    expect(header).toBe(`pinned_host_${slug}=tok; Path=/; HttpOnly; SameSite=Lax; Max-Age=60; Secure`);
+    expect(buildHostCookieHeader(slug, "tok", 60, true)).toBe(
+      `pinned_host_${slug}=h1.tok; Path=/api/boards/${slug}; HttpOnly; SameSite=Lax; Max-Age=60; Secure`,
+    );
     expect(buildHostCookieHeader(slug, "tok", 60, false)).not.toContain("Secure");
   });
 
-  it("issues a verifiable cookie, or nothing without a secret", () => {
-    const header = issueHostCookie(slug, false, { sessionSecret: SECRET, policy });
-    expect(header).toContain(`Max-Age=${2 * 24 * 60 * 60}`);
-    const pair = (header as string).split(";")[0];
+  it("reads the token back from a request cookie for this board only", () => {
+    const { token } = issueHostCredential(T0);
+    const pair = buildHostCookieHeader(slug, token, 60, false).split(";")[0];
     const request = new Request("http://t/x", { headers: { cookie: `other=1; ${pair}` } });
-    expect(isHostRequest(request, slug, SECRET)).toBe(true);
-    expect(isHostRequest(request, generateSlug(), SECRET)).toBe(false);
-    expect(isHostRequest(new Request("http://t/x"), slug, SECRET)).toBe(false);
-    expect(issueHostCookie(slug, false, { sessionSecret: null, policy })).toBeNull();
+    expect(hostTokenFrom(request, slug)).toBe(token);
+    expect(hostTokenFrom(request, generateSlug())).toBeNull();
+    expect(hostTokenFrom(new Request("http://t/x"), slug)).toBeNull();
   });
 });

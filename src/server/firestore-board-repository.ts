@@ -55,7 +55,7 @@ import type {
 import {
   applyBoardSettings,
   type BoardRepository,
-  type BoardSettingsPatch,
+  type BoardSettingsMutator,
   type DeleteElementResult,
 } from "../domain/board-repository";
 import {
@@ -193,17 +193,21 @@ export class FirestoreBoardRepository implements BoardRepository {
   }
 
   /**
-   * PIN-103 settings write: same transaction discipline as the
-   * counter updates (read the board doc, set it whole), so a
-   * concurrent counter bump is never lost and the version moves
-   * by exactly one. The whole-doc set is what lets a skin change
-   * drop stale theme tokens (undefined is stripped on write).
+   * PIN-103 settings write: the caller's mutator decides inside
+   * the transaction (same shape as mutateReclaimAttempt), and the
+   * board doc is read and set whole like the counter updates, so a
+   * concurrent counter bump is never lost and the version moves by
+   * exactly one. The whole-doc set is what lets a skin change drop
+   * stale theme tokens (undefined is stripped on write). A
+   * transaction retry re-runs the mutator on the fresh doc.
    */
-  async updateBoardSettings(slug: string, patch: BoardSettingsPatch): Promise<Board | null> {
+  async updateBoardSettings(slug: string, fn: BoardSettingsMutator): Promise<Board | null> {
     const ref = this.boardRef(slug);
     return this.db.runTransaction(async (tx) => {
       const board = fromSnapshot<Board>(await tx.get(ref));
       if (!board) return null;
+      const patch = fn(structuredClone(board));
+      if (patch === null) return board;
       const stored = toFirestoreData(applyBoardSettings(board, patch));
       tx.set(ref, stored);
       // A fresh JSON copy: exactly what a later getBoard returns.

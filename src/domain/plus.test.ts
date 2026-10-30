@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PLUS_SKIN_IDS,
   canUseSkin,
+  decideMockGrant,
   grantPlus,
   hasPlus,
   isPlusMode,
@@ -11,17 +12,22 @@ import {
   plusView,
   type BoardPlus,
 } from "./plus";
+import { DEFAULT_SKIN, SKINS, SKIN_IDS, getSkin, isPlusSkinId } from "./skins";
 
 const LABELS = { board: "$3.99", host: "$4.99/month" };
-const GRANT: BoardPlus = { plan: "board", source: "mock", grantedAt: 1_000 };
+const MOCK: BoardPlus = { plan: "board", source: "mock", grantedAt: 1_000 };
+const PAID: BoardPlus = { plan: "board", source: "stripe", grantedAt: 1_000 };
 
 describe("Board Plus domain (PIN-103)", () => {
-  it("knows exactly the three Plus skins", () => {
-    expect(PLUS_SKIN_IDS).toEqual(["darkroom", "postcard", "marigold"]);
-    for (const id of PLUS_SKIN_IDS) expect(isPlusSkin(id)).toBe(true);
-    for (const id of ["paper", "cork", "fridge", "zine", "Darkroom", "", null, 3]) {
-      expect(isPlusSkin(id)).toBe(false);
+  it("Plus membership agrees with the skins catalogue exactly", () => {
+    expect(PLUS_SKIN_IDS).toEqual(SKINS.filter((skin) => skin.plus).map((skin) => skin.id));
+    for (const id of SKIN_IDS) {
+      expect(isPlusSkin(id)).toBe(getSkin(id).plus);
+      expect(isPlusSkin(id)).toBe(isPlusSkinId(id));
     }
+    expect(PLUS_SKIN_IDS.length).toBeGreaterThan(0);
+    expect(isPlusSkin(DEFAULT_SKIN)).toBe(false);
+    for (const id of ["Darkroom", "helpdesk", "", null, 3]) expect(isPlusSkin(id)).toBe(false);
   });
 
   it("validates plans and modes by exact id", () => {
@@ -34,17 +40,25 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(isPlusMode("stripe")).toBe(false);
   });
 
-  it("gates Plus skins on the entitlement; free skins stay free", () => {
-    const free = {};
-    const plus = { plus: GRANT };
-    expect(hasPlus(free)).toBe(false);
-    expect(hasPlus(plus)).toBe(true);
-    expect(canUseSkin(free, "paper")).toBe(true);
-    expect(canUseSkin(free, "darkroom")).toBe(false);
-    expect(canUseSkin(plus, "darkroom")).toBe(true);
-    expect(canUseSkin(plus, "cork")).toBe(true);
+  it("hasPlus is null-safe and counts mock grants only in mock mode", () => {
+    expect(hasPlus({}, "mock")).toBe(false);
+    expect(hasPlus({ plus: null }, "mock")).toBe(false);
+    expect(hasPlus({ plus: MOCK }, "mock")).toBe(true);
+    expect(hasPlus({ plus: MOCK }, "off")).toBe(false);
+    expect(hasPlus({ plus: PAID }, "off")).toBe(true);
+    expect(hasPlus({ plus: PAID }, "mock")).toBe(true);
     // A malformed stored plan never counts as Plus.
-    expect(hasPlus({ plus: { ...GRANT, plan: "gold" as never } })).toBe(false);
+    expect(hasPlus({ plus: { ...PAID, plan: "gold" as never } }, "off")).toBe(false);
+  });
+
+  it("gates Plus skins on an entitlement that counts; free skins stay free", () => {
+    const plusSkin = PLUS_SKIN_IDS[0];
+    const freeSkin = DEFAULT_SKIN;
+    expect(canUseSkin({}, freeSkin, "off")).toBe(true);
+    expect(canUseSkin({ plus: null }, plusSkin, "mock")).toBe(false);
+    expect(canUseSkin({ plus: MOCK }, plusSkin, "mock")).toBe(true);
+    expect(canUseSkin({ plus: MOCK }, plusSkin, "off")).toBe(false);
+    expect(canUseSkin({ plus: PAID }, plusSkin, "off")).toBe(true);
   });
 
   it("host plan covers the board plan, not the other way round", () => {
@@ -54,8 +68,15 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(planCovers("board", "host")).toBe(false);
   });
 
-  it("grants a dated entitlement", () => {
+  it("mock grant decision: keep covering grants, never replace a paid one", () => {
     expect(grantPlus("host", "mock", 42)).toEqual({ plan: "host", source: "mock", grantedAt: 42 });
+    expect(decideMockGrant(undefined, "board", 5)).toEqual({ kind: "grant", plus: grantPlus("board", "mock", 5) });
+    expect(decideMockGrant(null, "host", 5)).toEqual({ kind: "grant", plus: grantPlus("host", "mock", 5) });
+    expect(decideMockGrant({ ...MOCK, plan: "host" }, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(MOCK, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(MOCK, "host", 5)).toEqual({ kind: "grant", plus: grantPlus("host", "mock", 5) });
+    expect(decideMockGrant(PAID, "board", 5)).toEqual({ kind: "keep" });
+    expect(decideMockGrant(PAID, "host", 5)).toEqual({ kind: "blocked" });
   });
 
   it("view exposes state, mode and labels — never source or grant time", () => {
@@ -64,7 +85,13 @@ describe("Board Plus domain (PIN-103)", () => {
       mode: "off",
       priceLabels: LABELS,
     });
-    const view = plusView({ plus: GRANT }, { mode: "mock", priceLabels: LABELS });
+    expect(plusView({ plus: null }, { mode: "mock", priceLabels: LABELS }).active).toBe(false);
+    expect(plusView({ plus: MOCK }, { mode: "off", priceLabels: LABELS })).toEqual({
+      active: false,
+      mode: "off",
+      priceLabels: LABELS,
+    });
+    const view = plusView({ plus: MOCK }, { mode: "mock", priceLabels: LABELS });
     expect(view).toEqual({ active: true, plan: "board", mode: "mock", priceLabels: LABELS });
     expect(JSON.stringify(view)).not.toMatch(/source|grantedAt/);
   });

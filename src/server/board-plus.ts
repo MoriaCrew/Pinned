@@ -1,18 +1,20 @@
 import "server-only";
 /**
  * Board Plus service (PIN-103, docs/15-board-plus.md): host-only
- * skin change and Plus checkout. Route handlers stay thin — slug
- * gate first (404), host cookie verified into a boolean — then
- * these functions check, in order: host (403) -> board (404) ->
- * input (400) -> entitlement (402) -> write. Every non-host gets
- * the same 403 whether or not the board exists, so neither route
- * is an existence oracle.
+ * skin change and Plus checkout. Route handlers run the cheap,
+ * I/O-free gates first (slug, request guards, rate limit, host
+ * cookie shape, body cap — see src/app/api/boards/plus-shared.ts);
+ * these functions then load the board and check, in order:
+ * host token against the stored hash + age (403) -> input (400)
+ * -> entitlement inside the repository write (402) -> write.
+ * An unknown board is the same 403 as a wrong token, so neither
+ * route is an existence oracle.
  *
  * BoardPlusError carries 402/403, which BoardApiError (owned by
  * the session track) does not; routes map it with the same
  * uniform-404 rule plus a machine-readable `code`.
  */
-import type { Checkout } from "../billing/checkout";
+import { BoardNotFoundError, type Checkout } from "../billing/checkout";
 import type { Board } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
@@ -26,6 +28,7 @@ import {
 } from "../domain/plus";
 import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
+import { verifyHostToken } from "./host-session";
 
 export class BoardPlusError extends Error {
   constructor(
@@ -42,19 +45,17 @@ export function plusRequiredError(): BoardPlusError {
   return new BoardPlusError(t("en", "plus.skinNeedsPlus"), 402, "plus_required");
 }
 
+export function hostOnlyError(): BoardPlusError {
+  return new BoardPlusError(t("en", "plus.hostOnly"), 403, "host_only");
+}
+
+function notFoundError(): BoardPlusError {
+  return new BoardPlusError("Board not found.", 404);
+}
+
 function field(value: unknown, key: string): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   return (value as Record<string, unknown>)[key];
-}
-
-function requireHost(isHost: boolean): void {
-  if (!isHost) throw new BoardPlusError(t("en", "plus.hostOnly"), 403, "host_only");
-}
-
-async function requireBoard(boards: BoardRepository, slug: string): Promise<Board> {
-  const board = await boards.getBoard(slug);
-  if (!board) throw new BoardPlusError("Board not found.", 404);
-  return board;
 }
 
 /** `{ skinId }` -> a skin id the theme registry knows, else 400. */
@@ -75,34 +76,48 @@ export function parsePlusInput(value: unknown): PlusPlan {
   return plan;
 }
 
-export interface ChangeSkinDeps {
+export interface HostRouteDeps {
   boards: BoardRepository;
+  /** The board's effective Policy (host credential age, labels). */
+  policy: Policy;
+  plusMode: PlusMode;
+  now?: () => number;
 }
 
-/** PATCH skin: host only; Plus skins need the board's entitlement. */
+/** Unknown board, no token, wrong token and expired token: one 403. */
+async function requireHost(slug: string, hostToken: string | null, deps: HostRouteDeps): Promise<Board> {
+  if (!hostToken) throw hostOnlyError();
+  const board = await deps.boards.getBoard(slug);
+  const now = deps.now?.() ?? Date.now();
+  if (!board || !verifyHostToken(board, hostToken, deps.policy, now)) throw hostOnlyError();
+  return board;
+}
+
+/**
+ * PATCH skin: host only. The entitlement check and the "already
+ * wearing it" no-op run inside the repository write, against the
+ * board being written (a no-op writes nothing, bumps nothing).
+ */
 export async function changeBoardSkin(
   slug: string,
-  isHost: boolean,
+  hostToken: string | null,
   rawInput: unknown,
-  deps: ChangeSkinDeps,
+  deps: HostRouteDeps,
 ): Promise<Board> {
-  requireHost(isHost);
-  const board = await requireBoard(deps.boards, slug);
+  await requireHost(slug, hostToken, deps);
   const skinId = parseSkinInput(rawInput);
-  if (!canUseSkin(board, skinId)) throw plusRequiredError();
   const theme = getBoardTheme(skinId);
-  const updated = await deps.boards.updateBoardSettings(slug, {
-    skin: { themeId: skinId, ...(theme ? { theme: theme.tokens } : {}) },
+  const updated = await deps.boards.updateBoardSettings(slug, (current) => {
+    if (!canUseSkin(current, skinId, deps.plusMode)) throw plusRequiredError();
+    if (current.themeId === skinId) return null;
+    return { skin: { themeId: skinId, ...(theme ? { theme: theme.tokens } : {}) } };
   });
-  if (!updated) throw new BoardPlusError("Board not found.", 404);
+  if (!updated) throw notFoundError();
   return updated;
 }
 
-export interface StartPlusDeps {
-  boards: BoardRepository;
+export interface StartPlusDeps extends HostRouteDeps {
   checkout: Checkout;
-  policy: Policy;
-  plusMode: PlusMode;
 }
 
 export type StartPlusResponse =
@@ -112,23 +127,23 @@ export type StartPlusResponse =
 
 /**
  * POST plus: host only; hands the validated plan to the Checkout
- * port. "unavailable" (PLUS_MODE=off) is an ordinary answer the
- * UI renders honestly, not an error — and nothing is written.
+ * port. "unavailable" (PLUS_MODE=off, or a paid grant the mock
+ * may not replace) is an ordinary answer the UI renders honestly,
+ * not an error — and nothing is written.
  */
 export async function startBoardPlus(
   slug: string,
-  isHost: boolean,
+  hostToken: string | null,
   rawInput: unknown,
   deps: StartPlusDeps,
 ): Promise<StartPlusResponse> {
-  requireHost(isHost);
-  await requireBoard(deps.boards, slug);
+  await requireHost(slug, hostToken, deps);
   const plan = parsePlusInput(rawInput);
   let result;
   try {
     result = await deps.checkout.startCheckout({ slug, plan });
   } catch (error) {
-    if (error instanceof RangeError) throw new BoardPlusError("Board not found.", 404);
+    if (error instanceof BoardNotFoundError) throw notFoundError();
     throw error;
   }
   switch (result.status) {

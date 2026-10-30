@@ -1,6 +1,7 @@
 import type { Firestore } from "@google-cloud/firestore";
 import { describe, expect, it } from "vitest";
 import { emptyBoardCounters } from "../domain/board";
+import { describeMockCheckoutBehaviour } from "../billing/mock-checkout.contract";
 import { describeBoardRepositoryContract } from "../domain/board-repository.contract";
 import { FirestoreBoardRepository } from "./firestore-board-repository";
 
@@ -172,6 +173,7 @@ function makeRepo() {
 }
 
 describeBoardRepositoryContract("firestore (fake)", () => makeRepo().repo);
+describeMockCheckoutBehaviour("firestore (fake)", () => makeRepo().repo);
 
 describe("FirestoreBoardRepository layout (fake Firestore)", () => {
   const SLUG = "board-slug-00000000001";
