@@ -30,6 +30,7 @@ import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
 import { LibraryTab } from "./LibraryTab";
+import { PhotoPick } from "./PhotoPick";
 
 interface PublicJob {
   id: string;
@@ -542,25 +543,7 @@ export function AddSheet({
 
   const photoContent = (
     <>
-      {stage === "pick" ? (
-        <label className="pn-add-pick">
-          <span className="pn-add-pick-icon" aria-hidden="true">
-            <Icon name="camera" size={28} />
-          </span>
-          <span className="pn-add-pick-title">{t("en", "add.pick")}</span>
-          <span className="pn-add-pick-help">{t("en", "add.pickHelp")}</span>
-          <input
-            type="file"
-            accept="image/*"
-            className="pn-sr"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) upload.mutate(file);
-            }}
-          />
-        </label>
-      ) : null}
+      {stage === "pick" ? <PhotoPick onFile={(file) => upload.mutate(file)} /> : null}
 
       {showFaceNote ? (
         <Hint point="none" dismissLabel={t("en", "add.gotIt")} onDismiss={() => setDismissedFaceJobId(jobId)}>
