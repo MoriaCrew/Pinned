@@ -226,7 +226,8 @@ describe("decorated SpeechTranscriber (PIN-119)", () => {
     expect(out.status).toBe("ready");
     const snap = budget.snapshot(dayBucketFor(NOW));
     expect(snap.participantTranscriptions).toEqual({ p1: 1 });
-    expect(snap.participants).toEqual({});
+    expect(snap.participantPhotos).toEqual({});
+    expect(snap.participantScenes).toEqual({});
     // Reserve priced the clip's own 2.5s at whole seconds.
     expect(snap.reservedMicroUsd).toBe(Math.round(3 * VOICE_USD_PER_AUDIO_SECOND * 1_000_000));
     expect(logs).toHaveLength(1);

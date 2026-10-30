@@ -20,11 +20,14 @@ export function dayBucketFor(now: number): string {
 export interface BudgetDayState {
   calls: number;
   reservedMicroUsd: number;
-  participants: Record<string, number>;
+  /** ElementNamer per-participant photo counts (PIN-136): split from the former shared `participants` counter so photo and scene caps are independent. */
+  participantPhotos: Record<string, number>;
+  /** SceneComposer per-participant scene counts (PIN-136). */
+  participantScenes: Record<string, number>;
   boards: Record<string, number>;
-  /** Segmenter-only per-participant counts (PIN-92): kept apart from `participants` (photo/scene quotas) so SAM spend neither consumes nor is masked by those budgets. */
+  /** Segmenter-only per-participant counts (PIN-92): kept apart from `participantPhotos`/`participantScenes` so SAM spend neither consumes nor is masked by those budgets. */
   participantSegments: Record<string, number>;
-  /** TapNamer-only per-participant counts (PIN-117): kept apart from `participants` (photo quotas) exactly like participantSegments, so tap naming neither consumes nor is masked by the photos-per-day budget. */
+  /** TapNamer-only per-participant counts (PIN-117): kept apart from `participantPhotos` exactly like participantSegments, so tap naming neither consumes nor is masked by the photos-per-day budget. */
   participantTapNames: Record<string, number>;
   /** SpeechTranscriber-only per-participant counts (PIN-119): kept apart exactly like participantTapNames. */
   participantTranscriptions: Record<string, number>;
@@ -33,7 +36,7 @@ export interface BudgetDayState {
 }
 
 export function emptyBudgetDay(): BudgetDayState {
-  return { calls: 0, reservedMicroUsd: 0, participants: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantTranscriptions: {}, photos: {} };
+  return { calls: 0, reservedMicroUsd: 0, participantPhotos: {}, participantScenes: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantTranscriptions: {}, photos: {} };
 }
 
 export interface ReserveRequest {
@@ -44,12 +47,15 @@ export interface ReserveRequest {
   /** Policy dailyCallLimit; 0 means OFF. */
   callLimit: number;
   participantId?: string;
-  participantCap?: number;
+  /** ElementNamer-only daily cap for participantId (PIN-136), counted in `participantPhotos`. */
+  participantPhotoCap?: number;
+  /** SceneComposer-only daily cap for participantId (PIN-136), counted in `participantScenes`. */
+  participantSceneCap?: number;
   boardId?: string;
   boardCap?: number;
-  /** Segmenter-only daily cap for participantId (PIN-92), counted in `participantSegments`, not `participants`. */
+  /** Segmenter-only daily cap for participantId (PIN-92), counted in `participantSegments`, not `participantPhotos`. */
   participantSegmentCap?: number;
-  /** TapNamer-only daily cap for participantId (PIN-117), counted in `participantTapNames`, not `participants`. */
+  /** TapNamer-only daily cap for participantId (PIN-117), counted in `participantTapNames`, not `participantPhotos`. */
   participantTapNameCap?: number;
   /** SpeechTranscriber-only daily cap for participantId (PIN-119), counted in `participantTranscriptions`. */
   participantTranscriptionCap?: number;
@@ -92,8 +98,13 @@ export function evaluateReserve(
   if (state.reservedMicroUsd + estimatedMicroUsd > toMicroUsd(request.budgetUsd)) {
     return { ok: false, reason: "budget" };
   }
-  if (request.participantId && request.participantCap !== undefined) {
-    if ((state.participants[request.participantId] ?? 0) >= request.participantCap) {
+  if (request.participantId && request.participantPhotoCap !== undefined) {
+    if ((state.participantPhotos[request.participantId] ?? 0) >= request.participantPhotoCap) {
+      return { ok: false, reason: "participant_cap" };
+    }
+  }
+  if (request.participantId && request.participantSceneCap !== undefined) {
+    if ((state.participantScenes[request.participantId] ?? 0) >= request.participantSceneCap) {
       return { ok: false, reason: "participant_cap" };
     }
   }
@@ -134,16 +145,21 @@ export function applyReserve(
   const next: BudgetDayState = {
     calls: state.calls + 1,
     reservedMicroUsd: state.reservedMicroUsd + estimatedMicroUsd,
-    participants: { ...state.participants },
+    participantPhotos: { ...state.participantPhotos },
+    participantScenes: { ...state.participantScenes },
     boards: { ...state.boards },
     participantSegments: { ...state.participantSegments },
     participantTapNames: { ...state.participantTapNames },
     participantTranscriptions: { ...state.participantTranscriptions },
     photos: { ...state.photos },
   };
-  if (request.participantId && request.participantCap !== undefined) {
-    next.participants[request.participantId] =
-      (next.participants[request.participantId] ?? 0) + 1;
+  if (request.participantId && request.participantPhotoCap !== undefined) {
+    next.participantPhotos[request.participantId] =
+      (next.participantPhotos[request.participantId] ?? 0) + 1;
+  }
+  if (request.participantId && request.participantSceneCap !== undefined) {
+    next.participantScenes[request.participantId] =
+      (next.participantScenes[request.participantId] ?? 0) + 1;
   }
   if (request.boardId && request.boardCap !== undefined) {
     next.boards[request.boardId] = (next.boards[request.boardId] ?? 0) + 1;

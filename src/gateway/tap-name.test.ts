@@ -200,7 +200,8 @@ describe("decorated TapNamer (PIN-117)", () => {
     expect(out.status).toBe("ready");
     const snap = budget.snapshot(dayBucketFor(NOW));
     expect(snap.participantTapNames).toEqual({ p1: 1 });
-    expect(snap.participants).toEqual({});
+    expect(snap.participantPhotos).toEqual({});
+    expect(snap.participantScenes).toEqual({});
     expect(logs).toHaveLength(1);
     expect(logs[0]).toMatchObject({
       operation: "nameOne",

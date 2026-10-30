@@ -123,10 +123,10 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     const fake = new FakeFirestore();
     const store = new FirestoreBudgetStore(fake as unknown as Firestore);
     const r1 = await store.reserve(
-      req({ participantId: "p1", participantCap: 20, boardId: "b1", boardCap: 40 }),
+      req({ participantId: "p1", participantPhotoCap: 20, boardId: "b1", boardCap: 40 }),
     );
     const r2 = await store.reserve(
-      req({ participantId: "p1", participantCap: 20, boardId: "b1", boardCap: 40 }),
+      req({ participantId: "p1", participantPhotoCap: 20, boardId: "b1", boardCap: 40 }),
     );
     expect(r1.ok && r2.ok).toBe(true);
     expect([...fake.store.keys()]).toEqual([`aiBudget/${DAY}`]);
@@ -134,7 +134,8 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       dayBucket: DAY,
       calls: 2,
       reservedMicroUsd: 20_000,
-      participants: { p1: 2 },
+      participantPhotos: { p1: 2 },
+      participantScenes: {},
       boards: { b1: 2 },
       participantSegments: {},
       participantTapNames: {},
@@ -176,7 +177,8 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     ).toEqual({ ok: false, reason: "participant_cap" });
     const doc = fake.store.get(`aiBudget/${DAY}`);
     expect(doc?.calls).toBe(1);
-    expect(doc?.participants).toEqual({});
+    expect(doc?.participantPhotos).toEqual({});
+    expect(doc?.participantScenes).toEqual({});
     expect(doc?.participantSegments).toEqual({ p1: 1 });
     expect(doc?.photos).toEqual({ "job-1": 1 });
   });
@@ -197,7 +199,8 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     ).toBe(true);
     const doc = fake.store.get(`aiBudget/${DAY}`);
     expect(doc?.calls).toBe(2);
-    expect(doc?.participants).toEqual({});
+    expect(doc?.participantPhotos).toEqual({});
+    expect(doc?.participantScenes).toEqual({});
     expect(doc?.participantTapNames).toEqual({ p1: 1, p2: 1 });
   });
 
@@ -212,8 +215,45 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     ).toBe(true);
     const doc = fake.store.get(`aiBudget/${DAY}`);
     expect(doc?.calls).toBe(2);
-    expect(doc?.participants).toEqual({});
+    expect(doc?.participantPhotos).toEqual({});
+    expect(doc?.participantScenes).toEqual({});
     expect(doc?.participantTranscriptions).toEqual({ p1: 1, p2: 1 });
+  });
+
+  it("photo/scene caps (PIN-136): counted in separate maps, each denied only at its own cap", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const scene = req({ participantId: "p1", participantSceneCap: 1 });
+    expect((await store.reserve(scene)).ok).toBe(true);
+    expect(await store.reserve(scene)).toEqual({ ok: false, reason: "participant_cap" });
+    // The exhausted scene quota leaves the photo quota untouched (update path).
+    const photo = req({ participantId: "p1", participantPhotoCap: 1 });
+    expect((await store.reserve(photo)).ok).toBe(true);
+    expect(await store.reserve(photo)).toEqual({ ok: false, reason: "participant_cap" });
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(2);
+    expect(doc?.participantScenes).toEqual({ p1: 1 });
+    expect(doc?.participantPhotos).toEqual({ p1: 1 });
+  });
+
+  it("legacy day doc (PIN-136): missing participantPhotos/Scenes read as 0, old participants ignored", async () => {
+    const fake = new FakeFirestore();
+    fake.store.set(`aiBudget/${DAY}`, {
+      dayBucket: DAY,
+      calls: 5,
+      reservedMicroUsd: 50_000,
+      participants: { p1: 20 },
+      boards: {},
+    });
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    // Old shared count of 20 must not block either new quota.
+    expect((await store.reserve(req({ participantId: "p1", participantPhotoCap: 20 }))).ok).toBe(true);
+    expect((await store.reserve(req({ participantId: "p1", participantSceneCap: 10 }))).ok).toBe(true);
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(7);
+    expect(doc?.participants).toEqual({ p1: 20 }); // legacy field left untouched
+    expect(doc?.participantPhotos).toEqual({ p1: 1 });
+    expect(doc?.participantScenes).toEqual({ p1: 1 });
   });
 
   it("parity with the memory store: off, budget and caps deny identically", async () => {
@@ -227,9 +267,9 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       ok: false,
       reason: "budget",
     });
-    await store.reserve(req({ participantId: "p1", participantCap: 1 }));
+    await store.reserve(req({ participantId: "p1", participantPhotoCap: 1 }));
     expect(
-      await store.reserve(req({ participantId: "p1", participantCap: 1 })),
+      await store.reserve(req({ participantId: "p1", participantPhotoCap: 1 })),
     ).toEqual({ ok: false, reason: "participant_cap" });
     // Denied reserves never wrote a doc beyond the one allowed call.
     expect(fake.store.get(`aiBudget/${DAY}`)?.calls).toBe(1);
