@@ -137,6 +137,19 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     ).toEqual({ plus: { priceLabels: { board: "$1" } } });
   });
 
+  it("scene preview size and WebP quality (PIN-133): defaults, env/board overrides, fail closed", () => {
+    expect(DEFAULT_POLICY.scenePreviewMaxPx).toBe(1024);
+    expect(DEFAULT_POLICY.scenePreviewQuality).toBe(80);
+    const env = parsePolicyOverridesJson('{"scenePreviewMaxPx": 960, "scenePreviewQuality": 70}');
+    const p = resolvePolicy(env, { scenePreviewQuality: 90 });
+    expect([p.scenePreviewMaxPx, p.scenePreviewQuality]).toEqual([960, 90]);
+    // Quality is sharp's integer 1-100 scale, never a 0.1-1 fraction.
+    for (const bad of [{ scenePreviewMaxPx: 0 }, { scenePreviewMaxPx: 512.5 }, { scenePreviewQuality: 0 }, { scenePreviewQuality: 101 }, { scenePreviewQuality: 0.8 }]) {
+      expect(() => resolvePolicy(bad)).toThrow();
+      expect(() => resolvePolicy(null, bad)).toThrow();
+    }
+  });
+
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
     expect(resolvePolicy({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBe(0);
   });
