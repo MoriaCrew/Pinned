@@ -108,6 +108,55 @@ Until step 2 lands for a backend, the `NEXT_PUBLIC_*`
 values resolve empty and the sign-in UI stays hidden even in
 optional mode — no dead buttons.
 
+## Auth domain: sign-in on the app's own host (PIN-163)
+
+By default the web config's `authDomain` is the
+`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` secret, the project's
+`{project}.firebaseapp.com`, so Google's account chooser names
+that address. Putting the app host in the secret alone does not
+work: Firebase's sign-in helper lives at the reserved `/__/auth/*`
+paths, which Firebase Hosting serves and App Hosting does not
+(`https://dev.pinneds.com/__/auth/handler` was the app's 404).
+
+`AUTH_SAME_ORIGIN=1` (only with `AUTH_MODE=optional`) closes the gap:
+
+1. Proxy: `next.config.ts` adds exactly one rewrite,
+   `/__/auth/:path*` to
+   `https://{FIREBASE_PROJECT_ID}.firebaseapp.com/__/auth/:path*`
+   (`src/domain/auth-proxy.ts`). Nothing else is proxied. Flag off,
+   link-only, or a project id that is not a valid GCP id means no
+   rewrite at all, so the destination is never env-typo or
+   attacker controlled. Rewrites are computed at build: the flag,
+   `AUTH_MODE` and `FIREBASE_PROJECT_ID` must be BUILD-available
+   (plain `value:` entries in `apphosting*.yaml` are). The proxied
+   request carries the browser's headers, cookies included, to the
+   project's own firebaseapp host, where only Firebase's reserved
+   helper answers on these paths.
+2. authDomain: `src/config.ts` then serves the host of
+   `APP_BASE_URL` instead of the secret — only for an https
+   `APP_BASE_URL` and a valid project id (the proxy must exist);
+   otherwise the secret's value, unchanged. The client project id
+   always comes from `FIREBASE_PROJECT_ID`: `resolveAuthUi` never
+   derives one from a non-firebaseapp authDomain.
+3. Flag off (the default, and prod today) is byte-identical to
+   before; rollback is removing the flag and rebuilding.
+
+Operator step, per environment (console, not code):
+
+- Google Cloud console → APIs & Services → Credentials → the
+  project's web OAuth client → add the authorized redirect URI
+  `https://{app host}/__/auth/handler`, and keep the app host in
+  Firebase Authentication → Settings → Authorized domains.
+- Dev: done Oct 30 for `dev.pinneds.com`; `apphosting.dev.yaml`
+  sets `AUTH_SAME_ORIGIN=1`.
+- Prod, at promotion: add `https://pinneds.com/__/auth/handler`
+  to the prod project's web client, confirm `pinneds.com` is an
+  authorized domain, then set `AUTH_SAME_ORIGIN: "1"` beside
+  `AUTH_MODE: optional` in `apphosting.prod.yaml`.
+- Smoke after the rebuild: `GET https://{app host}/__/auth/handler`
+  answers 200 (not the app's 404), and the Google chooser names
+  the app host.
+
 ## Sign-in UI + My boards + restore (PIN-84)
 
 The client half of PIN-57b, still behind the same gates:
@@ -115,7 +164,8 @@ The client half of PIN-57b, still behind the same gates:
 1. Visibility: `resolveAuthUi` (src/domain/auth-ui.ts) enables
    the UI only when `AUTH_MODE=optional` AND the public web
    config is complete (`NEXT_PUBLIC_FIREBASE_API_KEY`,
-   `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, project id from
+   `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` or the app host with
+   `AUTH_SAME_ORIGIN` (PIN-163, above), project id from
    `FIREBASE_PROJECT_ID` or the authDomain prefix). The root
    layout mounts the provider only then; the account entries
    live in each page's "you" button (PIN-120, docs/14).
