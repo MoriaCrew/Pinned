@@ -9,8 +9,9 @@ import {
 import {
   claimParticipantForUser,
   findClaimedParticipant,
+  isFreshAuth,
 } from "../../../../server/user-session";
-import { claimDeps, currentUser } from "../../auth-shared";
+import { claimDeps, currentUserSession } from "../../auth-shared";
 import {
   JSON_HEADERS,
   boardApiDeps,
@@ -39,6 +40,9 @@ export const dynamic = "force-dynamic";
  * different user is left untouched; the explicit claim route is
  * where that conflict surfaces as 409. Any auth-side failure
  * degrades to the plain link-only view, never an error.
+ * PIN-94: restore and auto-claim additionally need a fresh
+ * sign-in (auth_time inside the Policy window); a stale session
+ * simply gets the plain view, exactly like a signed-out one.
  */
 export async function GET(
   request: Request,
@@ -53,9 +57,11 @@ export async function GET(
     let restoredCookie: string | null = null;
     if (getConfig().authMode === "optional") {
       try {
-        const user = await currentUser(request);
+        const session = await currentUserSession(request);
+        const user = session?.user ?? null;
+        const deps = claimDeps(session?.authTimeMs);
         if (user && !viewer) {
-          const claimed = await findClaimedParticipant(slug, user, claimDeps());
+          const claimed = await findClaimedParticipant(slug, user, deps);
           if (claimed) {
             const issued = await restoreParticipantSession(
               claimed,
@@ -69,8 +75,13 @@ export async function GET(
               isSecureRequest(request),
             );
           }
-        } else if (user && viewer && !viewer.userId) {
-          viewer = await claimParticipantForUser(viewer, user, claimDeps());
+        } else if (
+          user &&
+          viewer &&
+          !viewer.userId &&
+          isFreshAuth(session?.authTimeMs, deps.policy, Date.now())
+        ) {
+          viewer = await claimParticipantForUser(viewer, user, deps);
         }
       } catch (error) {
         console.error("board auth restore failed", error);

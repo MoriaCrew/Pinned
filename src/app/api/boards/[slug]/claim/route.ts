@@ -10,7 +10,11 @@ import {
   claimParticipantForUser,
   publicUser,
 } from "../../../../../server/user-session";
-import { authDisabledGate, claimDeps, currentUser } from "../../../auth-shared";
+import {
+  authDisabledGate,
+  claimDeps,
+  currentUserSession,
+} from "../../../auth-shared";
 import {
   errorResponse,
   JSON_HEADERS,
@@ -27,7 +31,8 @@ export const dynamic = "force-dynamic";
  * Link this browser's board participant to the signed-in user
  * (PIN-83 claim flow). Needs both cookies: no user session ->
  * 401, not joined to the board -> 401, already claimed by a
- * different user -> 409.
+ * different user -> 409. PIN-94: a stale sign-in (auth_time
+ * outside the Policy fresh window) -> 401 stale_auth.
  */
 export async function POST(
   request: Request,
@@ -50,7 +55,8 @@ export async function POST(
   try {
     const board = await getBoardRepository().getBoard(slug);
     if (!board) return notFound();
-    const user = await currentUser(request);
+    const session = await currentUserSession(request);
+    const user = session?.user ?? null;
     if (!user) {
       return NextResponse.json(
         { error: "Sign in to link this board." },
@@ -65,7 +71,11 @@ export async function POST(
         { status: 401, headers: JSON_HEADERS },
       );
     }
-    const claimed = await claimParticipantForUser(participant, user, claimDeps());
+    const claimed = await claimParticipantForUser(
+      participant,
+      user,
+      claimDeps(session?.authTimeMs),
+    );
     return NextResponse.json(
       {
         participant: publicParticipant(claimed),

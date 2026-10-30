@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyBoardCounters, type Participant } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
-import { signPlayerCookie } from "../domain/tokens";
+import { signPlayerCookie, signUserCookie } from "../domain/tokens";
 import { InMemoryUserRepository } from "../domain/user-repository";
 import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
 import { resolvePolicy } from "../policy/policy";
@@ -18,8 +18,12 @@ import { FakeTokenVerifier } from "./token-verifier";
 import {
   claimParticipantForUser,
   establishUserSession,
+  findClaimedParticipant,
+  isFreshAuth,
   linkParticipantOnJoin,
   resolveUserSession,
+  resolveUserSessionContext,
+  type ClaimDeps,
   type EstablishUserSessionDeps,
 } from "./user-session";
 
@@ -40,6 +44,9 @@ interface Harness {
   users: InMemoryUserRepository;
   deps: EstablishUserSessionDeps;
   setNow(now: number): void;
+  getNow(): number;
+  /** Fresh claim deps anchored at the harness clock (PIN-94). */
+  claimDeps(authTimeMs?: number): ClaimDeps;
 }
 
 function makeHarness(): Harness {
@@ -55,13 +62,37 @@ function makeHarness(): Harness {
       sessionSecret: SECRET,
       policy,
       now: () => now,
-      verifier: new FakeTokenVerifier({
-        "token-alice": ALICE,
-        "token-bob": BOB,
-      }),
+      verifier: new FakeTokenVerifier(
+        {
+          "token-alice": ALICE,
+          "token-bob": BOB,
+          // PIN-94 fixtures: wrong provider, missing provider,
+          // revoked token, and a stale (2h-old) sign-in.
+          "token-anon": { uid: "synthetic-anon", signInProvider: "anonymous" },
+          "token-no-provider": { uid: "synthetic-noprov", signInProvider: "" },
+          "token-revoked": { uid: "synthetic-revoked", revoked: true },
+          "token-stale": {
+            uid: "synthetic-stale",
+            authTimeMs: T0 - 2 * 60 * 60 * 1000,
+          },
+        },
+        () => now,
+      ),
     },
     setNow(value: number) {
       now = value;
+    },
+    getNow() {
+      return now;
+    },
+    claimDeps(authTimeMs?: number) {
+      return {
+        boards,
+        users,
+        policy,
+        authTimeMs: authTimeMs ?? now,
+        now: () => now,
+      };
     },
   };
 }
@@ -158,10 +189,9 @@ describe("user session (PIN-83)", () => {
     const participant = await seedParticipant(h);
     const alice = (await establish(h, "token-alice")).user;
     const bob = (await establish(h, "token-bob")).user;
-    const claimDeps = { boards: h.boards, users: h.users, now: h.deps.now };
 
     // Empty -> set, index written.
-    const claimed = await claimParticipantForUser(participant, alice, claimDeps);
+    const claimed = await claimParticipantForUser(participant, alice, h.claimDeps());
     expect(claimed.userId).toBe("synthetic-alice");
     expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBe(
       "synthetic-alice",
@@ -174,8 +204,10 @@ describe("user session (PIN-83)", () => {
     });
 
     // Same user again -> ok, claimedAt preserved, updatedAt refreshed.
+    // (A day later the claim carries a fresh sign-in at the new
+    // clock: h.claimDeps() anchors auth_time at now, PIN-94.)
     h.setNow(T0 + DAY_MS);
-    const reclaim = await claimParticipantForUser(claimed, alice, claimDeps);
+    const reclaim = await claimParticipantForUser(claimed, alice, h.claimDeps());
     expect(reclaim.userId).toBe("synthetic-alice");
     expect(await h.users.getUserBoard("synthetic-alice", SLUG)).toEqual({
       boardId: SLUG,
@@ -185,7 +217,7 @@ describe("user session (PIN-83)", () => {
     });
 
     // Other user -> 409, nothing changes for either store.
-    await expect(claimParticipantForUser(claimed, bob, claimDeps)).rejects.toMatchObject({
+    await expect(claimParticipantForUser(claimed, bob, h.claimDeps())).rejects.toMatchObject({
       status: 409,
       code: "claim_conflict",
     });
@@ -200,7 +232,7 @@ describe("user session (PIN-83)", () => {
     const participant = await seedParticipant(h);
     const alice = (await establish(h, "token-alice")).user;
     const bob = (await establish(h, "token-bob")).user;
-    const deps = { boards: h.boards, users: h.users, now: h.deps.now };
+    const deps = h.claimDeps();
 
     expect(await linkParticipantOnJoin(participant, null, deps)).toEqual(participant);
 
@@ -286,15 +318,114 @@ describe("user session (PIN-83)", () => {
     ]);
   });
 
+  it("PIN-94: wrong or missing provider is the uniform 401, no profile stored", async () => {
+    const h = makeHarness();
+    for (const token of ["token-anon", "token-no-provider"]) {
+      await expect(establish(h, token)).rejects.toMatchObject({
+        status: 401,
+        code: "invalid_token",
+      });
+    }
+    expect(await h.users.getUser("synthetic-anon")).toBeNull();
+    expect(await h.users.getUser("synthetic-noprov")).toBeNull();
+  });
+
+  it("PIN-94: a revoked token is 401 at session exchange", async () => {
+    const h = makeHarness();
+    await expect(establish(h, "token-revoked")).rejects.toMatchObject({
+      status: 401,
+      code: "invalid_token",
+    });
+    expect(await h.users.getUser("synthetic-revoked")).toBeNull();
+  });
+
+  it("PIN-94: stale auth_time signs in for reads but cannot claim, restore or auto-link", async () => {
+    const h = makeHarness();
+    const participant = await seedParticipant(h);
+    const staleAuth = T0 - 2 * 60 * 60 * 1000;
+
+    // Session exchange itself succeeds; /api/me's resolve path is
+    // unaffected, and the cookie carries the stale auth_time.
+    const established = await establish(h, "token-stale");
+    expect(await resolveUserSession(established.cookieValue, h.deps)).toEqual(
+      established.user,
+    );
+    const context = await resolveUserSessionContext(established.cookieValue, h.deps);
+    expect(context?.authTimeMs).toBe(staleAuth);
+
+    // Explicit claim -> 401 stale_auth, nothing written.
+    await expect(
+      claimParticipantForUser(participant, established.user, h.claimDeps(staleAuth)),
+    ).rejects.toMatchObject({ status: 401, code: "stale_auth" });
+    expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBeUndefined();
+    expect(await h.users.listUserBoards("synthetic-stale")).toEqual([]);
+
+    // Join auto-link silently skips instead of throwing.
+    const untouched = await linkParticipantOnJoin(
+      participant,
+      established.user,
+      h.claimDeps(staleAuth),
+    );
+    expect(untouched).toEqual(participant);
+    expect(await h.users.listUserBoards("synthetic-stale")).toEqual([]);
+
+    // Restore restores nobody even with a live claim + index...
+    await h.boards.putParticipant({ ...participant, userId: "synthetic-stale" });
+    await h.users.putUserBoard("synthetic-stale", {
+      boardId: SLUG,
+      participantId: "part-1",
+      claimedAt: T0,
+      updatedAt: T0,
+    });
+    expect(
+      await findClaimedParticipant(SLUG, established.user, h.claimDeps(staleAuth)),
+    ).toBeNull();
+    // ...while the same lookup with a fresh sign-in restores.
+    expect(
+      (await findClaimedParticipant(SLUG, established.user, h.claimDeps()))?.id,
+    ).toBe("part-1");
+  });
+
+  it("PIN-94: missing auth_time fails claim closed; pre-PIN-94 cookies still read", async () => {
+    const h = makeHarness();
+    const participant = await seedParticipant(h);
+    const alice = (await establish(h, "token-alice")).user;
+
+    await expect(
+      claimParticipantForUser(participant, alice, {
+        ...h.claimDeps(),
+        authTimeMs: undefined,
+      }),
+    ).rejects.toMatchObject({ status: 401, code: "stale_auth" });
+
+    // A cookie minted before PIN-94 (no authTimeMs) resolves for
+    // ordinary reads, but its context carries no freshness.
+    const legacyCookie = signUserCookie(
+      { v: 1, uid: "synthetic-alice", issuedAt: T0 },
+      SECRET,
+    );
+    expect(await resolveUserSession(legacyCookie, h.deps)).toEqual(alice);
+    const context = await resolveUserSessionContext(legacyCookie, h.deps);
+    expect(context?.user).toEqual(alice);
+    expect(context?.authTimeMs).toBeUndefined();
+  });
+
+  it("PIN-94: freshness boundary is inclusive at the Policy window", () => {
+    const policy = resolvePolicy();
+    const window = policy.authFreshWindowMs;
+    expect(isFreshAuth(T0, policy, T0 + window)).toBe(true);
+    expect(isFreshAuth(T0, policy, T0 + window + 1)).toBe(false);
+    expect(isFreshAuth(T0 + 60_000, policy, T0)).toBe(true); // clock skew
+    expect(isFreshAuth(undefined, policy, T0)).toBe(false);
+    expect(isFreshAuth(Number.NaN, policy, T0)).toBe(false);
+  });
+
   it("claim errors are BoardApiError so routes map them uniformly", async () => {
     const h = makeHarness();
     const participant = await seedParticipant(h, { userId: "synthetic-bob" });
     const alice = (await establish(h, "token-alice")).user;
     await expect(
-      claimParticipantForUser(participant, alice, {
-        boards: h.boards,
-        users: h.users,
-      }),
+      claimParticipantForUser(participant, alice, h.claimDeps()),
     ).rejects.toBeInstanceOf(BoardApiError);
   });
 });

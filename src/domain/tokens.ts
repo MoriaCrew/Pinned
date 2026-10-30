@@ -74,6 +74,10 @@ export interface UserCookiePayload {
   v: 1;
   uid: string;
   issuedAt: number;
+  /** Firebase `auth_time` (ms) carried from session exchange
+   * (PIN-94). Optional so pre-PIN-94 cookies still verify for
+   * ordinary reads; claim/restore treat a missing value as stale. */
+  authTimeMs?: number;
 }
 
 const USER_COOKIE_DOMAIN = "pinned-user-v1:";
@@ -107,6 +111,12 @@ export function verifyUserCookie(
     ) as UserCookiePayload;
     if (payload.v !== 1 || typeof payload.uid !== "string" || !payload.uid) return null;
     if (typeof payload.issuedAt !== "number") return null;
+    if (
+      payload.authTimeMs !== undefined &&
+      (typeof payload.authTimeMs !== "number" || !Number.isFinite(payload.authTimeMs))
+    ) {
+      return null;
+    }
     if (options.maxAgeMs !== undefined) {
       const now = options.now ?? Date.now();
       if (now - payload.issuedAt > options.maxAgeMs) return null;

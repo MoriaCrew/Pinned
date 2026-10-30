@@ -28,7 +28,11 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    `verifyIdToken`, lazily initialised, failing closed to 401
    when unconfigured or invalid. The repo's Firestore access
    uses `@google-cloud/firestore` directly; `firebase-admin` was
-   added by PIN-83 solely for this verification.
+   added by PIN-83 solely for this verification. PIN-94: exchange
+   always verifies with revocation checking, and only Policy
+   `authAllowedProviders` (default `google.com`) may mint a
+   session — enabling another Firebase provider (e.g. Anonymous)
+   in a console cannot sign anyone in by itself.
 3. On success the server upserts `users/{uid}` and sets the
    `pinned_user` cookie: httpOnly, SameSite=Lax, Secure on
    https, HMAC-signed via `src/domain/tokens.ts` with a
@@ -42,7 +46,14 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    automatically (never overwriting a different user's claim,
    never failing the join). Both paths maintain the
    `users/{uid}/boards/{slug}` index (doc-get/subcollection
-   reads only — no new Firestore index).
+   reads only — no new Firestore index). PIN-94 freshness: the
+   user cookie carries the token's `auth_time`, and claim,
+   join/board-open auto-claim and restore (which mints a fresh
+   participant cookie) all require it within Policy
+   `authFreshWindowMs` (default 1h). A stale session still
+   reads `/api/me` and the library normally; the explicit claim
+   route answers 401 `stale_auth`, while the silent paths just
+   skip — signing in again refreshes `auth_time`.
 
 ## What is stored
 

@@ -31,6 +31,16 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
     // PIN-83 signed-in user cookie life.
     expect(DEFAULT_POLICY.userSessionDays).toBe(30);
+    // PIN-94 provider pin + claim/restore freshness window.
+    expect(DEFAULT_POLICY.authAllowedProviders).toEqual(["google.com"]);
+    expect(DEFAULT_POLICY.authFreshWindowMs).toBe(3_600_000);
+    expect(resolvePolicy({ authFreshWindowMs: 60_000 }).authFreshWindowMs).toBe(60_000);
+    expect(
+      resolvePolicy({ authAllowedProviders: ["google.com", "apple.com"] })
+        .authAllowedProviders,
+    ).toEqual(["google.com", "apple.com"]);
+    expect(() => resolvePolicy({ authAllowedProviders: [] })).toThrow();
+    expect(() => resolvePolicy({ authFreshWindowMs: 0 })).toThrow();
     expect(resolvePolicy({ userSessionDays: 7 }).userSessionDays).toBe(7);
     expect(() => resolvePolicy({ userSessionDays: 0 })).toThrow();
     expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);
