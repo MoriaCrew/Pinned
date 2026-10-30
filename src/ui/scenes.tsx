@@ -11,9 +11,10 @@ export type SceneKind = "scene" | "collage" | "remix";
 /**
  * A scene as a print: the picture alone in its frame, then one small
  * row on the paper (Remix / Collage tag left, Nº right), the idea in
- * quotes, credits, then Remix / Share / More. Nothing sits on the
- * picture, so it never covers a face. The skin draws the print (white
- * border, pinned card, film frame, stamp edges…).
+ * quotes, the compact credits row (PIN-130: stickers only, the full
+ * list lives in the scene viewer), then Remix / Share / More. Nothing
+ * sits on the picture, so it never covers a face. The skin draws the
+ * print (white border, pinned card, film frame, stamp edges…).
  */
 export function SceneCard({
   src,
@@ -29,7 +30,6 @@ export function SceneCard({
   onRemix,
   onShare,
   onMore,
-  onCredit,
   remixLabel = t("en", "ui.remix"),
   sharing,
   footer,
@@ -48,7 +48,6 @@ export function SceneCard({
   onRemix?: () => void;
   onShare?: () => void;
   onMore?: () => void;
-  onCredit?: (item: Credit, index: number) => void;
   remixLabel?: string;
   /** Share in progress: the share control is disabled. */
   sharing?: boolean;
@@ -90,7 +89,7 @@ export function SceneCard({
         {hasBody ? (
           <div className="pn-print-body">
             {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
-            {hasCredits ? <CreditLine items={credits ?? []} remixOf={remixOf} onItem={onCredit} /> : null}
+            {hasCredits ? <CreditLine compact items={credits ?? []} remixOf={remixOf} /> : null}
             {hasActions ? (
               <div className="pn-print-actions">
                 {onRemix ? (

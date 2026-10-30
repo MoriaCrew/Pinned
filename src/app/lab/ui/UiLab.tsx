@@ -6,6 +6,7 @@ import {
   BoardHeader,
   Button,
   Chip,
+  CreditLine,
   Developing,
   Dock,
   EmptyState,
@@ -45,6 +46,7 @@ const things = [
 ].map((thing) => ({ ...thing, src: `${LAB}/cutout-${thing.id}.webp` }));
 const byId = Object.fromEntries(things.map((thing) => [thing.id, thing]));
 const credit = (id: string) => ({ thing: byId[id].label.toLowerCase(), owner: byId[id].owner, src: byId[id].src });
+const allCredits = things.map((thing) => credit(thing.id));
 const noop = () => {};
 
 function Phone({ skin, children }: { skin: SkinId; children: ReactNode }) {
@@ -202,10 +204,21 @@ export function UiLab() {
           </div>
           <div style={{ ...row, alignItems: "flex-start", gap: 20 }}>
             <div style={{ width: 300 }}>
-              <SceneCard src={`${LAB}/scene-picnic-mug-duck.webp`} idea="A tiny picnic on the lawn" kind="remix" ratio="4 / 3" number={3} seed={`${s.id}-remix`} />
+              <SceneCard src={`${LAB}/scene-picnic-mug-duck.webp`} idea="A tiny picnic on the lawn" kind="remix" ratio="4 / 3" number={3} seed={`${s.id}-remix`} credits={allCredits.slice(0, 5)} remixOf={{ title: "Sunday on the balcony", owner: "Jo" }} />
             </div>
             <div style={{ width: 300 }}>
-              <SceneCard src={`${LAB}/scene-desk-clock-books.webp`} idea="Sunday morning" kind="collage" ratio="4 / 3" number={2} seed={`${s.id}-collage`} />
+              <SceneCard src={`${LAB}/scene-desk-clock-books.webp`} idea="Sunday morning" kind="collage" ratio="4 / 3" number={2} seed={`${s.id}-collage`} credits={allCredits.slice(3, 5)} />
+            </div>
+          </div>
+          <div style={{ ...row, alignItems: "flex-start", gap: 20 }}>
+            <div style={{ width: 300 }}>
+              <CreditLine items={allCredits.slice(0, 3)} />
+            </div>
+            <div style={{ width: 300 }}>
+              <CreditLine compact items={allCredits} remixOf={{ title: "Sunday on the balcony", owner: "Jo" }} />
+            </div>
+            <div style={{ width: 300 }}>
+              <CreditLine compact items={allCredits.slice(0, 3)} onOpen={noop} />
             </div>
           </div>
           <div style={{ ...row, alignItems: "flex-start" }}>

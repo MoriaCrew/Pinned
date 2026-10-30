@@ -304,6 +304,8 @@
   "ui.madeFrom": "Made from",
   "ui.remixOf": "Remix of",
   "ui.by": "by",
+  "ui.listAnd": "{rest} and {last}",
+  "ui.creditsMore": "+{n}",
   "ui.collage": "Collage",
   "ui.remixTag": "Remix",
   "ui.sceneNumber": "Nº {n}",

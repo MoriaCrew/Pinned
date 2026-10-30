@@ -22,7 +22,16 @@ export {
   type Person,
   type TagTone,
 } from "./primitives";
-export { CreditLine, Pin, Sticker, type Credit, type StickerState } from "./stickers";
+export {
+  COMPACT_CREDIT_SLOTS,
+  CreditLine,
+  Pin,
+  Sticker,
+  compactCreditsName,
+  splitCompactCredits,
+  type Credit,
+  type StickerState,
+} from "./stickers";
 export { Developing, SceneCard, type SceneKind } from "./scenes";
 export { BoardHeader, Dock, EmptyState, Menu, SectionHead, Sheet, boardMetaLine, type BoardCounts } from "./board";
 export {

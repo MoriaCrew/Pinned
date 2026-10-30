@@ -64,6 +64,15 @@ Principles:
   an item that sets `--print-ratio` narrows so its picture stays
   within `--print-frame-max` tall (a tall print and its caption fit a
   390x844 screen above the dock).
+- `CreditLine` has two forms. The full list (a pill per thing with
+  its maker) is for the scene viewer. `compact` (PIN-130) is what a
+  print carries: "Made from" over one row of overlapping `--avatar-lg`
+  stickers with a "+N" disc when the row is full, then the "Remix of"
+  line, so a print is the same height for 2 things or 9. The row is
+  not a control: it is one image whose accessible name lists every
+  thing ("Made from teal mug, rubber duck and succulent"); `onOpen`
+  makes it one button, 44px or taller. How many stickers fit
+  (`COMPACT_CREDIT_SLOTS`) is layout, not Policy.
 - Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
   paints the ground, ink and reading face, and lets a board wear a
   different skin than `<html>`. `src/app/globals.css` is only a reset
