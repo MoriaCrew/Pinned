@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
 import { t } from "../../i18n";
 import { getPolicy } from "../../policy/server";
-import { CreateBoardForm } from "./CreateBoardForm";
+import { StartFlow } from "./StartFlow";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Start a board — Pinneds",
+  title: `${t("en", "create.title")} — Pinneds`,
   robots: { index: false, follow: false },
 };
 
+/** Start a board (PIN-101): name it, then pick the look Spark suggests. */
 export default function NewBoardPage() {
   return (
-    <main>
-      <p className="eyebrow"><a href="/">📌 Pinneds</a></p>
-      <h1 className="page-title">{t("en", "create.title")}</h1>
-      <CreateBoardForm titleMaxChars={getPolicy().boardTitleMaxChars} />
+    <main className="pn-skin-root pn-start" data-theme="paper">
+      <StartFlow titleMaxChars={getPolicy().boardTitleMaxChars} />
     </main>
   );
 }
