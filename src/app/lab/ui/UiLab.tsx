@@ -125,7 +125,7 @@ export function UiLab() {
   const [plan, setPlan] = useState<PlusPlan>("board");
   const row: CSSProperties = { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" };
   return (
-    <main className="pn-skin-root" data-theme="paper" style={{ minHeight: "100dvh", maxWidth: "none", margin: 0, padding: 24, display: "grid", gap: 40 }}>
+    <main className="pn-skin-root" data-theme="paper" style={{ minHeight: "100dvh", padding: 24, display: "grid", gap: 40 }}>
       <header>
         <h1 className="pn-board-title">UI lab</h1>
         <p className="pn-board-meta">Pinneds design system v1 · every component in every skin</p>
