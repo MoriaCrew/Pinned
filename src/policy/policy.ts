@@ -23,6 +23,20 @@ const FractionRange = z.object({
   max: z.number().min(0).max(1),
 });
 
+/** One purchasable makes pack (PIN-147). `lookupKey` is the Stripe price lookup key from the PIN-146 catalog manifest (`src/billing/catalog.ts`); a policy test pins the defaults below to that manifest so the two cannot drift. `eurCents`/`label` are display + offer data — the Stripe price remains the charging truth. */
+const CreditPack = z.object({
+  lookupKey: z.string().min(1),
+  credits: z.number().int().positive(),
+  eurCents: z.number().int().positive(),
+  label: z.string().min(1),
+});
+
+const DEFAULT_CREDIT_PACKS = [
+  { lookupKey: "pinneds_credits_25", credits: 25, eurCents: 499, label: "25 makes · €4.99" },
+  { lookupKey: "pinneds_credits_60", credits: 60, eurCents: 999, label: "60 makes · €9.99" },
+  { lookupKey: "pinneds_credits_150", credits: 150, eurCents: 1999, label: "150 makes · €19.99" },
+];
+
 export const PolicySchema = z
   .object({
     elementsPerPhoto: Range.default({ min: 1, max: 6 }),
@@ -123,6 +137,32 @@ export const PolicySchema = z
         hostCookieDays: 365,
         requestMaxBytes: 1024,
         hostRoutesPerIp: { limit: 60, windowMs: 600_000 },
+      }),
+    /**
+     * Board makes credits (PIN-147, docs/15-board-plus.md). Pure
+     * offer + ledger parameters only: nothing here charges or
+     * grants by itself (the ledger domain is
+     * `src/domain/credit-ledger.ts`; checkout/webhook wiring is a
+     * later slice). `starterMakes` is the free pool each new board
+     * is granted once; paid makes never expire (no TTL knob on
+     * purpose). `pendingIntentCapPerBoard` bounds concurrent
+     * not-yet-paid purchase intents one board may hold, and
+     * `intentTtlSeconds` is how long such an intent stays payable
+     * before it is closed (30 min, matching a hosted checkout
+     * sitting open in a tab).
+     */
+    credits: z
+      .object({
+        packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
+        starterMakes: z.number().int().min(0).default(25),
+        pendingIntentCapPerBoard: z.number().int().min(1).default(3),
+        intentTtlSeconds: z.number().int().min(1).default(1_800),
+      })
+      .default({
+        packs: DEFAULT_CREDIT_PACKS,
+        starterMakes: 25,
+        pendingIntentCapPerBoard: 3,
+        intentTtlSeconds: 1_800,
       }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
@@ -244,9 +284,19 @@ export const PolicySchema = z
         message: "pinsPerScene.max < min",
       });
     }
+    const packKeys = p.credits.packs.map((pack) => pack.lookupKey);
+    if (new Set(packKeys).size !== packKeys.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["credits", "packs"],
+        message: "credits.packs lookupKey values must be unique",
+      });
+    }
   });
 
 export type Policy = z.infer<typeof PolicySchema>;
+
+export type PolicyCreditPack = z.infer<typeof CreditPack>;
 
 export const DEFAULT_POLICY: Policy = PolicySchema.parse({});
 
@@ -304,6 +354,14 @@ export const PolicyOverridesSchema = z.object({
           windowMs: z.number().int().min(1).optional(),
         })
         .optional(),
+    })
+    .optional(),
+  credits: z
+    .object({
+      packs: z.array(CreditPack).min(1).optional(),
+      starterMakes: z.number().int().min(0).optional(),
+      pendingIntentCapPerBoard: z.number().int().min(1).optional(),
+      intentTtlSeconds: z.number().int().min(1).optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),
