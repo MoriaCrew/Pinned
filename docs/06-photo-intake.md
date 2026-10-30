@@ -16,6 +16,15 @@
 - Working images: `tmp/boards/{boardId}/jobs/{jobId}/working.webp`
   (Studio layout; the pre-pivot `tmp/games/.../submissions/...`
   layout went with the legacy routes in PIN-93.)
+- Scenes (persistent, derived, never an original photo):
+  `scenes/boards/{boardId}/{sceneId}/scene.{png|jpg|webp}`, the full
+  image as composed (viewer, share, link cards, download), and
+  `preview.webp` beside it (PIN-133): long side at most
+  `Policy.scenePreviewMaxPx`, WebP at `Policy.scenePreviewQuality`
+  (sharp's 1-100), served by the scene image route with
+  `?size=preview` to the board strip. Scenes stored before PIN-133
+  get their preview on its first request. Scene delete and the
+  element-delete cascade remove both objects.
 - Everything ephemeral lives under the `tmp/` prefix so one bucket
   lifecycle rule covers it. Longer-lived reveal/poster assets (later
   slices) must use a different prefix with its own policy.
