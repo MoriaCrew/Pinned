@@ -106,6 +106,7 @@ describe("board scenes strip (PIN-98)", () => {
             ratio: "1280 / 1920",
             id: "s1",
             src: "/s1",
+            previewSrc: "/s1?size=preview",
             alt: "A picnic, with Robin's teal mug",
             idea: "A picnic",
             credits: [{ thing: "teal mug", owner: { id: "p1", name: "Robin" }, src: "/e1" }],
@@ -141,6 +142,7 @@ describe("board scenes strip (PIN-98)", () => {
             ratio: "2 / 3",
             id: "s9",
             src: "/s9",
+            previewSrc: "/s9?size=preview",
             alt: "A picnic",
             idea: "A picnic",
             credits: names.map((thing, i) => ({ thing, owner: { id: "p1", name: "Robin" }, src: `/e${i}` })),
@@ -171,6 +173,7 @@ describe("scene viewer (PIN-131)", () => {
     ratio: "2 / 3",
     id: "s7",
     src: "/api/boards/b/scenes/s7/image",
+    previewSrc: "/api/boards/b/scenes/s7/image?size=preview",
     alt: "A picnic, with Robin's teal mug",
     idea: "A picnic",
     credits: names.map((thing, i) => ({ thing, owner: { id: "p1", name: "Robin" }, src: `/e${i}` })),
@@ -265,5 +268,13 @@ describe("scene viewer (PIN-131)", () => {
     expect(out).toContain('data-scene-id="s7"');
     expect(out).toMatch(/<button type="button" class="pn-print-open" aria-label="A picnic" aria-haspopup="dialog"><div class="pn-print-frame"/);
     expect(out).toMatch(/class="pn-credit-row pn-credit-open" aria-label="Made from [^"]+" aria-haspopup="dialog"/);
+  });
+
+  it("the strip loads the phone-sized preview; the viewer the full image (PIN-133)", () => {
+    const strip = html(h(BoardScenes, { count: 1, slots: [remix] }));
+    expect(strip).toContain('src="/api/boards/b/scenes/s7/image?size=preview"');
+    expect(strip).not.toContain('src="/api/boards/b/scenes/s7/image"');
+    expect(viewer()).toContain('src="/api/boards/b/scenes/s7/image"');
+    expect(viewer()).not.toContain("size=preview");
   });
 });

@@ -44,6 +44,8 @@ export interface BoardViewScene {
   width?: number;
   height?: number;
   imageUrl: string | null;
+  /** Phone-sized strip image (PIN-133); the viewer and Share use imageUrl. */
+  previewUrl?: string | null;
   createdAt: number;
   /** Board view only (PIN-143): the viewer is its maker or the host. A UI hint; the server enforces. */
   canDelete?: boolean;
