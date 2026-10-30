@@ -215,7 +215,9 @@ export function LibraryStrip({
                     ) : null}
                   </span>
                   {state === "idle" ? (
-                    <span className="pn-pin-tag">{card.label}</span>
+                    <span className="pn-pin-tag">
+                      <span className="pn-pin-tag-text">{card.label}</span>
+                    </span>
                   ) : (
                     <span className="pn-add-strip-status">
                       {state === "failed" ? <Icon name="undo" size={14} /> : null}
