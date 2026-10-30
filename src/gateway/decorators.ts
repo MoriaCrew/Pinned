@@ -39,6 +39,7 @@ import {
   type ElementNamer,
   type PortOutcome,
   type SceneComposer,
+  type TapNamer,
   type ChipSuggester,
   type Segmenter,
 } from "./ports";
@@ -76,6 +77,8 @@ interface CallMeta {
   participantId?: string;
   participantCap?: number;
   boardCap?: number;
+  /** PIN-117: TapNamer-only per-participant cap (own counter). */
+  participantTapNameCap?: number;
   /** PIN-92: Segmenter-only per-participant / per-photo caps. */
   participantSegmentCap?: number;
   photoId?: string;
@@ -174,6 +177,7 @@ async function runDecorated<T>(
         estimatedCostUsd: estimateReserveUsd(meta.operation, {
           sparkElementsMaxTokens: policy.maxTokens.sparkElements,
           sparkChipsMaxTokens: policy.maxTokens.sparkChips,
+          sparkTapNameMaxTokens: policy.maxTokens.sparkTapName,
         }),
         budgetUsd: policy.dailyBudgetUsd,
         callLimit: policy.dailyCallLimit,
@@ -182,6 +186,7 @@ async function runDecorated<T>(
         boardId,
         boardCap: boardId ? meta.boardCap : undefined,
         participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
+        participantTapNameCap: participantId ? meta.participantTapNameCap : undefined,
         photoId,
         photoCap: photoId ? meta.photoCap : undefined,
       });
@@ -255,6 +260,7 @@ export interface DecoratedPorts {
   segmenter: Segmenter;
   sceneComposer?: SceneComposer;
   chipSuggester?: ChipSuggester;
+  tapNamer?: TapNamer;
 }
 
 /** Wrap base ports (Meta/mock/fixture) in the PIN-61 chain. */
@@ -345,6 +351,25 @@ export function decoratePorts(
             participantId: input.participantId,
           },
           () => suggester.suggestChips(input),
+        ),
+    };
+  }
+  if (base.tapNamer) {
+    const tapNamer = base.tapNamer;
+    ports.tapNamer = {
+      nameOne: (input) =>
+        runDecorated(
+          full,
+          {
+            operation: "nameOne",
+            model: policy.models.spark,
+            promptVersion: input.promptVersion,
+            timeoutMs: input.timeoutMs,
+            boardId: input.boardId,
+            participantId: input.participantId,
+            participantTapNameCap: policy.tapNamesPerParticipantPerDay,
+          },
+          () => tapNamer.nameOne(input),
         ),
     };
   }

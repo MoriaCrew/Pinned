@@ -20,10 +20,14 @@ import {
   elementsSystemPrompt,
   chipsSystemPrompt,
   normalizeElements,
+  normalizeTapName,
+  tapNameSystemPrompt,
   normalizeChips,
   sceneImageOutcome,
   type ComposeSceneInput,
   type NameElementsInput,
+  type NameOneInput,
+  type TapName,
   type SuggestChipsInput,
   type NamedElement,
   type PortOutcome,
@@ -217,6 +221,31 @@ export class MetaGateway implements ModelGateway {
       input.timeoutMs,
     );
     return normalizeElements(out.elements, input);
+  }
+
+  /**
+   * Spark tap naming (prompts/tap-name.v1.md, PIN-117): one vision
+   * call naming the single tapped cut-out in its flattened crop.
+   * A reply with no usable label throws bad_tap_name; the port
+   * adapter turns that into a failed outcome and the caller keeps
+   * the generic label — never a 500.
+   */
+  async nameOne(input: NameOneInput): Promise<TapName> {
+    const out = await this.chatJson(
+      "nameOne",
+      tapNameSystemPrompt(input),
+      [
+        { type: "text", text: "Name the tapped thing in this cut-out." },
+        { type: "image_url", image_url: { url: input.imageRef } },
+      ],
+      input.maxTokens,
+      input.timeoutMs,
+    );
+    const name = normalizeTapName(out, input);
+    if (!name) {
+      throw new MetaApiError("Model returned no usable tap name", undefined, "bad_tap_name");
+    }
+    return name;
   }
 
   /**

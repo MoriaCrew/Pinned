@@ -6,11 +6,12 @@ import { InMemoryBoardRepository } from "../domain/board-repository";
 import type { SamSegment } from "../gateway/model-gateway";
 import { InMemoryBudgetStore, dayBucketFor } from "../gateway/budget";
 import { decoratePorts } from "../gateway/decorators";
-import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
+import { mockElementNamer, mockSegmenter, mockTapNamer, MOCK_TAP_NAME } from "../gateway/mock-ports";
 import type {
   ElementNamer,
   SegmentPrompt,
   Segmenter,
+  TapNamer,
 } from "../gateway/ports";
 import { resolvePolicy, type PolicyOverrides } from "../policy/policy";
 import {
@@ -67,6 +68,7 @@ interface ServiceHarness {
 async function makeServiceHarness(opts: {
   pointSegments?: SamSegment[];
   pointOutcome?: { status: "failed" | "refused"; errorCode?: string };
+  tapNamer?: TapNamer;
   policyOverrides?: PolicyOverrides;
 } = {}): Promise<ServiceHarness> {
   const boards = new InMemoryBoardRepository();
@@ -126,6 +128,7 @@ async function makeServiceHarness(opts: {
       store,
       namer,
       segmenter,
+      ...(opts.tapNamer ? { tapNamer: opts.tapNamer } : {}),
       policy: resolvePolicy(opts.policyOverrides ?? null),
       now: () => now,
       newId: () => `job-${++seq}`,
@@ -295,6 +298,55 @@ describe("addTapElement point -> pin (PIN-78)", () => {
     expect(logs.filter((l) => l.operation === "segment")).toHaveLength(3);
   });
 
+  it("names the crop via TapNamer: label, description and faceFlag land on the Element (PIN-117)", async () => {
+    const seen: Parameters<TapNamer["nameOne"]>[0][] = [];
+    const tapNamer: TapNamer = {
+      async nameOne(input) {
+        seen.push(input);
+        return {
+          status: "ready",
+          value: {
+            name: { label: "Spotted Plant", description: "speckled green leaves", faceFlag: true },
+            promptVersion: input.promptVersion,
+          },
+        };
+      },
+    };
+    const h = await makeServiceHarness({ tapNamer });
+    const job = await readyJob(h);
+    const outcome = await addTapElement(job.id, { x: 0.25, y: 0.75 }, "My thing", h.deps);
+    expect(outcome.status).toBe("ready");
+    if (outcome.status !== "ready") return;
+    expect(outcome.element.label).toBe("Spotted Plant");
+    expect(outcome.element.description).toBe("speckled green leaves");
+    expect(outcome.element.faceFlag).toBe(true);
+    // The namer saw the flattened JPEG crop with Policy limits.
+    expect(seen).toHaveLength(1);
+    expect(seen[0].imageRef.startsWith("data:image/jpeg;base64,")).toBe(true);
+    expect(seen[0].promptVersion).toBe("tap-name.v1");
+    expect(seen[0].maxTokens).toBe(h.deps.policy.maxTokens.sparkTapName);
+    expect(seen[0].participantId).toBe("p1");
+    expect(seen[0].boardId).toBe("board-1");
+  });
+
+  it("namer failure/refusal/throw falls back to the generic label, tap still lands (PIN-117)", async () => {
+    const failing: TapNamer[] = [
+      { async nameOne() { return { status: "failed", errorCode: "participant_cap" }; } },
+      { async nameOne() { return { status: "refused", errorCode: "content_policy" }; } },
+      { async nameOne() { throw new Error("boom"); } },
+    ];
+    for (const tapNamer of failing) {
+      const h = await makeServiceHarness({ tapNamer });
+      const job = await readyJob(h);
+      const outcome = await addTapElement(job.id, { x: 0.5, y: 0.5 }, "My thing", h.deps);
+      expect(outcome.status).toBe("ready");
+      if (outcome.status !== "ready") continue;
+      expect(outcome.element.label).toBe("My thing");
+      expect(outcome.element.description).toBe("My thing");
+      expect(outcome.element.faceFlag).toBe(false);
+    }
+  });
+
   it("unknown job is not_found", async () => {
     const h = await makeServiceHarness();
     expect(await addTapElement("nope", { x: 0, y: 0 }, "My thing", h.deps)).toEqual({
@@ -373,6 +425,15 @@ describe("tapAddPin API layer (PIN-78)", () => {
     expect(confirmed.droppedPinIds).toContain(tap.pin.id);
     expect(await boards.getPin(tap.pin.id)).toBeNull();
     expect(confirmed.workingCopyDeleted).toBe(true);
+  });
+
+  it("with a TapNamer wired, the tapped pin carries the crop name, not 'My thing' (PIN-117)", async () => {
+    const { deps, slug, owner, job } = await makeApiHarness();
+    deps.tapNamer = mockTapNamer;
+    const result = await tapAddPin(slug, owner, job.id, { x: 0.4, y: 0.6 }, deps);
+    expect(result.element.label).toBe(MOCK_TAP_NAME.label);
+    expect(result.element.description).toBe(MOCK_TAP_NAME.description);
+    expect(result.element.faceFlag).toBe(MOCK_TAP_NAME.faceFlag);
   });
 
   it("404s non-uploaders, anonymous callers and wrong boards; 400s bad points", async () => {

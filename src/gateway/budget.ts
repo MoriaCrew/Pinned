@@ -24,12 +24,14 @@ export interface BudgetDayState {
   boards: Record<string, number>;
   /** Segmenter-only per-participant counts (PIN-92): kept apart from `participants` (photo/scene quotas) so SAM spend neither consumes nor is masked by those budgets. */
   participantSegments: Record<string, number>;
+  /** TapNamer-only per-participant counts (PIN-117): kept apart from `participants` (photo quotas) exactly like participantSegments, so tap naming neither consumes nor is masked by the photos-per-day budget. */
+  participantTapNames: Record<string, number>;
   /** Segmenter counts per photo (job id) for the day (PIN-92). */
   photos: Record<string, number>;
 }
 
 export function emptyBudgetDay(): BudgetDayState {
-  return { calls: 0, reservedMicroUsd: 0, participants: {}, boards: {}, participantSegments: {}, photos: {} };
+  return { calls: 0, reservedMicroUsd: 0, participants: {}, boards: {}, participantSegments: {}, participantTapNames: {}, photos: {} };
 }
 
 export interface ReserveRequest {
@@ -45,6 +47,8 @@ export interface ReserveRequest {
   boardCap?: number;
   /** Segmenter-only daily cap for participantId (PIN-92), counted in `participantSegments`, not `participants`. */
   participantSegmentCap?: number;
+  /** TapNamer-only daily cap for participantId (PIN-117), counted in `participantTapNames`, not `participants`. */
+  participantTapNameCap?: number;
   /** Photo (job) id + Policy segmentsPerPhoto cap (PIN-92). */
   photoId?: string;
   photoCap?: number;
@@ -104,6 +108,11 @@ export function evaluateReserve(
       return { ok: false, reason: "photo_cap" };
     }
   }
+  if (request.participantId && request.participantTapNameCap !== undefined) {
+    if ((state.participantTapNames[request.participantId] ?? 0) >= request.participantTapNameCap) {
+      return { ok: false, reason: "participant_cap" };
+    }
+  }
   return { ok: true, estimatedMicroUsd };
 }
 
@@ -119,6 +128,7 @@ export function applyReserve(
     participants: { ...state.participants },
     boards: { ...state.boards },
     participantSegments: { ...state.participantSegments },
+    participantTapNames: { ...state.participantTapNames },
     photos: { ...state.photos },
   };
   if (request.participantId && request.participantCap !== undefined) {
@@ -134,6 +144,10 @@ export function applyReserve(
   }
   if (request.photoId && request.photoCap !== undefined) {
     next.photos[request.photoId] = (next.photos[request.photoId] ?? 0) + 1;
+  }
+  if (request.participantId && request.participantTapNameCap !== undefined) {
+    next.participantTapNames[request.participantId] =
+      (next.participantTapNames[request.participantId] ?? 0) + 1;
   }
   return next;
 }

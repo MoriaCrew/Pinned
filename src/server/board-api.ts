@@ -20,7 +20,7 @@ import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { generateSlug } from "../domain/tokens";
-import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "../gateway/ports";
+import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { plusRequiredError } from "./board-plus";
@@ -52,6 +52,8 @@ export interface BoardApiDeps {
   composer?: SceneComposer;
   /** Generated chips (PIN-75); absent port/cache = fixed-list fallback. */
   chipSuggester?: ChipSuggester;
+  /** Tap naming (PIN-117); absent port = generic-label fallback. */
+  tapNamer?: TapNamer;
   chipsCache?: ChipsCacheStore;
   /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
   collageMode?: boolean;
@@ -459,8 +461,9 @@ export function parseTapAddInput(value: unknown): TapPoint {
  * Tap-to-add (PIN-78): uploader-only, like the job poll and
  * confirm — a missing job, another board's job, a non-uploader
  * and no participant at all are the same 404 (no existence
- * leak). The generic label comes from i18n (add.tapLabel); the
- * service enforces the working-copy lifetime, the usable-mask
+ * leak). PIN-117 names the crop via TapNamer; the i18n label
+ * (add.tapLabel) is only the typed fallback. The service
+ * enforces the working-copy lifetime, the usable-mask
  * gate and elementsPerPhoto.max. Typed service outcomes map to
  * friendly lines — an expired/deleted working copy is a 409
  * the sheet shows as "photo copy gone", never a 500.
@@ -479,6 +482,7 @@ export async function tapAddPin(
     throw new BoardApiError("Job not found.", 404);
   }
   const outcome = await addTapElement(jobId, point, t("en", "add.tapLabel"), {
+    ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
     boards: deps.boards,
     jobs: deps.jobs,
     store: deps.store,

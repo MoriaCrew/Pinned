@@ -185,10 +185,10 @@ never committed).
 
 ## Known v1 limits (status Oct 29, 2026)
 
-- **Tap-to-add labels.** A tapped cut-out has no naming pass, so it
-  lands with the generic label "My thing" and `faceFlag: false` —
-  a tapped person won't trigger the face consent note (v1 limit,
-  `src/server/decompose-job.ts`).
+- **Tap-to-add labels.** A tapped cut-out is named by a Spark crop
+  pass (PIN-117, `prompts/tap-name.v1.md`): a real label and
+  `faceFlag`, so a tapped person gets the face consent note. The
+  generic label "My thing" remains only as the typed fallback.
 - **Costs are estimates.** Spike figures of about $0.02 per photo
   and $0.02 per scene are estimates from `docs/11` §8 (T5); Muse
   Image dollars used Spark rates as a labelled proxy. The provider

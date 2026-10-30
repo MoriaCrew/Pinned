@@ -25,6 +25,8 @@ export const PolicySchema = z
     /** Segmenter (SAM) caps (PIN-92): every segment invocation — concept, tap-add, retry attempt, failure and refusal alike — reserves against these before the provider call, so failing taps cannot burn the shared daily pool unbounded. Per photo 18 = 3x the 6-element cap (concepts + a retry each + tap misses); per participant 150 covers the legit worst case (20 photos x 6 concepts = 120, + retry/tap headroom) while staying under the 200 global daily call limit. */
     segmentsPerPhoto: z.number().int().min(0).default(18),
     segmentsPerParticipantPerDay: z.number().int().min(0).default(150),
+    /** Tap-name (Spark crop pass) cap (PIN-117): one call per successful tap-add, counted in its own budget counter — never against photosPerParticipantPerDay. 100 covers the legit worst case (20 photos x up to 5 tap-adds) while failing/refusing names still consume the reservation, so a tap-loop cannot burn Spark spend unbounded. */
+    tapNamesPerParticipantPerDay: z.number().int().min(0).default(100),
     scenesPerParticipantPerDay: z.number().int().min(0).default(10),
     scenesPerBoardPerDay: z.number().int().min(0).default(40),
     /** Scene prompt length cap (PIN-69). */
@@ -154,8 +156,11 @@ export const PolicySchema = z
         // PIN-75: text-only chips JSON is tiny; 1200 leaves Spark
         // reasoning headroom while the reserve stays under $0.01.
         sparkChips: z.number().int().positive().default(1200),
+        // PIN-117: one tiny single-object JSON; same headroom logic
+        // as chips — Spark reasoning room, reserve stays under $0.01.
+        sparkTapName: z.number().int().positive().default(1200),
       })
-      .default({ sparkElements: 4000, sparkChips: 1200 }),
+      .default({ sparkElements: 4000, sparkChips: 1200, sparkTapName: 1200 }),
     /** 0 means OFF (PIN-59); never a silent fallback. */
     dailyBudgetUsd: z.number().min(0).default(2),
     dailyCallLimit: z.number().int().min(0).default(200),
@@ -175,8 +180,9 @@ export const PolicySchema = z
         elements: z.string().min(1).default("elements.v1"),
         scene: z.string().min(1).default("scene.v1"),
         chips: z.string().min(1).default("chips.v1"),
+        tapName: z.string().min(1).default("tap-name.v1"),
       })
-      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v1" }),
+      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v1", tapName: "tap-name.v1" }),
     /** Fixed suggestion chips: instant fallback while generated chips load or fail (docs/11 Q10, PIN-75). */
     sceneChips: z
       .array(z.string().min(1))
@@ -231,6 +237,7 @@ export const PolicyOverridesSchema = z.object({
   photosPerParticipantPerDay: z.number().int().min(0).optional(),
   segmentsPerPhoto: z.number().int().min(0).optional(),
   segmentsPerParticipantPerDay: z.number().int().min(0).optional(),
+  tapNamesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
   scenePromptMaxChars: z.number().int().min(1).optional(),
@@ -297,6 +304,7 @@ export const PolicyOverridesSchema = z.object({
     .object({
       sparkElements: z.number().int().positive().optional(),
       sparkChips: z.number().int().positive().optional(),
+      sparkTapName: z.number().int().positive().optional(),
     })
     .optional(),
   dailyBudgetUsd: z.number().min(0).optional(),
@@ -313,6 +321,7 @@ export const PolicyOverridesSchema = z.object({
       elements: z.string().min(1).optional(),
       scene: z.string().min(1).optional(),
       chips: z.string().min(1).optional(),
+      tapName: z.string().min(1).optional(),
     })
     .optional(),
   sceneChips: z.array(z.string().min(1)).optional(),

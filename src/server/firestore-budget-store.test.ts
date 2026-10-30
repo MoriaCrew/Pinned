@@ -137,6 +137,7 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       participants: { p1: 2 },
       boards: { b1: 2 },
       participantSegments: {},
+      participantTapNames: {},
       photos: {},
     });
   });
@@ -177,6 +178,26 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     expect(doc?.participants).toEqual({});
     expect(doc?.participantSegments).toEqual({ p1: 1 });
     expect(doc?.photos).toEqual({ "job-1": 1 });
+  });
+
+  it("tap-name caps (PIN-117): counted in their own map, denied at cap", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const name = req({ participantId: "p1", participantTapNameCap: 1 });
+    expect((await store.reserve(name)).ok).toBe(true);
+    expect(await store.reserve(name)).toEqual({
+      ok: false,
+      reason: "participant_cap",
+    });
+    // Second allowed call for p2 exercises the increment path on
+    // an existing doc.
+    expect(
+      (await store.reserve(req({ participantId: "p2", participantTapNameCap: 1 }))).ok,
+    ).toBe(true);
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(2);
+    expect(doc?.participants).toEqual({});
+    expect(doc?.participantTapNames).toEqual({ p1: 1, p2: 1 });
   });
 
   it("parity with the memory store: off, budget and caps deny identically", async () => {

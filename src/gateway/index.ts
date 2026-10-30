@@ -3,9 +3,9 @@ import { getConfig } from "../config";
 import { MetaGateway, type MetaGatewayOptions } from "./meta-gateway";
 import { mockGateway } from "./mock-gateway";
 import type { ModelGateway } from "./model-gateway";
-import { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter } from "./meta-ports";
-import { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter } from "./mock-ports";
-import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter } from "./ports";
+import { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter, metaTapNamer } from "./meta-ports";
+import { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter, mockTapNamer } from "./mock-ports";
+import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "./ports";
 
 export type { ModelGateway, ObjectLabel, SamSegment } from "./model-gateway";
 export { MetaApiError, MetaGateway } from "./meta-gateway";
@@ -22,6 +22,9 @@ export type {
   ChipSuggester,
   SuggestChipsInput,
   SegmentPrompt,
+  TapNamer,
+  TapName,
+  NameOneInput,
 } from "./ports";
 export {
   buildSceneResponsesBody,
@@ -30,6 +33,8 @@ export {
   classifyPortError,
   elementsSystemPrompt,
   normalizeElements,
+  normalizeTapName,
+  tapNameSystemPrompt,
   chipsSystemPrompt,
   normalizeChips,
   templateChips,
@@ -63,9 +68,9 @@ export type {
 } from "./budget";
 export { estimateMetaCostUsd, estimateReserveUsd } from "./costs";
 export type { PortOperation } from "./costs";
-export { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter } from "./meta-ports";
-export { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter } from "./mock-ports";
-export { fixtureChipSuggester, fixtureElementNamer, fixtureSceneComposer, fixtureSegmenter } from "./fixture-ports";
+export { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter, metaTapNamer } from "./meta-ports";
+export { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter, mockTapNamer, MOCK_TAP_NAME } from "./mock-ports";
+export { fixtureChipSuggester, fixtureElementNamer, fixtureSceneComposer, fixtureSegmenter, fixtureTapNamer } from "./fixture-ports";
 export type { StudioFixtureElement, StudioFixtureScene, StudioFixtures } from "./fixture-ports";
 
 /**
@@ -94,7 +99,7 @@ export function getModelGateway(options: { onLog?: MetaGatewayOptions["onLog"] }
  * src/server/ai-ports.ts (PIN-61); this stays for adapter-level
  * tests and composition.
  */
-export function getCapabilityPorts(options: { onLog?: MetaGatewayOptions["onLog"] } = {}): { elementNamer: ElementNamer; segmenter: Segmenter; sceneComposer: SceneComposer; chipSuggester: ChipSuggester } {
+export function getCapabilityPorts(options: { onLog?: MetaGatewayOptions["onLog"] } = {}): { elementNamer: ElementNamer; segmenter: Segmenter; sceneComposer: SceneComposer; chipSuggester: ChipSuggester; tapNamer: TapNamer } {
   const cfg = getConfig();
   if (cfg.aiMock) {
     return {
@@ -102,6 +107,7 @@ export function getCapabilityPorts(options: { onLog?: MetaGatewayOptions["onLog"
       segmenter: mockSegmenter,
       sceneComposer: mockSceneComposer,
       chipSuggester: mockChipSuggester,
+      tapNamer: mockTapNamer,
     };
   }
   if (!cfg.meta.apiKey) {
@@ -120,5 +126,6 @@ export function getCapabilityPorts(options: { onLog?: MetaGatewayOptions["onLog"
     segmenter: metaSegmenter(gateway),
     sceneComposer: metaSceneComposer(gateway),
     chipSuggester: metaChipSuggester(gateway),
+    tapNamer: metaTapNamer(gateway),
   };
 }

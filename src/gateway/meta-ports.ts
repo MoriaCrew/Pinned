@@ -10,6 +10,7 @@ import {
   buildSegmentPromptText,
   classifyPortError,
   type ElementNamer,
+  type TapNamer,
   type SceneComposer,
   type ChipSuggester,
   type Segmenter,
@@ -23,6 +24,22 @@ export function metaElementNamer(gateway: MetaGateway): ElementNamer {
         return {
           status: "ready",
           value: { elements, promptVersion: input.promptVersion },
+        };
+      } catch (cause) {
+        return classifyPortError(cause);
+      }
+    },
+  };
+}
+
+export function metaTapNamer(gateway: MetaGateway): TapNamer {
+  return {
+    async nameOne(input) {
+      try {
+        const name = await gateway.nameOne(input);
+        return {
+          status: "ready",
+          value: { name, promptVersion: input.promptVersion },
         };
       } catch (cause) {
         return classifyPortError(cause);

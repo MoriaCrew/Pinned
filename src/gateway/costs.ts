@@ -24,7 +24,8 @@ export type PortOperation =
   | "nameElements"
   | "segment"
   | "composeScene"
-  | "suggestChips";
+  | "suggestChips"
+  | "nameOne";
 
 /**
  * Conservative pre-call reserve estimate: Spark is priced at its
@@ -34,12 +35,16 @@ export type PortOperation =
  */
 export function estimateReserveUsd(
   operation: PortOperation,
-  limits: { sparkElementsMaxTokens: number; sparkChipsMaxTokens?: number },
+  limits: { sparkElementsMaxTokens: number; sparkChipsMaxTokens?: number; sparkTapNameMaxTokens?: number },
 ): number {
   if (operation === "segment") return SAM_USD_PER_IMAGE;
   if (operation === "suggestChips") {
     // PIN-75: priced at the small chips token budget, not elements.
     return (limits.sparkChipsMaxTokens ?? limits.sparkElementsMaxTokens) * SPARK_OUTPUT_USD_PER_TOKEN;
+  }
+  if (operation === "nameOne") {
+    // PIN-117: priced at the small tap-name token budget.
+    return (limits.sparkTapNameMaxTokens ?? limits.sparkElementsMaxTokens) * SPARK_OUTPUT_USD_PER_TOKEN;
   }
   return limits.sparkElementsMaxTokens * SPARK_OUTPUT_USD_PER_TOKEN;
 }

@@ -61,6 +61,7 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     sceneJobs: getSceneJobStore(),
     ...(ports.sceneComposer ? { composer: ports.sceneComposer } : {}),
     ...(ports.chipSuggester ? { chipSuggester: ports.chipSuggester } : {}),
+    ...(ports.tapNamer ? { tapNamer: ports.tapNamer } : {}),
     chipsCache: getChipsCacheStore(),
     // PIN-71: under AI_MOCK the sharp collage composes scenes
     // offline; live mode keeps the port (over-budget -> collage).
