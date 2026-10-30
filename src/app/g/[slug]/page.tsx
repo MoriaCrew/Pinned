@@ -34,7 +34,11 @@ export async function generateMetadata({
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
+  // The public origin goes on every path, the fallback included, so
+  // the card URL never resolves against an internal request host.
+  const origin = await publicOrigin();
   const fallback: Metadata = {
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
     title: "Pinneds board",
     description: t("en", "board.previewDescription"),
     robots: { index: false, follow: false },
@@ -45,11 +49,8 @@ export async function generateMetadata({
     const boards = getBoardRepository();
     const board = await boards.getBoard(slug);
     if (!board) return fallback;
+    if (!origin) return fallback;
     const scenes = await boards.listScenes(slug);
-    const origin = getPublicOriginFromHeaders(
-      await headers(),
-      getConfig().appBaseUrl,
-    );
     const preview = buildBoardPreview({
       boardTitle: board.title,
       slug,
@@ -80,6 +81,17 @@ export async function generateMetadata({
     };
   } catch {
     return fallback;
+  }
+}
+
+/** The public origin for metadata, or null when it can't be resolved. */
+async function publicOrigin(): Promise<string | null> {
+  try {
+    const origin = getPublicOriginFromHeaders(await headers(), getConfig().appBaseUrl);
+    new URL(origin);
+    return origin;
+  } catch {
+    return null;
   }
 }
 
