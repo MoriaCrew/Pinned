@@ -159,12 +159,20 @@ export const PolicySchema = z
         starterMakes: z.number().int().min(0).default(25),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
         intentTtlSeconds: z.number().int().min(1).default(1_800),
+        /** Buy-route per-IP brake (PIN-149, in-process like plus.hostRoutesPerIp): bounds checkout-session creation attempts before any Stripe call. */
+        checkoutPerIp: z
+          .object({
+            limit: z.number().int().min(1).default(20),
+            windowMs: z.number().int().min(1).default(600_000),
+          })
+          .default({ limit: 20, windowMs: 600_000 }),
       })
       .default({
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 25,
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
+        checkoutPerIp: { limit: 20, windowMs: 600_000 },
       }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
@@ -365,6 +373,12 @@ export const PolicyOverridesSchema = z.object({
       starterMakes: z.number().int().min(0).optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
       intentTtlSeconds: z.number().int().min(1).optional(),
+      checkoutPerIp: z
+        .object({
+          limit: z.number().int().min(1).optional(),
+          windowMs: z.number().int().min(1).optional(),
+        })
+        .optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),

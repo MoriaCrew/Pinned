@@ -52,12 +52,23 @@ export interface AppConfig {
   demoBoardSlug: string | null;
   /**
    * Board Plus billing adapter (PIN-103, docs/15). "off" (the
-   * default; anything but the exact value "mock") answers every
+   * default; anything but an exact known value) answers every
    * checkout "unavailable" and writes nothing; "mock" grants the
    * entitlement instantly with source "mock" for the demo. Never
-   * set mock on prod. Stripe adds a mode when it lands.
+   * set mock on prod. "stripe" (PIN-149) sells credit packs via
+   * hosted Checkout and requires STRIPE_SECRET_KEY (below).
    */
   plusMode: PlusMode;
+  /**
+   * Stripe secret key (PIN-149): env-name only (STRIPE_SECRET_KEY,
+   * a Secret Manager reference when hosted), never a value in git.
+   * Null unless set; PLUS_MODE=stripe without it fails closed to
+   * "off" below, so a misconfigured backend sells nothing instead
+   * of erroring per request. Never log or expose this value.
+   */
+  stripeSecretKey: string | null;
+  /** Pinned Stripe API version (STRIPE_API_VERSION); bump deliberately with the SDK. */
+  stripeApiVersion: typeof STRIPE_API_VERSION;
   storageBucket: string | null;
   labEnabled: boolean;
   meta: MetaConfig;
@@ -97,6 +108,13 @@ function parseDemoBoardSlug(value: string | undefined): string | null {
   return trimmed && DEMO_SLUG_PATTERN.test(trimmed) ? trimmed : null;
 }
 
+/**
+ * The one place the Stripe API version is pinned (PIN-149).
+ * Matches the bundled stripe SDK's ApiVersion; a config test
+ * fails if an SDK bump moves it without this following.
+ */
+export const STRIPE_API_VERSION = "2026-10-28.endive" as const;
+
 function nonEmpty(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -124,7 +142,14 @@ export function parseConfig(
     firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
     firebaseWebAuthDomain: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
-    plusMode: env.PLUS_MODE === "mock" ? "mock" : "off",
+    plusMode:
+      env.PLUS_MODE === "mock"
+        ? "mock"
+        : env.PLUS_MODE === "stripe" && nonEmpty(env.STRIPE_SECRET_KEY)
+          ? "stripe"
+          : "off",
+    stripeSecretKey: nonEmpty(env.STRIPE_SECRET_KEY),
+    stripeApiVersion: STRIPE_API_VERSION,
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??
       nonEmpty(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) ??

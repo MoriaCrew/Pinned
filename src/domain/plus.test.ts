@@ -37,7 +37,8 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(isPlusPlan(undefined)).toBe(false);
     expect(isPlusMode("off")).toBe(true);
     expect(isPlusMode("mock")).toBe(true);
-    expect(isPlusMode("stripe")).toBe(false);
+    expect(isPlusMode("stripe")).toBe(true);
+    expect(isPlusMode("STRIPE")).toBe(false);
   });
 
   it("hasPlus is null-safe and counts mock grants only in mock mode", () => {
@@ -47,6 +48,8 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(hasPlus({ plus: MOCK }, "off")).toBe(false);
     expect(hasPlus({ plus: PAID }, "off")).toBe(true);
     expect(hasPlus({ plus: PAID }, "mock")).toBe(true);
+    expect(hasPlus({ plus: MOCK }, "stripe")).toBe(false);
+    expect(hasPlus({ plus: PAID }, "stripe")).toBe(true);
     // A malformed stored plan never counts as Plus.
     expect(hasPlus({ plus: { ...PAID, plan: "gold" as never } }, "off")).toBe(false);
   });

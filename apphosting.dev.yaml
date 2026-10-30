@@ -37,3 +37,11 @@ env:
   # grant, no money moves). Prod inherits the code default "off".
   - variable: PLUS_MODE
     value: mock
+  # PIN-149: the Stripe key is referenced for the dev runtime
+  # only. PLUS_MODE deliberately stays "mock" above - hosted
+  # stripe mode waits for webhook grants (PIN-150/PIN-153), so
+  # dev never takes a payment it cannot fulfil yet.
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+    availability:
+      - RUNTIME

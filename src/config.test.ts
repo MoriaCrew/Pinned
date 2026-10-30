@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfig } from "./config";
+import { STRIPE_API_VERSION, parseConfig } from "./config";
 
 describe("parseConfig (FR8 fail-closed defaults)", () => {
   it("defaults to link-only auth and mock AI with empty env", () => {
@@ -29,7 +29,22 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ PLUS_MODE: "off" }).plusMode).toBe("off");
     expect(parseConfig({ PLUS_MODE: "MOCK" }).plusMode).toBe("off");
     expect(parseConfig({ PLUS_MODE: "stripe" }).plusMode).toBe("off");
+    expect(parseConfig({ PLUS_MODE: "STRIPE", STRIPE_SECRET_KEY: "rk_test_x" }).plusMode).toBe("off");
     expect(parseConfig({ PLUS_MODE: "mock" }).plusMode).toBe("mock");
+  });
+
+  it("PLUS_MODE=stripe requires STRIPE_SECRET_KEY, else fails closed to off (PIN-149)", () => {
+    expect(parseConfig({}).stripeSecretKey).toBeNull();
+    expect(
+      parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "   " }).plusMode,
+    ).toBe("off");
+    const cfg = parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: " rk_test_x " });
+    expect(cfg.plusMode).toBe("stripe");
+    expect(cfg.stripeSecretKey).toBe("rk_test_x");
+    expect(cfg.stripeApiVersion).toBe(STRIPE_API_VERSION);
+    expect(STRIPE_API_VERSION).toBe("2026-10-28.endive");
+    // The key alone never enables billing without the mode.
+    expect(parseConfig({ STRIPE_SECRET_KEY: "rk_test_x" }).plusMode).toBe("off");
   });
 
   it("passes Firebase web config through, empty fails to null (PIN-83)", () => {
