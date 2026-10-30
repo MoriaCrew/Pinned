@@ -184,6 +184,18 @@ describe("look flow reducer", () => {
     });
   });
 
+  it("says Plus is on even when saving the look then fails, and keeps the try-on for a retry", () => {
+    const failed = run([
+      { type: "tryOn", skin: "marigold" },
+      { type: "offerPlus" },
+      { type: "checkoutStart" },
+      { type: "checkoutGranted" },
+      { type: "applyStart", skin: "marigold" },
+      { type: "applyFailed" },
+    ]);
+    expect(failed).toMatchObject({ tryOn: "marigold", grantedNow: false, notice: { kind: "grantedLookFailed" } });
+  });
+
   it("holds the sheet open while checking out", () => {
     const busy = run([{ type: "tryOn", skin: "darkroom" }, { type: "offerPlus" }, { type: "checkoutStart" }]);
     expect(lookFlow(busy, { type: "closeSheet" })).toBe(busy);

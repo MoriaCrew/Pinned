@@ -82,6 +82,7 @@
   "plus.demoNote": "Demo checkout. Nothing is charged.",
   "plus.demoCharged": "Demo checkout. Nothing was charged.",
   "plus.failed": "Couldn't start Board Plus. Try again.",
+  "plus.grantedLookFailed": "Board Plus is on, but the look didn't save. Tap Keep it to try again.",
   "look.open": "Change look",
   "look.menu": "Board options",
   "look.title": "Pick a look",

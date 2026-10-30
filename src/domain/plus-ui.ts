@@ -176,6 +176,8 @@ export type LookNotice =
   | { kind: "applied"; skin: SkinId }
   | { kind: "granted"; skin: SkinId }
   | { kind: "lookFailed" }
+  /** Plus landed but saving the look failed: say both, so Keep it is a plain retry. */
+  | { kind: "grantedLookFailed" }
   | { kind: "plusFailed" };
 
 export interface LookFlowState {
@@ -249,7 +251,12 @@ export function lookFlow(state: LookFlowState, event: LookFlowEvent): LookFlowSt
         notice: { kind: state.grantedNow ? "granted" : "applied", skin: event.skin },
       };
     case "applyFailed":
-      return { ...state, applying: null, grantedNow: false, notice: { kind: "lookFailed" } };
+      return {
+        ...state,
+        applying: null,
+        grantedNow: false,
+        notice: { kind: state.grantedNow ? "grantedLookFailed" : "lookFailed" },
+      };
     case "plusRequired":
       return {
         ...state,

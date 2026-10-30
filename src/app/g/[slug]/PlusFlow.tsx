@@ -241,6 +241,8 @@ function noticeLine(notice: LookNotice): string {
       return tf("en", "plus.granted", { skin: skinName(notice.skin) });
     case "lookFailed":
       return t("en", "look.failed");
+    case "grantedLookFailed":
+      return t("en", "plus.grantedLookFailed");
     case "plusFailed":
       return t("en", "plus.failed");
   }
@@ -271,7 +273,8 @@ export function PlusFlow({
   const { state } = look;
   const notice = state.notice;
   const showBar = look.tryOn !== null && state.applying === null;
-  const failed = notice?.kind === "lookFailed" || notice?.kind === "plusFailed";
+  const failed =
+    notice?.kind === "lookFailed" || notice?.kind === "grantedLookFailed" || notice?.kind === "plusFailed";
   const available = canBuyPlus(plus) && !state.unavailable;
   return (
     <>
