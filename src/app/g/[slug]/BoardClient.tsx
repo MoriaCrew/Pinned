@@ -64,6 +64,8 @@ import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
+import { isPoolEmptyCode, type MakesPack } from "../../../domain/makes-ui";
+import { BillingBanner, MakesBuySheet, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
@@ -101,6 +103,8 @@ export interface BoardClientPolicy {
   /** Policy dictation (PIN-119): clip cap; enabled = caps + AI budget on. */
   dictationMaxSeconds: number;
   dictationEnabled: boolean;
+  /** Policy.credits offer for the makes UI (PIN-152): packs + the low-makes threshold. Rendered only while the board view carries credits. */
+  makes?: { packs: MakesPack[]; lowMakesWarning: number };
 }
 
 interface SceneAttempt {
@@ -122,7 +126,9 @@ type JoinIntent =
   | { kind: "remix"; scene: BoardViewScene }
   // From the "you" menu (PIN-120): just the sheet, nothing to continue.
   | { kind: "join" }
-  | { kind: "edit" };
+  | { kind: "edit" }
+  // PIN-152: buying makes needs a joined participant (or the host).
+  | { kind: "buyMakes" };
 
 /** localStorage key: the picking coach mark shows once. */
 const PICK_HINT_STORAGE_KEY = "pinned.pickHintSeen";
@@ -174,6 +180,7 @@ export function BoardClient({
   policy,
   tryOnSkin = null,
   initialSceneId = null,
+  initialBilling = null,
 }: {
   slug: string;
   initialView: BoardClientView;
@@ -182,6 +189,8 @@ export function BoardClient({
   tryOnSkin?: SkinId | null;
   /** `?scene=<id>`: the scene viewer opens on it (PIN-131). */
   initialSceneId?: string | null;
+  /** `?billing=` from the billing return (PIN-152); validated in the makes flow. */
+  initialBilling?: string | string[] | null;
 }) {
   const [queryClient] = useState(
     () =>
@@ -191,7 +200,7 @@ export function BoardClient({
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} initialSceneId={initialSceneId} />
+      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} initialSceneId={initialSceneId} initialBilling={initialBilling} />
     </QueryClientProvider>
   );
 }
@@ -202,12 +211,14 @@ function BoardBody({
   policy,
   tryOnSkin,
   initialSceneId,
+  initialBilling,
 }: {
   slug: string;
   initialView: BoardClientView;
   policy: BoardClientPolicy;
   tryOnSkin: SkinId | null;
   initialSceneId: string | null;
+  initialBilling: string | string[] | null;
 }) {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -300,6 +311,19 @@ function BoardBody({
   const boardSkin = skinForTheme(view.board.themeId);
   const isHost = view.viewer?.isHost === true;
   const look = useLookFlow({ slug, boardSkin, isHost, plus: view.plus, tryOnParam: tryOnSkin });
+  // PIN-152: makes indicator/buy/return banner. Inert while the
+  // view carries no credits; buying only in stripe mode.
+  const makes = useMakesFlow({
+    slug,
+    availableMakes: view.credits?.availableMakes ?? null,
+    initialAvailableMakes: initialView.credits?.availableMakes ?? null,
+    plusMode: view.plus?.mode,
+    billingParam: initialBilling,
+  });
+  const openBuyMakes = () => {
+    if (view.me || isHost) makes.openSheet();
+    else setJoinIntent({ kind: "buyMakes" });
+  };
 
   // PIN-84: sign-in sync. Disabled (link-only) -> useAuth is the
   // inert default and everything below renders/runs nothing.
@@ -532,15 +556,15 @@ function BoardBody({
     : undefined;
   const scenePoll = useQuery({
     queryKey: ["board-scene", slug, liveSceneId],
-    queryFn: async (): Promise<{ scene: BoardViewScene | null }> => {
+    queryFn: async (): Promise<{ scene: BoardViewScene | null; job: { errorCode?: string } | null }> => {
       const response = await fetch(
         `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(liveSceneId ?? "")}`,
         { cache: "no-store" },
       );
-      if (response.status === 404) return { scene: null };
-      const data = (await response.json()) as { scene?: BoardViewScene; error?: string };
+      if (response.status === 404) return { scene: null, job: null };
+      const data = (await response.json()) as { scene?: BoardViewScene; job?: { errorCode?: string } | null; error?: string };
       if (!response.ok || !data.scene) throw new Error(data.error || t("en", "board.sceneFailed"));
-      return { scene: data.scene };
+      return { scene: data.scene, job: data.job ?? null };
     },
     enabled:
       liveSceneId !== null &&
@@ -550,6 +574,9 @@ function BoardBody({
     refetchInterval: (query) => attemptPollInterval(query.state.data, policy.jobPollIntervalMs),
   });
   const polledScene = scenePoll.data?.scene;
+  // PIN-152: my scene lost the last-make race (PIN-151): its job
+  // says so, and the problem card gets make-aware copy.
+  const sceneJobPoolEmpty = isPoolEmptyCode(scenePoll.data?.job?.errorCode);
   const polledStatus = polledScene?.status;
   // My scene is gone: drop the attempt and its poll like a pin delete does.
   const attemptGone = polledScene === null;
@@ -744,6 +771,8 @@ function BoardBody({
         setPicking(true);
         setScrollToPinId(intent.pinId);
       }
+    } else if (intent.kind === "buyMakes") {
+      makes.openSheet();
     } else if (intent.kind === "remix") {
       if (canRemixScene(intent.scene)) startRemix(intent.scene);
     }
@@ -959,7 +988,12 @@ function BoardBody({
         ratio: slotRatio,
         id: scene.id,
         idea: scene.prompt,
-        line: refused ? (scene.refusalReason ?? t("en", "ai.refused")) : t("en", "board.sceneFailed"),
+        line:
+          scene.id === attempt?.sceneId && sceneJobPoolEmpty
+            ? t("en", "makes.poolEmptyScene")
+            : refused
+              ? (scene.refusalReason ?? t("en", "ai.refused"))
+              : t("en", "board.sceneFailed"),
         onChangeIdea: changeIdea,
         // A refusal repeats for the same idea: only a new idea helps.
         onTryAgain: refused ? undefined : tryAgain,
@@ -1062,6 +1096,19 @@ function BoardBody({
         />
 
         <div className={styles.under}>
+          {makes.banner ? (
+            <BillingBanner
+              kind={makes.banner}
+              availableMakes={view.credits?.availableMakes ?? null}
+              onDismiss={makes.dismissBanner}
+            />
+          ) : null}
+          <MakesIndicator
+            credits={view.credits}
+            lowMakesWarning={policy.makes?.lowMakesWarning ?? 0}
+            canBuy={makes.canBuy}
+            onAddMakes={openBuyMakes}
+          />
           {latestLine && !pickingNow ? (
             <p className={cx("pn-board-meta", styles.latest)}>
               <span className="pn-sr">{t("en", "board.activity")}: </span>
@@ -1215,6 +1262,15 @@ function BoardBody({
             elementsPerPhotoMax={policy.elementsPerPhotoMax}
             libraryStripMax={policy.libraryStripMax}
             resumeJobId={resumeJobId}
+            onAddMakes={
+              makes.canBuy && view.credits
+                ? () => {
+                    setAddOpen(false);
+                    setResumeJobId(null);
+                    openBuyMakes();
+                  }
+                : undefined
+            }
             photoMemory={photoMemory}
             onClose={() => {
               setAddOpen(false);
@@ -1274,6 +1330,18 @@ function BoardBody({
               if (renameElement.isError) renameElement.reset();
             }}
             onClose={() => setRenamingElementId(null)}
+          />
+        ) : null}
+
+        {makes.sheetOpen ? (
+          <MakesBuySheet
+            packs={policy.makes?.packs ?? []}
+            canBuy={makes.canBuy}
+            busy={makes.busy}
+            error={makes.error}
+            unavailable={makes.unavailable}
+            onBuy={makes.buy}
+            onClose={makes.closeSheet}
           />
         ) : null}
 

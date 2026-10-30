@@ -159,6 +159,8 @@ export const PolicySchema = z
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(25),
+        /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
+        lowMakesWarning: z.number().int().min(0).default(5),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
         intentTtlSeconds: z.number().int().min(1).default(1_800),
         /** Buy-route per-IP brake (PIN-149, in-process like plus.hostRoutesPerIp): bounds checkout-session creation attempts before any Stripe call. */
@@ -173,6 +175,7 @@ export const PolicySchema = z
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 25,
+        lowMakesWarning: 5,
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
         checkoutPerIp: { limit: 20, windowMs: 600_000 },
@@ -375,6 +378,7 @@ export const PolicyOverridesSchema = z.object({
       enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
+      lowMakesWarning: z.number().int().min(0).optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
       intentTtlSeconds: z.number().int().min(1).optional(),
       checkoutPerIp: z

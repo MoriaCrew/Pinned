@@ -658,6 +658,79 @@ drain and concurrent scene last-make races; kill flag off
 mid-life) plus the `credits.enabled` cases in
 `src/policy/policy.test.ts`.
 
+## Makes UI (PIN-152)
+
+The board page renders the PIN-151 `credits: { availableMakes }`
+field (`src/app/g/[slug]/MakesFlow.tsx`, pure rules in
+`src/domain/makes-ui.ts`). It mounts under the board header and
+renders **nothing** while the view carries no `credits`
+(`Policy.credits.enabled` off, the shipped default), so the
+disabled board is pixel-for-pixel the pre-credits board and
+`AUTH_MODE=link-only` behaviour is unchanged. The count rides
+the existing board poll, so spends and grants appear without a
+reload, and changes are announced (`aria-live="polite"`).
+
+- **Indicator.** "N makes left" for the whole board — activity
+  language only, never money words (`wallet`, `gift card`,
+  `cash`, `transfer`, money-`balance`), no dollars, no
+  per-person anything (a test scans the EN + FR `makes.*`
+  strings). At or under `Policy.credits.lowMakesWarning`
+  (default 5, deep-overridable like every credits key; 0
+  disables it) the indicator shows its low state; at zero it
+  says new scenes will be collages until someone adds more —
+  the free collage lane, still labelled `Collage` on the print.
+- **Buy sheet.** The Policy packs (`Policy.credits.packs`,
+  handed to the client through the board page's existing
+  Policy prop) as a keyboard-operable radio group on the Plus
+  sheet's plan pattern: EUR tax-included price, a per-make
+  line in plain words, "You may be charged in your local
+  currency" (Adaptive Pricing, PIN-149) and "Appears as
+  PINNEDS on your statement". Anyone on the board can add
+  makes for the board: someone who has not joined is asked
+  for a name first (the route requires a participant or the
+  host), then the sheet opens. Buying is offered **only**
+  while `plus.mode` is `stripe` — off/mock keep today's
+  behaviour (no buy button; an opened sheet says adding makes
+  is not open and sells nothing). Buy posts the chosen pack's
+  `lookupKey` to the PIN-149 route and follows the returned
+  hosted-checkout URL; the pending-cap, rate-limit, join-first
+  and generic failures each get their own inline line, and an
+  `unavailable` answer turns the sheet to the not-open state.
+- **Return landing.** `?billing=processing|cancelled` from
+  `GET /billing/return` becomes a transient `aria-live`
+  banner, and the flag is stripped from the URL at once.
+  Processing means "adding your makes…": the banner refetches
+  the board a few times, and only a real rise in
+  `availableMakes` (over the count kept from buy time) may
+  say the makes are in — granting stays webhook-only
+  (PIN-150) and the redirect alone never claims success. No
+  rise after the refetches lands on a neutral "still waiting"
+  line; cancelled/failed returns get one neutral line each.
+- **Pool-empty outcomes.** The photo 429
+  (`credits_pool_empty`, PIN-151) and a photo job failing with
+  that `errorCode` replace the Add sheet's generic failure
+  with out-of-makes copy plus a button into the buy sheet
+  (while buying works). A scene job failing with that code
+  (the last-make race loser) gets the same make-aware line on
+  its problem card. Every other error keeps its old copy.
+- **Copy.** All strings live under `makes.*` in
+  `src/i18n/messages/{en,fr}.json` in key parity (a test pins
+  it); the components take a locale and the board passes
+  English like every other board surface today. Prices format
+  from `eurCents` per locale (`€4.99` / `4,99 €`), never from
+  the pack's English display label.
+
+Tests: `src/domain/makes-ui.test.ts` (states, stripe-only
+buying, flag parsing + URL strip, banner never claims success
+without a rise, checkout answers, prices) and
+`src/app/g/[slug]/makes-render.test.ts` (hidden while credits
+absent, indicator states, packs from Policy data, off-mode
+sells nothing, in-flight/error lines, banner states,
+pool-empty copy, EN/FR rendering + copy guardrails), plus the
+`lowMakesWarning` cases in `src/policy/policy.test.ts`. No
+hosted flip ships with this slice: `Policy.credits.enabled`
+stays default `false` and no hosted `PLUS_MODE` changes.
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).

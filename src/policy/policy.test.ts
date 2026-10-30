@@ -173,6 +173,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
         { lookupKey: "pinneds_credits_150", credits: 150, eurCents: 1999, label: "150 makes · €19.99" },
       ],
       starterMakes: 25,
+      lowMakesWarning: 5,
       pendingIntentCapPerBoard: 3,
       intentTtlSeconds: 1_800,
       checkoutPerIp: { limit: 20, windowMs: 600_000 },
@@ -199,6 +200,12 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([5, 900, 1]);
     expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
     expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
+    // PIN-152 low-makes threshold: deep-overridable like the rest, 0 disables it.
+    expect(resolvePolicy({ credits: { lowMakesWarning: 2 } }).credits.lowMakesWarning).toBe(2);
+    expect(resolvePolicy(null, { credits: { lowMakesWarning: 0 } }).credits.lowMakesWarning).toBe(0);
+    expect(parsePolicyOverridesJson('{"credits":{"lowMakesWarning":3}}')).toEqual({
+      credits: { lowMakesWarning: 3 },
+    });
     // PIN-151 kill flag: env and per-board layers both flip it, board wins.
     expect(resolvePolicy({ credits: { enabled: true } }).credits.enabled).toBe(true);
     expect(resolvePolicy(null, { credits: { enabled: true } }).credits.enabled).toBe(true);
@@ -214,6 +221,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     ).toEqual([{ ...pack, label: "Starter pack" }]);
     for (const bad of [
       { credits: { starterMakes: -1 } },
+      { credits: { lowMakesWarning: -1 } },
       { credits: { pendingIntentCapPerBoard: 0 } },
       { credits: { intentTtlSeconds: 0 } },
       { credits: { packs: [] } },
