@@ -76,10 +76,10 @@ async function expect404(res: Response) {
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual(NOT_FOUND);
 }
-async function boardView(slug: string) {
-  const res = await getBoardRoute(new Request("http://t/x"), { params: Promise.resolve({ slug }) });
+async function boardView(slug: string, cookie?: string) {
+  const res = await getBoardRoute(new Request("http://t/x", { headers: cookie ? { cookie } : {} }), { params: Promise.resolve({ slug }) });
   return (await res.json()) as {
-    scenes: { id: string; parentSceneId?: string }[];
+    scenes: { id: string; parentSceneId?: string; canDelete?: boolean; parentDeleted?: boolean }[];
     board: { counters: { sceneCount: number } };
     activity: { id: string }[];
   };
@@ -188,5 +188,24 @@ describe("DELETE /api/boards/{slug}/scenes/{sceneId} (PIN-142)", () => {
     const lines = (await boardView(slug)).activity.map((line) => line.id);
     expect(lines).not.toContain(newest);
     expect(lines).toHaveLength(max); // the freed slot is refilled, not lost
+  });
+
+  it("the board view flags canDelete for the maker and host only, and parentDeleted on a remix (PIN-143)", async () => {
+    const { slug, host } = await newBoard();
+    const robin = await join(slug, "Robin");
+    const sam = await join(slug, "Sam");
+    const parent = `${slug}-flag-parent`;
+    const child = `${slug}-flag-child`;
+    await seedScene(slug, parent, robin.id);
+    await seedScene(slug, child, sam.id, { parentSceneId: parent });
+    const flags = async (cookie?: string) =>
+      Object.fromEntries((await boardView(slug, cookie)).scenes.map((s) => [s.id, s.canDelete]));
+    expect(await flags(robin.cookie)).toEqual({ [parent]: true, [child]: false });
+    expect(await flags(sam.cookie)).toEqual({ [parent]: false, [child]: true });
+    expect(await flags(host)).toEqual({ [parent]: true, [child]: true });
+    expect(await flags()).toEqual({ [parent]: false, [child]: false });
+    expect((await boardView(slug)).scenes.find((s) => s.id === child)).not.toHaveProperty("parentDeleted");
+    expect((await del(slug, parent, robin.cookie)).status).toBe(204);
+    expect((await boardView(slug)).scenes).toEqual([expect.objectContaining({ id: child, parentDeleted: true })]);
   });
 });

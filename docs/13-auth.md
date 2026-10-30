@@ -210,4 +210,6 @@ The image is deleted (best-effort, only inside the scene's own
 tombstone (`hidden`, `deletedAt`, `deletedBy: "maker" | "host"`) so
 remix chains hold, and the repository never rewrites a tombstone.
 Browsers that already fetched the image may keep it until the image
-route's `max-age` ends.
+route's `max-age` ends. The board view marks each scene `canDelete`
+(maker or host; only a UI hint, PIN-143), so a host's Delete shows
+after the first client poll (the page render has no host cookie).
