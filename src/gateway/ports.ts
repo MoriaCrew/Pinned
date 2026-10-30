@@ -49,6 +49,8 @@ export interface NameElementsInput {
   maxElements: number;
   /** Policy conceptMaxWords. */
   conceptMaxWords: number;
+  /** Policy elementLabelMaxChars (code points, PIN-155). */
+  labelMaxChars: number;
   /** Policy maxTokens.sparkElements (PIN-50 lock: 4000). */
   maxTokens: number;
   /** Policy timeoutsMs.spark. */
@@ -146,6 +148,8 @@ export interface ComposeSceneInput {
   store: boolean;
   timeoutMs: number;
   promptVersion: string;
+  /** Policy elementLabelMaxChars: caps each element label in the request (PIN-155). */
+  labelMaxChars: number;
   /** Policy sceneInputMode the imageRefs were prepared with. */
   sceneInputMode?: "flattened" | "transparent" | "whole";
   /** Recorded-fixture adapter only: fixtures.json scene id. */
@@ -202,17 +206,22 @@ export function elementsSystemPrompt(input: {
     .replaceAll("{{MAX_ELEMENTS}}", String(input.maxElements))
     .replaceAll("{{CONCEPT_MAX_WORDS}}", String(input.conceptMaxWords));
 }
-const LABEL_MAX = 60; // spike sanitation caps (scripts/studio-spike.mjs)
-const DESCRIPTION_MAX = 160;
+const DESCRIPTION_MAX = 160; // spike sanitation cap (scripts/studio-spike.mjs)
+
+/** The first `max` code points, so a cap never splits a surrogate pair (PIN-155). */
+function capChars(value: string, max: number): string {
+  return Array.from(value).slice(0, max).join("");
+}
 
 /**
  * Normalize raw model/fixture element rows to the port contract:
  * concept lowercased and truncated to the Policy word cap, deduped,
- * capped at maxElements. Rows without a usable concept drop out.
+ * capped at maxElements; label capped at Policy elementLabelMaxChars.
+ * Rows without a usable concept drop out.
  */
 export function normalizeElements(
   raw: unknown,
-  limits: { maxElements: number; conceptMaxWords: number },
+  limits: { maxElements: number; conceptMaxWords: number; labelMaxChars: number },
 ): NamedElement[] {
   const rows = Array.isArray(raw) ? raw : [];
   const seen = new Set<string>();
@@ -231,7 +240,7 @@ export function normalizeElements(
     if (!concept || seen.has(concept)) continue;
     seen.add(concept);
     out.push({
-      label: (String(r.label ?? "") || concept).slice(0, LABEL_MAX),
+      label: capChars(String(r.label ?? "") || concept, limits.labelMaxChars),
       concept,
       description: (String(r.description ?? "") || concept).slice(0, DESCRIPTION_MAX),
       faceFlag: r.faceFlag === true,
@@ -408,8 +417,9 @@ function oneLine(value: string, max: number): string {
 export function sceneElementLabel(
   element: ComposeSceneElement,
   index: number,
+  labelMaxChars: number,
 ): string {
-  const label = oneLine(element.label, LABEL_MAX);
+  const label = capChars(oneLine(element.label, element.label.length), labelMaxChars);
   const description = oneLine(element.description, DESCRIPTION_MAX);
   const from = element.from ? oneLine(element.from, FROM_MAX) : "";
   const detail =
@@ -542,6 +552,8 @@ export interface NameOneInput {
   imageRef: string;
   /** Policy conceptMaxWords: the label word cap. */
   conceptMaxWords: number;
+  /** Policy elementLabelMaxChars: the label length cap in code points (PIN-155). */
+  labelMaxChars: number;
   /** Policy maxTokens.sparkTapName. */
   maxTokens: number;
   /** Policy timeoutsMs.spark. */
@@ -607,25 +619,26 @@ export function tapNameSystemPrompt(input: {
 
 /**
  * Normalize one raw model/fixture tap-name row to the port
- * contract: label one-lined and truncated to the Policy word cap,
- * description defaulting to the label, faceFlag strict-true only.
+ * contract: label one-lined, truncated to the Policy word cap and
+ * capped at elementLabelMaxChars code points, description
+ * defaulting to the label, faceFlag strict-true only.
  * Returns null when there is no usable label (the caller falls
  * back to the generic i18n label).
  */
 export function normalizeTapName(
   raw: unknown,
-  limits: { conceptMaxWords: number },
+  limits: { conceptMaxWords: number; labelMaxChars: number },
 ): TapName | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
-  const label = String(r.label ?? "")
+  const words = String(r.label ?? "")
     .replace(/\s+/g, " ")
     .trim()
     .split(" ")
     .filter(Boolean)
     .slice(0, Math.max(1, limits.conceptMaxWords))
-    .join(" ")
-    .slice(0, LABEL_MAX);
+    .join(" ");
+  const label = capChars(words, limits.labelMaxChars);
   if (!label) return null;
   return {
     label,
@@ -750,7 +763,7 @@ export function buildSceneResponsesBody(
     if (!element.imageRef.trim()) {
       return bad(`Element ${i + 1} has no scene input image.`);
     }
-    content.push({ type: "input_text", text: sceneElementLabel(element, i) });
+    content.push({ type: "input_text", text: sceneElementLabel(element, i, input.labelMaxChars) });
     content.push({ type: "input_image", image_url: element.imageRef });
   }
   content.push({ type: "input_text", text: scenePromptText(input.prompt) });

@@ -35,6 +35,7 @@ import {
   type Segmenter,
   type TapNamer,
 } from "../gateway/ports";
+import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
 import {
   assertDerivativeRef,
@@ -124,8 +125,9 @@ export function buildElementFlattenedRef(boardId: string, elementId: string): st
 /**
  * Re-validate namer output against Policy (ports already normalize;
  * the service never trusts a port blindly): cap at
- * elementsPerPhoto.max, truncate concepts to conceptMaxWords,
- * dedupe by concept, drop concept-less rows.
+ * elementsPerPhoto.max, truncate concepts to conceptMaxWords and
+ * labels to elementLabelMaxChars, dedupe by concept, drop
+ * concept-less rows.
  */
 export function validateNamedElements(
   raw: readonly NamedElement[],
@@ -134,6 +136,7 @@ export function validateNamedElements(
   return normalizeElements(raw, {
     maxElements: policy.elementsPerPhoto.max,
     conceptMaxWords: policy.conceptMaxWords,
+    labelMaxChars: policy.elementLabelMaxChars,
   });
 }
 
@@ -282,6 +285,7 @@ export async function runDecomposeJob(
       minElements: policy.elementsPerPhoto.min,
       maxElements: policy.elementsPerPhoto.max,
       conceptMaxWords: policy.conceptMaxWords,
+      labelMaxChars: policy.elementLabelMaxChars,
       maxTokens: policy.maxTokens.sparkElements,
       timeoutMs: policy.timeoutsMs.spark,
       promptVersion: policy.promptVersions.elements,
@@ -589,7 +593,7 @@ export async function addTapElement(
     // TapNamer). Any non-ready outcome — refusal, failure, cap
     // denial, absent port — keeps the generic i18n label and
     // faceFlag:false; naming never fails the tap.
-    let label = genericLabel.trim() || "My thing";
+    let label = genericLabel.trim() || t("en", "add.tapLabel");
     let description = label;
     let faceFlag = false;
     if (deps.tapNamer) {
@@ -597,6 +601,7 @@ export async function addTapElement(
         const named = await deps.tapNamer.nameOne({
           imageRef: `data:image/jpeg;base64,${Buffer.from(flattened).toString("base64")}`,
           conceptMaxWords: policy.conceptMaxWords,
+          labelMaxChars: policy.elementLabelMaxChars,
           maxTokens: policy.maxTokens.sparkTapName,
           timeoutMs: policy.timeoutsMs.spark,
           promptVersion: policy.promptVersions.tapName,

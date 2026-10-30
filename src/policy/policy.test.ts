@@ -36,6 +36,14 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(resolvePolicy({ libraryStripMax: 0 }).libraryStripMax).toBe(0);
     expect(resolvePolicy(null, { libraryStripMax: 6 }).libraryStripMax).toBe(6);
     expect(() => resolvePolicy({ libraryStripMax: -1 })).toThrow();
+    // PIN-155 thing label cap: env and board layers override; 0 or a fraction fails closed.
+    expect(DEFAULT_POLICY.elementLabelMaxChars).toBe(60);
+    expect(resolvePolicy({ elementLabelMaxChars: 40 }).elementLabelMaxChars).toBe(40);
+    expect(resolvePolicy({ elementLabelMaxChars: 40 }, { elementLabelMaxChars: 24 }).elementLabelMaxChars).toBe(24);
+    for (const bad of [0, -1, 2.5]) {
+      expect(() => resolvePolicy({ elementLabelMaxChars: bad })).toThrow();
+      expect(() => resolvePolicy(null, { elementLabelMaxChars: bad })).toThrow();
+    }
     // PIN-75 generated chips: TTL/cap/token budget/prompt version.
     expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
     expect(DEFAULT_POLICY.chipsMax).toBe(4);

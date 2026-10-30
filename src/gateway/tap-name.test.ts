@@ -31,12 +31,15 @@ function nameOneInput(over: Partial<NameOneInput> = {}): NameOneInput {
   return {
     imageRef: "data:image/jpeg;base64,x",
     conceptMaxWords: p.conceptMaxWords,
+    labelMaxChars: p.elementLabelMaxChars,
     maxTokens: p.maxTokens.sparkTapName,
     timeoutMs: p.timeoutsMs.spark,
     promptVersion: p.promptVersions.tapName,
     ...over,
   };
 }
+
+const TAP_LIMITS = { conceptMaxWords: 3, labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars };
 
 function metaGateway(handler: () => unknown) {
   const calls: { url: string; body: Record<string, unknown> }[] = [];
@@ -77,7 +80,7 @@ describe("tap-name prompt + normalize (PIN-117)", () => {
     expect(
       normalizeTapName(
         { label: "  Big   Red Alarm Clock Extra ", faceFlag: true },
-        { conceptMaxWords: 3 },
+        TAP_LIMITS,
       ),
     ).toEqual({
       label: "Big Red Alarm",
@@ -85,15 +88,15 @@ describe("tap-name prompt + normalize (PIN-117)", () => {
       faceFlag: true,
     });
     expect(
-      normalizeTapName({ label: "Teal Mug", description: "worn glaze", faceFlag: "yes" }, { conceptMaxWords: 3 }),
+      normalizeTapName({ label: "Teal Mug", description: "worn glaze", faceFlag: "yes" }, TAP_LIMITS),
     ).toEqual({ label: "Teal Mug", description: "worn glaze", faceFlag: false });
   });
 
   it("normalizeTapName returns null without a usable label", () => {
-    expect(normalizeTapName({ label: "   " }, { conceptMaxWords: 3 })).toBeNull();
-    expect(normalizeTapName({}, { conceptMaxWords: 3 })).toBeNull();
-    expect(normalizeTapName("nope", { conceptMaxWords: 3 })).toBeNull();
-    expect(normalizeTapName(null, { conceptMaxWords: 3 })).toBeNull();
+    expect(normalizeTapName({ label: "   " }, TAP_LIMITS)).toBeNull();
+    expect(normalizeTapName({}, TAP_LIMITS)).toBeNull();
+    expect(normalizeTapName("nope", TAP_LIMITS)).toBeNull();
+    expect(normalizeTapName(null, TAP_LIMITS)).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiCallLog } from "../domain/types";
-import { resolvePolicy, type Policy } from "../policy/policy";
+import { DEFAULT_POLICY, resolvePolicy, type Policy } from "../policy/policy";
 import {
   InMemoryBudgetStore,
   type BudgetStore,
@@ -25,6 +25,7 @@ function namerInput(over: Partial<NameElementsInput> = {}): NameElementsInput {
     minElements: 1,
     maxElements: 6,
     conceptMaxWords: 3,
+    labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars,
     maxTokens: 4000,
     timeoutMs: 30_000,
     promptVersion: "elements.v1",
@@ -167,6 +168,7 @@ describe("decorator chain: budget (PIN-61)", () => {
       store: false,
       timeoutMs: 120_000,
       promptVersion: "scene.v1",
+      labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars,
       boardId: "b1",
       participantId: "p1",
     };
@@ -602,6 +604,7 @@ describe("decorator chain: AiCallLog (PIN-61)", () => {
       store: false,
       timeoutMs: 120_000,
       promptVersion: "scene.v1",
+      labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars,
       boardId: "b1",
       participantId: "p1",
     });
@@ -634,6 +637,7 @@ describe("decorator chain: AiCallLog (PIN-61)", () => {
       store: false,
       timeoutMs: 120_000,
       promptVersion: "scene.v1",
+      labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars,
       boardId: "b1",
     };
     expect((await ports.sceneComposer!.composeScene(input)).status).toBe("ready");
@@ -761,7 +765,7 @@ describe("AiCallLog v2 attribution (PIN-137)", () => {
     );
     await ports.sceneComposer!.composeScene({
       elements: [], prompt: "s", size: "1024x1536", store: false,
-      timeoutMs: 1, promptVersion: "scene.v1",
+      timeoutMs: 1, promptVersion: "scene.v1", labelMaxChars: DEFAULT_POLICY.elementLabelMaxChars,
       boardId: "b1", participantId: "p1", sceneId: "scene-1", jobId: "scene-1",
     });
     await ports.chipSuggester!.suggestChips({
