@@ -119,6 +119,12 @@ function fromSnapshot<T>(snapshot: DocumentSnapshot): T | null {
   return rowFrom<T>(snapshot.ref, snapshot.data() as DocumentData).value;
 }
 
+/** A board doc that exists and is not a tombstone (PIN-167). */
+function liveBoardFrom(snapshot: DocumentSnapshot): Board | null {
+  const board = fromSnapshot<Board>(snapshot);
+  return board && board.deletedAt === undefined ? board : null;
+}
+
 function isAlreadyExists(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const candidate = error as { code?: unknown; message?: unknown };
@@ -174,7 +180,7 @@ export class FirestoreBoardRepository implements BoardRepository {
   }
 
   private async requireBoardTx(tx: Transaction, slug: string): Promise<Board> {
-    const board = fromSnapshot<Board>(await tx.get(this.boardRef(slug)));
+    const board = liveBoardFrom(await tx.get(this.boardRef(slug)));
     if (!board) throw new RangeError(`Board ${slug} not found`);
     return board;
   }
@@ -189,7 +195,7 @@ export class FirestoreBoardRepository implements BoardRepository {
   }
 
   async getBoard(slug: string): Promise<Board | null> {
-    return fromSnapshot<Board>(await this.boardRef(slug).get());
+    return liveBoardFrom(await this.boardRef(slug).get());
   }
 
   /**
@@ -204,7 +210,7 @@ export class FirestoreBoardRepository implements BoardRepository {
   async updateBoardSettings(slug: string, fn: BoardSettingsMutator): Promise<Board | null> {
     const ref = this.boardRef(slug);
     return this.db.runTransaction(async (tx) => {
-      const board = fromSnapshot<Board>(await tx.get(ref));
+      const board = liveBoardFrom(await tx.get(ref));
       if (!board) return null;
       const patch = fn(structuredClone(board));
       if (patch === null) return board;
@@ -212,6 +218,22 @@ export class FirestoreBoardRepository implements BoardRepository {
       tx.set(ref, stored);
       // A fresh JSON copy: exactly what a later getBoard returns.
       return toFirestoreData(stored) as Board;
+    });
+  }
+
+  /**
+   * PIN-167 tombstone, in a transaction like every counter write:
+   * those read the doc and set it whole, so a tombstone written
+   * outside one could be overwritten by a stale read. Inside, a
+   * racing writer retries, sees the tombstone and refuses.
+   */
+  async deleteBoard(slug: string, at: number): Promise<boolean> {
+    const ref = this.boardRef(slug);
+    return this.db.runTransaction(async (tx) => {
+      const board = liveBoardFrom(await tx.get(ref));
+      if (!board) return false;
+      tx.set(ref, toFirestoreData({ ...board, deletedAt: at }));
+      return true;
     });
   }
 
@@ -400,6 +422,7 @@ export class FirestoreBoardRepository implements BoardRepository {
       const snap = await tx.get(found.ref);
       if (!snap.exists) return null;
       const row = rowFrom<Element>(found.ref, snap.data() as DocumentData);
+      await this.requireBoardTx(tx, row.value.boardId);
       const renamed: Element = { ...row.value, label };
       tx.set(found.ref, toStored(renamed, row.seq));
       return structuredClone(renamed);
@@ -524,8 +547,8 @@ export class FirestoreBoardRepository implements BoardRepository {
       const snap = await tx.get(found.ref);
       if (!snap.exists) return null;
       const row = rowFrom<Pin>(found.ref, snap.data() as DocumentData);
-      if (row.value.status === status) return row.value;
       const board = await this.requireBoardTx(tx, row.value.boardId);
+      if (row.value.status === status) return row.value;
       const events =
         status === "pinned"
           ? rowsFrom<BoardEvent>(await tx.get(this.col(row.value.boardId, EVENTS)))
@@ -558,10 +581,9 @@ export class FirestoreBoardRepository implements BoardRepository {
       const snap = await tx.get(found.ref);
       if (!snap.exists) return false;
       const row = rowFrom<Pin>(found.ref, snap.data() as DocumentData);
-      const board =
-        row.value.status === "pinned" ? await this.requireBoardTx(tx, row.value.boardId) : null;
+      const board = await this.requireBoardTx(tx, row.value.boardId);
       tx.delete(found.ref);
-      if (board) {
+      if (row.value.status === "pinned") {
         tx.set(this.boardRef(row.value.boardId), toFirestoreData(withCounters(board, { pinCount: -1 })));
       }
       return true;

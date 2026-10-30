@@ -1046,6 +1046,35 @@ describe("scene delete (PIN-142)", () => {
     expect((await h.boards.getBoard("board-1"))?.counters.sceneCount).toBe(0);
   });
 
+  it("a board deleted mid-compose: the runner returns quietly, nothing new shows, the request 404s (PIN-167)", async () => {
+    const h = await makeHarness();
+    const deleting: SceneComposer = {
+      async composeScene(input) {
+        await h.boards.deleteBoard("board-1", T0);
+        return h.deps.composer.composeScene(input);
+      },
+    };
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "late" },
+      { ...h.deps, composer: deleting },
+    );
+    expect(job.status).toBe("ready");
+    expect((await h.boards.getScene(job.id))?.status).toBe("running"); // the last pre-delete sync
+    expect((await h.boards.listEvents("board-1")).map((e) => e.type)).not.toContain("scene_ready");
+
+    const fresh = await makeHarness();
+    const robin = await fresh.boards.getParticipant("board-1", "p1");
+    const racing: SceneComposer = {
+      async composeScene(input) {
+        await fresh.boards.deleteBoard("board-1", T0);
+        return fresh.deps.composer.composeScene(input);
+      },
+    };
+    await expect(
+      requestScene("board-1", robin!, { elementIds: ["el1"], prompt: "late" }, { ...fresh.api, composer: racing }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it("a repeat POST of a deleted scene's client id is a 404, never the dead scene", async () => {
     const h = await makeHarness();
     const p1 = await h.boards.getParticipant("board-1", "p1");

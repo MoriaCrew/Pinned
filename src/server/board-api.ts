@@ -17,7 +17,7 @@ import "server-only";
 import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
 import { activityLines } from "../domain/board-activity";
 import { normalizeElementLabel } from "../domain/element-label";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { validSceneSize } from "../domain/scene-ratio";
@@ -469,20 +469,33 @@ export async function uploadPhoto(
   // Opportunistic A6a sweep; never blocks the upload itself.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
 
-  return startDecomposeJob(
-    { boardId: slug, participantId: participant.id, bytes },
-    {
-      boards: deps.boards,
-      jobs: deps.jobs,
-      store: deps.store,
-      namer: deps.namer,
-      segmenter: deps.segmenter,
-      ...(deps.credits ? { credits: deps.credits } : {}),
-      policy: deps.policy,
-      now: deps.now,
-      newId: deps.newId,
-    },
-  );
+  let job: DecomposeJob;
+  try {
+    job = await startDecomposeJob(
+      { boardId: slug, participantId: participant.id, bytes },
+      {
+        boards: deps.boards,
+        jobs: deps.jobs,
+        store: deps.store,
+        namer: deps.namer,
+        segmenter: deps.segmenter,
+        ...(deps.credits ? { credits: deps.credits } : {}),
+        policy: deps.policy,
+        now: deps.now,
+        newId: deps.newId,
+      },
+    );
+  } catch (error) {
+    // PIN-167: deleted between this request's board read and the
+    // job's own — the unknown-board 404, not a 500 (as requestScene).
+    if (error instanceof RangeError && !(await isLiveBoard(deps.boards, slug))) {
+      throw new BoardApiError("Board not found.", 404);
+    }
+    throw error;
+  }
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
+  return job;
 }
 
 /**
@@ -1019,6 +1032,8 @@ export async function requestScene(
     }
     throw error;
   }
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
   const scene = await deps.boards.getScene(job.id);
   // A repeat POST of a hidden or deleted scene's id: 404, like its GET (PIN-142).
   if (!scene || scene.hidden) throw new BoardApiError("Scene not found.", 404);

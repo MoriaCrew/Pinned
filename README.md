@@ -126,7 +126,8 @@ them directly:
   page polls with TanStack Query. There is no queue in v1.
 - **Routes** — pages: `/` (landing), `/new` (create a board),
   `/g/{slug}` (the board), `/me/boards` + `/me/pins` (signed-in
-  library). API under `src/app/api/boards/`: board create/view,
+  library). API under `src/app/api/boards/`: board create/view/
+  delete (host only),
   `photos` (upload → decompose), `pins/confirm`,
   `pins/from-library`, `claim`, `jobs/{jobId}` +
   `jobs/{jobId}/tap-add`, `scenes` (+ scene image),

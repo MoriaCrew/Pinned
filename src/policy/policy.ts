@@ -112,6 +112,13 @@ export const PolicySchema = z
         windowMs: z.number().int().min(1).default(600_000),
       })
       .default({ limit: 60, windowMs: 600_000 }),
+    /** Board delete per-IP brake (PIN-167, in-process like plus.hostRoutesPerIp). */
+    boardDeletePerIp: z
+      .object({
+        limit: z.number().int().min(1).default(60),
+        windowMs: z.number().int().min(1).default(600_000),
+      })
+      .default({ limit: 60, windowMs: 600_000 }),
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Price labels
      * are display-only placeholders until Stripe lands — nothing
@@ -362,6 +369,12 @@ export const PolicyOverridesSchema = z.object({
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
   myBoardsRemovePerIp: z
+    .object({
+      limit: z.number().int().min(1).optional(),
+      windowMs: z.number().int().min(1).optional(),
+    })
+    .optional(),
+  boardDeletePerIp: z
     .object({
       limit: z.number().int().min(1).optional(),
       windowMs: z.number().int().min(1).optional(),

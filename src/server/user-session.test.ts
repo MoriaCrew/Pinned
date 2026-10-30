@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { emptyBoardCounters, type Participant } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { signPlayerCookie, signUserCookie } from "../domain/tokens";
@@ -434,6 +434,31 @@ describe("user session (PIN-83)", () => {
     expect((await h.users.getUserBoard("synthetic-alice", SLUG))?.updatedAt).toBe(
       T0 + DAY_MS,
     );
+  });
+
+  it("PIN-167: no index row for a deleted board, even when the delete lands mid-write", async () => {
+    const h = makeHarness();
+    const participant = await seedParticipant(h, { userId: "synthetic-alice" });
+    const alice = (await establish(h, "token-alice")).user;
+    // The delete (tombstone + row clean-up, no row yet) lands after
+    // the live check and before the row write.
+    const getRow = h.users.getUserBoard.bind(h.users);
+    let armed = true;
+    h.users.getUserBoard = async (uid, slug) => {
+      if (armed) {
+        armed = false;
+        await h.boards.deleteBoard(SLUG, T0);
+      }
+      return getRow(uid, slug);
+    };
+    await linkParticipantToUser(participant, alice, h.claimDeps());
+    expect(armed).toBe(false);
+    expect(await getRow("synthetic-alice", SLUG)).toBeNull();
+    // Already deleted: nothing is written at all.
+    const writes = vi.spyOn(h.users, "putUserBoard");
+    await linkParticipantToUser(participant, alice, h.claimDeps());
+    expect(writes).not.toHaveBeenCalled();
+    expect(await h.users.listUserBoards("synthetic-alice")).toEqual([]);
   });
 
   it("PIN-94: missing auth_time fails claim closed; pre-PIN-94 cookies still read", async () => {

@@ -108,7 +108,9 @@ and an unknown board are the same 403 `host_only`, so the routes
 reveal nothing about whether a board exists. Input errors are 400.
 Error bodies are `{ error, code }`. The guards live in
 `src/app/api/boards/request-guards.ts` for other routes to adopt
-later.
+later. Board delete (`DELETE /api/boards/{slug}`, PIN-167) is also
+host-only but answers every failure with the uniform 404
+(`docs/13-auth.md`).
 
 - `PATCH /api/boards/{slug}/skin` `{ skinId }` → 200 `{ board }`.
   400 `skin_unknown` (not `isBoardThemeId`); 402 `plus_required`

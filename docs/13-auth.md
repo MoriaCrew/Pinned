@@ -291,6 +291,35 @@ route's `max-age` ends. The board view marks each scene `canDelete`
 (maker or host; only a UI hint, PIN-143), so a host's Delete shows
 after the first client poll (the page render has no host cookie).
 
+## Board delete (PIN-167)
+
+`DELETE /api/boards/{slug}`: the board's host only (host cookie).
+Bodyless. After the slug gate come the cross-site 403 and the
+`Policy.boardDeletePerIp` 429, before any read; every other failure
+is the uniform 404 (no or bad host cookie, another board's host, an
+unknown or already deleted board), never the Plus routes' 403. On
+success (204) the repository tombstones the board (`deletedAt`, set
+once, in a transaction against the counter writers). From then on
+`getBoard` returns null and every write that names the board or one
+of its records is refused, so every board route, page and image
+answers exactly as for a slug that never existed, and nothing brings
+it back. Handlers that never read the board see it gone too: no
+participant cookie resolves on it, and nothing on it is anyone's
+(My pins thumbnail, pin-from-library source). Each linked member's
+`users/{uid}/boards/{slug}` row is deleted; the index writer skips a
+deleted board and re-checks after writing, and My boards skips one
+anyway. Jobs in flight are not waited for: their board-record writes
+(elements, pins, scenes, events) are refused and they end quietly,
+but a job already running can still finish its AI call, update its
+own job doc, write storage objects with no record, and debit one make
+from the board's credit account. Records and stored objects stay
+until storage clean-up (PIN-169). A library copy of a thing made on
+another live board before the delete keeps working for its owner
+(it shares the original's bytes). Concurrent deletes: only the call
+that set the tombstone gets 204; the other gets the uniform 404.
+Errors on these paths are logged with slug-shaped tokens blanked
+(`src/server/safe-log.ts`).
+
 ## Thing rename (PIN-156, parent PIN-134)
 
 `PATCH /api/boards/{slug}/elements/{elementId}` with JSON

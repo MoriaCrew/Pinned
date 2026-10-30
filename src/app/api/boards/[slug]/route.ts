@@ -11,8 +11,14 @@ import {
   linkParticipantToUser,
 } from "../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../auth-shared";
+import { getPolicy } from "../../../../policy/server";
+import { deleteBoardForEveryone } from "../../../../server/board-delete";
+import { getBoardRepository } from "../../../../server/board-repository";
+import { BoardApiError } from "../../../../server/board-session";
 import { hostTokenFrom } from "../../../../server/host-session";
-import { isCrossSite } from "../request-guards";
+import { getUserRepository } from "../../../../server/user-repository";
+import { logServerError } from "../../../../server/safe-log";
+import { isCrossSite, rateLimit, rejectCrossSite } from "../request-guards";
 import {
   JSON_HEADERS,
   boardApiDeps,
@@ -48,7 +54,9 @@ export const dynamic = "force-dynamic";
  * board's participant cookie and the user cookie. Neither runs
  * for a request the browser labels cross-site (a top-level
  * navigation from another site must not write or rotate
- * anything); the app's own poll is a same-origin fetch.
+ * anything); the app's own poll is a same-origin fetch. PIN-167:
+ * the board is loaded first, so a missing or deleted board is the
+ * 404 before that branch can restore or link anything.
  */
 export async function GET(
   request: Request,
@@ -58,7 +66,9 @@ export async function GET(
   const gated = slugGate(slug);
   if (gated) return gated;
   try {
-    const policy = await policyForBoard(slug);
+    const board = await getBoardRepository().getBoard(slug);
+    if (!board) return notFound();
+    const policy = getPolicy(board.policyOverrides ?? null);
     let viewer: Participant | null = await viewerFor(request, slug, policy);
     let restoredCookie: string | null = null;
     if (getConfig().authMode === "optional" && !isCrossSite(request)) {
@@ -85,7 +95,7 @@ export async function GET(
           viewer = await linkParticipantToUser(viewer, user, deps);
         }
       } catch (error) {
-        console.error("board auth restore failed", error);
+        logServerError("board auth restore failed", error);
       }
     }
     // PIN-103: additive viewer.isHost + plus. The host cookie is
@@ -101,5 +111,47 @@ export async function GET(
     });
   } catch (error) {
     return errorResponse(error, "Could not load this board. Please try again.");
+  }
+}
+
+/**
+ * Delete this board for everyone (PIN-167): the host only, by the
+ * host cookie (its Path covers this route). Bodyless: no
+ * requireJson. Bad slug 404, then cross-site 403 and the
+ * Policy.boardDeletePerIp brake 429 before any read. After that
+ * every failure — no or bad host cookie, another board's host, an
+ * unknown or already deleted board — is the one uniform 404, never
+ * the Plus routes' 403. 204 on success.
+ */
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ slug: string }> },
+): Promise<NextResponse> {
+  const { slug } = await context.params;
+  const gated = slugGate(slug);
+  if (gated) return gated;
+  const refused =
+    rejectCrossSite(request) ??
+    rateLimit(request, "board-delete", getPolicy().boardDeletePerIp);
+  if (refused) return refused;
+  const hostToken = hostTokenFrom(request, slug);
+  if (!hostToken) return notFound();
+  try {
+    await deleteBoardForEveryone(slug, hostToken, {
+      boards: getBoardRepository(),
+      users: getUserRepository(),
+      policy: await policyForBoard(slug),
+    });
+    return new NextResponse(null, { status: 204, headers: JSON_HEADERS });
+  } catch (error) {
+    if (error instanceof BoardApiError && error.status === 404) return notFound();
+    // By error name only: a store error can carry the slug or a uid.
+    console.error("Board delete failed.", {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    return NextResponse.json(
+      { error: "Could not delete this board. Please try again." },
+      { status: 500, headers: JSON_HEADERS },
+    );
   }
 }

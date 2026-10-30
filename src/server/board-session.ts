@@ -34,7 +34,7 @@ import "server-only";
  */
 import { randomUUID } from "node:crypto";
 import type { Participant } from "../domain/board";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import {
   isReclaimLocked,
   recordReclaimFailure,
@@ -257,7 +257,13 @@ async function issueNewSession(
   return sessionResult(persisted, cookieValue, deps, now, "created");
 }
 
-/** Resolve the signed cookie to a Participant; null = not joined. */
+/**
+ * Resolve the signed cookie to a Participant; null = not joined.
+ * PIN-167: a deleted board's roster stays stored, but no cookie
+ * resolves on it, so every handler that only asks "who is this?"
+ * (job poll, tap-add, confirm, transcribe, participants GET, ...)
+ * answers exactly as on a slug that never existed.
+ */
 export async function resolveParticipantSession(
   slug: string,
   cookieValue: string | null,
@@ -272,8 +278,11 @@ export async function resolveParticipantSession(
     maxAgeMs: deps.policy.participantCookieDays * DAY_MS,
   });
   if (!payload || payload.gameId !== slug) return null;
-  const participant = await deps.boards.getParticipant(slug, payload.playerId);
-  if (!participant || !verifyToken(cookieValue, participant.cookieSecretHash)) {
+  const [live, participant] = await Promise.all([
+    isLiveBoard(deps.boards, slug),
+    deps.boards.getParticipant(slug, payload.playerId),
+  ]);
+  if (!live || !participant || !verifyToken(cookieValue, participant.cookieSecretHash)) {
     return null;
   }
   return participant;
