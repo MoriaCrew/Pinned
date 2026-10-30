@@ -224,7 +224,8 @@ for every element: cross-site 403, non-JSON 415, a body over
 `Policy.elementRenameMaxBytes` 413. Then every miss is the uniform
 404: no or garbled cookie, unknown board or element, another board's
 element, anyone else's, whatever label they send. Only the owner can
-see the 400 (empty, control characters, or over
+see the 400 (no visible character; C0/C1 or bidi controls, tag
+characters or lone surrogates; or over
 `Policy.elementLabelMaxChars` code points; never truncated) or the
 200 with the board view's public element. The label is trimmed and
 its whitespace collapsed (`src/domain/element-label.ts`). No AI call

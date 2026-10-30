@@ -23,6 +23,28 @@ describe("normalizeElementLabel (PIN-156)", () => {
     expect(normalizeElementLabel("lamp\u007f", CAP)).toEqual({ ok: false, reason: "invalid" });
   });
 
+  it("refuses C1 controls, bidi controls, tag characters and lone surrogates as invalid", () => {
+    const refused = {
+      c1: ["lamp\u0085", "\u009b31m lamp"],
+      bidi: ["\u202elamp", "lamp\u202a", "\u2066lamp\u2069", "\u200elamp", "lamp\u200f", "\u061clamp"],
+      tags: ["lamp\u{E0041}\u{E007F}"],
+      loneSurrogates: ["\ud800 lamp", "lamp \udc00"],
+    };
+    for (const raw of Object.values(refused).flat()) {
+      expect(normalizeElementLabel(raw, CAP)).toEqual({ ok: false, reason: "invalid" });
+    }
+  });
+
+  it("calls a label with no visible character empty, and keeps ZWJ emoji and ZWNJ text", () => {
+    for (const raw of ["\u200b", "\u2060\u200b", "\u200d", "\u0301"]) {
+      expect(normalizeElementLabel(raw, CAP)).toEqual({ ok: false, reason: "empty" });
+    }
+    const cookPan = "\u{1F469}\u200d\u{1F373} pan"; // woman cook (ZWJ sequence) + "pan"
+    const zwnj = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"; // Persian word with a ZWNJ
+    expect(normalizeElementLabel(cookPan, CAP)).toEqual({ ok: true, label: cookPan });
+    expect(normalizeElementLabel(zwnj, CAP)).toEqual({ ok: true, label: zwnj });
+  });
+
   it("allows exactly the cap and refuses one over, counting code points", () => {
     const astral = "\u{1D49C}"; // one code point, two UTF-16 units
     expect(normalizeElementLabel("a".repeat(CAP), CAP)).toEqual({ ok: true, label: "a".repeat(CAP) });

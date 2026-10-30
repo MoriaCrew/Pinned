@@ -145,11 +145,12 @@ describe("PATCH /api/boards/{slug}/elements/{elementId} (PIN-156)", () => {
     expect(await labelOf(id)).toBe("my thing");
   });
 
-  it("the owner gets 400 for an empty, over-cap, control-character or missing label; the label stays", async () => {
+  it("the owner gets 400 for an empty, over-cap, control-character, bidi-override or missing label; the label stays", async () => {
     const slug = await newBoard();
     const robin = await join(slug, "Robin");
     const id = await seedThing(slug, robin.id);
-    const bad: unknown[] = [{ label: "" }, { label: " \n " }, { label: "a".repeat(CAP + 1) }, { label: "lamp\u0000" }, {}, { label: 7 }, "\"lamp\"", "{"];
+    const bidiOverride = { label: "\u202epmal" };
+    const bad: unknown[] = [{ label: "" }, { label: " \n " }, { label: "a".repeat(CAP + 1) }, { label: "lamp\u0000" }, bidiOverride, {}, { label: 7 }, "\"lamp\"", "{"];
     for (const body of bad) {
       const res = await patch(slug, id, body, robin.cookie);
       expect(res.status).toBe(400);
