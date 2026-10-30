@@ -397,6 +397,25 @@ export function describeBoardRepositoryContract(
       await expect(repo.createElement(makeElement())).rejects.toThrow(RangeError);
     });
 
+    it("renameElement changes the label only: order, counters and events stay; missing is null (PIN-156)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createElement(makeElement());
+      await repo.createElement(makeElement({ id: "el-2", createdAt: 1_200 }));
+      const before = await repo.getElement("el-1");
+      const renamed = await repo.renameElement("el-1", "brass lamp");
+      expect(renamed).toEqual({ ...before, label: "brass lamp" });
+      renamed!.label = "mutated";
+      expect(await repo.getElement("el-1")).toEqual({ ...before, label: "brass lamp" });
+      expect((await repo.listElements(SLUG)).map((e) => [e.id, e.label])).toEqual([
+        ["el-1", "brass lamp"],
+        ["el-2", "teal mug"],
+      ]);
+      expect((await repo.getBoard(SLUG))?.counters.elementCount).toBe(2);
+      expect((await repo.listEvents(SLUG)).map((e) => e.type)).toEqual(["element_added", "element_added"]);
+      expect(await repo.renameElement("ghost", "x")).toBeNull();
+    });
+
     it("listElementsBySource returns library copies across boards (PIN-85)", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());

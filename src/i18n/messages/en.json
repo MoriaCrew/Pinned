@@ -200,6 +200,7 @@
   "board.deleteKeep": "Keep",
   "board.deleting": "Deleting…",
   "board.deleteFailed": "Couldn't delete. Try again.",
+  "board.renameInvalid": "Give it a name up to {max} characters.",
   "board.retry": "Try again",
   "board.changeIdea": "Change idea",
   "board.sceneFailed": "That scene didn't develop. Try again.",
