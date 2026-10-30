@@ -34,6 +34,11 @@ let myElementImageRoute: (
 ) => Promise<Response>;
 let fromLibraryRoute: SlugHandler;
 let seedElement: (boardId: string, ownerId: string) => Promise<void>;
+/** A participant's userId and where that user's board index points. */
+let linkState: (
+  slug: string,
+  participantId: string,
+) => Promise<{ userId?: string; indexed?: string }>;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
@@ -73,6 +78,14 @@ beforeAll(async () => {
   ));
   const { getBoardRepository } = await import("../../../server/board-repository");
   const { getDerivativeStore } = await import("../../../server/derivative-store");
+  const { getUserRepository } = await import("../../../server/user-repository");
+  linkState = async (slug, participantId) => {
+    const participant = await getBoardRepository().getParticipant(slug, participantId);
+    const userId = participant?.userId;
+    if (!userId) return {};
+    const entry = await getUserRepository().getUserBoard(userId, slug);
+    return { userId, ...(entry ? { indexed: entry.participantId } : {}) };
+  };
   seedElement = async (boardId, ownerId) => {
     await getBoardRepository().createElement({
       id: "route-el-1",
@@ -156,6 +169,10 @@ async function join(
     slugParams(slug),
   );
   return { res, participantCookie: cookiePair(res) };
+}
+
+async function participantIdOf(res: Response): Promise<string> {
+  return ((await res.clone().json()) as { participant: { id: string } }).participant.id;
 }
 
 describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
@@ -488,71 +505,82 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     }
   });
 
-  it("PIN-94: stale sign-in reads /api/me but cannot claim, auto-link or restore", async () => {
+  it("PIN-160: stale sign-in auto-links on join and open; claim and restore need fresh", async () => {
     const staleCookie = await signIn("token-alice-stale");
+    const bobCookie = await signIn("token-bob");
 
     // Ordinary session reads are unaffected by freshness.
     const me = await getMe(req("http://t/api/me", { headers: { cookie: staleCookie } }));
     expect(me.status).toBe(200);
     expect((await me.json()).user.uid).toBe("synthetic-alice");
 
-    // One board for all three flows (board creation is rate-limited).
+    // One board for every flow (board creation is rate-limited).
     const slug = await makeBoard("Stale auth board");
-    const { res: joinRes, participantCookie } = await join(slug, "Aye");
-    expect(joinRes.status).toBe(201);
+    const aye = await join(slug, "Aye");
+    expect(aye.res.status).toBe(201);
+    const ayeId = await participantIdOf(aye.res);
+    const getView = (cookie: string) =>
+      boardGetRoute(req("http://t/x", { headers: { cookie } }), slugParams(slug));
 
-    // Explicit claim with the stale session -> 401.
+    // Explicit claim with the stale session -> 401 stale_auth.
     const staleClaim = await claimRoute(
       req("http://t/x", {
         method: "POST",
-        headers: { cookie: `${participantCookie}; ${staleCookie}` },
+        headers: { cookie: `${aye.participantCookie}; ${staleCookie}` },
       }),
       slugParams(slug),
     );
     expect(staleClaim.status).toBe(401);
+    expect((await staleClaim.json()).error).toBe("Sign in again to link this board.");
+    expect((await linkState(slug, ayeId)).userId).toBeUndefined();
 
-    // Join-while-stale does not auto-link: a fresh different user
-    // can still claim that participant (a live alice claim would 409).
-    const staleJoin = await join(slug, "Bee", staleCookie);
-    expect(staleJoin.res.status).toBe(201);
-    const bobCookie = await signIn("token-bob");
-    const bobClaim = await claimRoute(
-      req("http://t/x", {
-        method: "POST",
-        headers: { cookie: `${staleJoin.participantCookie}; ${bobCookie}` },
-      }),
-      slugParams(slug),
-    );
-    expect(bobClaim.status).toBe(200);
+    // Board-open with the stale session links the unclaimed one.
+    const opened = await getView(`${aye.participantCookie}; ${staleCookie}`);
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get("set-cookie")).toBeNull();
+    expect(((await opened.json()) as { me: { id: string } | null }).me?.id).toBe(ayeId);
+    expect(await linkState(slug, ayeId)).toEqual({
+      userId: "synthetic-alice",
+      indexed: ayeId,
+    });
 
-    // Alice claims "Aye" while fresh (board-open auto-claim)...
-    const freshCookie = await signIn("token-alice");
-    const opened = await boardGetRoute(
-      req("http://t/x", {
-        headers: { cookie: `${participantCookie}; ${freshCookie}` },
-      }),
-      slugParams(slug),
-    );
-    const openedMe = ((await opened.json()) as { me: { id: string } | null }).me;
-    expect(openedMe).not.toBeNull();
+    // Bob's claim is never re-linked by stale alice's join or open.
+    const bee = await join(slug, "Bee", bobCookie);
+    const beeId = await participantIdOf(bee.res);
+    const both = `${bee.participantCookie}; ${staleCookie}`;
+    const rejoin = await join(slug, "Bee", both);
+    expect(rejoin.res.status).toBe(200);
+    expect((await getView(both)).status).toBe(200);
+    expect((await linkState(slug, beeId)).userId).toBe("synthetic-bob");
+    expect((await linkState(slug, ayeId)).indexed).toBe(ayeId);
 
-    // ...then the stale session alone restores nobody, sets nothing...
-    const staleRestore = await boardGetRoute(
-      req("http://t/x", { headers: { cookie: staleCookie } }),
-      slugParams(slug),
-    );
+    // The stale session alone restores nobody, sets nothing...
+    const staleRestore = await getView(staleCookie);
     expect(staleRestore.status).toBe(200);
     expect(staleRestore.headers.get("set-cookie")).toBeNull();
     expect(((await staleRestore.json()) as { me: unknown }).me).toBeNull();
 
-    // ...while the fresh session restores the same participant.
-    const freshRestore = await boardGetRoute(
-      req("http://t/x", { headers: { cookie: freshCookie } }),
-      slugParams(slug),
-    );
+    // ...while a fresh session restores the linked participant.
+    const freshRestore = await getView(await signIn("token-alice"));
+    expect(freshRestore.headers.get("set-cookie")).not.toBeNull();
     expect(
       ((await freshRestore.json()) as { me: { id: string } | null }).me?.id,
-    ).toBe(openedMe?.id);
+    ).toBe(ayeId);
+
+    // Join while stale links the new participant and the index
+    // follows it, so the board is in My boards for that session.
+    const cee = await join(slug, "Cee", staleCookie);
+    expect(cee.res.status).toBe(201);
+    const ceeId = await participantIdOf(cee.res);
+    expect(await linkState(slug, ceeId)).toEqual({
+      userId: "synthetic-alice",
+      indexed: ceeId,
+    });
+    const myBoards = await myBoardsRoute(
+      req("http://t/api/me/boards", { headers: { cookie: staleCookie } }),
+    );
+    const listed = (await myBoards.json()) as { boards: { slug: string }[] };
+    expect(listed.boards.map((b) => b.slug)).toContain(slug);
   });
 
   it("DELETE /api/auth/session clears the cookie; /api/me is then 401", async () => {

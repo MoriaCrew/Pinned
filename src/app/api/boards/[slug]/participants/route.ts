@@ -85,7 +85,8 @@ export async function POST(
     // the user + board index. Optional-mode only and best-effort:
     // link-only never runs this, and a link failure never fails
     // the join (the explicit claim route surfaces real errors).
-    // PIN-94: a stale sign-in silently skips the auto-link.
+    // PIN-160: any sign-in age links (this browser holds both
+    // cookies); freshness gates only the claim route and restore.
     let participant = result.participant;
     if (getConfig().authMode === "optional") {
       try {

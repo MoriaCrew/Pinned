@@ -47,13 +47,15 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    never failing the join). Both paths maintain the
    `users/{uid}/boards/{slug}` index (doc-get/subcollection
    reads only — no new Firestore index). PIN-94 freshness: the
-   user cookie carries the token's `auth_time`, and claim,
-   join/board-open auto-claim and restore (which mints a fresh
-   participant cookie) all require it within Policy
-   `authFreshWindowMs` (default 1h). A stale session still
-   reads `/api/me` and the library normally; the explicit claim
-   route answers 401 `stale_auth`, while the silent paths just
-   skip — signing in again refreshes `auth_time`.
+   user cookie carries the token's `auth_time`, and the
+   explicit claim route and restore (which mints a fresh
+   participant cookie) require it within Policy
+   `authFreshWindowMs` (default 1h): a stale claim answers 401
+   `stale_auth`, a stale restore restores nobody — signing in
+   again refreshes `auth_time`. PIN-160: the automatic link on
+   join and board-open does not (the browser already holds both
+   cookies), so boards land in My boards at any sign-in age. A
+   stale session still reads `/api/me` and the library.
 
 ## What is stored
 
@@ -132,7 +134,9 @@ The client half of PIN-57b, still behind the same gates:
    silently. Restore rotates `cookieSecretHash` like the
    reclaim-PIN path, so the previous device's cookie stops
    working — the single-hash record cannot hold two live
-   cookies. Failures degrade to the plain link-only view.
+   cookies. Restore needs a fresh sign-in (PIN-94); the silent
+   claim works at any sign-in age (PIN-160). Failures degrade
+   to the plain link-only view.
 5. First-pin nudge: after the viewer's first pinned pin, a
    one-time (localStorage) invite to sign in, gated by
    Policy `signInNudge` (default true) and only ever shown

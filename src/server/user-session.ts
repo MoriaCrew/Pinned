@@ -23,9 +23,10 @@ import "server-only";
  *
  * PIN-94 hardening: session exchange verifies with revocation
  * checking and a Policy provider allowlist, and the cookie
- * carries the token's auth_time. Claim and restore (which mints
- * a fresh participant cookie) require that auth_time inside
- * Policy.authFreshWindowMs; ordinary session reads do not.
+ * carries the token's auth_time. The explicit claim route and
+ * restore (which mints a fresh participant cookie) require that
+ * auth_time inside Policy.authFreshWindowMs; ordinary session
+ * reads and (PIN-160) the automatic join/board-open link do not.
  */
 import type { Participant } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
@@ -63,8 +64,9 @@ export interface ClaimDeps {
   users: UserRepository;
   policy: Policy;
   /** Caller's Firebase `auth_time` (ms) from their user cookie
-   * (PIN-94). Claim/restore fail closed when it is missing or
-   * older than Policy.authFreshWindowMs. */
+   * (PIN-94). The explicit claim route and restore fail closed
+   * when it is missing or older than Policy.authFreshWindowMs;
+   * the automatic join/board-open link ignores it (PIN-160). */
   authTimeMs?: number;
   now?: () => number;
 }
@@ -236,16 +238,39 @@ async function writeBoardIndex(
 }
 
 /**
- * Claim a participant for a signed-in user: empty userId -> set,
- * same userId -> ok (index refreshed), another user's -> 409.
+ * Link core (PIN-160), no freshness check: the caller already
+ * holds this board's participant cookie AND the user cookie.
+ * Another user's claim -> the participant unchanged (never
+ * overwritten, never an error); empty userId -> set; same user
+ * -> kept. Both linkable cases write/refresh the board index.
+ */
+export async function linkParticipantToUser(
+  participant: Participant,
+  user: UserProfile,
+  deps: ClaimDeps,
+): Promise<Participant> {
+  if (participant.userId && participant.userId !== user.uid) return participant;
+  const now = deps.now?.() ?? Date.now();
+  let linked = participant;
+  if (!participant.userId) {
+    linked = { ...participant, userId: user.uid };
+    await deps.boards.putParticipant(linked);
+  }
+  await writeBoardIndex(linked, user, deps, now);
+  return linked;
+}
+
+/**
+ * Explicit claim route: fresh sign-in required (PIN-94, 401
+ * stale_auth), then empty userId -> set, same userId -> ok
+ * (index refreshed), another user's -> 409.
  */
 export async function claimParticipantForUser(
   participant: Participant,
   user: UserProfile,
   deps: ClaimDeps,
 ): Promise<Participant> {
-  const now = deps.now?.() ?? Date.now();
-  requireFreshAuth(deps, now);
+  requireFreshAuth(deps, deps.now?.() ?? Date.now());
   if (participant.userId && participant.userId !== user.uid) {
     throw new BoardApiError(
       "This board identity is already linked to a different account.",
@@ -253,20 +278,14 @@ export async function claimParticipantForUser(
       "claim_conflict",
     );
   }
-  let claimed = participant;
-  if (!participant.userId) {
-    claimed = { ...participant, userId: user.uid };
-    await deps.boards.putParticipant(claimed);
-  }
-  await writeBoardIndex(claimed, user, deps, now);
-  return claimed;
+  return linkParticipantToUser(participant, user, deps);
 }
 
 /**
- * Join-while-signed-in auto-link: claim semantics, but a
- * different user's existing claim is left untouched (never
- * overwritten, never an error) so joining a board can never be
- * blocked by optional sign-in. Returns the participant to use.
+ * Join-while-signed-in auto-link: the link core with any sign-in
+ * age (PIN-160), so a different user's existing claim is left
+ * untouched and joining a board can never be blocked by optional
+ * sign-in. Returns the participant to use.
  */
 export async function linkParticipantOnJoin(
   participant: Participant,
@@ -274,13 +293,7 @@ export async function linkParticipantOnJoin(
   deps: ClaimDeps,
 ): Promise<Participant> {
   if (!user) return participant;
-  if (participant.userId && participant.userId !== user.uid) return participant;
-  // PIN-94: a stale sign-in silently skips the auto-link (the
-  // explicit claim route is where stale_auth surfaces as 401).
-  if (!isFreshAuth(deps.authTimeMs, deps.policy, deps.now?.() ?? Date.now())) {
-    return participant;
-  }
-  return claimParticipantForUser(participant, user, deps);
+  return linkParticipantToUser(participant, user, deps);
 }
 
 /**

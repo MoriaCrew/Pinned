@@ -21,6 +21,7 @@ import {
   findClaimedParticipant,
   isFreshAuth,
   linkParticipantOnJoin,
+  linkParticipantToUser,
   resolveUserSession,
   resolveUserSessionContext,
   type ClaimDeps,
@@ -343,7 +344,7 @@ describe("user session (PIN-83)", () => {
     expect(await h.users.getUser("synthetic-revoked")).toBeNull();
   });
 
-  it("PIN-94: stale auth_time signs in for reads but cannot claim, restore or auto-link", async () => {
+  it("PIN-160: stale auth_time reads and auto-links on join, but cannot claim or restore", async () => {
     const h = makeHarness();
     const participant = await seedParticipant(h);
     const staleAuth = T0 - 2 * 60 * 60 * 1000;
@@ -364,23 +365,24 @@ describe("user session (PIN-83)", () => {
     expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBeUndefined();
     expect(await h.users.listUserBoards("synthetic-stale")).toEqual([]);
 
-    // Join auto-link silently skips instead of throwing.
-    const untouched = await linkParticipantOnJoin(
+    // Join auto-link links at any sign-in age: userId + index.
+    const linked = await linkParticipantOnJoin(
       participant,
       established.user,
       h.claimDeps(staleAuth),
     );
-    expect(untouched).toEqual(participant);
-    expect(await h.users.listUserBoards("synthetic-stale")).toEqual([]);
-
-    // Restore restores nobody even with a live claim + index...
-    await h.boards.putParticipant({ ...participant, userId: "synthetic-stale" });
-    await h.users.putUserBoard("synthetic-stale", {
+    expect(linked.userId).toBe("synthetic-stale");
+    expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBe(
+      "synthetic-stale",
+    );
+    expect(await h.users.getUserBoard("synthetic-stale", SLUG)).toEqual({
       boardId: SLUG,
       participantId: "part-1",
       claimedAt: T0,
       updatedAt: T0,
     });
+
+    // Restore restores nobody even with that live claim + index...
     expect(
       await findClaimedParticipant(SLUG, established.user, h.claimDeps(staleAuth)),
     ).toBeNull();
@@ -388,6 +390,50 @@ describe("user session (PIN-83)", () => {
     expect(
       (await findClaimedParticipant(SLUG, established.user, h.claimDeps()))?.id,
     ).toBe("part-1");
+  });
+
+  it("PIN-160: link core needs no fresh sign-in and never re-links another user's claim", async () => {
+    const h = makeHarness();
+    const participant = await seedParticipant(h);
+    const alice = (await establish(h, "token-alice")).user;
+    const bob = (await establish(h, "token-bob")).user;
+    const staleAuth = T0 - 2 * 60 * 60 * 1000;
+    // Stale and missing auth_time (pre-PIN-94 cookie) both link.
+    const noAuthTime = { ...h.claimDeps(), authTimeMs: undefined };
+
+    // Empty -> set + index.
+    const linked = await linkParticipantToUser(participant, alice, noAuthTime);
+    expect(linked.userId).toBe("synthetic-alice");
+    expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBe(
+      "synthetic-alice",
+    );
+
+    // Same user later -> kept, index refreshed, first claimedAt kept.
+    h.setNow(T0 + DAY_MS);
+    const again = await linkParticipantToUser(linked, alice, h.claimDeps(staleAuth));
+    expect(again).toEqual(linked);
+    expect(await h.users.getUserBoard("synthetic-alice", SLUG)).toEqual({
+      boardId: SLUG,
+      participantId: "part-1",
+      claimedAt: T0,
+      updatedAt: T0 + DAY_MS,
+    });
+
+    // Another user (core and join wrapper) -> unchanged, no throw,
+    // nothing written for either account.
+    expect(await linkParticipantToUser(linked, bob, h.claimDeps(staleAuth))).toEqual(
+      linked,
+    );
+    expect(await linkParticipantOnJoin(linked, bob, h.claimDeps(staleAuth))).toEqual(
+      linked,
+    );
+    expect((await h.boards.getParticipant(SLUG, "part-1"))?.userId).toBe(
+      "synthetic-alice",
+    );
+    expect(await h.users.listUserBoards("synthetic-bob")).toEqual([]);
+    expect((await h.users.getUserBoard("synthetic-alice", SLUG))?.updatedAt).toBe(
+      T0 + DAY_MS,
+    );
   });
 
   it("PIN-94: missing auth_time fails claim closed; pre-PIN-94 cookies still read", async () => {

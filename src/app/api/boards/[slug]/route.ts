@@ -7,9 +7,8 @@ import {
   restoreParticipantSession,
 } from "../../../../server/board-session";
 import {
-  claimParticipantForUser,
   findClaimedParticipant,
-  isFreshAuth,
+  linkParticipantToUser,
 } from "../../../../server/user-session";
 import { claimDeps, currentUserSession } from "../../auth-shared";
 import { hostTokenFrom } from "../../../../server/host-session";
@@ -41,9 +40,11 @@ export const dynamic = "force-dynamic";
  * different user is left untouched; the explicit claim route is
  * where that conflict surfaces as 409. Any auth-side failure
  * degrades to the plain link-only view, never an error.
- * PIN-94: restore and auto-claim additionally need a fresh
- * sign-in (auth_time inside the Policy window); a stale session
- * simply gets the plain view, exactly like a signed-out one.
+ * PIN-94: restore additionally needs a fresh sign-in (auth_time
+ * inside the Policy window); a stale session restores nobody and
+ * gets the plain view, exactly like a signed-out one. PIN-160:
+ * the auto-claim does not — this browser already holds both the
+ * board's participant cookie and the user cookie.
  */
 export async function GET(
   request: Request,
@@ -76,13 +77,8 @@ export async function GET(
               isSecureRequest(request),
             );
           }
-        } else if (
-          user &&
-          viewer &&
-          !viewer.userId &&
-          isFreshAuth(session?.authTimeMs, deps.policy, Date.now())
-        ) {
-          viewer = await claimParticipantForUser(viewer, user, deps);
+        } else if (user && viewer && !viewer.userId) {
+          viewer = await linkParticipantToUser(viewer, user, deps);
         }
       } catch (error) {
         console.error("board auth restore failed", error);
