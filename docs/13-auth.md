@@ -267,7 +267,8 @@ gates (404 in link-only mode, 401 signed out):
    guards the shared objects: deleting the original or a
    copy leaves storage alone while the other side lives (its
    scenes keep working; only the deleted side's pins/scenes
-   cascade), and the last record out frees the bytes.
+   cascade), and the last record out frees the bytes. Records
+   on a deleted board never count (PIN-169).
    `BoardRepository.listElementsBySource` backs the guard;
    its Firestore form needs the `sourceElementId` collection-
    group field index declared in `firestore.indexes.json`.
@@ -311,14 +312,31 @@ deleted board and re-checks after writing, and My boards skips one
 anyway. Jobs in flight are not waited for: their board-record writes
 (elements, pins, scenes, events) are refused and they end quietly,
 but a job already running can still finish its AI call, update its
-own job doc, write storage objects with no record, and debit one make
-from the board's credit account. Records and stored objects stay
-until storage clean-up (PIN-169). A library copy of a thing made on
-another live board before the delete keeps working for its owner
-(it shares the original's bytes). Concurrent deletes: only the call
-that set the tombstone gets 204; the other gets the uniform 404.
-Errors on these paths are logged with slug-shaped tokens blanked
+own job doc and debit one make from the board's credit account. The
+Firestore records stay (no route serves them; the shared-asset check
+below reads them). A library copy of a thing made on another live
+board before the delete keeps working for its owner (it shares the
+original's bytes). Concurrent deletes: only the call that set the
+tombstone gets 204; the other gets the uniform 404. Errors on these
+paths are logged with slug-shaped tokens blanked
 (`src/server/safe-log.ts`).
+
+Storage (PIN-169, `src/server/board-storage.ts`): then the board's
+three folders, built from the valid slug with the trailing slash —
+`tmp/boards/{slug}/`, `elements/boards/{slug}/`,
+`scenes/boards/{slug}/` — are listed and emptied, best-effort (never
+fails the 204; errors logged by name only). Only an element folder
+whose cut-out a library copy on a live board still points at stays
+whole, decided from storage, so it holds even when the source record
+was deleted earlier. Records on deleted boards never count as
+needing bytes (here and in `deleteMyElement`), so the last live copy
+going frees them: deleting that copy, or deleting its board (the
+sweep frees a copy's bytes in another board's element folder once
+nothing live needs them). A job that outlives its board (decompose,
+tap-add, scene, first preview render) sweeps again before it
+returns, so the objects it wrote with no record go too. The sweep is
+a no-op for a bad slug or a live board and can be re-run; nothing
+schedules a re-run yet.
 
 ## Thing rename (PIN-156, parent PIN-134)
 
