@@ -357,6 +357,16 @@
 .viewerPanel {
   flex: none;
   max-height: 55%;
+}
+
+/* When the panel is full, only the credits scroll: the idea, Close and the actions stay in view. */
+.viewer > .viewerPanel {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewerCredits {
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

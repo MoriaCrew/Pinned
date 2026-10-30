@@ -7,6 +7,7 @@ import type { PinCard } from "../../../domain/board-view";
 import { BoardScenes, type PrintSlot } from "./BoardScenes";
 import { BoardThings, type DeleteControls } from "./BoardThings";
 import { SceneViewer } from "./SceneViewer";
+import styles from "./board.module.css";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
@@ -205,6 +206,14 @@ describe("scene viewer (PIN-131)", () => {
     expect(out.match(/class="pn-credit-item"/g)).toHaveLength(names.length);
     expect(out).toContain("straw hat");
     expect(out).toContain("Remix of <b>A tiny picnic</b> by Jo");
+  });
+
+  it("scrolls only the credits when the panel is full, so the idea, Close and Share stay in view", () => {
+    expect(viewer()).toContain(`class="pn-credit ${styles.viewerCredits}"`);
+    const css = readFileSync(path.join(process.cwd(), "src/app/g/[slug]/board.module.css"), "utf8");
+    expect(css).toMatch(/\.viewer > \.viewerPanel \{[^}]*display: flex;[^}]*flex-direction: column;/);
+    expect(css).toMatch(/\.viewerCredits \{[^}]*min-height: 0;[^}]*overflow-y: auto;/);
+    expect(css).not.toMatch(/\.viewerPanel \{[^}]*overflow-y/);
   });
 
   it("puts Share first, then Remix, and More only when it has items", () => {

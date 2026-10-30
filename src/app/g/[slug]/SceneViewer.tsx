@@ -70,7 +70,7 @@ export function SceneViewer({
           </h2>
           <IconButton icon="close" label={t("en", "ui.close")} variant="ghost" onClick={onClose} />
         </div>
-        <CreditLine items={slot.credits} remixOf={slot.remixOf} />
+        <CreditLine items={slot.credits} remixOf={slot.remixOf} className={styles.viewerCredits} />
         <div className="pn-print-actions">
           <Button variant="primary" icon="share" onClick={slot.onShare} disabled={slot.sharing}>
             {t("en", "share.button")}
