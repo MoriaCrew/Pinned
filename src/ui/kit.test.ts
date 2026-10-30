@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   BoardHeader,
+  COMPACT_CREDIT_SLOTS,
+  CreditLine,
   Developing,
   Dock,
   Icon,
@@ -14,7 +16,9 @@ import {
   SkinPicker,
   Sticker,
   boardMetaLine,
+  compactCreditsName,
   pickedCountLabel,
+  splitCompactCredits,
 } from "./index";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
@@ -171,6 +175,137 @@ describe("SceneCard print paper (PIN-128)", () => {
     expect(developing).not.toContain("pn-print-meta");
     expect(developing).toContain("pn-develop-status");
     expect(developing).toContain("Developing");
+  });
+});
+
+describe("CreditLine compact (PIN-130)", () => {
+  const names = ["teal mug", "rubber duck", "succulent", "alarm clock", "book stack", "red sneakers", "straw hat", "black cat", "orange cat"];
+  const credits = (n: number) =>
+    names.slice(0, n).map((thing, i) => ({ thing, owner: { id: `p${i}`, name: `Person ${i}` }, src: `/e/${i}.webp` }));
+  const count = (markup: string, cls: string) => (markup.match(new RegExp(`class="${cls}"`, "g")) ?? []).length;
+  const rowName = (markup: string) => markup.match(/<div class="pn-credit-row" role="img" aria-label="([^"]*)"/)?.[1];
+
+  it("folds what does not fit into a +N tail that takes the last place and never stands for one", () => {
+    const things = Array.from({ length: 9 }, (_, i) => i);
+    expect(splitCompactCredits(things.slice(0, 1), 6)).toEqual({ shown: [0], more: 0 });
+    expect(splitCompactCredits(things.slice(0, 6), 6)).toEqual({ shown: [0, 1, 2, 3, 4, 5], more: 0 });
+    expect(splitCompactCredits(things.slice(0, 7), 6)).toEqual({ shown: [0, 1, 2, 3, 4], more: 2 });
+    expect(splitCompactCredits(things, 6)).toEqual({ shown: [0, 1, 2, 3, 4], more: 4 });
+    expect(splitCompactCredits(things, 3)).toEqual({ shown: [0, 1], more: 7 });
+    expect(splitCompactCredits(things, 1)).toEqual({ shown: [], more: 9 });
+    expect(splitCompactCredits([], 6)).toEqual({ shown: [], more: 0 });
+  });
+
+  it("names every thing, with and between the last two", () => {
+    expect(compactCreditsName("Made from", [])).toBe("Made from");
+    expect(compactCreditsName("Made from", ["teal mug"])).toBe("Made from teal mug");
+    expect(compactCreditsName("Made from", ["teal mug", "rubber duck"])).toBe("Made from teal mug and rubber duck");
+    expect(compactCreditsName("Made from", names.slice(0, 3))).toBe("Made from teal mug, rubber duck and succulent");
+  });
+
+  it("shows one thing as one sticker, with no tail", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(1) }));
+    expect(count(markup, "pn-credit-dot")).toBe(1);
+    expect(markup).not.toContain("pn-credit-more");
+    expect(rowName(markup)).toBe("Made from teal mug");
+    expect(markup).toContain("Made from</span>");
+  });
+
+  it("shows three things as three stickers and names all three", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(3) }));
+    expect(count(markup, "pn-credit-dot")).toBe(3);
+    expect(markup).not.toContain("pn-credit-more");
+    expect(rowName(markup)).toBe("Made from teal mug, rubber duck and succulent");
+  });
+
+  it("shows nine things as a full row ending in +N, and still names all nine", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(9) }));
+    expect(count(markup, "pn-credit-dot")).toBe(COMPACT_CREDIT_SLOTS - 1);
+    expect(markup).toContain('<span class="pn-credit-more">+4</span>');
+    const name = rowName(markup) ?? "";
+    for (const thing of names) expect(name).toContain(thing);
+    expect(name.endsWith("black cat and orange cat")).toBe(true);
+  });
+
+  it("is a labelled image, not a control, until it is given onOpen", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(3) }));
+    expect(markup).toContain('role="img"');
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("tabindex");
+    expect(markup).not.toContain("pn-credit-list");
+    expect(markup).not.toContain("pn-credit-item");
+    // The stickers are decorative: the row's name is the only place the things are written.
+    expect(markup.match(/<img [^>]*alt=""/g)).toHaveLength(3);
+  });
+
+  it("turns the whole row into one button with the same name when onOpen is given", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(9), onOpen: () => {} }));
+    expect(markup.match(/<button/g)).toHaveLength(1);
+    expect(markup).toContain('<button type="button" class="pn-credit-row pn-credit-open" aria-label="Made from teal mug, ');
+    expect(markup).not.toContain('role="img"');
+    // Label, stickers and +N are all inside that one button.
+    const button = markup.match(/<button[^]*<\/button>/)?.[0] ?? "";
+    expect(button).toContain("pn-credit-label");
+    expect(button).toContain("pn-credit-dot");
+    expect(button).toContain("pn-credit-more");
+  });
+
+  it("keeps the Remix of line under the row, with or without the owner", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(9), remixOf: { title: "A tiny picnic", owner: "Jo" } }));
+    expect(markup).toContain('<p class="pn-credit-remix">Remix of <b>A tiny picnic</b> by Jo</p>');
+    expect(markup.indexOf("pn-credit-row")).toBeLessThan(markup.indexOf("pn-credit-remix"));
+    const noOwner = html(h(CreditLine, { compact: true, items: credits(2), remixOf: { title: "A tiny picnic" } }));
+    expect(noOwner).toContain("Remix of <b>A tiny picnic</b></p>");
+    expect(html(h(CreditLine, { compact: true, items: credits(2) }))).not.toContain("pn-credit-remix");
+    // No things left on the board: no empty row, but the remix source still shows.
+    const bare = html(h(CreditLine, { compact: true, items: [], remixOf: { title: "A tiny picnic" } }));
+    expect(bare).not.toContain("pn-credit-row");
+    expect(bare).toContain("Remix of");
+  });
+
+  it("falls back to the owner's avatar, then the thing's initials, when a cut-out is missing", () => {
+    const items = [{ thing: "teal mug", owner: { id: "p1", name: "Robin Lee" } }, { thing: "rubber duck" }];
+    const markup = html(h(CreditLine, { compact: true, items }));
+    expect(markup).not.toContain("<img");
+    expect(markup.match(/pn-avatar-lg/g)).toHaveLength(2);
+    expect(markup).toContain(">RL<");
+    expect(markup).toContain(">RD<");
+  });
+
+  it("takes a given label into the name, and leaves the full list as it was", () => {
+    expect(rowName(html(h(CreditLine, { compact: true, items: credits(2), label: "Built from" })))).toBe(
+      "Built from teal mug and rubber duck",
+    );
+    const full = html(h(CreditLine, { items: credits(3), onItem: () => {} }));
+    expect(full.match(/pn-credit-item/g)).toHaveLength(3);
+    expect(full).toContain("Person 0&#x27;s teal mug");
+    expect(full).not.toContain("pn-credit-compact");
+  });
+
+  it("makes a print carry the compact row, so its credits stay one row for 2, 5 or 9 things", () => {
+    const print = (n: number) =>
+      html(
+        h(SceneCard, {
+          src: "/s.webp",
+          idea: "A picnic",
+          credits: credits(n),
+          remixOf: { title: "Sunday", owner: "Jo" },
+          onRemix: () => {},
+          onShare: () => {},
+        }),
+      );
+    const stickers = { 2: 2, 5: 5, 9: COMPACT_CREDIT_SLOTS - 1 };
+    for (const [n, shown] of Object.entries(stickers)) {
+      const markup = print(Number(n));
+      expect(markup).toContain("pn-credit-compact");
+      expect(markup).not.toContain("pn-credit-list");
+      expect(markup).not.toContain("pn-credit-item");
+      expect(count(markup, "pn-credit-dot")).toBe(shown);
+    }
+    // The row sits between the idea and the actions, with the remix line before the actions.
+    const markup = print(5);
+    expect(markup.indexOf("pn-print-idea")).toBeLessThan(markup.indexOf("pn-credit-compact"));
+    expect(markup.indexOf("pn-credit-remix")).toBeLessThan(markup.indexOf("pn-print-actions"));
   });
 });
 

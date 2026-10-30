@@ -125,4 +125,37 @@ describe("board scenes strip (PIN-98)", () => {
     expect(out).toContain("aspect-ratio:1280 / 1920");
     expect(out).not.toContain("4 / 3");
   });
+
+  it("shows a remix's nine credits as one compact row, not a pill per thing (PIN-130)", () => {
+    const names = ["teal mug", "rubber duck", "succulent", "alarm clock", "book stack", "red sneakers", "straw hat", "black cat", "orange cat"];
+    const out = html(
+      h(BoardScenes, {
+        count: 1,
+        slots: [
+          {
+            type: "print",
+            ratio: "2 / 3",
+            id: "s9",
+            src: "/s9",
+            alt: "A picnic",
+            idea: "A picnic",
+            credits: names.map((thing, i) => ({ thing, owner: { id: "p1", name: "Robin" }, src: `/e${i}` })),
+            kind: "remix",
+            remixOf: { title: "A tiny picnic", owner: "Jo" },
+            number: 9,
+            onRemix: noop,
+            onShare: noop,
+            sharing: false,
+          },
+        ],
+      }),
+    );
+    expect(out).toContain("pn-credit-compact");
+    expect(out).toContain(">+4<");
+    expect(out).toContain("Made from teal mug, rubber duck, succulent, alarm clock, book stack, red sneakers, straw hat, black cat and orange cat");
+    expect(out).toContain("Remix of <b>A tiny picnic</b> by Jo");
+    expect(out).not.toContain("pn-credit-item");
+    // Nothing in the credits is a tab stop; the only buttons are the print's own (Remix, Share).
+    expect(out.match(/<button/g)).toHaveLength(2);
+  });
 });

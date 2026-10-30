@@ -157,7 +157,7 @@
 [class^="pn-"], [class*=" pn-"], [class^="pn-"]::before, [class*=" pn-"]::before, [class^="pn-"]::after, [class*=" pn-"]::after { box-sizing: border-box; }
 .pn-skin-root { background-color: var(--surface); background-image: var(--board-pattern); background-size: var(--board-pattern-size); color: var(--ink); font-family: var(--font-ui); font-size: 16px; line-height: 24px; }
 .pn-sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.pn-focusable:focus-visible, .pn-wordmark:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-input:focus-visible {
+.pn-focusable:focus-visible, .pn-wordmark:focus-visible, .pn-btn:focus-visible, .pn-iconbtn:focus-visible, .pn-chip:focus-visible, .pn-pin-hit:focus-visible, .pn-credit-item:focus-visible, .pn-credit-open:focus-visible, .pn-input:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 
@@ -269,6 +269,14 @@
 .pn-credit-who { color: var(--ink-muted); font-weight: 500; }
 .pn-credit-remix { margin: 0; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); }
 .pn-credit-remix b { color: var(--accent-text); font-weight: 650; }
+/* Compact (PIN-130): "Made from" over one row of overlapping stickers, ~--avatar-lg tall whatever the count. Not a control; with onOpen the row is one button, at least --tap tall.
+   Six places (COMPACT_CREDIT_SLOTS) = 40 + 5 x 28px: the overlap is --space-3. */
+.pn-credit-row { display: grid; justify-items: start; gap: var(--space-2); max-width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.pn-credit-open { min-height: var(--tap); align-content: center; border-radius: var(--radius-sm); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pn-credit-stack { display: flex; align-items: center; max-width: 100%; padding: var(--space-1); margin: calc(-1 * var(--space-1)); overflow: hidden; }
+.pn-credit-stack > * + * { margin-left: calc(-1 * var(--space-3)); }
+.pn-credit-dot { width: var(--avatar-lg); height: var(--avatar-lg); flex: none; object-fit: contain; filter: drop-shadow(1.5px 0 0 var(--keyline)) drop-shadow(-1.5px 0 0 var(--keyline)) drop-shadow(0 1.5px 0 var(--keyline)) drop-shadow(0 -1.5px 0 var(--keyline)) drop-shadow(0 2px 2px var(--shade)); }
+.pn-credit-more { position: relative; display: inline-grid; place-items: center; width: var(--avatar-lg); height: var(--avatar-lg); flex: none; border-radius: 50%; background: var(--surface-sunk); color: var(--ink); box-shadow: 0 0 0 1.5px var(--line-strong); font: 650 14px/1 var(--font-ui); }
 
 /* ---------- Scene card (a print) ---------- */
 .pn-print-wrap { display: block; rotate: calc(var(--tilt) * var(--t, 0) * var(--print-tilt) * .5); }
