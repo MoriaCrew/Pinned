@@ -15,7 +15,7 @@ import {
   type BoardViewLike,
   type BoardViewScene,
 } from "../../../domain/board-view";
-import { withElementLabel } from "../../../domain/element-label";
+import { rollbackElementLabel, withElementLabel } from "../../../domain/element-label";
 import {
   attemptPollInterval,
   isTerminalScene,
@@ -435,9 +435,11 @@ function BoardBody({
 
   // PIN-157: rename my element. Optimistic: the new name shows on the
   // grid, in credits and in the viewer at once (they all read
-  // view.elements); a failure puts the snapshot back and the sheet,
-  // which stays open until the answer, shows why. Only a 400 carries a
-  // line worth showing (the server's own); 404 and the rest are generic.
+  // view.elements); a failure puts that one label back (only while the
+  // board still shows the optimistic one) and the sheet, which stays
+  // open until the answer, shows why. Only a 400 carries a line worth
+  // showing (the server's own); 404 and the rest are generic. A late
+  // answer touches only its own thing and its own sheet.
   const renameElement = useMutation({
     mutationFn: async ({ elementId, label }: { elementId: string; label: string }) => {
       const response = await fetch(
@@ -451,22 +453,30 @@ function BoardBody({
     },
     onMutate: async ({ elementId, label }) => {
       await queryClient.cancelQueries({ queryKey: boardQueryKey(slug) });
-      const previous = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
-      if (previous) queryClient.setQueryData(boardQueryKey(slug), withElementLabel(previous, elementId, label));
-      return { previous };
+      const current = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
+      const previousLabel = current?.elements.find((e) => e.id === elementId)?.label;
+      if (current) queryClient.setQueryData(boardQueryKey(slug), withElementLabel(current, elementId, label));
+      return { previousLabel };
     },
     onSuccess: (element) => {
       queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
         current ? withElementLabel(current, element.id, element.label) : current,
       );
-      setRenamingElementId(null);
+      // Close only the sheet that made this request.
+      setRenamingElementId((open) => (open === element.id ? null : open));
     },
-    onError: (_cause, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
+    onError: (_cause, { elementId, label }, context) => {
+      const previousLabel = context?.previousLabel;
+      if (previousLabel === undefined) return;
+      queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
+        current ? rollbackElementLabel(current, elementId, label, previousLabel) : current,
+      );
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) }),
   });
   const renamingElement = renamingElementId ? view.elements.find((e) => e.id === renamingElementId) : undefined;
+  // The mutation tracks only its latest request: busy and the error line belong to the sheet of that thing.
+  const renameIsForOpenSheet = renameElement.variables?.elementId === renamingElementId;
 
   // PIN-143: delete a scene (maker or host; the route enforces). Not
   // optimistic: the viewer stays open with its confirm until the
@@ -1245,8 +1255,8 @@ function BoardBody({
           <RenameSheet
             label={renamingElement.label}
             maxChars={policy.elementLabelMaxChars}
-            busy={renameElement.isPending}
-            error={renameElement.error?.message ?? ""}
+            busy={renameIsForOpenSheet && renameElement.isPending}
+            error={renameIsForOpenSheet ? (renameElement.error?.message ?? "") : ""}
             onSave={(label) => {
               if (label === renamingElement.label) setRenamingElementId(null);
               else renameElement.mutate({ elementId: renamingElement.id, label });

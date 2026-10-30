@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY } from "../policy/policy";
-import { normalizeElementLabel, withElementLabel } from "./element-label";
+import { normalizeElementLabel, rollbackElementLabel, withElementLabel } from "./element-label";
 
 const CAP = DEFAULT_POLICY.elementLabelMaxChars;
 
@@ -76,5 +76,28 @@ describe("withElementLabel (PIN-157)", () => {
 
   it("returns the same view when the thing is gone", () => {
     expect(withElementLabel(view, "e9", "Anything")).toBe(view);
+  });
+});
+
+describe("rollbackElementLabel (PIN-157)", () => {
+  const view = {
+    elements: [
+      { id: "e1", label: "Teal mug" },
+      { id: "e2", label: "Bath duck" },
+    ],
+  };
+
+  it("puts the previous label back while the board still shows the optimistic one", () => {
+    const next = rollbackElementLabel(view, "e2", "Bath duck", "Rubber duck");
+    expect(next.elements.map((e) => e.label)).toEqual(["Teal mug", "Rubber duck"]);
+  });
+
+  it("leaves a newer name alone (a later rename, or a refetch, got there first)", () => {
+    expect(rollbackElementLabel(view, "e2", "Pond duck", "Rubber duck")).toBe(view);
+  });
+
+  it("only ever touches its own thing, and returns the same view when it is gone", () => {
+    expect(rollbackElementLabel(view, "e1", "Bath duck", "Rubber duck")).toBe(view);
+    expect(rollbackElementLabel(view, "e9", "Bath duck", "Rubber duck")).toBe(view);
   });
 });

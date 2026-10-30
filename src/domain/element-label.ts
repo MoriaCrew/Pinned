@@ -43,3 +43,20 @@ export function withElementLabel<V extends { elements: readonly { id: string; la
     elements: view.elements.map((element) => (element.id === elementId ? { ...element, label } : element)),
   };
 }
+
+/**
+ * Undo an optimistic rename (PIN-157), but only while the board still
+ * shows that optimistic label. By the time a failure lands, a newer
+ * rename of the same thing or a refetch may have moved on, and a late
+ * answer must never overwrite it. Otherwise returns the same view.
+ */
+export function rollbackElementLabel<V extends { elements: readonly { id: string; label: string }[] }>(
+  view: V,
+  elementId: string,
+  optimistic: string,
+  previous: string,
+): V {
+  const current = view.elements.find((element) => element.id === elementId);
+  if (!current || current.label !== optimistic) return view;
+  return withElementLabel(view, elementId, previous);
+}
