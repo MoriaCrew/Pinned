@@ -28,7 +28,7 @@ describe("rename sheet (PIN-157)", () => {
   });
 
   it("sets no native maxlength: it counts UTF-16 units, so an emoji label would stop early", () => {
-    const label = "\u{1F469}‍\u{1F373} pan"; // 7 code points, 9 UTF-16 units
+    const label = "\u{1F469}\u200D\u{1F373} pan"; // 7 code points, 9 UTF-16 units
     expect([...label]).toHaveLength(7);
     expect(label).toHaveLength(9);
     const out = sheet({ label, maxChars: 7 });
@@ -42,7 +42,7 @@ describe("rename sheet (PIN-157)", () => {
     const over = sheet({ label: "x".repeat(CAP + 1) });
     expect(saveDisabled(over)).toBe(true);
     expect(over).toContain(`Give it a name up to ${CAP} characters.`);
-    const control = sheet({ label: "lamp‮" });
+    const control = sheet({ label: "lamp\u202E" });
     expect(saveDisabled(control)).toBe(true);
     expect(control).toContain("Give it a name up to");
     const empty = sheet({ label: "  " });
