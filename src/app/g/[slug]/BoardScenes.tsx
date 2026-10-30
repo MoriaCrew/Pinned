@@ -61,7 +61,7 @@ export type PrintSlot = Extract<SceneSlot, { type: "print" }>;
 export function BoardScenes({ slots, count }: { slots: SceneSlot[]; count: number }) {
   return (
     <section aria-labelledby="board-scenes">
-      <SectionHead title={t("en", "board.scenes")} count={count} id="board-scenes" />
+      <SectionHead title={t("en", "board.scenes")} count={count} id="board-scenes" focusable />
       {slots.length === 0 ? (
         <p className={styles.quietLine}>{t("en", "board.scenesEmpty")}</p>
       ) : (

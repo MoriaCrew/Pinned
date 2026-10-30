@@ -256,6 +256,10 @@ describe("scene viewer (PIN-131)", () => {
     expect(viewer({ slot: { ...remix, remixOf: { deleted: true } } })).toContain("Remix of a deleted scene");
   });
 
+  it("lets the Scenes heading take focus when a delete leaves no print to return to (PIN-143)", () => {
+    expect(html(h(BoardScenes, { count: 0, slots: [] }))).toContain('<h2 class="pn-section-title" id="board-scenes" tabindex="-1">');
+  });
+
   it("makes the print's picture and credits row open the viewer", () => {
     const out = html(h(BoardScenes, { count: 1, slots: [{ ...remix, onOpen: noop }] }));
     expect(out).toContain('data-scene-id="s7"');

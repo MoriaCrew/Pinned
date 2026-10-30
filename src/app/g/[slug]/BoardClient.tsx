@@ -452,7 +452,11 @@ function BoardBody({
       setConfirmDeleteSceneId(null);
       // Close first, so the deleter never gets "That scene isn't here
       // any more"; then it leaves the strip and the poll reconciles.
-      if (viewerId === sceneId) closeViewer();
+      // Focus goes to the next print (or the Scenes heading if none is left).
+      if (viewerId === sceneId) {
+        viewerReturnId.current = stepScene(viewerIds, sceneId, 1) ?? stepScene(viewerIds, sceneId, -1) ?? sceneId;
+        closeViewer();
+      }
       queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
         current ? { ...current, scenes: current.scenes.filter((scene) => scene.id !== sceneId) } : current,
       );
@@ -953,7 +957,8 @@ function BoardBody({
     const id = viewerReturnId.current;
     if (viewerOpen || !id) return;
     viewerReturnId.current = null;
-    document.querySelector<HTMLElement>(`[data-scene-id="${CSS.escape(id)}"] .pn-print-open`)?.focus();
+    const print = document.querySelector<HTMLElement>(`[data-scene-id="${CSS.escape(id)}"] .pn-print-open`);
+    (print ?? document.getElementById("board-scenes"))?.focus();
   }, [viewerOpen]);
 
   const showNudge = shouldShowSignInNudge({

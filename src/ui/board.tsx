@@ -72,10 +72,11 @@ export function BoardHeader({
 }
 
 /** Section head on the board ("Scenes", "Things") with an optional mono count. */
-export function SectionHead({ title, count, id }: { title: string; count?: number; id?: string }) {
+/** `focusable`: the heading can take focus from script (tabIndex -1), e.g. after its last item goes. */
+export function SectionHead({ title, count, id, focusable }: { title: string; count?: number; id?: string; focusable?: boolean }) {
   return (
     <div className="pn-section-head">
-      <h2 className="pn-section-title" id={id}>
+      <h2 className="pn-section-title" id={id} tabIndex={focusable ? -1 : undefined}>
         {title}
       </h2>
       {count !== undefined ? <span className="pn-board-meta">{count}</span> : null}
