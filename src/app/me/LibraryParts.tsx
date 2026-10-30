@@ -5,6 +5,7 @@ import { skinForTheme } from "../../domain/skins";
 import { t } from "../../i18n";
 import { Pin, Wordmark } from "../../ui";
 import { You } from "../auth/You";
+import { MyBoardItem } from "./boards/MyBoardItem";
 import { PinToBoardButton } from "./pins/PinToBoardButton";
 import { boardCardMeta } from "./library-format";
 
@@ -71,12 +72,13 @@ export function LibraryEmpty({
  * Each board as a mini board in its own skin (like the SkinPicker's):
  * the ground, the title in the skin's display face, the latest scene
  * as a small print, then your count and the last active day in mono.
+ * Each card's More menu removes it from your list (PIN-166).
  */
 export function BoardCards({ boards }: { boards: MyBoardCard[] }) {
   return (
     <ul className="pn-lib-boards">
       {boards.map((board) => (
-        <li key={board.slug}>
+        <MyBoardItem key={board.slug} slug={board.slug} title={board.title} theme={skinForTheme(board.themeId)}>
           <a className="pn-lib-board" data-theme={skinForTheme(board.themeId)} href={`/g/${board.slug}`}>
             <span className="pn-skin-band" aria-hidden="true" />
             <span className="pn-lib-board-title">{board.title}</span>
@@ -94,7 +96,7 @@ export function BoardCards({ boards }: { boards: MyBoardCard[] }) {
             )}
             <BoardCardMeta myPinCount={board.myPinCount} lastActivityAt={board.lastActivityAt} />
           </a>
-        </li>
+        </MyBoardItem>
       ))}
     </ul>
   );

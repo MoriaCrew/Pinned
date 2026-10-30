@@ -90,5 +90,24 @@ export function describeUserRepositoryContract(
       entry.participantId = "mutated";
       expect((await repo.getUserBoard(UID, SLUG))?.participantId).toBe("part-1");
     });
+
+    it("deletes one board entry for one user only, idempotently (PIN-166)", async () => {
+      const repo = makeRepo();
+      await repo.putUser(makeProfile());
+      await repo.putUserBoard(UID, makeEntry());
+      await repo.putUserBoard(UID, makeEntry({ boardId: OTHER_SLUG }));
+      await repo.putUserBoard(OTHER_UID, makeEntry());
+      await repo.deleteUserBoard(UID, SLUG);
+      await repo.deleteUserBoard(UID, SLUG);
+      await repo.deleteUserBoard(UID, "ghost-board");
+      await repo.deleteUserBoard("ghost-user", SLUG);
+      expect(await repo.getUserBoard(UID, SLUG)).toBeNull();
+      expect((await repo.listUserBoards(UID)).map((e) => e.boardId)).toEqual([OTHER_SLUG]);
+      expect(await repo.getUserBoard(OTHER_UID, SLUG)).toEqual(makeEntry());
+      expect(await repo.getUser(UID)).toEqual(makeProfile());
+      // A later link writes the entry afresh.
+      await repo.putUserBoard(UID, makeEntry({ claimedAt: 5_000 }));
+      expect((await repo.getUserBoard(UID, SLUG))?.claimedAt).toBe(5_000);
+    });
   });
 }

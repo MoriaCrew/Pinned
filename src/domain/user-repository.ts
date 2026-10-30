@@ -9,6 +9,8 @@
  * - Puts upsert by uid / (uid, boardId); no board need exist —
  *   the index is a plain per-user map keyed by board slug.
  * - listUserBoards is claimedAt-ascending; ties keep write order.
+ * - deleteUserBoard removes one (uid, slug) entry only; a missing
+ *   entry is a no-op (PIN-166 "Remove from My boards").
  * - Firestore home: users/{uid} + users/{uid}/boards/{slug},
  *   doc-get/subcollection reads only — no new index.
  */
@@ -21,6 +23,7 @@ export interface UserRepository {
   putUserBoard(uid: string, entry: UserBoardEntry): Promise<void>;
   getUserBoard(uid: string, boardId: string): Promise<UserBoardEntry | null>;
   listUserBoards(uid: string): Promise<UserBoardEntry[]>;
+  deleteUserBoard(uid: string, boardId: string): Promise<void>;
 }
 
 function clone<T>(value: T): T {
@@ -55,5 +58,9 @@ export class InMemoryUserRepository implements UserRepository {
     const entries = [...(this.boards.get(uid)?.values() ?? [])].map(clone);
     // Stable sort: claimedAt ties keep Map insertion (write) order.
     return entries.sort((a, b) => a.claimedAt - b.claimedAt);
+  }
+
+  async deleteUserBoard(uid: string, boardId: string): Promise<void> {
+    this.boards.get(uid)?.delete(boardId);
   }
 }

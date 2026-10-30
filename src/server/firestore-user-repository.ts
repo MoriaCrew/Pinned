@@ -94,6 +94,11 @@ export class FirestoreUserRepository implements UserRepository {
       .map((row) => row.value);
   }
 
+  /** Idempotent: Firestore delete of a missing doc succeeds. */
+  async deleteUserBoard(uid: string, boardId: string): Promise<void> {
+    await this.boardsCol(uid).doc(boardId).delete();
+  }
+
   /** Release the underlying gRPC client in scripts and tests. */
   async close(): Promise<void> {
     await this.db.terminate();

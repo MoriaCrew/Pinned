@@ -4,7 +4,7 @@ import { describeUserRepositoryContract } from "../domain/user-repository.contra
 import { FirestoreUserRepository } from "./firestore-user-repository";
 
 /**
- * Minimal fake Firestore for doc get/set + whole-subcollection
+ * Minimal fake Firestore for doc get/set/delete + whole-subcollection
  * reads (the only shapes FirestoreUserRepository uses — no
  * queries, so no index). Docs live in one path-keyed map.
  */
@@ -32,6 +32,10 @@ class FakeDocRef {
 
   async set(data: DocData) {
     this.store.set(this.path, structuredClone(data));
+  }
+
+  async delete() {
+    this.store.delete(this.path);
   }
 }
 

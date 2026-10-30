@@ -5,8 +5,8 @@ import { InMemoryBoardRepository } from "../domain/board-repository";
 import type { UserProfile } from "../domain/user";
 import { InMemoryUserRepository } from "../domain/user-repository";
 import { resolvePolicy } from "../policy/policy";
-import { listMyBoards } from "./my-boards";
-import { findClaimedParticipant } from "./user-session";
+import { listMyBoards, removeMyBoard } from "./my-boards";
+import { findClaimedParticipant, linkParticipantToUser } from "./user-session";
 
 const USER: UserProfile = { uid: "synthetic-alice", createdAt: 1, updatedAt: 1 };
 
@@ -154,5 +154,87 @@ describe("findClaimedParticipant (restore lookup)", () => {
     expect(
       await findClaimedParticipant("board-none", USER, freshDeps),
     ).toBeNull();
+  });
+});
+
+describe("removeMyBoard (PIN-166)", () => {
+  const SLUG = "SyntheticBoardSlugAA01";
+  const OTHER_SLUG = "SyntheticBoardSlugBB02";
+  const BOB = "synthetic-bob";
+
+  async function linkedBoard() {
+    const boards = new InMemoryBoardRepository();
+    const users = new InMemoryUserRepository();
+    await users.putUser(USER);
+    await boards.createBoard(board(SLUG, 100));
+    await boards.putParticipant(participant("p-alice", SLUG, USER.uid));
+    await users.putUserBoard(USER.uid, {
+      boardId: SLUG,
+      participantId: "p-alice",
+      claimedAt: 1,
+      updatedAt: 1,
+    });
+    return { boards, users };
+  }
+
+  it("a board poll landing between the two writes can't strand a claim without a row", async () => {
+    const { boards, users } = await linkedBoard();
+    const claimDeps = { boards, users, policy: resolvePolicy() };
+    const order: string[] = [];
+    const deleteRow = users.deleteUserBoard.bind(users);
+    users.deleteUserBoard = async (uid, slug) => {
+      order.push("row");
+      await deleteRow(uid, slug);
+      // The open board tab's poll runs here (board GET auto-link:
+      // only an unlinked participant is linked, PIN-160).
+      const seen = await boards.getParticipant(SLUG, "p-alice");
+      if (seen && !seen.userId) await linkParticipantToUser(seen, USER, claimDeps);
+    };
+    const put = boards.putParticipant.bind(boards);
+    boards.putParticipant = async (p) => {
+      order.push("unlink");
+      await put(p);
+    };
+
+    await removeMyBoard(USER, SLUG, { boards, users });
+
+    expect(order).toEqual(["row", "unlink"]);
+    expect((await boards.getParticipant(SLUG, "p-alice"))?.userId).toBeUndefined();
+    expect(await users.getUserBoard(USER.uid, SLUG)).toBeNull();
+    // Opening the board again brings it back (PIN-160 auto-link).
+    const again = await boards.getParticipant(SLUG, "p-alice");
+    await linkParticipantToUser(again!, USER, claimDeps);
+    expect(await users.getUserBoard(USER.uid, SLUG)).not.toBeNull();
+  });
+
+  it("a retry repairs a half-done removal: a linked participant with no row is unlinked", async () => {
+    const { boards, users } = await linkedBoard();
+    await users.deleteUserBoard(USER.uid, SLUG);
+
+    await removeMyBoard(USER, SLUG, { boards, users });
+
+    expect((await boards.getParticipant(SLUG, "p-alice"))?.userId).toBeUndefined();
+  });
+
+  it("unlinks only the caller's participants on that board", async () => {
+    const { boards, users } = await linkedBoard();
+    await boards.putParticipant(participant("p-alice-2", SLUG, USER.uid));
+    await boards.putParticipant(participant("p-bob", SLUG, BOB));
+    await boards.createBoard(board(OTHER_SLUG, 200));
+    await boards.putParticipant(participant("p-alice-other", OTHER_SLUG, USER.uid));
+    await users.putUserBoard(USER.uid, {
+      boardId: OTHER_SLUG,
+      participantId: "p-alice-other",
+      claimedAt: 1,
+      updatedAt: 1,
+    });
+
+    await removeMyBoard(USER, SLUG, { boards, users });
+
+    expect((await boards.getParticipant(SLUG, "p-alice"))?.userId).toBeUndefined();
+    expect((await boards.getParticipant(SLUG, "p-alice-2"))?.userId).toBeUndefined();
+    expect((await boards.getParticipant(SLUG, "p-bob"))?.userId).toBe(BOB);
+    expect((await boards.getParticipant(OTHER_SLUG, "p-alice-other"))?.userId).toBe(USER.uid);
+    expect(await users.getUserBoard(USER.uid, OTHER_SLUG)).not.toBeNull();
   });
 });

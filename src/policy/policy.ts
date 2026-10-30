@@ -105,6 +105,13 @@ export const PolicySchema = z
       .min(1)
       .default(["google.com"]),
     authFreshWindowMs: z.number().int().min(1).default(3_600_000),
+    /** My boards "Remove" per-IP brake (PIN-166, in-process like plus.hostRoutesPerIp). */
+    myBoardsRemovePerIp: z
+      .object({
+        limit: z.number().int().min(1).default(60),
+        windowMs: z.number().int().min(1).default(600_000),
+      })
+      .default({ limit: 60, windowMs: 600_000 }),
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Price labels
      * are display-only placeholders until Stripe lands — nothing
@@ -354,6 +361,12 @@ export const PolicyOverridesSchema = z.object({
   userSessionDays: z.number().int().min(1).optional(),
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
+  myBoardsRemovePerIp: z
+    .object({
+      limit: z.number().int().min(1).optional(),
+      windowMs: z.number().int().min(1).optional(),
+    })
+    .optional(),
   signInNudge: z.boolean().optional(),
   plus: z
     .object({
