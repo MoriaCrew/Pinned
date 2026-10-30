@@ -65,6 +65,24 @@ describe("tokens", () => {
     expect(verifyUserCookie(cookie, "secret")).toEqual(payload);
   });
 
+  it("round-trips authTimeMs and rejects a malformed one (PIN-94)", () => {
+    const payload = {
+      v: 1 as const,
+      uid: "synthetic-user-1",
+      issuedAt: 100,
+      authTimeMs: 90,
+    };
+    expect(verifyUserCookie(signUserCookie(payload, "secret"), "secret")).toEqual(
+      payload,
+    );
+    const malformed = signUserCookie(
+      // @ts-expect-error non-number authTimeMs on purpose
+      { v: 1, uid: "u1", issuedAt: 100, authTimeMs: "90" },
+      "secret",
+    );
+    expect(verifyUserCookie(malformed, "secret")).toBeNull();
+  });
+
   it("user and player cookies never cross-verify (domain separation, PIN-83)", () => {
     const userCookie = signUserCookie({ v: 1, uid: "u1", issuedAt: 100 }, "secret");
     const playerCookie = signPlayerCookie(

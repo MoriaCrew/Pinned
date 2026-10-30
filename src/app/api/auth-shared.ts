@@ -8,9 +8,11 @@ import { getTokenVerifier } from "../../server/token-verifier";
 import { getUserRepository } from "../../server/user-repository";
 import {
   resolveUserSession,
+  resolveUserSessionContext,
   USER_COOKIE_NAME,
   type ClaimDeps,
   type EstablishUserSessionDeps,
+  type UserSessionContext,
   type UserSessionDeps,
 } from "../../server/user-session";
 import { notFound } from "./boards/shared";
@@ -36,12 +38,28 @@ export function establishUserSessionDeps(): EstablishUserSessionDeps {
   return { ...userSessionDeps(), verifier: getTokenVerifier() };
 }
 
-export function claimDeps(): ClaimDeps {
-  return { boards: getBoardRepository(), users: getUserRepository() };
+export function claimDeps(authTimeMs?: number): ClaimDeps {
+  return {
+    boards: getBoardRepository(),
+    users: getUserRepository(),
+    policy: getPolicy(),
+    ...(authTimeMs !== undefined ? { authTimeMs } : {}),
+  };
 }
 
 /** Signed-in user for this request; null when signed out. */
 export async function currentUser(request: Request): Promise<UserProfile | null> {
   const cookie = readCookieValue(request.headers.get("cookie"), USER_COOKIE_NAME);
   return resolveUserSession(cookie, userSessionDeps());
+}
+
+/**
+ * Signed-in session (user + auth_time) for claim/restore routes
+ * (PIN-94): the freshness gate reads authTimeMs from here.
+ */
+export async function currentUserSession(
+  request: Request,
+): Promise<UserSessionContext | null> {
+  const cookie = readCookieValue(request.headers.get("cookie"), USER_COOKIE_NAME);
+  return resolveUserSessionContext(cookie, userSessionDeps());
 }

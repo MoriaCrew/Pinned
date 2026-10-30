@@ -4,6 +4,7 @@ import { emptyBoardCounters } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import type { UserProfile } from "../domain/user";
 import { InMemoryUserRepository } from "../domain/user-repository";
+import { resolvePolicy } from "../policy/policy";
 import { listMyBoards } from "./my-boards";
 import { findClaimedParticipant } from "./user-session";
 
@@ -124,19 +125,34 @@ describe("findClaimedParticipant (restore lookup)", () => {
     await users.putUserBoard(USER.uid, {
       boardId: "board-a", participantId: "p1", claimedAt: 1, updatedAt: 1,
     });
+    // PIN-94: restore requires a fresh sign-in at the lookup clock.
+    const freshDeps = {
+      boards,
+      users,
+      policy: resolvePolicy(),
+      authTimeMs: 1,
+      now: () => 1,
+    };
     expect(
-      (await findClaimedParticipant("board-a", USER, { boards, users }))?.id,
+      (await findClaimedParticipant("board-a", USER, freshDeps))?.id,
     ).toBe("p1");
+    // The same live claim with a stale sign-in restores nobody.
+    expect(
+      await findClaimedParticipant("board-a", USER, {
+        ...freshDeps,
+        now: () => 1 + resolvePolicy().authFreshWindowMs + 1,
+      }),
+    ).toBeNull();
 
     // Forged/stale index pointing at another user's participant.
     await users.putUserBoard(USER.uid, {
       boardId: "board-a", participantId: "p2", claimedAt: 1, updatedAt: 1,
     });
     expect(
-      await findClaimedParticipant("board-a", USER, { boards, users }),
+      await findClaimedParticipant("board-a", USER, freshDeps),
     ).toBeNull();
     expect(
-      await findClaimedParticipant("board-none", USER, { boards, users }),
+      await findClaimedParticipant("board-none", USER, freshDeps),
     ).toBeNull();
   });
 });

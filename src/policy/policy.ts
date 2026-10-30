@@ -58,6 +58,19 @@ export const PolicySchema = z
      * users/{uid} profile + board index persist until account
      * deletion lands (PIN-57c) — this TTL bounds the cookie only. */
     userSessionDays: z.number().int().min(1).default(30),
+    /** Sign-in provider pin + freshness (PIN-94): session exchange
+     * only accepts these Firebase `sign_in_provider` values, so
+     * enabling another provider (e.g. Anonymous) in a console can
+     * never mint user sessions by itself. Claim/restore additionally
+     * require the token's `auth_time` within authFreshWindowMs
+     * (default 1h, the Firebase ID-token lifetime): an old session
+     * still reads /api/me, but linking or restoring a board identity
+     * needs a recent Google sign-in. */
+    authAllowedProviders: z
+      .array(z.string().min(1))
+      .min(1)
+      .default(["google.com"]),
+    authFreshWindowMs: z.number().int().min(1).default(3_600_000),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
     signInNudge: z.boolean().default(true),
@@ -202,6 +215,8 @@ export const PolicyOverridesSchema = z.object({
   joinMaxNewPerIp: z.number().int().min(1).optional(),
   joinNewWindowMs: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
+  authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
+  authFreshWindowMs: z.number().int().min(1).optional(),
   signInNudge: z.boolean().optional(),
   libraryPageSize: z.number().int().min(1).optional(),
   boardPollIntervalMs: z.number().int().min(250).optional(),

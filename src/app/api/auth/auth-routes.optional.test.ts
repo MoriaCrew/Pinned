@@ -46,6 +46,15 @@ beforeAll(async () => {
         photoUrl: "https://example.test/alice.png",
       },
       "token-bob": { uid: "synthetic-bob" },
+      // PIN-94 fixtures: wrong provider, revoked, stale sign-in
+      // (same alice uid, auth_time 2h before the suite runs).
+      "token-anon": { uid: "synthetic-anon", signInProvider: "anonymous" },
+      "token-revoked": { uid: "synthetic-revoked", revoked: true },
+      "token-alice-stale": {
+        uid: "synthetic-alice",
+        displayName: "Alice A",
+        authTimeMs: Date.now() - 2 * 60 * 60 * 1000,
+      },
     }),
   );
   ({ POST: postSession, DELETE: deleteSession } = await import("./session/route"));
@@ -455,6 +464,86 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     expect(
       (await fromLibraryRoute(pinReq(aliceB.participantCookie), slugParams(boardB))).status,
     ).toBe(401);
+  });
+
+  it("PIN-94: wrong-provider and revoked tokens are 401 with no cookie", async () => {
+    for (const idToken of ["token-anon", "token-revoked"]) {
+      const res = await postSession(
+        req("http://t/api/auth/session", {
+          method: "POST",
+          body: JSON.stringify({ idToken }),
+        }),
+      );
+      expect(res.status).toBe(401);
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
+  it("PIN-94: stale sign-in reads /api/me but cannot claim, auto-link or restore", async () => {
+    const staleCookie = await signIn("token-alice-stale");
+
+    // Ordinary session reads are unaffected by freshness.
+    const me = await getMe(req("http://t/api/me", { headers: { cookie: staleCookie } }));
+    expect(me.status).toBe(200);
+    expect((await me.json()).user.uid).toBe("synthetic-alice");
+
+    // One board for all three flows (board creation is rate-limited).
+    const slug = await makeBoard("Stale auth board");
+    const { res: joinRes, participantCookie } = await join(slug, "Aye");
+    expect(joinRes.status).toBe(201);
+
+    // Explicit claim with the stale session -> 401.
+    const staleClaim = await claimRoute(
+      req("http://t/x", {
+        method: "POST",
+        headers: { cookie: `${participantCookie}; ${staleCookie}` },
+      }),
+      slugParams(slug),
+    );
+    expect(staleClaim.status).toBe(401);
+
+    // Join-while-stale does not auto-link: a fresh different user
+    // can still claim that participant (a live alice claim would 409).
+    const staleJoin = await join(slug, "Bee", staleCookie);
+    expect(staleJoin.res.status).toBe(201);
+    const bobCookie = await signIn("token-bob");
+    const bobClaim = await claimRoute(
+      req("http://t/x", {
+        method: "POST",
+        headers: { cookie: `${staleJoin.participantCookie}; ${bobCookie}` },
+      }),
+      slugParams(slug),
+    );
+    expect(bobClaim.status).toBe(200);
+
+    // Alice claims "Aye" while fresh (board-open auto-claim)...
+    const freshCookie = await signIn("token-alice");
+    const opened = await boardGetRoute(
+      req("http://t/x", {
+        headers: { cookie: `${participantCookie}; ${freshCookie}` },
+      }),
+      slugParams(slug),
+    );
+    const openedMe = ((await opened.json()) as { me: { id: string } | null }).me;
+    expect(openedMe).not.toBeNull();
+
+    // ...then the stale session alone restores nobody, sets nothing...
+    const staleRestore = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: staleCookie } }),
+      slugParams(slug),
+    );
+    expect(staleRestore.status).toBe(200);
+    expect(staleRestore.headers.get("set-cookie")).toBeNull();
+    expect(((await staleRestore.json()) as { me: unknown }).me).toBeNull();
+
+    // ...while the fresh session restores the same participant.
+    const freshRestore = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: freshCookie } }),
+      slugParams(slug),
+    );
+    expect(
+      ((await freshRestore.json()) as { me: { id: string } | null }).me?.id,
+    ).toBe(openedMe?.id);
   });
 
   it("DELETE /api/auth/session clears the cookie; /api/me is then 401", async () => {

@@ -14,6 +14,9 @@ import "server-only";
  * token — fails closed to null. The identity carries uid plus
  * the optional display name / photo claims only; the email
  * claim is deliberately never read (see src/domain/user.ts).
+ * PIN-94: it also carries `firebase.sign_in_provider` and
+ * `auth_time`, which user-session checks against Policy
+ * (provider allowlist at exchange, freshness at claim/restore).
  */
 import { getConfig, type AppConfig } from "../config";
 
@@ -21,29 +24,95 @@ export interface VerifiedIdentity {
   uid: string;
   displayName?: string;
   photoUrl?: string;
+  /** Firebase `firebase.sign_in_provider` (PIN-94), e.g. "google.com". */
+  signInProvider?: string;
+  /** Firebase `auth_time` in ms: when the user last authenticated. */
+  authTimeMs?: number;
+}
+
+export interface VerifyIdTokenOptions {
+  /** Firebase revocation check; session exchange always passes true. */
+  checkRevoked?: boolean;
 }
 
 export interface TokenVerifier {
   /** Null = token invalid or verification unavailable. Never throws. */
-  verifyIdToken(idToken: string): Promise<VerifiedIdentity | null>;
+  verifyIdToken(
+    idToken: string,
+    options?: VerifyIdTokenOptions,
+  ): Promise<VerifiedIdentity | null>;
 }
 
-/** Deterministic verifier for tests: exact token -> identity map. */
+/** Test fixture shape: a VerifiedIdentity plus a revocation flag. */
+export type FakeTokenIdentity = VerifiedIdentity & { revoked?: boolean };
+
+/**
+ * Deterministic verifier for tests: exact token -> identity map.
+ * Mirrors the hosted contract (PIN-94): entries default to a fresh
+ * Google sign-in (provider "google.com", authTime = now) unless a
+ * fixture overrides them, and a `revoked` entry verifies only when
+ * the caller does NOT request the revocation check — exactly like
+ * Firebase, where revocation bites only with checkRevoked=true.
+ */
 export class FakeTokenVerifier implements TokenVerifier {
   constructor(
-    private readonly tokens: Readonly<Record<string, VerifiedIdentity>>,
+    private readonly tokens: Readonly<Record<string, FakeTokenIdentity>>,
+    private readonly now: () => number = () => Date.now(),
   ) {}
 
-  async verifyIdToken(idToken: string): Promise<VerifiedIdentity | null> {
-    const identity = this.tokens[idToken];
-    return identity ? { ...identity } : null;
+  async verifyIdToken(
+    idToken: string,
+    options?: VerifyIdTokenOptions,
+  ): Promise<VerifiedIdentity | null> {
+    const entry = this.tokens[idToken];
+    if (!entry) return null;
+    if (options?.checkRevoked && entry.revoked) return null;
+    const { revoked: _revoked, ...identity } = entry;
+    return {
+      ...identity,
+      signInProvider: identity.signInProvider ?? "google.com",
+      authTimeMs: identity.authTimeMs ?? this.now(),
+    };
   }
+}
+
+interface DecodedTokenLike {
+  uid?: unknown;
+  name?: unknown;
+  picture?: unknown;
+  auth_time?: unknown;
+  firebase?: { sign_in_provider?: unknown } | null;
 }
 
 interface AdminAuthLike {
   verifyIdToken(
     idToken: string,
-  ): Promise<{ uid?: unknown; name?: unknown; picture?: unknown }>;
+    checkRevoked?: boolean,
+  ): Promise<DecodedTokenLike>;
+}
+
+/** Decoded Firebase token -> VerifiedIdentity; null without a uid. */
+export function identityFromDecodedToken(
+  decoded: DecodedTokenLike,
+): VerifiedIdentity | null {
+  if (typeof decoded.uid !== "string" || !decoded.uid) return null;
+  const provider = decoded.firebase?.sign_in_provider;
+  return {
+    uid: decoded.uid,
+    ...(typeof decoded.name === "string" && decoded.name
+      ? { displayName: decoded.name }
+      : {}),
+    ...(typeof decoded.picture === "string" && decoded.picture
+      ? { photoUrl: decoded.picture }
+      : {}),
+    ...(typeof provider === "string" && provider
+      ? { signInProvider: provider }
+      : {}),
+    ...(typeof decoded.auth_time === "number" &&
+    Number.isFinite(decoded.auth_time)
+      ? { authTimeMs: decoded.auth_time * 1000 }
+      : {}),
+  };
 }
 
 const ADMIN_APP_NAME = "pinned-auth";
@@ -52,9 +121,17 @@ const ADMIN_APP_NAME = "pinned-auth";
 export class FirebaseAdminTokenVerifier implements TokenVerifier {
   private authPromise: Promise<AdminAuthLike | null> | null = null;
 
-  constructor(private readonly projectId: string | null) {}
+  constructor(
+    private readonly projectId: string | null,
+    // Test seam: inject a fake Admin Auth instead of loading the SDK.
+    private readonly authLoader?: () => Promise<AdminAuthLike | null>,
+  ) {}
 
   private loadAuth(): Promise<AdminAuthLike | null> {
+    if (this.authLoader) {
+      this.authPromise ??= this.authLoader().catch(() => null);
+      return this.authPromise;
+    }
     this.authPromise ??= (async () => {
       try {
         const { applicationDefault, getApps, initializeApp } =
@@ -78,22 +155,21 @@ export class FirebaseAdminTokenVerifier implements TokenVerifier {
     return this.authPromise;
   }
 
-  async verifyIdToken(idToken: string): Promise<VerifiedIdentity | null> {
+  async verifyIdToken(
+    idToken: string,
+    options?: VerifyIdTokenOptions,
+  ): Promise<VerifiedIdentity | null> {
     if (!idToken || !this.projectId) return null;
     try {
       const auth = await this.loadAuth();
       if (!auth) return null;
-      const decoded = await auth.verifyIdToken(idToken);
-      if (typeof decoded.uid !== "string" || !decoded.uid) return null;
-      return {
-        uid: decoded.uid,
-        ...(typeof decoded.name === "string" && decoded.name
-          ? { displayName: decoded.name }
-          : {}),
-        ...(typeof decoded.picture === "string" && decoded.picture
-          ? { photoUrl: decoded.picture }
-          : {}),
-      };
+      // With checkRevoked, Firebase throws auth/id-token-revoked for
+      // revoked tokens; the catch below fails closed to null.
+      const decoded = await auth.verifyIdToken(
+        idToken,
+        options?.checkRevoked ?? false,
+      );
+      return identityFromDecodedToken(decoded);
     } catch {
       return null;
     }
