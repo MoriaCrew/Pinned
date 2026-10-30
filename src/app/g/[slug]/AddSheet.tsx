@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addSheetStage,
   applyOptimisticConfirm,
+  canConfirmJob,
   canTapAdd,
   confirmPayload,
   cuttingProgress,
@@ -526,7 +527,7 @@ export function AddSheet({
     // tap pin then, and confirm drops unlisted job pins. Scoped
     // to that one pin — background refetches never disable Pin.
     payload !== null &&
-    job?.status === "ready" &&
+    canConfirmJob(job?.status ?? null, candidatePins.length) &&
     !confirm.isPending &&
     !tapAdd.isPending &&
     !awaitingTap;
@@ -735,7 +736,10 @@ export function AddSheet({
         </div>
       ) : null}
 
-      {job?.status === "failed" ? <SheetLine tone="error">{t("en", "add.failed")}</SheetLine> : null}
+      {/* Failed after some things landed: the review offers those, no error line. */}
+      {job?.status === "failed" && candidatePins.length === 0 ? (
+        <SheetLine tone="error">{t("en", "add.failed")}</SheetLine>
+      ) : null}
       {job?.status === "refused" ? <SheetLine>{t("en", "add.refused")}</SheetLine> : null}
       {uploadError ? <SheetLine tone="error">{uploadError}</SheetLine> : null}
     </>

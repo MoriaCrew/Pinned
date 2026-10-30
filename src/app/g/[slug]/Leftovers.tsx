@@ -124,15 +124,14 @@ export function BoardLeftovers({
         }),
       );
     },
-    onMutate: async (groups) => {
+    // Not optimistic (PIN-122 Bugbot): taking the leftovers out of the
+    // board before the server answers would unmount this line, and
+    // with it "Clearing…" and any error. They leave once it succeeds.
+    onSuccess: async (_data, groups) => {
       await queryClient.cancelQueries({ queryKey: boardQueryKey(slug) });
-      const previous = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
-      if (previous) queryClient.setQueryData(boardQueryKey(slug), withoutLeftovers(previous, groups));
-      return { previous };
-    },
-    onSuccess: () => setConfirming(false),
-    onError: (_cause, _groups, context) => {
-      if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
+      const current = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
+      if (current) queryClient.setQueryData(boardQueryKey(slug), withoutLeftovers(current, groups));
+      setConfirming(false);
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) }),
   });

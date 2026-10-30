@@ -190,10 +190,20 @@ export function isTerminalJob(status: JobStatusLike): boolean {
  * The cut-out moment's steps (PIN-99, docs/14): pick a photo,
  * finding (upload / job running, nothing cut yet), cutting
  * (candidates arriving on the photo), review (job ready: keep or
- * drop, tap to add) and ended (failed or refused). A ready job
- * with no candidates is still review: tap-to-add is the fix.
+ * drop, tap to add) and ended (failed with nothing cut, or
+ * refused). A ready job with no candidates is still review:
+ * tap-to-add is the fix.
  */
 export type AddStage = "pick" | "finding" | "cutting" | "review" | "ended";
+
+/**
+ * A job whose candidates can be confirmed: done cutting, with
+ * something to pin. Ready, or failed after some things landed
+ * (PIN-122). Running jobs are refused by the confirm route.
+ */
+export function canConfirmJob(status: JobStatusLike | null, candidateCount: number): boolean {
+  return status === "ready" || (status === "failed" && candidateCount > 0);
+}
 
 export function addSheetStage(input: {
   uploadPending: boolean;
@@ -204,6 +214,10 @@ export function addSheetStage(input: {
 }): AddStage {
   if (!input.uploadPending && input.jobId === null) return "pick";
   if (input.jobStatus === "ready") return "review";
+  // A job that failed after some things landed (decompose_failed)
+  // still lets the user pin those (PIN-122 Bugbot): review them, with
+  // tap-to-add off (canTapAdd wants ready). Refused never has any.
+  if (input.jobStatus === "failed" && input.candidateCount > 0) return "review";
   if (input.jobStatus === "failed" || input.jobStatus === "refused") return "ended";
   return input.candidateCount > 0 ? "cutting" : "finding";
 }
