@@ -88,6 +88,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       resolvePolicy({ myBoardsRemovePerIp: { limit: 5 } }).myBoardsRemovePerIp,
     ).toEqual({ limit: 5, windowMs: 600_000 });
     expect(() => resolvePolicy({ myBoardsRemovePerIp: { limit: 0 } })).toThrow();
+    // PIN-167 board delete brake: same shape, same fail-closed floor.
+    expect(DEFAULT_POLICY.boardDeletePerIp).toEqual({ limit: 60, windowMs: 600_000 });
+    expect(resolvePolicy({ boardDeletePerIp: { limit: 5 } }).boardDeletePerIp).toEqual({ limit: 5, windowMs: 600_000 });
+    expect(() => resolvePolicy({ boardDeletePerIp: { windowMs: 0 } })).toThrow();
     expect(resolvePolicy({ userSessionDays: 7 }).userSessionDays).toBe(7);
     expect(() => resolvePolicy({ userSessionDays: 0 })).toThrow();
     expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);

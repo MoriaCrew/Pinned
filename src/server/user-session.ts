@@ -29,7 +29,7 @@ import "server-only";
  * reads and (PIN-160) the automatic join/board-open link do not.
  */
 import type { Participant } from "../domain/board";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { signUserCookie, verifyUserCookie } from "../domain/tokens";
 import type { UserProfile } from "../domain/user";
 import type { UserRepository } from "../domain/user-repository";
@@ -221,13 +221,20 @@ export async function resolveUserSession(
   return context?.user ?? null;
 }
 
-/** Write/refresh users/{uid}/boards/{slug}, keeping the first claimedAt. */
+/**
+ * Write/refresh users/{uid}/boards/{slug}, keeping the first
+ * claimedAt. Never for a deleted board (PIN-167): checked before,
+ * and again after the write — a board delete's row clean-up that
+ * ran in between either saw this (already linked) participant or
+ * the re-check sees its tombstone and removes the row.
+ */
 async function writeBoardIndex(
   participant: Participant,
   user: UserProfile,
   deps: ClaimDeps,
   now: number,
 ): Promise<void> {
+  if (!(await isLiveBoard(deps.boards, participant.boardId))) return;
   const existing = await deps.users.getUserBoard(user.uid, participant.boardId);
   await deps.users.putUserBoard(user.uid, {
     boardId: participant.boardId,
@@ -235,6 +242,9 @@ async function writeBoardIndex(
     claimedAt: existing?.claimedAt ?? now,
     updatedAt: now,
   });
+  if (!(await isLiveBoard(deps.boards, participant.boardId))) {
+    await deps.users.deleteUserBoard(user.uid, participant.boardId);
+  }
 }
 
 /**
