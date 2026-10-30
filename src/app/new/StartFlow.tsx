@@ -201,7 +201,12 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
                 locked: option.plus,
               }))}
               value={skin}
-              onChange={setSkin}
+              onChange={(next) => {
+                // A new pick is a fresh attempt: drop the old error so the
+                // button names the new look and the Plus note can show.
+                setSkin(next);
+                setError("");
+              }}
               sample={SAMPLE}
               legend={t("en", "ui.look")}
             />
