@@ -1,13 +1,22 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
+import { viewerEscapeTarget } from "../../../domain/scene-viewer";
 import { t } from "../../../i18n";
 import { Button, CreditLine, IconButton, Menu, cx } from "../../../ui";
 import type { PrintSlot } from "./BoardScenes";
 import styles from "./board.module.css";
 
-/** One "More" entry (PIN-132 brings Delete). With none, there is no More button. */
+/** One "More" entry (PIN-143 brings Delete). With none, there is no More button. */
 export type ViewerMoreItem = ComponentProps<typeof Menu>["items"][number];
+
+/** The inline delete confirm (PIN-143): it holds the error line, so a failure stays on screen. */
+export interface ViewerDeleteConfirm {
+  deleting: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onKeep: () => void;
+}
 
 /**
  * Scene viewer (PIN-131): one print full screen. The whole picture
@@ -24,6 +33,7 @@ export function SceneViewer({
   onStep,
   onRemix,
   more = [],
+  confirmDelete = null,
 }: {
   slot: PrintSlot;
   onClose: () => void;
@@ -31,23 +41,48 @@ export function SceneViewer({
   onStep: (step: 1 | -1) => void;
   onRemix?: () => void;
   more?: ViewerMoreItem[];
+  confirmDelete?: ViewerDeleteConfirm | null;
 }) {
   const titleId = useId();
+  const confirmId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLSpanElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  // Latest handlers without re-running the open effect (it owns focus and scroll).
-  const handlers = useRef({ onClose, onStep });
+  const confirming = confirmDelete !== null;
+  // Latest handlers and state without re-running the open effect (it owns focus and scroll).
+  const handlers = useRef({ onClose, onStep, moreOpen, confirmDelete });
   useEffect(() => {
-    handlers.current = { onClose, onStep };
+    handlers.current = { onClose, onStep, moreOpen, confirmDelete };
   });
+  const focusMore = () => moreRef.current?.querySelector("button")?.focus();
+  // Nothing closes the confirm while the delete is in flight: its answer (and error) lands there.
+  const keep = () => {
+    if (confirmDelete && !confirmDelete.deleting) confirmDelete.onKeep();
+  };
+  // Back from the confirm (Keep or Esc), focus returns to More.
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    if (wasConfirming.current && !confirming) focusMore();
+    wasConfirming.current = confirming;
+  }, [confirming]);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
     const body = document.body.style;
     const overflow = body.overflow;
     body.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") handlers.current.onClose();
-      else if (event.key === "ArrowRight") handlers.current.onStep(1);
+      const { moreOpen: menuOpen, confirmDelete: asked } = handlers.current;
+      if (event.key === "Escape") {
+        const target = viewerEscapeTarget({ menuOpen, confirming: asked !== null });
+        if (target === "menu") {
+          setMoreOpen(false);
+          focusMore();
+        } else if (target === "confirm") {
+          if (!asked?.deleting) asked?.onKeep();
+        } else handlers.current.onClose();
+      } else if (menuOpen || asked !== null) {
+        return; // stepping waits until the menu or confirm is closed
+      } else if (event.key === "ArrowRight") handlers.current.onStep(1);
       else if (event.key === "ArrowLeft") handlers.current.onStep(-1);
     };
     document.addEventListener("keydown", onKey);
@@ -71,30 +106,62 @@ export function SceneViewer({
           <IconButton icon="close" label={t("en", "ui.close")} variant="ghost" onClick={onClose} />
         </div>
         <CreditLine items={slot.credits} remixOf={slot.remixOf} className={styles.viewerCredits} />
-        <div className="pn-print-actions">
-          <Button variant="primary" icon="share" onClick={slot.onShare} disabled={slot.sharing}>
-            {t("en", "share.button")}
-          </Button>
-          {onRemix ? (
-            <Button icon="remix" onClick={onRemix}>
-              {t("en", "ui.remix")}
+        {confirmDelete ? (
+          // In the actions row's place, inside the panel's flow: never over the idea and Close.
+          <div className={styles.viewerConfirm} role="group" aria-labelledby={confirmId}>
+            <p id={confirmId}>{t("en", "board.sceneDeleteConfirm")}</p>
+            <div className="pn-print-actions">
+              <Button disabled={confirmDelete.deleting} onClick={confirmDelete.onConfirm}>
+                {confirmDelete.deleting ? t("en", "board.deleting") : t("en", "board.delete")}
+              </Button>
+              <Button variant="quiet" disabled={confirmDelete.deleting} autoFocus onClick={keep}>
+                {t("en", "board.deleteKeep")}
+              </Button>
+            </div>
+            {confirmDelete.error ? (
+              <p className={styles.error} role="alert">
+                {confirmDelete.error}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="pn-print-actions">
+            <Button variant="primary" icon="share" onClick={slot.onShare} disabled={slot.sharing}>
+              {t("en", "share.button")}
             </Button>
-          ) : null}
-          <span className="pn-spacer" />
-          {more.length > 0 ? (
-            <span className={styles.viewerMore}>
-              <IconButton
-                icon="more"
-                label={t("en", "ui.more")}
-                variant="ghost"
-                aria-haspopup="menu"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((open) => !open)}
-              />
-              {moreOpen ? <Menu items={more} label={t("en", "ui.more")} className={styles.viewerMenu} /> : null}
-            </span>
-          ) : null}
-        </div>
+            {onRemix ? (
+              <Button icon="remix" onClick={onRemix}>
+                {t("en", "ui.remix")}
+              </Button>
+            ) : null}
+            <span className="pn-spacer" />
+            {more.length > 0 ? (
+              <span ref={moreRef} className={styles.viewerMore}>
+                <IconButton
+                  icon="more"
+                  label={t("en", "ui.more")}
+                  variant="ghost"
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((open) => !open)}
+                />
+                {moreOpen ? (
+                  <Menu
+                    items={more.map((item) => ({
+                      ...item,
+                      onSelect: () => {
+                        setMoreOpen(false);
+                        item.onSelect?.();
+                      },
+                    }))}
+                    label={t("en", "ui.more")}
+                    className={styles.viewerMenu}
+                  />
+                ) : null}
+              </span>
+            ) : null}
+          </div>
+        )}
         {slot.footer}
       </section>
     </div>

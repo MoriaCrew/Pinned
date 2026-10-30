@@ -45,6 +45,10 @@ export interface BoardViewScene {
   height?: number;
   imageUrl: string | null;
   createdAt: number;
+  /** Board view only (PIN-143): the viewer is its maker or the host. A UI hint; the server enforces. */
+  canDelete?: boolean;
+  /** Board view only (PIN-143): a remix whose parent was deleted. */
+  parentDeleted?: boolean;
 }
 
 export interface BoardViewLike {

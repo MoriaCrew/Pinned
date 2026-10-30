@@ -78,7 +78,12 @@ Principles:
   shifts) and passes `onOpen` to the compact credits row; both say
   `aria-haspopup="dialog"`. The board's scene viewer shows the whole
   picture contained on `--viewer-bg` (the skin's dark ground), then
-  the full `CreditLine` on a sheet panel with Share first.
+  the full `CreditLine` on a sheet panel with Share first. Its More
+  menu (PIN-143) holds Delete for the scene's maker or the host: the
+  confirm (Delete / Keep) takes the actions row's place in the
+  panel, so the idea and Close stay in view, and holds the error
+  line; Esc closes the menu or confirm before the viewer.
+  A remix of a deleted scene says "Remix of a deleted scene".
 - Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
   paints the ground, ink and reading face, and lets a board wear a
   different skin than `<html>`. `src/app/globals.css` is only a reset

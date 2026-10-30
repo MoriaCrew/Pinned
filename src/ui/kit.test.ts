@@ -263,6 +263,11 @@ describe("CreditLine compact (PIN-130)", () => {
     expect(bare).toContain("Remix of");
   });
 
+  it("says Remix of a deleted scene once the parent is gone (PIN-143)", () => {
+    const markup = html(h(CreditLine, { compact: true, items: credits(2), remixOf: { deleted: true } }));
+    expect(markup).toContain('<p class="pn-credit-remix">Remix of a deleted scene</p>');
+  });
+
   it("falls back to the owner's avatar, then the thing's initials, when a cut-out is missing", () => {
     const items = [{ thing: "teal mug", owner: { id: "p1", name: "Robin Lee" } }, { thing: "rubber duck" }];
     const markup = html(h(CreditLine, { compact: true, items }));

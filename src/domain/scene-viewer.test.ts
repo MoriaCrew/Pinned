@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoardViewScene } from "./board-view";
 import { stripItems } from "./board-ui";
-import { parseSceneParam, sceneIdInUrl, stepScene, urlWithScene, viewerSceneIds } from "./scene-viewer";
+import { parseSceneParam, sceneIdInUrl, stepScene, urlWithScene, viewerEscapeTarget, viewerSceneIds } from "./scene-viewer";
 
 const board = "https://pinneds.test/g/AAAAAAAAAAAAAAAAAAAAAA";
 
@@ -39,5 +39,13 @@ describe("scene viewer URL state (PIN-131)", () => {
     expect(stepScene(ids, "s1", 1)).toBeNull();
     // An unknown, hidden or deleted id is not viewable, so it has no neighbours.
     expect(stepScene(ids, "gone", 1)).toBeNull();
+  });
+});
+
+describe("viewerEscapeTarget (PIN-143)", () => {
+  it("closes an open menu first, then the delete confirm, then the viewer", () => {
+    expect(viewerEscapeTarget({ menuOpen: true, confirming: true })).toBe("menu");
+    expect(viewerEscapeTarget({ menuOpen: false, confirming: true })).toBe("confirm");
+    expect(viewerEscapeTarget({ menuOpen: false, confirming: false })).toBe("viewer");
   });
 });

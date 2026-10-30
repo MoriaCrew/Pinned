@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import type { RemixSource } from "../domain/board-ui";
 import { stickerTilt } from "../domain/skins";
 import { t, tf } from "../i18n";
 import { Button, IconButton, Tag, cx } from "./primitives";
@@ -43,7 +44,7 @@ export function SceneCard({
   idea?: string;
   credits?: Credit[];
   kind?: SceneKind;
-  remixOf?: { title: string; owner?: string } | null;
+  remixOf?: RemixSource | null;
   ratio?: string;
   number?: number;
   seed?: string;

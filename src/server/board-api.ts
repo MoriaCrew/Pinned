@@ -321,6 +321,7 @@ export async function getBoardView(
   );
   const visibleElementIds = new Set(pins.map((pin) => pin.elementId));
   const elementsById = new Map(elements.map((element) => [element.id, element]));
+  const isHost = verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now());
   return {
     board: publicBoard(board),
     me: viewer ? publicParticipant(viewer) : null,
@@ -332,13 +333,17 @@ export async function getBoardView(
     elements: elements
       .filter((element) => visibleElementIds.has(element.id))
       .map((element) => publicElement(slug, element)),
-    scenes: scenes.map((scene) => publicScene(slug, scene)),
+    // PIN-143: canDelete only shows Delete (the DELETE route re-checks);
+    // parentDeleted: a remix whose parent is a tombstone.
+    scenes: scenes.map((scene) => ({
+      ...publicScene(slug, scene),
+      canDelete: isHost || (viewer !== null && scene.createdBy === viewer.id),
+      ...(scene.parentSceneId && deletedSceneIds.has(scene.parentSceneId) ? { parentDeleted: true } : {}),
+    })),
     // Activity strip (PIN-74): board-visible BoardEvent lines,
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
-    viewer: {
-      isHost: verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now()),
-    },
+    viewer: { isHost },
     plus: plusView(board, {
       mode: deps.plusMode ?? "off",
       priceLabels: deps.policy.plus.priceLabels,

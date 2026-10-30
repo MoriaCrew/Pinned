@@ -228,6 +228,38 @@ describe("scene viewer (PIN-131)", () => {
     expect(viewer({ slot: { ...remix, sharing: true } })).toMatch(/disabled=""[^>]*>.*Share<\/button>/);
   });
 
+  it("asks in the actions row's place, never over the idea and Close, and keeps the error line (PIN-143)", () => {
+    const confirmDelete = { deleting: false, error: null, onConfirm: noop, onKeep: noop };
+    const more = [{ label: "Delete", onSelect: noop, danger: true }];
+    const asked = viewer({ more, confirmDelete });
+    const line = "Delete this scene? It&#x27;s gone for everyone on this board.";
+    expect(asked).toContain(`class="${styles.viewerConfirm}" role="group"`);
+    expect(asked).toMatch(/>Delete<\/button>.*>Keep<\/button>/);
+    // In the panel's flow after the credits; the header keeps Close; no popover, no Share/More row.
+    expect(asked.indexOf(line)).toBeGreaterThan(asked.indexOf(styles.viewerCredits));
+    expect(asked).toContain('aria-label="Close"');
+    expect(asked).not.toContain("pn-menu");
+    expect(asked).not.toContain("Share</button>");
+    expect(asked).not.toContain('aria-label="More"');
+    expect(asked).not.toContain('role="alert"');
+    const failed = viewer({ more, confirmDelete: { ...confirmDelete, error: "Couldn't delete. Try again." } });
+    expect(failed).toContain('role="alert">Couldn&#x27;t delete. Try again.</p>');
+    const busy = viewer({ more, confirmDelete: { ...confirmDelete, deleting: true } });
+    expect(busy).toMatch(/disabled=""[^>]*>Deleting…<\/button>/);
+    expect(busy).toMatch(/disabled=""[^>]*>Keep<\/button>/);
+    expect(viewer({ more })).not.toContain("Delete this scene?");
+    const css = readFileSync(path.join(process.cwd(), "src/app/g/[slug]/board.module.css"), "utf8");
+    expect(css).not.toMatch(/\.viewerConfirm \{[^}]*position:/);
+  });
+
+  it("shows Remix of a deleted scene in the viewer's credits", () => {
+    expect(viewer({ slot: { ...remix, remixOf: { deleted: true } } })).toContain("Remix of a deleted scene");
+  });
+
+  it("lets the Scenes heading take focus when a delete leaves no print to return to (PIN-143)", () => {
+    expect(html(h(BoardScenes, { count: 0, slots: [] }))).toContain('<h2 class="pn-section-title" id="board-scenes" tabindex="-1">');
+  });
+
   it("makes the print's picture and credits row open the viewer", () => {
     const out = html(h(BoardScenes, { count: 1, slots: [{ ...remix, onOpen: noop }] }));
     expect(out).toContain('data-scene-id="s7"');

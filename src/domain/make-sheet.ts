@@ -176,6 +176,35 @@ export function isTerminalScene(status: SceneStatusLike): boolean {
   return status === "ready" || status === "failed" || status === "refused";
 }
 
+/**
+ * My attempt's scene poll (PIN-143): `scene: null` = the scene route
+ * 404'd (deleted or hidden), so the poll stops there, as it does at a
+ * terminal status; otherwise it keeps the job cadence.
+ */
+export function attemptPollInterval(
+  data: { scene: { status: SceneStatusLike } | null } | undefined,
+  intervalMs: number,
+): number | false {
+  if (data && (data.scene === null || isTerminalScene(data.scene.status))) return false;
+  return intervalMs;
+}
+
+/**
+ * The strip's scenes with my attempt's polled copy on top (PIN-143).
+ * It replaces the board view's copy (keeping that copy's per-viewer
+ * flags), and only while the board view still lists the scene: once
+ * it is deleted or hidden there, a stale polled copy never brings it
+ * back.
+ */
+export function withPolledScene(viewScenes: readonly BoardViewScene[], polled: BoardViewScene | null | undefined): BoardViewScene[] {
+  const inView = polled ? viewScenes.find((scene) => scene.id === polled.id) : undefined;
+  if (!polled || !inView) return [...viewScenes];
+  return [
+    { ...polled, canDelete: inView.canDelete, parentDeleted: inView.parentDeleted },
+    ...viewScenes.filter((scene) => scene.id !== polled.id),
+  ];
+}
+
 /** Gallery order: newest first, stable for equal timestamps. */
 export function scenesNewestFirst(scenes: readonly BoardViewScene[]): BoardViewScene[] {
   return [...scenes].sort(
