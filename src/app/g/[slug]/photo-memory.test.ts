@@ -51,3 +51,23 @@ describe("last photo memory (PIN-122, PIN-126)", () => {
     expect(r.revoked).toEqual(["blob:2"]);
   });
 });
+
+describe("photo memory store (PIN-126)", () => {
+  it("tells open sheets when the slot changes, so a late job id shows the photo", async () => {
+    const { createPhotoMemory } = await import("./photo-memory");
+    const memory = createPhotoMemory();
+    let calls = 0;
+    const off = memory.subscribe(() => void (calls += 1));
+    memory.current = stashUploadingPhoto(memory.current, "blob:2", () => {});
+    expect(photoForJob(memory.current, "job-2")).toBeNull();
+    memory.current = claimStashedPhoto(memory.current, "blob:2", "job-2");
+    expect(photoForJob(memory.current, "job-2")).toBe("blob:2");
+    expect(calls).toBe(2);
+    // Same slot again: no news.
+    memory.current = claimStashedPhoto(memory.current, "blob:2", "job-2");
+    expect(calls).toBe(2);
+    off();
+    memory.current = null;
+    expect(calls).toBe(2);
+  });
+});

@@ -53,3 +53,36 @@ export function dropStashedPhoto(
 export function photoForJob(current: PhotoSlot, jobId: string | null): string | null {
   return jobId !== null && current?.jobId === jobId ? current.url : null;
 }
+
+/**
+ * The board page's photo memory: a slot that tells open sheets when
+ * it changes. A photo stashed mid-upload only learns its job when
+ * the upload returns (the request runs the whole cut), so a sheet
+ * reopened by "Pin them" before then picks the photo up the moment
+ * it lands (PIN-126).
+ */
+export interface PhotoMemoryStore {
+  current: PhotoSlot;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createPhotoMemory(): PhotoMemoryStore {
+  let slot: PhotoSlot = null;
+  const listeners = new Set<() => void>();
+  return {
+    get current() {
+      return slot;
+    },
+    set current(next: PhotoSlot) {
+      if (next === slot) return;
+      slot = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}

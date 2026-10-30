@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addSheetStage,
@@ -41,7 +41,7 @@ import {
   photoForJob,
   rememberJobPhoto,
   stashUploadingPhoto,
-  type PhotoSlot,
+  type PhotoMemoryStore,
 } from "./photo-memory";
 
 const revokeUrl = (url: string) => URL.revokeObjectURL(url);
@@ -80,14 +80,15 @@ export function reviewHelpLine(help: ReviewHelp): string {
  * the same visit. A reload forgets it: the review then shows the
  * stickers only.
  */
-export interface PhotoMemory {
-  /**
-   * The last photo's local preview. `jobId` is null while its upload
-   * is still in flight after the sheet closed (PIN-126); the upload's
-   * success fills it in, a failure releases the URL.
-   */
-  current: PhotoSlot;
-}
+/**
+ * The board page's memory of the last photo's local preview
+ * (`createPhotoMemory`). `jobId` is null while its upload is still in
+ * flight after the sheet closed (PIN-126); the upload's success fills
+ * it in, a failure releases the URL. Open sheets are told on change.
+ */
+export type PhotoMemory = PhotoMemoryStore;
+
+const noSubscribe = () => () => {};
 
 /**
  * Client downscale before upload (docs/11 section 5.8): decode,
@@ -311,6 +312,14 @@ export function AddSheet({
   // browsers apply EXIF orientation to <img>, so normalized tap
   // points line up with the working copy's frame.
   const remembered = photoForJob(photoMemory?.current ?? null, resumeJobId);
+  // Read live too: a photo stashed mid-upload gets its job only when
+  // that upload returns, possibly after this sheet opened (PIN-126).
+  const memorySlot = useSyncExternalStore(
+    photoMemory?.subscribe ?? noSubscribe,
+    () => photoMemory?.current ?? null,
+    () => null,
+  );
+  const rememberedLive = photoForJob(memorySlot, resumeJobId);
   const [previewUrl, setPreviewUrl] = useState<string | null>(remembered);
   const previewRef = useRef<string | null>(remembered);
   const [tapError, setTapError] = useState("");
@@ -378,6 +387,17 @@ export function AddSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // "Pin them" opened before a mid-upload photo learned its job: show
+  // it once it does, while this sheet is still on that photo.
+  useEffect(() => {
+    if (rememberedLive && previewRef.current === null && jobId === resumeJobId) {
+      previewRef.current = rememberedLive;
+      setPreviewUrl(rememberedLive);
+    }
+    // Only when the remembered photo changes, not on later resets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rememberedLive]);
 
   const upload = useMutation({
     mutationFn: async (file: File) => {

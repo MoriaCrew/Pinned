@@ -49,6 +49,7 @@ import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
 import { AddSheet, boardQueryKey, type PhotoMemory } from "./AddSheet";
+import { createPhotoMemory } from "./photo-memory";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
@@ -191,12 +192,12 @@ function BoardBody({
   // PIN-122: "Pin them" reopens the Add sheet at this photo's review;
   // the last photo's local preview survives sheet closes meanwhile.
   const [resumeJobId, setResumeJobId] = useState<string | null>(null);
-  const photoMemory = useRef<PhotoMemory["current"]>(null);
+  const [photoMemory] = useState<PhotoMemory>(createPhotoMemory);
   useEffect(
     () => () => {
       if (photoMemory.current) URL.revokeObjectURL(photoMemory.current.url);
     },
-    [],
+    [photoMemory],
   );
   const [makeOpen, setMakeOpen] = useState(false);
   // Picking mode: pins become toggles and the dock becomes the tray.
