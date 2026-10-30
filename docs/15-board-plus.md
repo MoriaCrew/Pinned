@@ -271,6 +271,61 @@ spend only `available`. Persistence sits behind the
 operation is one atomic per-board read-modify-write and a refusal
 writes nothing.
 
+## Credit storage + checkout intents (PIN-148)
+
+`FirestoreCreditLedgerStore`
+(`src/server/firestore-credit-ledger-store.ts`) implements the
+ledger port by running the pure ops inside one Firestore
+transaction per board, so concurrent debits cannot overspend and
+concurrent grants cannot double-credit; a throw aborts the
+transaction and writes nothing. Storage is multi-doc so no
+document grows unbounded:
+
+- `creditAccounts/{boardId}` — the account head only (`balance`,
+  `frozen`, `pendingClawback`, `starterGranted`,
+  `frozenByDispute`).
+- `creditAccounts/{boardId}/purchases/{purchaseId}` — one doc
+  per recorded purchase.
+- `creditAccounts/{boardId}/entries/{eventId}` — one append-only
+  doc per applied entry, keyed by event id, with an internal
+  `_seq` (append order, stripped on reads; the board-repository
+  pattern).
+
+`getAccount`/`listEntries` reconstruct the domain account
+exactly (entries by `_seq`, `appliedEventIds` derived from the
+entry ids), so duplicate-event replay is a no-op even after a
+restart. Unknown boards read a zero balance. All access is
+direct doc reads plus whole-subcollection reads sorted in code:
+**no new composite indexes**, so `firestore.indexes.json` is
+unchanged and no index deploy is needed for this slice.
+`firestore.rules` stays deny-all — the Admin SDK server path
+owns these collections.
+
+`CheckoutIntent` (`src/server/checkout-intent.ts`, Firestore impl
+in `src/server/firestore-checkout-intent-store.ts`) is the
+opaque bridge to hosted checkout. The server mints a random
+UUID intent id; the board mapping exists only inside the stored
+record at `checkoutIntents/{intentId}` (top-level by intent id,
+so a webhook resolves it with one direct get). The
+public/Stripe-facing shape (`toPublicCheckoutIntent`) carries
+only the opaque intent id plus the pack offer — no board slug or
+internal board id may ever reach Stripe metadata,
+`client_reference_id` or URLs; the checkout slice must send the
+intent id and nothing board-identifying. `purchaseId` equals the
+intent id (one opaque identity per purchase); creating an intent
+writes nothing to the ledger — the caller drives
+`recordPurchase`/`closePurchase` with that id. Intent `expiresAt`
+is `createdAt + Policy.credits.intentTtlSeconds`, and the
+per-board pending cap (`Policy.credits.pendingIntentCapPerBoard`,
+values supplied by the caller) is enforced transactionally
+against `checkoutIntentBoards/{boardId}` (`pendingIntentIds`),
+lazily expiring stale pending intents so an abandoned tab
+cannot block a board forever. `resolvePending` answers "still
+payable" for the webhook slice and lazily expires stale intents;
+`close`/`expire` free the cap slot. No routes, Stripe calls or
+board-loop wiring landed in this slice — store selection arrives
+with the checkout/webhook slices that first call these stores.
+
 ## Stripe plan (not built)
 
 1. Add `PLUS_MODE=stripe`, with `STRIPE_SECRET_KEY` and
