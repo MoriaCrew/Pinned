@@ -162,6 +162,36 @@ describe("credit ledger (PIN-147)", () => {
     expect(grant2.entry).toMatchObject({ frozenDelta: 0, availableAfter: 25 });
   });
 
+  it("deferred freeze at grant is capped at what the grant credited, never other board makes", async () => {
+    const store = new InMemoryCreditLedgerStore();
+    await store.grantStarter(BOARD, { eventId: ev(), amount: 25, at: at() });
+    await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });
+    await store.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", amount: 25, at: at() });
+    await store.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 15, refundId: "re-1", at: at() });
+    const grant = await store.grantPurchase(BOARD, { eventId: ev(), purchaseId: "p1", at: at() });
+    expect(grant.entry).toMatchObject({ balanceDelta: 10, frozenDelta: 10, balanceAfter: 35, frozenAfter: 10, availableAfter: 25 });
+    expect((await store.getAccount(BOARD))?.frozenByDispute).toEqual({ "dp-1": 10 });
+    const claw = await store.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 10, disputeId: "dp-1", at: at() });
+    expect(claw.entry).toMatchObject({ balanceDelta: -10, frozenDelta: -10, balanceAfter: 25, frozenAfter: 0, availableAfter: 25 });
+    expect((await store.getAccount(BOARD))?.purchases.p1.state).toBe("clawed_back");
+  });
+
+  it("restore before freeze records the resolution, so the later freeze is a no-op", async () => {
+    const store = await grantedBoard(25);
+    const early = await store.restore(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-early", at: at() });
+    expect(early.applied).toBe(true);
+    expect(early.entry).toMatchObject({ type: "restore", amount: 0, frozenDelta: 0, frozenAfter: 0, availableAfter: 25 });
+    expect((await store.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-early", amount: 25, at: at() })).applied).toBe(false);
+    expect(await store.getBalance(BOARD)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+
+    const store2 = new InMemoryCreditLedgerStore();
+    await store2.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });
+    expect((await store2.restore(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-early", at: at() })).applied).toBe(true);
+    expect((await store2.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-early", amount: 10, at: at() })).applied).toBe(false);
+    const grant = await store2.grantPurchase(BOARD, { eventId: ev(), purchaseId: "p1", at: at() });
+    expect(grant.entry).toMatchObject({ frozenDelta: 0, frozenAfter: 0, availableAfter: 25 });
+  });
+
   it("close: pending intent closes, fully pre-clawed closes as clawed_back, granted cannot close", async () => {
     const store = new InMemoryCreditLedgerStore();
     await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });

@@ -72,6 +72,8 @@ export interface CreditPurchase {
   refundIds: string[];
   /** Dispute freezes recorded before the grant landed, by dispute id. Applied (capped at what's actually credited) by the grant, then cleared. */
   deferredFreezes: Record<string, number>;
+  /** Disputes resolved (restored in full, or final-clawed with no hold left). A late freeze for one is a no-op, even when the restore arrived before any freeze. */
+  resolvedDisputeIds: string[];
 }
 
 export interface CreditLedgerEntry {
@@ -344,6 +346,10 @@ function reduceFrozen(
 }
 
 // ---------------------------------------------------------------------------
+function markDisputeResolved(target: CreditPurchase, disputeId: string): void {
+  if (!target.resolvedDisputeIds.includes(disputeId)) target.resolvedDisputeIds.push(disputeId);
+}
+
 // Pure operations. None mutates its input; applied ops work on a clone.
 // ---------------------------------------------------------------------------
 
@@ -399,6 +405,7 @@ export function recordPurchase(
     clawedCredits: 0,
     refundIds: [],
     deferredFreezes: {},
+    resolvedDisputeIds: [],
   };
   assertCreditAccountInvariants(next);
   return { account: next, applied: true };
@@ -431,15 +438,17 @@ export function grantPurchase(
   const netGrant = target.credits - target.clawedCredits;
   const { balanceDelta, pendingClawbackDelta } = applyGrantToPool(next, netGrant);
   target.grantedCredits = target.credits;
+  let freezeBudget = balanceDelta;
 
   let frozenDelta = 0;
   for (const [disputeId, wanted] of Object.entries(target.deferredFreezes)) {
-    const canFreeze = next.balance - next.frozen;
+    const canFreeze = freezeBudget;
     const appliedFreeze = Math.min(wanted, Math.max(0, canFreeze));
     if (appliedFreeze > 0) {
       next.frozen += appliedFreeze;
       next.frozenByDispute[disputeId] = (next.frozenByDispute[disputeId] ?? 0) + appliedFreeze;
       frozenDelta += appliedFreeze;
+      freezeBudget -= appliedFreeze;
     }
   }
   target.deferredFreezes = {};
@@ -535,12 +544,18 @@ export function clawbackCredits(
     if (next.frozen > next.balance) {
       frozenDelta += reduceFrozen(next, next.frozen - next.balance);
     }
+    if (input.disputeId && (next.frozenByDispute[input.disputeId] ?? 0) === 0) {
+      markDisputeResolved(target, input.disputeId);
+    }
     if (target.clawedCredits >= target.credits) target.state = "clawed_back";
-  } else if (input.disputeId && target.deferredFreezes[input.disputeId] !== undefined) {
+  } else if (input.disputeId) {
     // Final clawback for a dispute frozen pre-grant: the deferred
     // hold is moot once those makes are clawed back on paper.
-    const held = target.deferredFreezes[input.disputeId];
-    if (input.amount >= held) delete target.deferredFreezes[input.disputeId];
+    const held = target.deferredFreezes[input.disputeId] ?? 0;
+    if (input.amount >= held) {
+      delete target.deferredFreezes[input.disputeId];
+      markDisputeResolved(target, input.disputeId);
+    }
     else target.deferredFreezes[input.disputeId] = held - input.amount;
   }
 
@@ -575,6 +590,7 @@ export function freezeCredits(
   assertId(input.disputeId, "disputeId");
   if (alreadyApplied(account, input.eventId)) return noOp(account);
   const purchase = getPurchase(account, input.purchaseId);
+  if (purchase.resolvedDisputeIds.includes(input.disputeId)) return noOp(account);
   if (purchase.state === "closed" || purchase.state === "clawed_back") {
     throw new RangeError(`Purchase ${input.purchaseId} is ${purchase.state} and cannot freeze`);
   }
@@ -633,7 +649,28 @@ export function restoreCredits(
 
   const liveHold = account.frozenByDispute[input.disputeId] ?? 0;
   const deferredHold = purchase.deferredFreezes[input.disputeId] ?? 0;
-  if (liveHold === 0 && deferredHold === 0) return noOp(account);
+  if (liveHold === 0 && deferredHold === 0) {
+    if (
+      purchase.resolvedDisputeIds.includes(input.disputeId) ||
+      purchase.state === "closed" ||
+      purchase.state === "clawed_back"
+    ) {
+      return noOp(account);
+    }
+    const next = structuredClone(account);
+    markDisputeResolved(next.purchases[input.purchaseId], input.disputeId);
+    return finishWithEntry(next, {
+      id: input.eventId,
+      type: "restore",
+      amount: input.amount ?? 0,
+      balanceDelta: 0,
+      frozenDelta: 0,
+      pendingClawbackDelta: 0,
+      purchaseId: input.purchaseId,
+      disputeId: input.disputeId,
+      createdAt: input.at,
+    });
+  }
 
   const next = structuredClone(account);
   const target = next.purchases[input.purchaseId];
@@ -647,6 +684,7 @@ export function restoreCredits(
       );
     }
     frozenDelta = reduceFrozen(next, amount, input.disputeId);
+    if (amount === liveHold) markDisputeResolved(target, input.disputeId);
   } else {
     amount = input.amount ?? deferredHold;
     if (amount > deferredHold) {
@@ -654,7 +692,10 @@ export function restoreCredits(
         `Restore of ${amount} exceeds deferred disputed hold ${deferredHold} on board ${account.boardId}`,
       );
     }
-    if (amount === deferredHold) delete target.deferredFreezes[input.disputeId];
+    if (amount === deferredHold) {
+      delete target.deferredFreezes[input.disputeId];
+      markDisputeResolved(target, input.disputeId);
+    }
     else target.deferredFreezes[input.disputeId] = deferredHold - amount;
   }
 
