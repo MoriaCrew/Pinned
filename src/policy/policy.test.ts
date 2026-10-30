@@ -174,6 +174,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       starterMakes: 25,
       pendingIntentCapPerBoard: 3,
       intentTtlSeconds: 1_800,
+      checkoutPerIp: { limit: 20, windowMs: 600_000 },
     });
     // Parity with the catalog manifest: Policy can never offer a pack Stripe does not sell.
     const catalogPacks = CATALOG_ITEMS.filter(
@@ -214,6 +215,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       expect(() => resolvePolicy(bad)).toThrow();
       expect(() => resolvePolicy(null, bad)).toThrow();
     }
+    expect(
+      resolvePolicy({ credits: { checkoutPerIp: { limit: 2 } } }).credits.checkoutPerIp,
+    ).toEqual({ limit: 2, windowMs: 600_000 });
+    expect(() => resolvePolicy({ credits: { checkoutPerIp: { limit: 0 } } })).toThrow();
     expect(parsePolicyOverridesJson('{"credits":{"starterMakes":10}}')).toEqual({
       credits: { starterMakes: 10 },
     });

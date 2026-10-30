@@ -23,5 +23,7 @@ describe("Checkout adapters (PIN-103)", () => {
     const boards = new InMemoryBoardRepository();
     expect(createCheckout("off", { boards })).toBeInstanceOf(OffCheckout);
     expect(createCheckout("mock", { boards })).toBeInstanceOf(MockCheckout);
+    // PIN-149: stripe sells credit packs only; the Plus-plan port stays off.
+    expect(createCheckout("stripe", { boards })).toBeInstanceOf(OffCheckout);
   });
 });

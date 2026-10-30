@@ -1,9 +1,10 @@
 # 15 — Board Plus (PIN-103)
 
 Server seam for an optional paid add-on. The UI is built
-separately; this page is the contract it builds on. Stripe is
-not wired yet: `PLUS_MODE` is `off` (nothing can be bought) or
-`mock` (an instant, clearly labelled demo grant).
+separately; this page is the contract it builds on.
+`PLUS_MODE` is `off` (nothing can be bought), `mock` (demo) or
+`stripe` (credit packs via hosted Checkout, PIN-149; the
+credits themselves still land by webhook, PIN-150).
 
 ## What it is
 
@@ -119,13 +120,38 @@ later.
   - `{ status: "redirect", url }` (reserved for Stripe)
 
   400 `plan_unknown`.
+- `POST /api/boards/{slug}/credits/checkout` `{ lookupKey }` →
+  200 with one of:
+  - `{ status: "redirect", url }` (PLUS_MODE=stripe: a hosted
+    Stripe Checkout Session for that pack)
+  - `{ status: "unavailable" }` (off/mock; nothing written)
+
+  Gates: slug 404; cross-site 403, non-JSON 415, per-IP 429
+  (`Policy.credits.checkoutPerIp`, default 20 per 10 min,
+  in-process), body 413 (the shared `plus.requestMaxBytes` cap);
+  then a joined board participant (board session cookie) or the
+  board host, else 401 `participant_required` (the same answer
+  for unknown boards). 400 `pack_unknown` for a pack Policy does
+  not offer; 429 `intent_cap_reached` at the per-board pending
+  cap (`Policy.credits.pendingIntentCapPerBoard`); 503
+  `checkout_unavailable` when Stripe has no active price or the
+  session cannot be created (the just-made intent and purchase
+  are closed again, so the cap is freed). Error bodies never
+  carry the slug.
+- `GET /billing/return?intent={id}&result=success|cancel` → 302.
+  The return redirector Stripe points at: it resolves the opaque
+  intent server-side and lands on `/g/{slug}?billing=processing`
+  (success) or `?billing=cancelled` (cancel). It grants nothing —
+  credits arrive by webhook only (PIN-150), hence "processing".
+  Unknown, expired and malformed intents all land on `/` with no
+  flag, indistinguishable from each other.
 - `POST /api/boards` (create): unchanged body; additionally sets
   the host cookie. A Plus skin as the initial `themeId` is 402
   `plus_required` (a new board holds no entitlement).
 - `GET /api/boards/{slug}` (board view), additive fields:
   - `viewer: { isHost: boolean }`
   - `plus: { active: boolean, plan?: "board" | "host", mode:
-    "off" | "mock", priceLabels: { board, host } }`
+    "off" | "mock" | "stripe", priceLabels: { board, host } }`
 
   The entitlement's `source` and `grantedAt` and the host hash
   never leave the server.
@@ -157,7 +183,7 @@ later.
 
 ## `PLUS_MODE`
 
-Read only in `src/config.ts`; anything but the exact value `mock`
+Read only in `src/config.ts`; anything but an exact known value
 is `off`. Adapters live in `src/billing/` behind the `Checkout`
 port (`startCheckout({ slug, plan })`, which throws a typed
 `BoardNotFoundError` when the board is gone).
@@ -174,6 +200,19 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   `source: "mock"`. No money moves; the UI must say it is a demo.
   The stored source keeps mock grants distinguishable forever.
   Never set `mock` on prod.
+- `stripe` (PIN-149): sells the credit packs through hosted
+  Stripe Checkout (adapter section below). Requires
+  `STRIPE_SECRET_KEY` in the same env — `stripe` without a key
+  parses as `off` in config (fail closed: sells nothing, never
+  errors per request; `GET /api/health` shows the effective
+  mode). Plus plans (board/host skins) are **not** sold in this
+  mode yet: the plan route answers `unavailable`, and a stored
+  `source: "stripe"` grant counts while a mock one does not.
+  **No hosted backend runs `stripe` yet**: dev references the
+  key in `apphosting.dev.yaml` but keeps `PLUS_MODE=mock`, and
+  prod has neither the mode nor a key reference. Flipping a
+  hosted backend waits for webhook grants (PIN-150/PIN-153) —
+  taking payments with no fulfilment path is forbidden.
 
 Check a backend with `GET /api/health` → `plusMode`.
 
@@ -229,8 +268,8 @@ converged sandbox creates nothing. The pure decision functions
 (`catalogValidationErrors`, `planProduct`, `planPrice`,
 `buildCatalogPlan`) are unit-tested in
 `src/billing/catalog.test.ts`. This slice changes no runtime
-behavior: checkout still runs `off`/`mock` until the Stripe
-adapter slice lands.
+behavior in that slice; the runtime adapter followed in
+PIN-149 (below).
 
 ## Credit ledger (PIN-147)
 
@@ -323,33 +362,108 @@ lazily expiring stale pending intents so an abandoned tab
 cannot block a board forever. `resolvePending` answers "still
 payable" for the webhook slice and lazily expires stale intents;
 `close`/`expire` free the cap slot. No routes, Stripe calls or
-board-loop wiring landed in this slice — store selection arrives
-with the checkout/webhook slices that first call these stores.
+board-loop wiring landed in this slice — store selection arrived
+with PIN-149, the first slice to call these stores (below).
 
-## Stripe plan (not built)
+## Stripe Checkout adapter + buy route (PIN-149)
 
-1. Add `PLUS_MODE=stripe`, with `STRIPE_SECRET_KEY` and
-   `STRIPE_WEBHOOK_SECRET` from Secret Manager (referenced in
-   `apphosting.*.yaml`, never values in git) and the two Stripe
-   price ids in config.
-2. A `StripeCheckout` adapter returns `{ status: "redirect", url }`:
-   - **This board** → Checkout Session, `mode: "payment"`.
-   - **Host plan** → Checkout Session, `mode: "subscription"`.
-   - `client_reference_id` = slug, `metadata` = `{ slug, plan }`,
-     success/cancel URLs back to `/g/{slug}`.
+`StripeCreditCheckout` (`src/billing/stripe-checkout.ts`,
+official `stripe` SDK, server-only) implements the additive
+`CreditCheckout` port next to the plan-based `Checkout` port —
+packs are not Plus plans, so the plan port's shape stays
+untouched and keeps answering `unavailable` in stripe mode.
+The client is dependency-injected (tests run a fake; no network
+in tests), built once per process in `src/billing/server.ts`
+from `STRIPE_SECRET_KEY` (env name only, via `src/config.ts`)
+with the API version pinned in that one config place
+(`STRIPE_API_VERSION`, typed against the SDK's bundled version
+so an SDK bump fails typecheck until the pin follows). Store
+selection for the PIN-148 stores also landed here, following
+the budget-store pattern (`src/server/checkout-intent-store.ts`,
+`src/server/credit-ledger-store.ts`): Firestore when
+`DATA_BACKEND=firestore`, in-memory otherwise.
+
+How a buy flows (`buyCredits`, `src/server/credit-checkout.ts`):
+
+1. The pack is validated against `Policy.credits.packs` (pinned
+   to the catalog by test) and the Stripe **price is resolved
+   by `lookup_key`** (`prices.list`, active only) through a
+   short in-process cache (5 min; lookup keys survive price
+   transfers, ids do not). Unknown/draft/mis-sized packs are
+   refused from the committed catalog before any Stripe call;
+   a catalog pack with no active price is a 503. Nothing is
+   written yet, so a bad price leaves no intent behind.
+2. The opaque `CheckoutIntent` is created (per-board pending
+   cap + TTL from Policy, enforced in the store) and the ledger
+   purchase recorded with `purchaseId` = the intent id.
+3. Only then is the hosted Checkout Session created. If that
+   fails, the intent and purchase are closed again so the cap
+   slot is freed, and the caller gets a generic 503.
+
+Session parameters (checked against the current Stripe docs —
+Checkout Sessions create + Adaptive Pricing):
+
+- `mode: "payment"`, one line item at quantity 1 on the EUR
+  base price. `expires_at` tracks the intent's expiry (floored
+  at Stripe's 30-minute minimum session life, capped under
+  its 24-hour maximum) so a session cannot be paid long after
+  its intent died; the webhook stays the grant authority.
+- `adaptive_pricing: { enabled: true }` — Stripe presents the
+  payer's local currency and handles conversion; the session
+  still settles in EUR. This only takes effect on eligible
+  sessions and follows the Dashboard's Adaptive Pricing
+  setting; if the account cannot use it (e.g. a Managed
+  Payments conflict, to verify when the mode is first flipped
+  on dev), the fallback is explicit `currency_options` on the
+  catalog prices — not built today.
+- **No `payment_method_types`.** That is the legacy static
+  list; eligible methods are Dashboard-managed (dynamic payment
+  methods) and naming types would override the Dashboard
+  configuration. Which immediate methods v1 accepts is
+  therefore a Dashboard setting, not code.
+- **Guest payer**: no `customer` and no `customer_creation`.
+  The payment-mode default (`if_required`) creates no Customer
+  for a plain one-time payment, so anyone with the board link
+  who has joined can pay without an account.
+- **Opacity**: `client_reference_id` is the intent id and
+  `metadata` is exactly `{ checkout_intent_id, pack_lookup_key,
+  credits }`. The board slug (a capability secret) is never
+  given to the adapter, so it cannot appear in params,
+  metadata or URLs; success/cancel go to `/billing/return`
+  keyed by intent id only. Session creation carries an
+  idempotency key derived from the intent id.
+
+Hosted wiring in this slice is reference-only: dev references
+`STRIPE_SECRET_KEY` from Secret Manager in
+`apphosting.dev.yaml` (already provisioned there) but keeps
+`PLUS_MODE=mock`; prod references nothing (no prod secret
+exists yet). No hosted backend takes a Stripe payment until
+webhook grants land.
+
+## Stripe webhook plan (not built — PIN-150)
+
+1. Add `STRIPE_WEBHOOK_SECRET` from Secret Manager (referenced
+   in `apphosting.*.yaml`, never values in git). `PLUS_MODE=stripe`
+   and `STRIPE_SECRET_KEY` already exist (PIN-149); prices resolve
+   by lookup key, never by configured price ids.
+2. Webhook events resolve their board by the opaque intent id
+   (`client_reference_id` / `metadata.checkout_intent_id`) —
+   never by slug, which Stripe has never seen. Plus-plan
+   (board/host) Stripe sales stay unbuilt: the draft
+   `pinneds_host_monthly` price is seeded only (PIN-146).
 3. `POST /api/billing/stripe/webhook` verifies the signature on
    the raw body.
-   - `checkout.session.completed` writes
-     `{ plan, source: "stripe", grantedAt }` through
-     `updateBoardSettings`.
-   - Subscription `deleted` / unpaid and refunds/disputes revoke
-     (needs a revoke field in the patch).
+   - `checkout.session.completed` (paid) resolves the intent and
+     calls the ledger's `grantPurchase` for exactly the pack the
+     intent recorded.
+   - Refunds claw back and disputes freeze/restore via the
+     ledger ops (PIN-147 shapes).
    - The success redirect never grants — only the webhook does.
 4. **Idempotency by Checkout Session id:** record each processed
    session id with a create-if-absent doc (e.g.
    `billing/sessions/{sessionId}`) in the same transaction as the
-   grant, so a webhook retry or replay is a no-op. Use an
-   idempotency key when creating sessions too.
+   grant, so a webhook retry or replay is a no-op. Session
+   creation already sends an idempotency key (PIN-149).
 5. The host plan becomes truly cross-board only once host status
    lives on a signed-in user (see the follow-up above).
 
@@ -377,3 +491,9 @@ with the checkout/webhook slices that first call these stores.
 - Route tests: `src/app/api/boards/plus-routes.test.ts` (mock: real
   registry, cookie path, guards, 429) and `plus-routes.off.test.ts`
   (off: unavailable, leftover mock grant inert).
+- PIN-149: `src/billing/stripe-checkout.test.ts` (fake client:
+  lookup resolution + cache, exact session params, no-slug
+  guarantee), `src/server/credit-checkout.test.ts` (buy order,
+  cap, cleanup, return resolver, store selection) and
+  `src/app/api/boards/credits-checkout-routes.off.test.ts`
+  (route gates/auth/429, off-mode unavailable, return 302s).

@@ -26,8 +26,8 @@ export const PLUS_SKIN_IDS: readonly SkinId[] = SKINS.filter((skin) => skin.plus
 export const PLUS_PLANS = ["board", "host"] as const;
 export type PlusPlan = (typeof PLUS_PLANS)[number];
 
-/** Which billing adapter runs (PLUS_MODE env, read in src/config.ts). */
-export const PLUS_MODES = ["off", "mock"] as const;
+/** Which billing adapter runs (PLUS_MODE env, read in src/config.ts). "stripe" also needs a secret key there; without one config fails closed to "off". */
+export const PLUS_MODES = ["off", "mock", "stripe"] as const;
 export type PlusMode = (typeof PLUS_MODES)[number];
 
 /** Where an entitlement came from: the demo mock or a real payment. */
