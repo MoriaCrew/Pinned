@@ -31,7 +31,7 @@ import type {
   Scene,
   SceneJob,
 } from "../domain/board";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
 import { estimateReserveUsd } from "../gateway/costs";
 import type { ComposeSceneElement, SceneComposer } from "../gateway/ports";
@@ -583,13 +583,19 @@ async function finish(
     updatedAt: (deps.now ?? Date.now)(),
   };
   await deps.jobs.update(done);
-  await syncScene(deps, done);
-  if (done.status === "ready") {
-    await appendSceneEvent(deps, done, "scene_ready", "ready");
-  } else if (done.status === "refused") {
-    await appendSceneEvent(deps, done, "scene_refused", "refused");
-  } else if (done.status === "failed") {
-    await appendSceneEvent(deps, done, "scene_failed", "failed");
+  try {
+    await syncScene(deps, done);
+    if (done.status === "ready") {
+      await appendSceneEvent(deps, done, "scene_ready", "ready");
+    } else if (done.status === "refused") {
+      await appendSceneEvent(deps, done, "scene_refused", "refused");
+    } else if (done.status === "failed") {
+      await appendSceneEvent(deps, done, "scene_failed", "failed");
+    }
+  } catch (error) {
+    // PIN-167: a board deleted mid-run refuses the gallery writes;
+    // the job keeps its end state quietly. Anything else throws.
+    if (await isLiveBoard(deps.boards, done.boardId)) throw error;
   }
   return cloneJob(done);
 }

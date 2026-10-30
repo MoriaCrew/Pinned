@@ -17,7 +17,7 @@ import "server-only";
 import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
 import { activityLines } from "../domain/board-activity";
 import { normalizeElementLabel } from "../domain/element-label";
-import type { BoardRepository } from "../domain/board-repository";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { validSceneSize } from "../domain/scene-ratio";
@@ -469,7 +469,7 @@ export async function uploadPhoto(
   // Opportunistic A6a sweep; never blocks the upload itself.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
 
-  return startDecomposeJob(
+  const job = await startDecomposeJob(
     { boardId: slug, participantId: participant.id, bytes },
     {
       boards: deps.boards,
@@ -483,6 +483,9 @@ export async function uploadPhoto(
       newId: deps.newId,
     },
   );
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
+  return job;
 }
 
 /**
@@ -1019,6 +1022,8 @@ export async function requestScene(
     }
     throw error;
   }
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
   const scene = await deps.boards.getScene(job.id);
   // A repeat POST of a hidden or deleted scene's id: 404, like its GET (PIN-142).
   if (!scene || scene.hidden) throw new BoardApiError("Scene not found.", 404);

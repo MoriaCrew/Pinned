@@ -448,3 +448,26 @@ describe("faces Policy", () => {
     ]);
   });
 });
+
+describe("board deleted mid-run (PIN-167)", () => {
+  it("the job ends quietly and nothing lands on the dead board", async () => {
+    const h = await makeHarness();
+    const { namer } = h.deps;
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      {
+        ...h.deps,
+        namer: {
+          async nameElements(input) {
+            await h.boards.deleteBoard("board-1", 1_000);
+            return namer.nameElements(input);
+          },
+        },
+      },
+    );
+    expect(job).toMatchObject({ status: "failed", errorCode: "no_usable_pins", elementIds: [], pinIds: [] });
+    expect(await h.boards.listElements("board-1")).toEqual([]);
+    expect(await h.boards.listPins("board-1")).toEqual([]);
+    expect((await h.boards.listEvents("board-1")).map((e) => e.type)).toEqual(["participant_joined"]);
+  });
+});
