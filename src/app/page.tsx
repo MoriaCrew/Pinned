@@ -125,6 +125,8 @@ export default function HomePage() {
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
                       <img src={`${IMG}/scene-picnic-mug-duck.webp`} alt="" loading="lazy" style={{ objectPosition: "50% 62%" }} />
+                    </span>
+                    <span className="pn-print-meta">
                       <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: "01" })}</span>
                     </span>
                   </span>

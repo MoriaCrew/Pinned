@@ -80,7 +80,7 @@ function BoardDemo({ skin, picking }: { skin: SkinId; picking?: boolean }) {
           <div style={{ padding: "0 16px" }}>
             <ul className="pn-prints">
               <li>
-                <SceneCard src={`${LAB}/scene-picnic-mug-duck.webp`} idea="A tiny picnic on the lawn" ratio="4 / 3" number={3} seed="s1" />
+                <SceneCard src={`${LAB}/scene-picnic-mug-duck.webp`} idea="A tiny picnic on the lawn" kind="remix" ratio="4 / 3" number={3} seed="s1" />
               </li>
               <li>
                 <SceneCard src={`${LAB}/scene-desk-clock-books.webp`} idea="Sunday morning" ratio="4 / 3" number={2} seed="s2" />
@@ -199,6 +199,14 @@ export function UiLab() {
             <Chip thumb={byId["straw-hat"].src} selected>A tiny picnic</Chip>
             <Chip thumb={byId["red-sneakers"].src}>At the beach</Chip>
             <Chip icon="plus">Write your own</Chip>
+          </div>
+          <div style={{ ...row, alignItems: "flex-start", gap: 20 }}>
+            <div style={{ width: 300 }}>
+              <SceneCard src={`${LAB}/scene-picnic-mug-duck.webp`} idea="A tiny picnic on the lawn" kind="remix" ratio="4 / 3" number={3} seed={`${s.id}-remix`} />
+            </div>
+            <div style={{ width: 300 }}>
+              <SceneCard src={`${LAB}/scene-desk-clock-books.webp`} idea="Sunday morning" kind="collage" ratio="4 / 3" number={2} seed={`${s.id}-collage`} />
+            </div>
           </div>
           <div style={{ ...row, alignItems: "flex-start" }}>
             <div style={{ width: 300 }}>

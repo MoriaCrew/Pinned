@@ -50,6 +50,12 @@ Principles:
   style, button and print shape, ground pattern, band) is a set of
   CSS variables declared on the `[data-theme]` element itself, so a
   nested skin always wins over an outer one.
+- A scene print (`SceneCard`) keeps the picture clear: the frame holds
+  the image and nothing else (PIN-128). The Remix / Collage tag
+  (left) and the scene number "Nº 02" (right) are one small row on
+  the paper (`.pn-print-meta`) between the picture and the idea, in
+  every skin; the row is left out when a print has neither.
+  `Developing` keeps its own status tag in its body.
 - Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
   paints the ground, ink and reading face, and lets a board wear a
   different skin than `<html>`. `src/app/globals.css` is only a reset
