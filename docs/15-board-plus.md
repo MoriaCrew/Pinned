@@ -232,6 +232,45 @@ converged sandbox creates nothing. The pure decision functions
 behavior: checkout still runs `off`/`mock` until the Stripe
 adapter slice lands.
 
+## Credit ledger (PIN-147)
+
+`src/domain/credit-ledger.ts` is the pure per-board makes ledger:
+no Stripe calls and no board-loop wiring yet — checkout/webhook
+slices translate Stripe events into its operations, taking amounts
+from `Policy.credits` (packs pinned to the PIN-146 catalog by a
+test, `starterMakes` 25 granted once per board, paid makes never
+expire, `pendingIntentCapPerBoard` 3, `intentTtlSeconds` 1800).
+
+The account tracks `balance` (makes owned, never negative),
+`frozen` (the disputed subset of `balance`, held per dispute id)
+and `pendingClawback` (make-debt from a clawback that exceeded the
+unspent pool; every future grant pays it down before crediting).
+Spendable makes are exactly:
+
+```
+available = max(0, balance - frozen - pendingClawback)
+```
+
+Reachable states never hold `balance > 0` with
+`pendingClawback > 0`, so the debt term cannot double-count; it
+keeps a corrupt state failing closed. Ledger entry types are
+`starter_grant`, `purchase_grant`, `debit`, `clawback`, `freeze`
+and `restore`, each recording gross `amount` plus the signed
+counter deltas it actually made. Purchases move
+`pending -> granted -> clawed_back`, or `pending -> closed` for an
+expired intent. Rules, all unit-tested including duplicates and
+out-of-order events: grants are idempotent by purchase id (and
+every entry by its event id); a clawback before its grant records
+against the pending purchase so grant + clawback net to zero;
+partial refunds apply as per-refund deltas indexed by refund id
+(repeat id = no-op, totals never exceed the pack); disputed makes
+freeze until a restore or the dispute's final clawback (a freeze
+arriving before the grant is deferred and lands with it); debits
+spend only `available`. Persistence sits behind the
+`CreditLedgerStore` port (in-memory implementation included): each
+operation is one atomic per-board read-modify-write and a refusal
+writes nothing.
+
 ## Stripe plan (not built)
 
 1. Add `PLUS_MODE=stripe`, with `STRIPE_SECRET_KEY` and

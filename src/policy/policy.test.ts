@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CATALOG_ITEMS } from "../billing/catalog";
 import {
   DEFAULT_POLICY,
   parsePolicyOverridesJson,
@@ -156,6 +157,61 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       expect(() => resolvePolicy(bad)).toThrow();
       expect(() => resolvePolicy(null, bad)).toThrow();
     }
+  });
+
+  it("credits: packs mirror the PIN-146 catalog, starter/intent defaults, deep-overridable (PIN-147)", () => {
+    expect(DEFAULT_POLICY.credits).toEqual({
+      packs: [
+        { lookupKey: "pinneds_credits_25", credits: 25, eurCents: 499, label: "25 makes · €4.99" },
+        { lookupKey: "pinneds_credits_60", credits: 60, eurCents: 999, label: "60 makes · €9.99" },
+        { lookupKey: "pinneds_credits_150", credits: 150, eurCents: 1999, label: "150 makes · €19.99" },
+      ],
+      starterMakes: 25,
+      pendingIntentCapPerBoard: 3,
+      intentTtlSeconds: 1_800,
+    });
+    // Parity with the catalog manifest: Policy can never offer a pack Stripe does not sell.
+    const catalogPacks = CATALOG_ITEMS.filter(
+      (item) => item.status === "live" && item.credits !== undefined,
+    ).map((item) => ({
+      lookupKey: item.lookupKey,
+      credits: item.credits,
+      eurCents: item.unitAmount,
+    }));
+    expect(
+      DEFAULT_POLICY.credits.packs.map(({ lookupKey, credits, eurCents }) => ({
+        lookupKey,
+        credits,
+        eurCents,
+      })),
+    ).toEqual(catalogPacks);
+    const p = resolvePolicy(
+      { credits: { starterMakes: 5, intentTtlSeconds: 900 } },
+      { credits: { pendingIntentCapPerBoard: 1 } },
+    );
+    expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([5, 900, 1]);
+    expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
+    expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
+    const pack = DEFAULT_POLICY.credits.packs[0];
+    expect(
+      resolvePolicy({ credits: { packs: [{ ...pack, label: "Starter pack" }] } }).credits.packs,
+    ).toEqual([{ ...pack, label: "Starter pack" }]);
+    for (const bad of [
+      { credits: { starterMakes: -1 } },
+      { credits: { pendingIntentCapPerBoard: 0 } },
+      { credits: { intentTtlSeconds: 0 } },
+      { credits: { packs: [] } },
+      { credits: { packs: [{ ...pack, credits: 0 }] } },
+      { credits: { packs: [{ ...pack, eurCents: -1 }] } },
+      { credits: { packs: [{ ...pack, label: "" }] } },
+      { credits: { packs: [pack, { ...pack, credits: 60 }] } },
+    ]) {
+      expect(() => resolvePolicy(bad)).toThrow();
+      expect(() => resolvePolicy(null, bad)).toThrow();
+    }
+    expect(parsePolicyOverridesJson('{"credits":{"starterMakes":10}}')).toEqual({
+      credits: { starterMakes: 10 },
+    });
   });
 
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
