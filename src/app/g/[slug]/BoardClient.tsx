@@ -87,7 +87,9 @@ type JoinIntent =
   | { kind: "add" }
   | { kind: "make" }
   | { kind: "pick"; pinId: string }
-  | { kind: "remix"; sceneId: string }
+  // The merged scene the print was built from (the job poll can mark
+  // it ready before the board cache does).
+  | { kind: "remix"; scene: BoardViewScene }
   | { kind: "edit" };
 
 /** localStorage key: the picking coach mark shows once. */
@@ -566,8 +568,7 @@ function BoardBody({
         setScrollToPinId(intent.pinId);
       }
     } else if (intent.kind === "remix") {
-      const scene = view.scenes.find((candidate) => candidate.id === intent.sceneId);
-      if (scene && canRemixScene(scene)) startRemix(scene);
+      if (canRemixScene(intent.scene)) startRemix(intent.scene);
     }
   }
 
@@ -757,7 +758,7 @@ function BoardBody({
         kind: sceneTag(scene),
         remixOf: remixSource(scene, view.scenes, view.participants),
         number: numbers.get(scene.id),
-        onRemix: canRemixScene(scene) ? () => requireJoin({ kind: "remix", sceneId: scene.id }) : undefined,
+        onRemix: canRemixScene(scene) ? () => requireJoin({ kind: "remix", scene }) : undefined,
         onShare: () => void shareScene(scene),
         sharing: sharingSceneId === scene.id,
         footer:
