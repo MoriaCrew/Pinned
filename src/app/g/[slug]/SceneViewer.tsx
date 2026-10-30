@@ -54,8 +54,10 @@ export function SceneViewer({
     handlers.current = { onClose, onStep, moreOpen, confirmDelete };
   });
   const moreButton = () => moreRef.current?.querySelector("button");
+  // Nothing closes the confirm while the delete is in flight: its answer (and error) lands there.
   const keep = () => {
-    confirmDelete?.onKeep();
+    if (!confirmDelete || confirmDelete.deleting) return;
+    confirmDelete.onKeep();
     moreButton()?.focus();
   };
   // The confirm takes focus when it opens (its first live button).
@@ -119,6 +121,7 @@ export function SceneViewer({
                 variant="ghost"
                 aria-haspopup="menu"
                 aria-expanded={moreOpen || confirming}
+                disabled={confirmDelete?.deleting === true}
                 onClick={() => (confirming ? keep() : setMoreOpen((open) => !open))}
               />
               {confirmDelete ? (

@@ -1228,6 +1228,7 @@ function BoardBody({
                   error: removeScene.isError && removeScene.variables === viewerSlot.id ? removeScene.error.message : null,
                   onConfirm: () => removeScene.mutate(viewerSlot.id),
                   onKeep: () => {
+                    if (removeScene.isPending) return;
                     removeScene.reset();
                     setConfirmDeleteSceneId(null);
                   },

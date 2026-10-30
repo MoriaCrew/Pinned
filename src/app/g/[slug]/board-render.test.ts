@@ -242,6 +242,7 @@ describe("scene viewer (PIN-131)", () => {
     const busy = viewer({ more, confirmDelete: { ...confirmDelete, deleting: true } });
     expect(busy).toMatch(/disabled=""[^>]*>Deleting…<\/button>/);
     expect(busy).toMatch(/disabled=""[^>]*>Keep<\/button>/);
+    expect(busy).toMatch(/aria-label="More"[^>]*disabled=""|disabled=""[^>]*aria-label="More"/);
     expect(viewer({ more })).not.toContain("Delete this scene?");
   });
 
