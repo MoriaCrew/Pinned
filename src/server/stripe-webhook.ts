@@ -583,7 +583,32 @@ async function resolveStripePurchase(
   lookup: { chargeId?: string; paymentIntentId?: string },
   ids: DeadLetterExtra,
 ): Promise<ResolvedPurchase | string> {
-  const intent = await deps.intents.findByStripeIds(lookup);
+  let intent = await deps.intents.findByStripeIds(lookup);
+  if (!intent && lookup.paymentIntentId && deps.client) {
+    // PIN-153 live race: a fast dispute/refund can be delivered
+    // before (or concurrently with) fulfilment persisting the
+    // session->intent mapping, so the local lookup misses even
+    // though the purchase is ours. Stripe still knows: the
+    // Checkout Session behind this PaymentIntent names the
+    // intent. Resolve through it and backfill the mapping so
+    // later events resolve locally. Pre-grant ledger semantics
+    // (deferred freeze / pre-clawback, PIN-147) then apply.
+    const found = obj(
+      await deps.client.findCheckoutSessionByPaymentIntent(lookup.paymentIntentId),
+    );
+    const foundIntentId = found ? sessionIntentId(found) : null;
+    if (found && foundIntentId) {
+      intent = await deps.intents.get(foundIntentId);
+      if (intent) {
+        const mapping = sessionMapping(found);
+        if (!mapping.chargeId && lookup.chargeId) mapping.chargeId = lookup.chargeId;
+        if (!mapping.paymentIntentId) mapping.paymentIntentId = lookup.paymentIntentId;
+        if (!(await persistSessionMapping(deps, ctx, intent, mapping))) {
+          return "dead_letter";
+        }
+      }
+    }
+  }
   if (!intent) return deadLetter(deps, ctx, "unknown_mapping", ids);
   const account = await deps.ledger.getAccount(intent.boardId);
   const purchase = account?.purchases[intent.purchaseId];

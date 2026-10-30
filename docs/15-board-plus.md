@@ -796,6 +796,20 @@ URL on a joined board, a bad-signature webhook POST returns
 400, and `npm run billing:reconcile` against dev data reports
 its summary (exit 1 only on named anomalies).
 
+**Early-dispute race (found by the PIN-153 E2E).** The
+fraud-dispute test card disputes within about a second of
+the charge, and Stripe delivered `charge.dispute.created`
+(+ `funds_withdrawn`) before fulfilment had persisted the
+session->intent mapping, so `findByStripeIds` missed and
+both events dead-lettered `unknown_mapping` (reconciliation
+flagged them; the grant itself was fine). The handler now
+falls back on a mapping miss to Stripe's own session lookup
+by PaymentIntent (`findCheckoutSessionByPaymentIntent` on
+the webhook client), resolves the intent the session names,
+and backfills the mapping; the PIN-147 pre-grant freeze /
+pre-clawback semantics then apply unchanged. A dispute for
+a genuinely unknown charge still dead-letters.
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).

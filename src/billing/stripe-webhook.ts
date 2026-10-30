@@ -32,6 +32,8 @@ export interface StripeWebhookClientLike {
   retrievePaymentIntent(paymentIntentId: string): Promise<unknown>;
   retrieveCharge(chargeId: string): Promise<unknown>;
   retrieveBalanceTransaction(balanceTransactionId: string): Promise<unknown>;
+  /** The Checkout Session behind a PaymentIntent (first match), or null. PIN-153: resolves a dispute/refund delivered before the local mapping persisted. */
+  findCheckoutSessionByPaymentIntent(paymentIntentId: string): Promise<unknown>;
 }
 
 /** Build the real SDK-backed webhook client, API version pinned in config like the checkout adapter. */
@@ -50,6 +52,13 @@ export function createStripeWebhookSdkClient(
     retrievePaymentIntent: (paymentIntentId) =>
       stripe.paymentIntents.retrieve(paymentIntentId),
     retrieveCharge: (chargeId) => stripe.charges.retrieve(chargeId),
+    findCheckoutSessionByPaymentIntent: async (paymentIntentId) => {
+      const listed = await stripe.checkout.sessions.list({
+        payment_intent: paymentIntentId,
+        limit: 1,
+      });
+      return listed.data[0] ?? null;
+    },
     retrieveBalanceTransaction: (balanceTransactionId) =>
       stripe.balanceTransactions.retrieve(balanceTransactionId),
   };
