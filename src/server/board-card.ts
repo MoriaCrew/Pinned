@@ -557,10 +557,15 @@ export async function loadCardFonts(skin: SkinId): Promise<CardFont[]> {
   );
 }
 
-/** Branded card shipped in public/ (PIN-72): the last-resort image. */
+/**
+ * Branded card (PIN-72): the last-resort image. A server-side copy
+ * lives in src/server/og-assets/ and is traced into the bundle
+ * (next.config.ts); public/og-card.png stays the public URL. Never
+ * trace from public/: see the note in next.config.ts (PIN-116).
+ */
 export async function staticFallbackCard(): Promise<Buffer> {
   try {
-    return await readFile(path.join(process.cwd(), "public", "og-card.png"));
+    return await readFile(path.join(process.cwd(), "src", "server", "og-assets", "og-card.png"));
   } catch {
     const c = parseColor(cardColors("paper").surface);
     return sharp({

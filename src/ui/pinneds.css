@@ -169,7 +169,7 @@
 /* ---------- Wordmark ---------- */
 .pn-wordmark { display: inline-flex; align-items: baseline; font-family: var(--font-display-paper); font-weight: 800; letter-spacing: -0.035em; line-height: 1; color: var(--ink); text-decoration: none; }
 .pn-wm-i { position: relative; display: inline-block; }
-.pn-wm-dot { position: absolute; left: 50%; top: -0.13em; width: 0.3em; height: 0.3em; translate: -50% 0; border-radius: 50%; background: var(--accent); box-shadow: inset -0.04em -0.05em 0 color-mix(in srgb, var(--ink) 22%, transparent); }
+.pn-wm-dot { position: absolute; left: 50%; top: -0.04em; width: 0.3em; height: 0.3em; translate: -50% 0; border-radius: 50%; background: var(--accent); box-shadow: inset -0.04em -0.05em 0 color-mix(in srgb, var(--ink) 22%, transparent); }
 
 /* ---------- Button ---------- */
 .pn-btn {
