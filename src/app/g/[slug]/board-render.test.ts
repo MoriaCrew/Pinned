@@ -273,7 +273,8 @@ describe("scene viewer (PIN-131)", () => {
   it("the strip loads the phone-sized preview; the viewer the full image (PIN-133)", () => {
     const strip = html(h(BoardScenes, { count: 1, slots: [remix] }));
     expect(strip).toContain('src="/api/boards/b/scenes/s7/image?size=preview"');
-    expect(strip).not.toContain('src="/api/boards/b/scenes/s7/image"');
+    // No print src ends at /image (the full file): every strip src carries ?size=preview.
+    expect(strip).not.toMatch(/src="[^"]*\/image"/);
     expect(viewer()).toContain('src="/api/boards/b/scenes/s7/image"');
     expect(viewer()).not.toContain("size=preview");
   });
