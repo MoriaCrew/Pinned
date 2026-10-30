@@ -38,6 +38,7 @@ describe("evaluateReserve (PIN-61)", () => {
       participants: {},
       boards: {},
       participantSegments: {},
+      participantTapNames: {},
       photos: {},
     };
     expect(evaluateReserve(state, req())).toMatchObject({
@@ -116,6 +117,42 @@ describe("segment caps (PIN-92)", () => {
   });
 });
 
+describe("tap-name caps (PIN-117)", () => {
+  it("evaluateReserve denies on the tap-name cap, independently of the photo quota", () => {
+    const state = {
+      ...emptyBudgetDay(),
+      participantTapNames: { p1: 100 },
+    };
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantTapNameCap: 100 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    // A different participant is unaffected.
+    expect(
+      evaluateReserve(state, req({ participantId: "p2", participantTapNameCap: 100 })).ok,
+    ).toBe(true);
+    // Tap-name spend does not trip the namer photo quota.
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+    ).toBe(true);
+  });
+
+  it("store counts tap names apart from participants and segments", async () => {
+    const store = new InMemoryBudgetStore();
+    const name = req({ participantId: "p1", participantTapNameCap: 2 });
+    expect((await store.reserve(name)).ok).toBe(true);
+    expect((await store.reserve(name)).ok).toBe(true);
+    expect(await store.reserve(name)).toEqual({
+      ok: false,
+      reason: "participant_cap",
+    });
+    const snap = store.snapshot(DAY);
+    expect(snap.calls).toBe(2);
+    expect(snap.participants).toEqual({});
+    expect(snap.participantSegments).toEqual({});
+    expect(snap.participantTapNames).toEqual({ p1: 2 });
+  });
+});
+
 describe("InMemoryBudgetStore (PIN-61)", () => {
   it("counts calls, reserved micro-USD and per-id counters per day", async () => {
     const store = new InMemoryBudgetStore();
@@ -129,6 +166,7 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
       participants: { p1: 1 },
       boards: { b1: 1 },
       participantSegments: {},
+      participantTapNames: {},
       photos: {},
     });
     expect(store.snapshot("2026-10-30").calls).toBe(0);

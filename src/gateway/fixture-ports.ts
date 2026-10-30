@@ -14,7 +14,9 @@ import {
   buildSceneResponsesBody,
   buildSegmentPromptText,
   normalizeElements,
+  normalizeTapName,
   type ElementNamer,
+  type TapNamer,
   type SceneComposer,
   type ChipSuggester,
   templateChips,
@@ -65,6 +67,30 @@ export function fixtureElementNamer(fixtures: StudioFixtures): ElementNamer {
           elements: normalizeElements(rows, input),
           promptVersion: input.promptVersion,
         },
+      };
+    },
+  };
+}
+
+/**
+ * No tap-name pass was recorded by PIN-50, so the fixture namer
+ * replays the first recorded element's name: same fixtures in,
+ * same name out, zero provider calls (PIN-117).
+ */
+export function fixtureTapNamer(fixtures: StudioFixtures): TapNamer {
+  return {
+    async nameOne(input) {
+      const name = normalizeTapName(fixtures.elements[0], input);
+      if (!name) {
+        return {
+          status: "failed",
+          errorCode: "fixture_not_found",
+          message: "No recorded element to replay as a tap name.",
+        };
+      }
+      return {
+        status: "ready",
+        value: { name, promptVersion: input.promptVersion },
       };
     },
   };

@@ -10,6 +10,8 @@ import {
   buildSegmentPromptText,
   normalizeElements,
   type ElementNamer,
+  type TapNamer,
+  type TapName,
   type NamedElement,
   type SceneComposer,
   type ChipSuggester,
@@ -46,6 +48,22 @@ export const mockElementNamer: ElementNamer = {
         elements: normalizeElements(MOCK_ELEMENTS, input),
         promptVersion: input.promptVersion,
       },
+    };
+  },
+};
+
+/** Stable synthetic tap name (PIN-117): same crop in, same name out. */
+export const MOCK_TAP_NAME: TapName = {
+  label: "Little Treasure",
+  description: "a favourite thing, tapped to pin it",
+  faceFlag: false,
+};
+
+export const mockTapNamer: TapNamer = {
+  async nameOne(input) {
+    return {
+      status: "ready",
+      value: { name: { ...MOCK_TAP_NAME }, promptVersion: input.promptVersion },
     };
   },
 };

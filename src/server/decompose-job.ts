@@ -33,6 +33,7 @@ import {
   type ElementNamer,
   type NamedElement,
   type Segmenter,
+  type TapNamer,
 } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
 import {
@@ -164,6 +165,8 @@ export interface DecomposeDeps {
   store: DerivativeStore;
   namer: ElementNamer;
   segmenter: Segmenter;
+  /** PIN-117 tap naming; absent port = generic-label fallback. */
+  tapNamer?: TapNamer;
   policy: Policy;
   now?: () => number;
   newId?: () => string;
@@ -473,13 +476,13 @@ export type TapAddOutcome =
  * segmentsPerParticipantPerDay before the provider call, and a
  * cap denial surfaces here as the same `cap_reached` stop.
  *
- * Label: caller-supplied generic i18n label (PIN-78 decision).
- * A second ElementNamer pass on the crop was rejected: the
- * elements.v1 prompt names things in a whole photo, the mock
- * namer would return canned wrong names, and the decorated
- * namer would count the crop against photosPerParticipantPerDay.
- * No namer pass also means faceFlag is unknown -> false (v1
- * limitation, noted in the PR).
+ * Label (PIN-117): the flattened crop goes through the
+ * TapNamer port (prompts/tap-name.v1.md, one Spark vision
+ * call on the single cut-out) for a real label, description
+ * and faceFlag — so a tapped person gets the face note. The
+ * call reserves under its own Policy counter
+ * (tapNamesPerParticipantPerDay), never the photo quota. The
+ * generic i18n label remains only as the typed fallback.
  */
 export async function addTapElement(
   jobId: string,
@@ -573,18 +576,44 @@ export async function addTapElement(
     });
     await deps.store.put(cutoutRef, cutout, "image/png");
     await deps.store.put(flattenedRef, flattened, "image/jpeg");
-    const label = genericLabel.trim() || "My thing";
+    // PIN-117: name the crop (tap-name.v1 via the decorated
+    // TapNamer). Any non-ready outcome — refusal, failure, cap
+    // denial, absent port — keeps the generic i18n label and
+    // faceFlag:false; naming never fails the tap.
+    let label = genericLabel.trim() || "My thing";
+    let description = label;
+    let faceFlag = false;
+    if (deps.tapNamer) {
+      try {
+        const named = await deps.tapNamer.nameOne({
+          imageRef: `data:image/jpeg;base64,${Buffer.from(flattened).toString("base64")}`,
+          conceptMaxWords: policy.conceptMaxWords,
+          maxTokens: policy.maxTokens.sparkTapName,
+          timeoutMs: policy.timeoutsMs.spark,
+          promptVersion: policy.promptVersions.tapName,
+          boardId: job.boardId,
+          participantId: job.participantId,
+        });
+        if (named.status === "ready" && named.value.name.label) {
+          label = named.value.name.label;
+          description = named.value.name.description || label;
+          faceFlag = named.value.name.faceFlag;
+        }
+      } catch {
+        // Fall through to the generic label.
+      }
+    }
     element = {
       id: elementId,
       boardId: job.boardId,
       ownerId: job.participantId,
       label,
-      description: label,
+      description,
       maskBox: toMaskBox(usable.box, frame),
       cutoutRef,
       flattenedRef,
       sourcePhotoId: job.id,
-      faceFlag: false,
+      faceFlag,
       createdAt: at,
     };
     await deps.boards.createElement(element);
@@ -619,6 +648,10 @@ export async function addTapElement(
   }
   const updated: DecomposeJob = {
     ...fresh,
+    // PIN-117: a tapped face raises the same consent note the
+    // concept pass sets (runDecomposeJob); the Add sheet banner
+    // reads job.faceNote, not the element flag.
+    faceNote: fresh.faceNote || (policy.faces === "note" && element.faceFlag),
     elementIds: fresh.elementIds.includes(elementId)
       ? fresh.elementIds
       : [...fresh.elementIds, elementId],

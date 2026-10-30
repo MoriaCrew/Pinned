@@ -29,6 +29,11 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.chipsMax).toBe(4);
     expect(DEFAULT_POLICY.maxTokens.sparkChips).toBe(1200);
     expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
+    // PIN-117 tap-name crop pass: own counter, token budget, prompt.
+    expect(DEFAULT_POLICY.tapNamesPerParticipantPerDay).toBe(100);
+    expect(DEFAULT_POLICY.maxTokens.sparkTapName).toBe(1200);
+    expect(DEFAULT_POLICY.promptVersions.tapName).toBe("tap-name.v1");
+    expect(resolvePolicy({ tapNamesPerParticipantPerDay: 3 }).tapNamesPerParticipantPerDay).toBe(3);
     // PIN-83 signed-in user cookie life.
     expect(DEFAULT_POLICY.userSessionDays).toBe(30);
     // PIN-94 provider pin + claim/restore freshness window.
@@ -47,6 +52,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(resolvePolicy({ maxTokens: { sparkChips: 800 } }).maxTokens).toEqual({
       sparkElements: 4000,
       sparkChips: 800,
+      sparkTapName: 1200,
     });
     expect(resolvePolicy({ boardPollIntervalMs: 1_000 }).boardPollIntervalMs).toBe(1_000);
     // PIN-90 reclaim-PIN lockout thresholds.

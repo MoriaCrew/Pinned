@@ -22,6 +22,8 @@ call log once live calls land).
   (PIN-52 seam; feeds the SAM concept prompt until elements land).
 - `scene.v1.md` — elements + prompt → composed scene, the final
   `input_text` of the Muse Image compose request (PIN-68).
+- `tap-name.v1.md` — one tapped cut-out crop → its pin label,
+  description and face flag (PIN-117).
 - `chips.v1.md` — selected pin labels → scene-idea suggestion chips
   for the Make sheet, cached per label set (PIN-75).
 
