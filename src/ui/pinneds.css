@@ -258,8 +258,10 @@
 /* The whole name on up to 3 lines (PIN-164); "…" only past that. Every
    parent is a centring grid, so the tag still hugs its text. The clamp sits
    on the inner text span: on the padded tag itself, the top of a 4th line
-   showed through the bottom padding. Long words hyphenate (html lang="en"). */
-.pn-pin-tag { display: inline-block; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
+   showed through the bottom padding. min-width: 0 keeps a long word from
+   widening the tag past its cell; the word breaks instead, with a hyphen
+   where the browser hyphenates (not uppercase text in Chromium). */
+.pn-pin-tag { display: inline-block; min-width: 0; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
   font: 650 var(--tag-size)/1.25 var(--tag-font); letter-spacing: var(--tag-tracking); text-transform: var(--tag-transform); }
 .pn-pin-tag-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: break-word; hyphens: auto; text-wrap: balance; }
 .pn-pin-tag { text-decoration: var(--tag-deco); text-underline-offset: 4px; }
