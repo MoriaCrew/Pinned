@@ -9,6 +9,7 @@ import {
   buildSceneResponsesBody,
   buildSegmentPromptText,
   normalizeElements,
+  normalizeTapName,
   type ElementNamer,
   type TapNamer,
   type SpeechTranscriber,
@@ -64,7 +65,7 @@ export const mockTapNamer: TapNamer = {
   async nameOne(input) {
     return {
       status: "ready",
-      value: { name: { ...MOCK_TAP_NAME }, promptVersion: input.promptVersion },
+      value: { name: normalizeTapName(MOCK_TAP_NAME, input)!, promptVersion: input.promptVersion },
     };
   },
 };
