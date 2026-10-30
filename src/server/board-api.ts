@@ -16,6 +16,7 @@ import "server-only";
  */
 import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
 import { activityLines } from "../domain/board-activity";
+import { normalizeElementLabel } from "../domain/element-label";
 import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
@@ -26,7 +27,7 @@ import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { plusRequiredError } from "./board-plus";
 import { issueHostCredential, verifyHostToken } from "./host-session";
-import { t } from "../i18n";
+import { t, tf } from "../i18n";
 import {
   addTapElement,
   startDecomposeJob,
@@ -671,6 +672,52 @@ export interface DeleteMyElementResult {
 }
 
 /**
+ * The owner-only gate of delete (PIN-77) and rename (PIN-156): no
+ * participant, no board, an unknown id, another board's element or
+ * someone else's is the one uniform 404 (no existence leak).
+ */
+async function myElementOr404(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  deps: BoardApiDeps,
+): Promise<Element> {
+  if (!participant) throw new BoardApiError("Element not found.", 404);
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Element not found.", 404);
+  const element = await deps.boards.getElement(elementId);
+  if (!element || element.boardId !== slug || element.ownerId !== participant.id) {
+    throw new BoardApiError("Element not found.", 404);
+  }
+  return element;
+}
+
+/**
+ * Rename my element (PIN-156): the owner gate runs BEFORE the label
+ * check, so anyone else gets the uniform 404 whatever they send; then
+ * normalizeElementLabel (Policy.elementLabelMaxChars) or 400. No AI
+ * call and no BoardEvent (as delete). Scenes store only elementIds,
+ * so their credits read the new name; library copies keep their own.
+ */
+export async function renameMyElement(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  body: unknown,
+  deps: BoardApiDeps,
+): Promise<{ element: ReturnType<typeof publicElement> }> {
+  await myElementOr404(slug, participant, elementId, deps);
+  const raw = typeof body === "object" && body !== null ? (body as { label?: unknown }).label : undefined;
+  const checked = normalizeElementLabel(raw, deps.policy.elementLabelMaxChars);
+  if (!checked.ok) {
+    throw new BoardApiError(tf("en", "board.renameInvalid", { max: deps.policy.elementLabelMaxChars }));
+  }
+  const renamed = await deps.boards.renameElement(elementId, checked.label);
+  if (!renamed) throw new BoardApiError("Element not found.", 404);
+  return { element: publicElement(slug, renamed) };
+}
+
+/**
  * Delete my element (PIN-77, docs/11 section 5.4 Deletes):
  * owner-only. Missing board/element, an element from another
  * board, a non-owner participant and no participant at all all
@@ -715,13 +762,7 @@ export async function deleteMyElement(
   elementId: string,
   deps: BoardApiDeps,
 ): Promise<DeleteMyElementResult> {
-  if (!participant) throw new BoardApiError("Element not found.", 404);
-  const board = await deps.boards.getBoard(slug);
-  if (!board) throw new BoardApiError("Element not found.", 404);
-  const element = await deps.boards.getElement(elementId);
-  if (!element || element.boardId !== slug || element.ownerId !== participant.id) {
-    throw new BoardApiError("Element not found.", 404);
-  }
+  const element = await myElementOr404(slug, participant, elementId, deps);
 
   const pins = await deps.boards.listPinsForElement(elementId);
   const pinsElsewhere = pins.filter((pin) => pin.boardId !== slug);

@@ -214,3 +214,20 @@ Browsers that already fetched the image may keep it until the image
 route's `max-age` ends. The board view marks each scene `canDelete`
 (maker or host; only a UI hint, PIN-143), so a host's Delete shows
 after the first client poll (the page render has no host cookie).
+
+## Thing rename (PIN-156, parent PIN-134)
+
+`PATCH /api/boards/{slug}/elements/{elementId}` with JSON
+`{ label }`: the thing's owner only (participant cookie). After the
+slug gate come the checks that read nothing, so they answer the same
+for every element: cross-site 403, non-JSON 415, a body over
+`Policy.elementRenameMaxBytes` 413. Then every miss is the uniform
+404: no or garbled cookie, unknown board or element, another board's
+element, anyone else's, whatever label they send. Only the owner can
+see the 400 (empty, control characters, or over
+`Policy.elementLabelMaxChars` code points; never truncated) or the
+200 with the board view's public element. The label is trimmed and
+its whitespace collapsed (`src/domain/element-label.ts`). No AI call
+and no BoardEvent. Scenes store only `elementIds`, so a scene made
+before the rename credits the new name; library copies keep their
+own label.
