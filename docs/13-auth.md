@@ -195,3 +195,19 @@ gates (404 in link-only mode, 401 signed out):
    `BoardRepository.listElementsBySource` backs the guard;
    its Firestore form needs the `sourceElementId` collection-
    group field index declared in `firestore.indexes.json`.
+
+## Scene delete (PIN-142, parent PIN-132)
+
+`DELETE /api/boards/{slug}/scenes/{sceneId}`: the scene's maker
+(participant cookie) or the board host (host cookie, see
+`docs/15-board-plus.md`). After the slug gate and the cross-site 403
+(no I/O), every failure before authorization is the uniform 404: no
+or garbled cookies, unknown board or scene, another board's scene,
+anyone else. Only the maker or host can see a 409 (still developing)
+or the 204; a repeat is a 204 no-op for them, a 404 for others.
+The image is deleted (best-effort, only inside the scene's own
+`scenes/boards/{slug}/{sceneId}/` folder); the Scene stays as a
+tombstone (`hidden`, `deletedAt`, `deletedBy: "maker" | "host"`) so
+remix chains hold, and the repository never rewrites a tombstone.
+Browsers that already fetched the image may keep it until the image
+route's `max-age` ends.
