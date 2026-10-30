@@ -181,6 +181,134 @@
   pointer-events: none;
 }
 
+/* ---------- Board Plus (PIN-111) ---------- */
+
+/* The TryOnBar sits over the last row: give the page room for it. */
+.boardTryOn {
+  padding-bottom: calc(var(--tap-main) + var(--space-2) * 2 + var(--space-3) + var(--space-6) + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+.boardRest.boardTryOn {
+  padding-bottom: calc(var(--space-6) + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+/* The dock's fade reaches up behind the TryOnBar or a line above the dock. */
+.fadeTall {
+  height: calc(var(--space-8) * 2 + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+/* The host's More beside Share, and its menu under it. */
+.boardMore {
+  position: relative;
+  display: inline-flex;
+}
+
+.boardMenu {
+  top: calc(100% + var(--space-1));
+  right: 0;
+}
+
+/* Change look: seven mini boards are taller than a small phone, so the
+   picker scrolls while the title and the one button stay put. */
+.lookSheet:global(.pn-sheet) {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  max-height: 92dvh;
+}
+
+.lookSheet:focus {
+  outline: none;
+}
+
+.lookSheet > :global(.pn-sheet-grab) {
+  flex: none;
+  align-self: center;
+}
+
+.lookSheet > :global(.pn-sheet-head),
+.lookSheet > :global(.pn-sheet-foot) {
+  flex: none;
+}
+
+.lookSheet > :global(.pn-sheet-body) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+}
+
+/* One line and the TryOnBar, stacked over the dock (or the page foot). */
+.lookStack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  z-index: 21;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.lookStackLifted {
+  bottom: calc(var(--space-3) + var(--tap-main) + var(--space-2) * 3 + var(--edge-w) * 2 + env(safe-area-inset-bottom));
+}
+
+.lookStack > * {
+  width: min(100% - 2 * var(--space-4), 440px);
+  pointer-events: auto;
+}
+
+.lookNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: var(--edge-w) solid var(--edge);
+  border-radius: var(--dock-radius);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-dock);
+}
+
+.lookNotice p {
+  flex: 1;
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}
+
+.lookNotice small {
+  display: block;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-ui);
+}
+
+.lookNoticeError p {
+  color: var(--danger);
+}
+
+/* Mock checkout: says it is a demo, above the Plus sheet's scrim. */
+.demoNote {
+  position: fixed;
+  top: calc(var(--space-4) + env(safe-area-inset-top));
+  left: var(--space-4);
+  right: var(--space-4);
+  z-index: 41;
+  width: fit-content;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 650 14px/20px var(--font-ui);
+  text-align: center;
+  box-shadow: var(--shadow-dock);
+  pointer-events: none;
+}
+
 /* Join sheet. */
 .joinLead {
   margin: 0;

@@ -576,6 +576,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-perks .pn-sticker { flex: none; }
 .pn-perk-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--surface-sunk); color: var(--ink); }
 .pn-perks b { display: block; font: 700 16px/22px var(--font-ui); }
+.pn-perk-soon { margin-left: var(--space-2); vertical-align: 2px; }
 .pn-perks small { display: block; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
 .pn-plus-price { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .pn-plus-price b { font: 700 28px/32px var(--font-mono); }

@@ -33,6 +33,7 @@ export function BoardThings({
   pickNumbers,
   onTapPin,
   deletion,
+  foilPinId = null,
   showHead = true,
 }: {
   cards: PinCard[];
@@ -42,6 +43,8 @@ export function BoardThings({
   pickNumbers: ReadonlyMap<string, number>;
   onTapPin: (pinId: string) => void;
   deletion: DeleteControls;
+  /** Board Plus perk (PIN-111): this pin wears foil. */
+  foilPinId?: string | null;
   showHead?: boolean;
 }) {
   return (
@@ -68,6 +71,7 @@ export function BoardThings({
                 seed={card.element.id}
                 state={picking && pickIndex !== undefined ? "picked" : "rest"}
                 pickIndex={pickIndex}
+                foil={card.pinId === foilPinId}
                 onToggle={pinned ? () => onTapPin(card.pinId) : undefined}
               >
                 {pinned ? null : (

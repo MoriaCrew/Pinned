@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { getSkin, type SkinId } from "../domain/skins";
 import { t, type MessageKey } from "../i18n";
 import { Icon } from "./icons";
@@ -167,13 +167,17 @@ export function PlusSheet({
   onClose?: () => void;
   layer?: "fixed" | "absolute" | "none";
 }) {
-  const perks: { icon?: "skin" | "scene" | "download"; foil?: boolean; title: MessageKey; body: MessageKey }[] = [
+  // `soon`: planned, not built yet. The sheet says so instead of
+  // promising it (docs/15: the demo stays honest).
+  const perks: { icon?: "skin" | "scene" | "download"; foil?: boolean; soon?: boolean; title: MessageKey; body: MessageKey }[] = [
     { icon: "skin", title: "ui.plusPerkSkins", body: "ui.plusPerkSkinsBody" },
     { foil: true, title: "ui.plusPerkFoil", body: "ui.plusPerkFoilBody" },
-    { icon: "scene", title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
-    { icon: "download", title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
+    { icon: "scene", soon: true, title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
+    { icon: "download", soon: true, title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
   ];
   const price = plan === "board" ? prices.board : prices.host;
+  // One radio group per sheet: two open sheets never share a name.
+  const planGroup = `plus-plan-${useId()}`;
   return (
     <Sheet
       title={t("en", "ui.plusTitle")}
@@ -209,7 +213,10 @@ export function PlusSheet({
               </span>
             )}
             <span>
-              <b>{t("en", perk.title)}</b>
+              <b>
+                {t("en", perk.title)}
+                {perk.soon ? <Tag className="pn-perk-soon">{t("en", "ui.perkSoon")}</Tag> : null}
+              </b>
               <small>{t("en", perk.body)}</small>
             </span>
           </li>
@@ -219,7 +226,7 @@ export function PlusSheet({
         <legend className="pn-sr">{t("en", "ui.plusPlans")}</legend>
         {(["board", "host"] as const).map((id) => (
           <label key={id} className="pn-plan">
-            <input type="radio" name="plus-plan" value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
+            <input type="radio" name={planGroup} value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
             <span className="pn-plan-name">{t("en", id === "board" ? "ui.plusPlanBoard" : "ui.plusPlanHost")}</span>
             <span className="pn-plan-price">{id === "board" ? prices.board : prices.host}</span>
             <span className="pn-plan-note">{t("en", id === "board" ? "ui.plusPlanBoardNote" : "ui.plusPlanHostNote")}</span>
