@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY } from "../policy/policy";
-import { normalizeElementLabel } from "./element-label";
+import { normalizeElementLabel, withElementLabel } from "./element-label";
 
 const CAP = DEFAULT_POLICY.elementLabelMaxChars;
 
@@ -51,5 +51,30 @@ describe("normalizeElementLabel (PIN-156)", () => {
     expect(normalizeElementLabel("a".repeat(CAP + 1), CAP)).toEqual({ ok: false, reason: "tooLong" });
     expect(normalizeElementLabel(astral.repeat(5), 5)).toEqual({ ok: true, label: astral.repeat(5) });
     expect(normalizeElementLabel(astral.repeat(6), 5)).toEqual({ ok: false, reason: "tooLong" });
+  });
+});
+
+describe("withElementLabel (PIN-157)", () => {
+  const view = {
+    board: "b1",
+    elements: [
+      { id: "e1", label: "Teal mug" },
+      { id: "e2", label: "Rubber duck" },
+    ],
+  };
+
+  it("replaces only that thing's label and leaves the input alone", () => {
+    const next = withElementLabel(view, "e2", "Bath duck");
+    expect(next.elements).toEqual([
+      { id: "e1", label: "Teal mug" },
+      { id: "e2", label: "Bath duck" },
+    ]);
+    expect(next.elements[0]).toBe(view.elements[0]);
+    expect(next.board).toBe("b1");
+    expect(view.elements[1].label).toBe("Rubber duck");
+  });
+
+  it("returns the same view when the thing is gone", () => {
+    expect(withElementLabel(view, "e9", "Anything")).toBe(view);
   });
 });

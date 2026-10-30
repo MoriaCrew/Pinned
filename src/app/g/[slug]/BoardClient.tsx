@@ -11,9 +11,11 @@ import {
 import {
   needsEmptyPrompt,
   pinCards,
+  type BoardViewElement,
   type BoardViewLike,
   type BoardViewScene,
 } from "../../../domain/board-view";
+import { withElementLabel } from "../../../domain/element-label";
 import {
   attemptPollInterval,
   isTerminalScene,
@@ -60,6 +62,7 @@ import { BoardThings } from "./BoardThings";
 import { BoardLeftovers } from "./Leftovers";
 import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
+import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
@@ -83,6 +86,8 @@ export interface BoardClientPolicy {
   pinsPerScene: { min: number; max: number };
   sceneChips: string[];
   scenePromptMaxChars: number;
+  /** Policy elementLabelMaxChars: the rename sheet's cap, in code points (PIN-157). */
+  elementLabelMaxChars: number;
   /** Policy sceneSize (PIN-129): the print shape of a scene with no stored size. */
   sceneSize: string;
   /** Policy elementsPerPhoto.max, tap-adds included (PIN-78). */
@@ -234,6 +239,8 @@ function BoardBody({
   const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
   const [confirmDeleteElementId, setConfirmDeleteElementId] = useState<string | null>(null);
   const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
+  // PIN-157: the thing whose rename sheet is open (mounted here, not in its More menu).
+  const [renamingElementId, setRenamingElementId] = useState<string | null>(null);
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   // Join sheet: open while an intent waits for a name (or "edit").
@@ -425,6 +432,41 @@ function BoardBody({
     },
     onError: (_cause, elementId) => setDeleteErrorElementId(elementId),
   });
+
+  // PIN-157: rename my element. Optimistic: the new name shows on the
+  // grid, in credits and in the viewer at once (they all read
+  // view.elements); a failure puts the snapshot back and the sheet,
+  // which stays open until the answer, shows why. Only a 400 carries a
+  // line worth showing (the server's own); 404 and the rest are generic.
+  const renameElement = useMutation({
+    mutationFn: async ({ elementId, label }: { elementId: string; label: string }) => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}`,
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) },
+      );
+      const data = (await response.json().catch(() => ({}))) as { element?: BoardViewElement; error?: string };
+      if (response.status === 400 && data.error) throw new Error(data.error);
+      if (!response.ok || !data.element) throw new Error(t("en", "board.renameFailed"));
+      return data.element;
+    },
+    onMutate: async ({ elementId, label }) => {
+      await queryClient.cancelQueries({ queryKey: boardQueryKey(slug) });
+      const previous = queryClient.getQueryData<BoardClientView>(boardQueryKey(slug));
+      if (previous) queryClient.setQueryData(boardQueryKey(slug), withElementLabel(previous, elementId, label));
+      return { previous };
+    },
+    onSuccess: (element) => {
+      queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
+        current ? withElementLabel(current, element.id, element.label) : current,
+      );
+      setRenamingElementId(null);
+    },
+    onError: (_cause, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) }),
+  });
+  const renamingElement = renamingElementId ? view.elements.find((e) => e.id === renamingElementId) : undefined;
 
   // PIN-143: delete a scene (maker or host; the route enforces). Not
   // optimistic: the viewer stays open with its confirm until the
@@ -1097,6 +1139,10 @@ function BoardBody({
             foilPinId={foilPinId(cards, view.plus)}
             showHead={!pickingNow}
             onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
+            onRename={(elementId) => {
+              renameElement.reset();
+              setRenamingElementId(elementId);
+            }}
             deletion={{
               confirmElementId: confirmDeleteElementId,
               errorElementId: deleteErrorElementId,
@@ -1192,6 +1238,20 @@ function BoardBody({
             profileName={auth.user?.displayName ?? null}
             onJoined={onJoined}
             onClose={() => setJoinIntent(null)}
+          />
+        ) : null}
+
+        {renamingElement ? (
+          <RenameSheet
+            label={renamingElement.label}
+            maxChars={policy.elementLabelMaxChars}
+            busy={renameElement.isPending}
+            error={renameElement.error?.message ?? ""}
+            onSave={(label) => {
+              if (label === renamingElement.label) setRenamingElementId(null);
+              else renameElement.mutate({ elementId: renamingElement.id, label });
+            }}
+            onClose={() => setRenamingElementId(null)}
           />
         ) : null}
 

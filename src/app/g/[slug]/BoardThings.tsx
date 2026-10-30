@@ -24,7 +24,8 @@ export interface DeleteControls {
  * rest starts picking with it). Pinned things only: the uploader's
  * unpinned candidates live in the leftovers line above the grid
  * (PIN-122), never here. Own things get a More menu whose Delete
- * asks once more (PIN-77 owner-only delete).
+ * asks once more (PIN-77 owner-only delete) and whose Rename opens
+ * the board's rename sheet (PIN-157).
  */
 export function BoardThings({
   cards,
@@ -34,6 +35,7 @@ export function BoardThings({
   pickNumbers,
   onTapPin,
   deletion,
+  onRename,
   foilPinId = null,
   showHead = true,
 }: {
@@ -44,6 +46,8 @@ export function BoardThings({
   pickNumbers: ReadonlyMap<string, number>;
   onTapPin: (pinId: string) => void;
   deletion: DeleteControls;
+  /** Rename in a thing's More menu: the board opens the rename sheet (PIN-157). */
+  onRename?: (elementId: string) => void;
   /** Board Plus perk (PIN-111): this pin wears foil. */
   foilPinId?: string | null;
   showHead?: boolean;
@@ -74,7 +78,7 @@ export function BoardThings({
                 foil={card.pinId === foilPinId}
                 onToggle={() => onTapPin(card.pinId)}
               />
-              {mine && !picking ? <PinMore card={card} deletion={deletion} /> : null}
+              {mine && !picking ? <PinMore card={card} deletion={deletion} onRename={onRename} /> : null}
             </li>
           );
         })}
@@ -83,7 +87,23 @@ export function BoardThings({
   );
 }
 
-function PinMore({ card, deletion }: { card: PinCard; deletion: DeleteControls }) {
+/** The More menu's items, in order: Rename (when the board can rename), then Delete. */
+export function pinMenuItems(actions: { onRename?: () => void; onDelete: () => void }) {
+  return [
+    ...(actions.onRename ? [{ label: t("en", "board.rename"), onSelect: actions.onRename }] : []),
+    { label: t("en", "board.delete"), danger: true, onSelect: actions.onDelete },
+  ];
+}
+
+function PinMore({
+  card,
+  deletion,
+  onRename,
+}: {
+  card: PinCard;
+  deletion: DeleteControls;
+  onRename?: (elementId: string) => void;
+}) {
   const elementId = card.element.id;
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"menu" | "confirm">("menu");
@@ -197,16 +217,19 @@ function PinMore({ card, deletion }: { card: PinCard; deletion: DeleteControls }
             <Menu
               label={tf("en", "board.thingActions", { thing })}
               className={alignStart ? styles.pinMenuStart : styles.pinMenu}
-              items={[
-                {
-                  label: t("en", "board.delete"),
-                  danger: true,
-                  onSelect: () => {
-                    deletion.onAsk(elementId);
-                    setStep("confirm");
-                  },
+              items={pinMenuItems({
+                onRename: onRename
+                  ? () => {
+                      // Focus goes back to More first: the sheet hands it back there when it closes.
+                      close(true);
+                      onRename(elementId);
+                    }
+                  : undefined,
+                onDelete: () => {
+                  deletion.onAsk(elementId);
+                  setStep("confirm");
                 },
-              ]}
+              })}
             />
           )}
         </div>

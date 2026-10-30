@@ -31,8 +31,10 @@
 4. **Remix.** Any scene can be remixed: the parent scene image plus
    any new pins go back to Muse Image as references, statelessly
    (`store: false`; PIN-79). Credits carry the full contributor set.
-5. **Delete.** A pin's owner can delete their own element; its pins
-   go and scenes that used it are hidden (PIN-77).
+5. **Rename or delete.** A pin's owner can rename their own thing
+   (More, Rename; up to Policy `elementLabelMaxChars`; credits and
+   scenes show the new name, PIN-157) or delete it; its pins go and
+   scenes that used it are hidden (PIN-77).
 6. **Your library (optional).** Sign in with Google and the boards
    you join and the cut-outs you pinned follow you: *My boards*
    lists them, *My pins* is your cut-out library, and any of your

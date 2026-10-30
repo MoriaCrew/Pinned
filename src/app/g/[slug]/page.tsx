@@ -146,7 +146,7 @@ export default async function BoardPage({
       initialView={view as BoardClientView}
       tryOnSkin={tryOnSkin}
       initialSceneId={parseSceneParam(query.scene)}
-      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0 }}
+      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementLabelMaxChars: resolved.elementLabelMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0 }}
     />
   );
 }
