@@ -439,6 +439,15 @@ function BoardBody({
   // Nothing to pick on an empty board: picking ends with it.
   const pickingNow = picking && !empty;
 
+  // An emptied board ends picking for good, so the next pin to land
+  // shows the board at rest, not a tray.
+  useEffect(() => {
+    if (!empty || !picking) return;
+    setPicking(false);
+    setSelected(new Set());
+    setRemixOfId(null);
+  }, [empty, picking]);
+
   useEffect(() => {
     if (!scrollToPinId || !pickingNow) return;
     document
