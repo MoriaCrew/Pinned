@@ -182,8 +182,23 @@ creates one synthetic demo board through the public boards API and
 prints its slug once — record it privately, never commit it; setting
 `DEMO_BOARD_SLUG` in the host env turns on the landing demo link.
 `npm run usage:report -- <slug> [...]` prints per-board
-people/elements/pins/scenes counts (slugs are passed locally only,
-never committed).
+people/elements/pins/scenes counts, and `npm run usage:costs`
+prints per-board estimated AI costs (slugs are passed locally only,
+or printed hashed, never committed).
+
+Billing (makes credits; design in `docs/15-board-plus.md`): modes are
+`PLUS_MODE=off|mock|stripe` — `off` sells nothing (the default, and
+prod), `mock` is the no-money demo, `stripe` sells credit packs via
+hosted Checkout with webhook-only grants. The dev backend runs
+`stripe` against the pinneds-dev **sandbox** since PIN-153 (including
+`Policy.credits.enabled`, which defaults off in code). Operator
+scripts: `npm run seed:stripe-catalog` converges a sandbox onto the
+committed catalog (dry-run unless `--apply`);
+`npm run billing:webhook-endpoint` ensures the dev webhook endpoint
+and stores its signing secret in Secret Manager without printing it;
+`npm run billing:reconcile` is the read-only paid-vs-granted report
+(exit 1 on anomalies — runbook in `docs/15-board-plus.md`). Keys come
+from env var names / Secret Manager only, never from git.
 
 ## Known v1 limits (status Oct 29, 2026)
 

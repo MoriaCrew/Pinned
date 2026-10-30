@@ -71,9 +71,9 @@ export interface AppConfig {
    * Stripe webhook signing secret (PIN-150): env-name only
    * (STRIPE_WEBHOOK_SECRET), never a value in git. Null unless
    * set; the webhook route fails closed (503, nothing granted)
-   * without it. The hosted value does not exist until the
-   * endpoint is registered (PIN-153), so no apphosting yaml
-   * references it yet. Never log or expose this value.
+   * without it. The dev hosted value exists since PIN-153
+   * registered the endpoint (apphosting.dev.yaml references
+   * it); prod has none. Never log or expose this value.
    */
   stripeWebhookSecret: string | null;
   /** Pinned Stripe API version (STRIPE_API_VERSION); bump deliberately with the SDK. */

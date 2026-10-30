@@ -213,11 +213,12 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   mode). Plus plans (board/host skins) are **not** sold in this
   mode yet: the plan route answers `unavailable`, and a stored
   `source: "stripe"` grant counts while a mock one does not.
-  **No hosted backend runs `stripe` yet**: dev references the
-  key in `apphosting.dev.yaml` but keeps `PLUS_MODE=mock`, and
-  prod has neither the mode nor a key reference. Flipping a
-  hosted backend waits for webhook grants (PIN-150/PIN-153) —
-  taking payments with no fulfilment path is forbidden.
+  **Dev runs `stripe` since PIN-153** (sandbox only: the dev
+  backend flips together with `Policy.credits.enabled` and
+  the registered webhook endpoint - PIN-153 section below).
+  Prod keeps `off` with no key reference. PIN-149/PIN-150
+  deliberately shipped reference-only so no backend ever took
+  a payment with no fulfilment path.
 
 Check a backend with `GET /api/health` → `plusMode`.
 
@@ -439,23 +440,21 @@ Checkout Sessions create + Adaptive Pricing):
   keyed by intent id only. Session creation carries an
   idempotency key derived from the intent id.
 
-Hosted wiring in this slice is reference-only: dev references
+Hosted wiring in this slice was reference-only: dev referenced
 `STRIPE_SECRET_KEY` from Secret Manager in
-`apphosting.dev.yaml` (already provisioned there) but keeps
-`PLUS_MODE=mock`; prod references nothing (no prod secret
-exists yet). No hosted backend takes a Stripe payment until
-webhook grants land.
+`apphosting.dev.yaml` but kept `PLUS_MODE=mock`, and prod
+referenced nothing, so no hosted backend took a Stripe payment
+before webhook grants landed. PIN-153 flips dev (below).
 
 ## Stripe webhook (PIN-150)
 
 `POST /api/billing/stripe/webhook` (Node runtime) is the only
 grant authority for credit packs: it hands the RAW body +
 `Stripe-Signature` header to the SDK's `constructEvent` with
-`STRIPE_WEBHOOK_SECRET` (env name via `src/config.ts`; no
-apphosting yaml references it yet and no hosted `PLUS_MODE`
-flips to `stripe` in this slice - the secret cannot exist
-until PIN-153 registers the endpoint, and a dangling reference
-would break deploys). The route fails closed with 503 when
+`STRIPE_WEBHOOK_SECRET` (env name via `src/config.ts`; the dev secret exists since
+PIN-153 registered the endpoint, and `apphosting.dev.yaml`
+references it - PIN-150 itself shipped no reference, since a
+dangling one would break deploys). The route fails closed with 503 when
 stripe mode, the API key, or the signing secret is absent;
 400 only for a bad/missing signature; 500 only for unexpected
 store/API failures so Stripe retries them. Every handled
@@ -731,6 +730,72 @@ pool-empty copy, EN/FR rendering + copy guardrails), plus the
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
 
+## Reconciliation + dev activation (PIN-153)
+
+`npm run billing:reconcile` (`scripts/billing-reconciliation.mjs`,
+pure report logic in `src/domain/billing-reconciliation.ts`) is
+the operator safety net: a read-only join of paid Stripe
+Checkout Sessions (listed with the runtime key, by env name)
+against Firestore ledger purchases, checkout intents and the
+PIN-150 dead letters, via service-account ADC. It reports
+paid-no-grant (a paid session whose intent has no ledger
+grant), grant-no-payment (a granted purchase matching no paid
+session by intent id or by the intent's mapped Stripe
+session/payment-intent ids), dead-letters by reason (including
+`reinstated_after_final_clawback` and `fx_unverifiable`), and
+pending intents past their TTL. Board slugs print only as
+short hashes, like `usage:costs`. Exit 0 means clean; exit 1
+means anomalies exist; exit 2 is a usage/config error.
+
+```
+node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
+```
+
+**Runbook.** Run it daily while dev stripe mode is live and
+after any billing change or deploy, and drain dead letters to
+zero before calling a billing change done. In Stripe
+Workbench, check the dev endpoint's delivery failures the
+same cadence: a run of non-2xx deliveries means grants are
+not landing and paid-no-grant will confirm it. A paid-no-grant
+row is paid money with no makes - find the intent, read the
+dead letter for the blocking reason, fix forward, never grant
+by hand-editing the ledger. Refunds from an agent key are
+approval-gated in Stripe (an operator must approve the
+pending request in the Dashboard): agents only ever
+demonstrate the gate and report the pending request, they do
+not chase approval.
+
+**Dev webhook endpoint.** `npm run billing:webhook-endpoint`
+(`scripts/ensure-stripe-webhook-endpoint.mjs`, dry-run unless
+`--apply`; pure plan in `src/billing/webhook-endpoint.ts`)
+converges the sandbox onto one endpoint at
+`https://dev.pinneds.com/api/billing/stripe/webhook` with
+exactly the 11 PIN-150 events. Creation goes through
+`POST /v1/webhook_endpoints`, so payloads are snapshots (the
+full resource in `data.object`) rendered at the pinned API
+version. On creation Stripe returns the signing secret once:
+the script pipes it from process memory into Secret Manager
+(`STRIPE_WEBHOOK_SECRET` in `moriacrew-pinned-dev`) over
+gcloud stdin - never printed, echoed or written to a file -
+and mirrors the `STRIPE_SECRET_KEY` IAM grants onto it. When
+the endpoint already exists the secret cannot be re-read, so
+the script only verifies URL, events and status; an operator
+rolls a lost secret in Workbench.
+
+**Dev activation.** Since PIN-153 the dev backend runs the
+full path: `apphosting.dev.yaml` sets `PLUS_MODE=stripe`,
+references `STRIPE_WEBHOOK_SECRET` next to `STRIPE_SECRET_KEY`,
+and enables credits with
+`POLICY_OVERRIDES_JSON={"credits":{"enabled":true}}` (the code
+default stays off; prod yaml is untouched and stays `off`).
+Dev is sandbox money only - the pinneds-dev sandbox catalog
+converges with `scripts/seed-stripe-catalog.mjs` (PIN-146).
+Verify after each dev deploy: `GET /api/health` reports
+`plusMode: "stripe"`, the buy route returns a hosted Checkout
+URL on a joined board, a bad-signature webhook POST returns
+400, and `npm run billing:reconcile` against dev data reports
+its summary (exit 1 only on named anomalies).
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).
@@ -773,3 +838,10 @@ stays default `false` and no hosted `PLUS_MODE` changes.
   cap, cleanup, return resolver, store selection) and
   `src/app/api/boards/credits-checkout-routes.off.test.ts`
   (route gates/auth/429, off-mode unavailable, return 302s).
+- PIN-153: `src/domain/billing-reconciliation.test.ts` (pure
+  report over fakes: matched pair clean, paid-no-grant,
+  grant-no-payment, mapped-id matching, dead-letters by
+  reason, pending past TTL, dedupe, operator-script mirror)
+  and `src/billing/webhook-endpoint.test.ts` (exact 11-event
+  list + dev URL, create/reuse/drift/wildcard plans,
+  ensure-script mirror incl. the pinned API version).
