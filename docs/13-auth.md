@@ -72,7 +72,8 @@ from the token, and timestamps. **Email is never stored** —
 nothing sends mail or keys identity off an address; the token's
 email claim is not even read. The profile and board index
 persist until a future account-deletion flow lands (not yet
-built); `userSessionDays` bounds the cookie only.
+built; one board's row goes with "Remove from My boards",
+PIN-166); `userSessionDays` bounds the cookie only.
 
 ## Operator steps to enable (per backend)
 
@@ -132,7 +133,17 @@ The client half of PIN-57b, still behind the same gates:
    list the user's claimed boards (title, theme, my pinned-pin
    count, latest ready scene thumb, last activity), newest
    activity first. Both 404 in link-only mode; the API 401s
-   signed out.
+   signed out. Each card's More menu has "Remove from My boards"
+   (PIN-166): `DELETE /api/me/boards/{slug}` deletes the caller's
+   own index row AND clears `userId` on the caller's own
+   participant there (only when it carries that uid) — never the
+   board, nor anyone else's row or claim. The row alone would not
+   hold (the next signed-in join or fresh `/claim` rewrites it).
+   Side effects: the board's pins leave My pins and restore on
+   another device stops for it. Opening the board in a browser
+   that still holds that place links it again (PIN-160). Guards:
+   cross-site 403 and `Policy.myBoardsRemovePerIp` 429 before any
+   read; success is always 204, row or not.
 4. Restore + auto-claim: in optional mode, `GET
    /api/boards/{slug}` with a user session but no participant
    cookie re-issues the participant cookie when the user holds
