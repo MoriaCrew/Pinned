@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyChip,
+  chipThumbs,
   chipsForSelection,
   chipsSelectionKey,
   isTerminalScene,
@@ -44,6 +45,30 @@ describe("generated chips selection guard (PIN-75)", () => {
     expect(
       chipsForSelection({ key: chipsSelectionKey(["e1"]), chips: [] }, chipsSelectionKey(["e1"]), fallback),
     ).toEqual(fallback);
+  });
+});
+
+describe("chip thumbnails (PIN-100)", () => {
+  const chips = ["a", "b", "c", "d", "e"];
+
+  it("gives chip i the i-th picked sticker, wrapping round", () => {
+    const cards = [card("p1", "e1"), card("p2", "e2"), card("p3", "e3")];
+    expect(chipThumbs(chips, cards)).toEqual(["/e1", "/e2", "/e3", "/e1", "/e2"]);
+  });
+
+  it("counts picks that share an image once", () => {
+    const cards = [card("p1", "e1"), card("p9", "e1"), card("p2", "e2")];
+    expect(chipThumbs(chips.slice(0, 3), cards)).toEqual(["/e1", "/e2", "/e1"]);
+  });
+
+  it("leaves chips bare when fewer than two distinct stickers are picked", () => {
+    expect(chipThumbs(chips.slice(0, 2), [])).toEqual([undefined, undefined]);
+    expect(chipThumbs(chips.slice(0, 2), [card("p1", "e1")])).toEqual([undefined, undefined]);
+    expect(chipThumbs(chips.slice(0, 2), [card("p1", "e1"), card("p9", "e1")])).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(chipThumbs([], [card("p1", "e1"), card("p2", "e2")])).toEqual([]);
   });
 });
 

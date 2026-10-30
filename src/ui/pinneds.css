@@ -424,6 +424,25 @@ textarea.pn-input { resize: none; min-height: 88px; }
 .pn-menu-item[data-danger] { color: var(--danger); }
 .pn-menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
+/* ---------- Make sheet (PIN-100) ---------- */
+/* Long on a small phone (base scene + picks + field + chips): the body scrolls, title and "Make it" stay put. */
+.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; max-height: 92vh; max-height: 92dvh; }
+.pn-make-sheet > .pn-sheet-grab, .pn-make-sheet > .pn-sheet-head, .pn-make-sheet > .pn-sheet-foot { flex: none; }
+.pn-make-sheet > .pn-sheet-grab { align-self: center; }
+/* The sheet itself takes focus when it opens (so a screen reader starts at the title); it is not a control, so no ring around it. */
+.pn-make-sheet:focus { outline: none; }
+.pn-make-sheet > .pn-sheet-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: -8px; padding: 4px 8px; }
+.pn-make-base { display: flex; align-items: center; gap: var(--space-4); }
+.pn-make-base-print { flex: none; width: 104px; }
+.pn-make-base-text { display: grid; gap: var(--space-2); justify-items: start; min-width: 0; }
+.pn-make-base-text p { margin: 0; color: var(--ink); font: 650 16px/22px var(--font-ui); overflow-wrap: anywhere; }
+.pn-make-picks { --sticker: 72px; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3) var(--space-2); list-style: none; margin: 0; padding: var(--space-2) 0 0; }
+.pn-make-picks > .pn-pin { flex: 1 1 72px; max-width: 96px; }
+.pn-make-sheet .pn-hint { padding: 10px var(--space-4); }
+/* An idea can be a whole sentence: let it wrap inside the chip instead of running off the sheet. */
+.pn-make-chips .pn-chip { max-width: 100%; padding-block: 6px; white-space: normal; text-align: left; }
+.pn-make-chips .pn-chip-thumb { flex: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .pn-sticker, .pn-sticker *, .pn-sticker::after, .pn-develop-frame::after, .pn-develop-cut, .pn-tray-slot, .pn-develop-status .pn-tag, .pn-foil { animation: none !important; transition: none !important; }
 }

@@ -119,3 +119,10 @@ describe("UI kit components (PIN-97)", () => {
     expect(on).toContain("Get Plus · $4.99");
   });
 });
+
+describe("SceneCard body (PIN-100)", () => {
+  it("drops the print body when there is nothing to put in it", () => {
+    expect(html(h(SceneCard, { src: "/s.webp" }))).not.toContain("pn-print-body");
+    expect(html(h(SceneCard, { src: "/s.webp", idea: "A picnic" }))).toContain("pn-print-body");
+  });
+});

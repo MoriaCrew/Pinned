@@ -66,6 +66,8 @@ export function SceneCard({
       </Tag>
     ) : null;
   const hasActions = Boolean(onRemix || onShare || onMore);
+  const hasCredits = Boolean(credits && credits.length > 0);
+  const hasBody = Boolean(idea || hasCredits || hasActions || footer);
   return (
     <article
       className={cx("pn-print-wrap", className)}
@@ -79,23 +81,25 @@ export function SceneCard({
           {tag}
           {number !== undefined ? <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: String(number).padStart(2, "0") })}</span> : null}
         </div>
-        <div className="pn-print-body">
-          {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
-          {credits && credits.length > 0 ? <CreditLine items={credits} remixOf={remixOf} onItem={onCredit} /> : null}
-          {hasActions ? (
-            <div className="pn-print-actions">
-              {onRemix ? (
-                <Button variant="secondary" size="sm" icon="remix" onClick={onRemix}>
-                  {remixLabel}
-                </Button>
-              ) : null}
-              <span className="pn-spacer" />
-              {onShare ? <IconButton icon="share" label={t("en", "ui.shareScene")} variant="ghost" onClick={onShare} disabled={sharing} /> : null}
-              {onMore ? <IconButton icon="more" label={t("en", "ui.more")} variant="ghost" onClick={onMore} /> : null}
-            </div>
-          ) : null}
-          {footer}
-        </div>
+        {hasBody ? (
+          <div className="pn-print-body">
+            {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
+            {hasCredits ? <CreditLine items={credits ?? []} remixOf={remixOf} onItem={onCredit} /> : null}
+            {hasActions ? (
+              <div className="pn-print-actions">
+                {onRemix ? (
+                  <Button variant="secondary" size="sm" icon="remix" onClick={onRemix}>
+                    {remixLabel}
+                  </Button>
+                ) : null}
+                <span className="pn-spacer" />
+                {onShare ? <IconButton icon="share" label={t("en", "ui.shareScene")} variant="ghost" onClick={onShare} disabled={sharing} /> : null}
+                {onMore ? <IconButton icon="more" label={t("en", "ui.more")} variant="ghost" onClick={onMore} /> : null}
+              </div>
+            ) : null}
+            {footer}
+          </div>
+        ) : null}
       </div>
     </article>
   );

@@ -76,6 +76,22 @@ export function applyChip(
   return charCount(joined) <= maxChars ? joined : prompt;
 }
 
+/**
+ * Sticker thumbnail for each idea chip (PIN-100): chip i wears the
+ * i-th picked thing, wrapping round (i mod n). Picks that share an
+ * image count once, and with fewer than two distinct stickers every
+ * chip would carry the same thumbnail, which reads as noise, so no
+ * chip gets one. Result is parallel to `chips`.
+ */
+export function chipThumbs(
+  chips: readonly string[],
+  cards: readonly PinCard[],
+): (string | undefined)[] {
+  const sources = [...new Set(cards.map((card) => card.element.imageUrl))];
+  if (sources.length < 2) return chips.map(() => undefined);
+  return chips.map((_, index) => sources[index % sources.length]);
+}
+
 /** Stable identity of a pick set for generated chips (PIN-75). */
 export function chipsSelectionKey(elementIds: readonly string[]): string {
   return [...new Set(elementIds)].sort().join(",");
