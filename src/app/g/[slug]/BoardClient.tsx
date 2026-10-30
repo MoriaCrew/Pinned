@@ -81,6 +81,9 @@ export interface BoardClientPolicy {
   signInNudge: boolean;
   /** Policy libraryStripMax: the Add sheet's "From your other boards" cap (PIN-121). */
   libraryStripMax: number;
+  /** Policy dictation (PIN-119): clip cap; enabled = caps + AI budget on. */
+  dictationMaxSeconds: number;
+  dictationEnabled: boolean;
 }
 
 interface SceneAttempt {
@@ -973,6 +976,11 @@ function BoardBody({
             chips={sheetChips}
             pinsPerScene={policy.pinsPerScene}
             promptMaxChars={policy.scenePromptMaxChars}
+            dictate={
+              policy.dictationEnabled
+                ? { slug, maxSeconds: policy.dictationMaxSeconds }
+                : null
+            }
             initialPrompt={sheetPrompt}
             remixParent={
               remixParent?.imageUrl

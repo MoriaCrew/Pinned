@@ -40,6 +40,7 @@ import {
   type PortOutcome,
   type SceneComposer,
   type TapNamer,
+  type SpeechTranscriber,
   type ChipSuggester,
   type Segmenter,
 } from "./ports";
@@ -79,6 +80,9 @@ interface CallMeta {
   boardCap?: number;
   /** PIN-117: TapNamer-only per-participant cap (own counter). */
   participantTapNameCap?: number;
+  /** PIN-119: SpeechTranscriber-only cap + clip seconds for pricing. */
+  participantTranscriptionCap?: number;
+  audioSeconds?: number;
   /** PIN-92: Segmenter-only per-participant / per-photo caps. */
   participantSegmentCap?: number;
   photoId?: string;
@@ -178,6 +182,8 @@ async function runDecorated<T>(
           sparkElementsMaxTokens: policy.maxTokens.sparkElements,
           sparkChipsMaxTokens: policy.maxTokens.sparkChips,
           sparkTapNameMaxTokens: policy.maxTokens.sparkTapName,
+          voiceMaxSeconds: policy.dictationMaxSeconds,
+          voiceSeconds: meta.audioSeconds,
         }),
         budgetUsd: policy.dailyBudgetUsd,
         callLimit: policy.dailyCallLimit,
@@ -187,6 +193,7 @@ async function runDecorated<T>(
         boardCap: boardId ? meta.boardCap : undefined,
         participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
         participantTapNameCap: participantId ? meta.participantTapNameCap : undefined,
+        participantTranscriptionCap: participantId ? meta.participantTranscriptionCap : undefined,
         photoId,
         photoCap: photoId ? meta.photoCap : undefined,
       });
@@ -261,6 +268,7 @@ export interface DecoratedPorts {
   sceneComposer?: SceneComposer;
   chipSuggester?: ChipSuggester;
   tapNamer?: TapNamer;
+  speechTranscriber?: SpeechTranscriber;
 }
 
 /** Wrap base ports (Meta/mock/fixture) in the PIN-61 chain. */
@@ -370,6 +378,25 @@ export function decoratePorts(
             participantTapNameCap: policy.tapNamesPerParticipantPerDay,
           },
           () => tapNamer.nameOne(input),
+        ),
+    };
+  }
+  if (base.speechTranscriber) {
+    const transcriber = base.speechTranscriber;
+    ports.speechTranscriber = {
+      transcribe: (input) =>
+        runDecorated(
+          full,
+          {
+            operation: "transcribe",
+            model: policy.models.voice,
+            timeoutMs: input.timeoutMs,
+            boardId: input.boardId,
+            participantId: input.participantId,
+            participantTranscriptionCap: policy.dictationsPerParticipantPerDay,
+            audioSeconds: input.durationSeconds,
+          },
+          () => transcriber.transcribe(input),
         ),
     };
   }

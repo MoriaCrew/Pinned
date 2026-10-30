@@ -23,6 +23,7 @@ function envLayer(): PolicyOverrides {
       spark: jsonLayer?.models?.spark ?? cfg.meta.sparkModel,
       sam: jsonLayer?.models?.sam ?? cfg.meta.samModel,
       image: jsonLayer?.models?.image ?? cfg.meta.imageModel,
+      voice: jsonLayer?.models?.voice ?? cfg.meta.voiceModel,
     },
   };
 }

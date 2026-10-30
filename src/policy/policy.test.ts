@@ -14,6 +14,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       spark: 30_000,
       sam: 20_000,
       scene: 120_000,
+      voice: 60_000,
     });
     expect(DEFAULT_POLICY.maxTokens.sparkElements).toBe(4000);
     expect(DEFAULT_POLICY.faces).toBe("note");
@@ -39,6 +40,16 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.maxTokens.sparkTapName).toBe(1200);
     expect(DEFAULT_POLICY.promptVersions.tapName).toBe("tap-name.v1");
     expect(resolvePolicy({ tapNamesPerParticipantPerDay: 3 }).tapNamesPerParticipantPerDay).toBe(3);
+    // PIN-119 dictation: own counter, clip caps, voice model + timeout.
+    expect(DEFAULT_POLICY.dictationsPerParticipantPerDay).toBe(50);
+    expect(DEFAULT_POLICY.dictationMaxSeconds).toBe(30);
+    expect(DEFAULT_POLICY.dictationMaxBytes).toBe(1_048_576);
+    expect(DEFAULT_POLICY.models.voice).toBe("muse-voice-transcribe-1.0");
+    expect(DEFAULT_POLICY.timeoutsMs.voice).toBe(60_000);
+    expect(resolvePolicy({ dictationsPerParticipantPerDay: 0 }).dictationsPerParticipantPerDay).toBe(0);
+    expect(resolvePolicy({ dictationMaxSeconds: 10 }).dictationMaxSeconds).toBe(10);
+    expect(resolvePolicy({ models: { voice: "other-voice" } }).models.voice).toBe("other-voice");
+    expect(() => resolvePolicy({ dictationMaxSeconds: 0 })).toThrow();
     // PIN-83 signed-in user cookie life.
     expect(DEFAULT_POLICY.userSessionDays).toBe(30);
     // PIN-94 provider pin + claim/restore freshness window.

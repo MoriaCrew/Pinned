@@ -21,12 +21,14 @@ import {
   chipsSystemPrompt,
   normalizeElements,
   normalizeTapName,
+  normalizeTranscript,
   tapNameSystemPrompt,
   normalizeChips,
   sceneImageOutcome,
   type ComposeSceneInput,
   type NameElementsInput,
   type NameOneInput,
+  type TranscribeInput,
   type TapName,
   type SuggestChipsInput,
   type NamedElement,
@@ -39,6 +41,8 @@ export interface MetaGatewayOptions {
   sparkModel: string;
   samModel: string;
   imageModel: string;
+  /** Muse Voice model (PIN-119); older constructions may omit it. */
+  voiceModel?: string;
   fetchFn?: typeof fetch;
   /** Per-request deadline; timeouts surface as code "timeout" and must not be retried. */
   timeoutMs?: number;
@@ -54,6 +58,8 @@ export interface MetaCallLog {
   inputTokens?: number;
   outputTokens?: number;
   images?: number;
+  /** Muse Voice billing unit (PIN-119). */
+  audioSeconds?: number;
   errorCode?: string;
 }
 
@@ -319,6 +325,88 @@ export class MetaGateway implements ModelGateway {
    * small text-only chat call. Labels travel as JSON data, never
    * instructions; limits arrive from Policy via the port input.
    */
+  /**
+   * Muse Voice file transcription (PIN-119, meta-model-cookbook
+   * 06_muse_voice transcribe_recording): POST /asr/transcribe as
+   * multipart — a JSON `request` part ({mode:PUSH_TO_TALK, model,
+   * audioEncoding:WAV}) plus the `audio` WAV part, Bearer auth.
+   * PUSH_TO_TALK answers {transcript, audioDurationMs, turns:[]}.
+   * The clip is forwarded from memory and never persisted.
+   */
+  async transcribeAudio(
+    input: TranscribeInput,
+  ): Promise<{ text: string; audioDurationMs?: number }> {
+    const operation = "transcribeAudio";
+    const model = this.options.voiceModel ?? "muse-voice-transcribe-1.0";
+    const started = Date.now();
+    const form = new FormData();
+    form.append(
+      "request",
+      new Blob(
+        [JSON.stringify({ mode: "PUSH_TO_TALK", model, audioEncoding: "WAV" })],
+        { type: "application/json" },
+      ),
+    );
+    form.append(
+      "audio",
+      new Blob([input.audio as BlobPart], { type: "audio/wav" }),
+      "clip.wav",
+    );
+    let response: Response;
+    try {
+      response = await this.fetchFn(`${this.options.baseUrl}/asr/transcribe`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${this.options.apiKey}` },
+        body: form,
+        signal: AbortSignal.timeout(input.timeoutMs),
+      });
+    } catch (cause) {
+      const timedOut =
+        cause instanceof Error &&
+        (cause.name === "TimeoutError" || cause.name === "AbortError");
+      const code = timedOut ? "timeout" : "network";
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: code });
+      throw new MetaApiError(
+        timedOut
+          ? `Meta API timed out after ${input.timeoutMs}ms`
+          : `Meta API unreachable: ${String(cause)}`,
+        undefined,
+        code,
+      );
+    }
+    const textBody = await response.text();
+    let json: Json = {};
+    try {
+      const parsed: unknown = JSON.parse(textBody);
+      if (isRecord(parsed)) json = parsed;
+    } catch {
+      // Non-JSON body: handled by the status/shape checks below.
+    }
+    const err = isRecord(json.error) ? json.error : null;
+    if (!response.ok || err) {
+      const code = str(err?.code, `http_${response.status}`);
+      await this.log({ operation, model, latencyMs: Date.now() - started, outcome: "error", errorCode: code });
+      throw new MetaApiError(
+        str(err?.message, `Meta API HTTP ${response.status}`),
+        response.status,
+        code,
+      );
+    }
+    const audioDurationMs =
+      typeof json.audioDurationMs === "number" ? json.audioDurationMs : undefined;
+    await this.log({
+      operation,
+      model,
+      latencyMs: Date.now() - started,
+      outcome: "ok",
+      audioSeconds: (audioDurationMs ?? input.durationSeconds * 1000) / 1000,
+    });
+    return {
+      text: normalizeTranscript(json, input.maxChars),
+      ...(audioDurationMs !== undefined ? { audioDurationMs } : {}),
+    };
+  }
+
   async suggestChips(input: SuggestChipsInput): Promise<string[]> {
     const out = await this.chatJson(
       "suggestChips",

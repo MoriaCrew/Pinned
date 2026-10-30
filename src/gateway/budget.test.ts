@@ -39,6 +39,7 @@ describe("evaluateReserve (PIN-61)", () => {
       boards: {},
       participantSegments: {},
       participantTapNames: {},
+      participantTranscriptions: {},
       photos: {},
     };
     expect(evaluateReserve(state, req())).toMatchObject({
@@ -153,6 +154,31 @@ describe("tap-name caps (PIN-117)", () => {
   });
 });
 
+describe("transcription caps (PIN-119)", () => {
+  it("evaluateReserve denies on the transcription cap, independently of other quotas", () => {
+    const state = { ...emptyBudgetDay(), participantTranscriptions: { p1: 50 } };
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantTranscriptionCap: 50 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    expect(
+      evaluateReserve(state, req({ participantId: "p2", participantTranscriptionCap: 50 })).ok,
+    ).toBe(true);
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+    ).toBe(true);
+  });
+
+  it("store counts transcriptions in their own counter", async () => {
+    const store = new InMemoryBudgetStore();
+    const dictation = req({ participantId: "p1", participantTranscriptionCap: 1 });
+    expect((await store.reserve(dictation)).ok).toBe(true);
+    expect(await store.reserve(dictation)).toEqual({ ok: false, reason: "participant_cap" });
+    const snap = store.snapshot(DAY);
+    expect(snap.participants).toEqual({});
+    expect(snap.participantTranscriptions).toEqual({ p1: 1 });
+  });
+});
+
 describe("InMemoryBudgetStore (PIN-61)", () => {
   it("counts calls, reserved micro-USD and per-id counters per day", async () => {
     const store = new InMemoryBudgetStore();
@@ -167,6 +193,7 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
       boards: { b1: 1 },
       participantSegments: {},
       participantTapNames: {},
+      participantTranscriptions: {},
       photos: {},
     });
     expect(store.snapshot("2026-10-30").calls).toBe(0);

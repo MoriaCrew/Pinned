@@ -27,6 +27,10 @@ export const PolicySchema = z
     segmentsPerParticipantPerDay: z.number().int().min(0).default(150),
     /** Tap-name (Spark crop pass) cap (PIN-117): one call per successful tap-add, counted in its own budget counter — never against photosPerParticipantPerDay. 100 covers the legit worst case (20 photos x up to 5 tap-adds) while failing/refusing names still consume the reservation, so a tap-loop cannot burn Spark spend unbounded. */
     tapNamesPerParticipantPerDay: z.number().int().min(0).default(100),
+    /** Dictation caps (PIN-119): one Muse Voice file-transcription call per dictation, counted in its own budget counter. 30s of mono 16-bit 16kHz WAV is ~960KB, so the 1MiB byte cap and the seconds cap agree; audio is never persisted. 50/day at <=30s is <=25 audio-minutes (~$0.08 at list) worst case. */
+    dictationsPerParticipantPerDay: z.number().int().min(0).default(50),
+    dictationMaxSeconds: z.number().positive().default(30),
+    dictationMaxBytes: z.number().int().min(1).default(1_048_576),
     scenesPerParticipantPerDay: z.number().int().min(0).default(10),
     scenesPerBoardPerDay: z.number().int().min(0).default(40),
     /** Scene prompt length cap (PIN-69). */
@@ -140,8 +144,9 @@ export const PolicySchema = z
         spark: z.number().int().positive().default(30_000),
         sam: z.number().int().positive().default(20_000),
         scene: z.number().int().positive().default(120_000),
+        voice: z.number().int().positive().default(60_000),
       })
-      .default({ spark: 30_000, sam: 20_000, scene: 120_000 }),
+      .default({ spark: 30_000, sam: 20_000, scene: 120_000, voice: 60_000 }),
     retries: z.number().int().min(0).default(1),
     /** Backoff before the single 429/5xx retry (PIN-61). */
     retryBackoffMs: z.number().int().min(0).default(500),
@@ -171,11 +176,13 @@ export const PolicySchema = z
         spark: z.string().min(1).default("muse-spark-1.3"),
         sam: z.string().min(1).default("sam-3.1"),
         image: z.string().min(1).default("muse-image-1.0"),
+        voice: z.string().min(1).default("muse-voice-transcribe-1.0"),
       })
       .default({
         spark: "muse-spark-1.3",
         sam: "sam-3.1",
         image: "muse-image-1.0",
+        voice: "muse-voice-transcribe-1.0",
       }),
     promptVersions: z
       .object({
@@ -240,6 +247,9 @@ export const PolicyOverridesSchema = z.object({
   segmentsPerPhoto: z.number().int().min(0).optional(),
   segmentsPerParticipantPerDay: z.number().int().min(0).optional(),
   tapNamesPerParticipantPerDay: z.number().int().min(0).optional(),
+  dictationsPerParticipantPerDay: z.number().int().min(0).optional(),
+  dictationMaxSeconds: z.number().positive().optional(),
+  dictationMaxBytes: z.number().int().min(1).optional(),
   scenesPerParticipantPerDay: z.number().int().min(0).optional(),
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
   scenePromptMaxChars: z.number().int().min(1).optional(),
@@ -295,6 +305,7 @@ export const PolicyOverridesSchema = z.object({
       spark: z.number().int().positive().optional(),
       sam: z.number().int().positive().optional(),
       scene: z.number().int().positive().optional(),
+      voice: z.number().int().positive().optional(),
     })
     .optional(),
   retries: z.number().int().min(0).optional(),
@@ -317,6 +328,7 @@ export const PolicyOverridesSchema = z.object({
       spark: z.string().min(1).optional(),
       sam: z.string().min(1).optional(),
       image: z.string().min(1).optional(),
+      voice: z.string().min(1).optional(),
     })
     .optional(),
   promptVersions: z

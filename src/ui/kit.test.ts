@@ -32,8 +32,9 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 21 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(21);
+  it("ships 22 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(22);
+    expect(ICON_NAMES).toContain("mic");
     expect(html(h(Icon, { name: "camera" }))).toContain('aria-hidden="true"');
     expect(html(h(Icon, { name: "share", title: "Share" }))).toContain('aria-label="Share"');
   });
