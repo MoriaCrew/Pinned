@@ -5,7 +5,7 @@ import { generateSlug, isValidSlug } from "../../../domain/tokens";
 import { getBoardRepository } from "../../../server/board-repository";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { POST as createBoardRoute } from "./route";
-import { GET as getBoardRoute } from "./[slug]/route";
+import { DELETE as deleteBoardRoute, GET as getBoardRoute } from "./[slug]/route";
 import {
   GET as getMeRoute,
   POST as joinRoute,
@@ -83,6 +83,7 @@ describe("slug gate: malformed slug -> uniform 404 on every board route", () => 
       }),
     ];
     calls.push(
+      deleteBoardRoute(req("http://t/x", { method: "DELETE" }), slugParams(slug)),
       deleteElementRoute(req("http://t/x", { method: "DELETE" }), {
         params: Promise.resolve({ slug, elementId: "el-1" }),
       }),
@@ -95,6 +96,21 @@ describe("slug gate: malformed slug -> uniform 404 on every board route", () => 
       expect(res.status).toBe(404);
       expect(await bodyOf(res)).toEqual({ error: "Not found." });
     }
+  });
+});
+
+describe("board delete in link-only mode (PIN-167)", () => {
+  it("the host's DELETE is a 204, then the board is the uniform 404", async () => {
+    const created = await createBoardRoute(
+      req("http://t/api/boards", { method: "POST", body: JSON.stringify({ title: "Gone board" }) }),
+    );
+    const { board } = (await created.json()) as { board: { slug: string } };
+    const cookie = (created.headers.get("set-cookie") ?? "").split(";")[0];
+    const del = await deleteBoardRoute(req("http://t/x", { method: "DELETE", headers: { cookie } }), slugParams(board.slug));
+    expect(del.status).toBe(204);
+    const res = await getBoardRoute(req("http://t/x"), slugParams(board.slug));
+    expect(res.status).toBe(404);
+    expect(await bodyOf(res)).toEqual({ error: "Not found." });
   });
 });
 
