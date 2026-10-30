@@ -11,8 +11,10 @@ import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme } from "../domain/board-themes";
 import { pickLatestPreviewScene } from "../domain/board-preview";
 import { sortMyBoards, type MyBoardCard } from "../domain/my-boards";
+import { isValidSlug } from "../domain/tokens";
 import type { UserProfile } from "../domain/user";
 import type { UserRepository } from "../domain/user-repository";
+import { isSafeUid } from "./user-session";
 
 export interface MyBoardsDeps {
   boards: BoardRepository;
@@ -66,4 +68,33 @@ export async function listMyBoards(
     });
   }
   return sortMyBoards(cards);
+}
+
+/**
+ * "Remove from My boards" (PIN-166): touches the caller's own data
+ * only, never the board or anyone else's row or claim. Deleting the
+ * index row alone would not hold — the next signed-in join or fresh
+ * /claim rewrites it, so reappearance would hang on sign-in age —
+ * so the caller's own participant (the one the row names, only when
+ * it carries this uid) is unlinked first. Opening the board again in
+ * a browser that holds that participant re-links it (PIN-160). The
+ * unlink runs before the row delete so a failure in between still
+ * hides the card and a retry finishes the job. Idempotent.
+ */
+export async function removeMyBoard(
+  user: UserProfile,
+  slug: string,
+  deps: MyBoardsDeps,
+): Promise<void> {
+  if (!isSafeUid(user.uid) || !isValidSlug(slug)) return;
+  const entry = await deps.users.getUserBoard(user.uid, slug);
+  if (!entry) return;
+  if (await deps.boards.getBoard(slug)) {
+    const participant = await deps.boards.getParticipant(slug, entry.participantId);
+    if (participant?.userId === user.uid) {
+      const { userId: _unlinked, ...rest } = participant;
+      await deps.boards.putParticipant(rest);
+    }
+  }
+  await deps.users.deleteUserBoard(user.uid, slug);
 }

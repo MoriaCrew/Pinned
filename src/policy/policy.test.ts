@@ -82,6 +82,12 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     ).toEqual(["google.com", "apple.com"]);
     expect(() => resolvePolicy({ authAllowedProviders: [] })).toThrow();
     expect(() => resolvePolicy({ authFreshWindowMs: 0 })).toThrow();
+    // PIN-166 My boards "Remove" brake: deep-overridable, fails closed.
+    expect(DEFAULT_POLICY.myBoardsRemovePerIp).toEqual({ limit: 60, windowMs: 600_000 });
+    expect(
+      resolvePolicy({ myBoardsRemovePerIp: { limit: 5 } }).myBoardsRemovePerIp,
+    ).toEqual({ limit: 5, windowMs: 600_000 });
+    expect(() => resolvePolicy({ myBoardsRemovePerIp: { limit: 0 } })).toThrow();
     expect(resolvePolicy({ userSessionDays: 7 }).userSessionDays).toBe(7);
     expect(() => resolvePolicy({ userSessionDays: 0 })).toThrow();
     expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);

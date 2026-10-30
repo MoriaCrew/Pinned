@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { POST as claimRoute } from "../boards/[slug]/claim/route";
 import { GET as meRoute } from "../me/route";
 import { GET as myBoardsRoute } from "../me/boards/route";
+import { DELETE as removeMyBoardRoute } from "../me/boards/[slug]/route";
 import { GET as myElementsRoute } from "../me/elements/route";
 import { GET as myElementImageRoute } from "../me/elements/[elementId]/image/route";
 import { POST as fromLibraryRoute } from "../boards/[slug]/pins/from-library/route";
@@ -46,6 +47,18 @@ describe("AUTH_MODE=link-only (default): every PIN-83 route 404s", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not found." });
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("DELETE /api/me/boards/{slug} -> uniform 404 (PIN-166)", async () => {
+    const res = await removeMyBoardRoute(
+      req(`http://t/api/me/boards/${VALID_SLUG}`, {
+        method: "DELETE",
+        headers: { "sec-fetch-site": "same-origin" },
+      }),
+      { params: Promise.resolve({ slug: VALID_SLUG }) },
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not found." });
   });
 
   it("GET /api/me/elements -> uniform 404 (PIN-85)", async () => {

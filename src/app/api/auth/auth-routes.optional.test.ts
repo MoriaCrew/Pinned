@@ -28,6 +28,7 @@ let joinRoute: SlugHandler;
 let claimRoute: SlugHandler;
 let boardGetRoute: SlugHandler;
 let myBoardsRoute: Handler;
+let removeMyBoardRoute: SlugHandler;
 let myElementsRoute: Handler;
 let myElementImageRoute: (
   request: Request,
@@ -42,6 +43,7 @@ let linkState: (
   participantId: string,
 ) => Promise<{ userId?: string; indexed?: string }>;
 let participantCount: (slug: string) => Promise<number>;
+let indexedFor: (uid: string, slug: string) => Promise<string | undefined>;
 
 beforeAll(async () => {
   const { FakeTokenVerifier, setTokenVerifierForTests } =
@@ -72,6 +74,7 @@ beforeAll(async () => {
   ({ POST: claimRoute } = await import("../boards/[slug]/claim/route"));
   ({ GET: boardGetRoute } = await import("../boards/[slug]/route"));
   ({ GET: myBoardsRoute } = await import("../me/boards/route"));
+  ({ DELETE: removeMyBoardRoute } = await import("../me/boards/[slug]/route"));
   ({ GET: myElementsRoute } = await import("../me/elements/route"));
   ({ GET: myElementImageRoute } = await import(
     "../me/elements/[elementId]/image/route"
@@ -89,6 +92,8 @@ beforeAll(async () => {
     const entry = await getUserRepository().getUserBoard(userId, slug);
     return { userId, ...(entry ? { indexed: entry.participantId } : {}) };
   };
+  indexedFor = async (uid, slug) =>
+    (await getUserRepository().getUserBoard(uid, slug))?.participantId;
   participantCount = async (slug) =>
     (await getBoardRepository().listParticipants(slug)).length;
   seedElement = async (boardId, ownerId) => {
@@ -151,8 +156,10 @@ function cookiePair(res: Response): string {
   return header!.split(";")[0];
 }
 
-async function signIn(idToken: string): Promise<string> {
-  const res = await postSession(sessionReq(idToken));
+/** `ip` gives a test its own sign-in rate-limit bucket. */
+async function signIn(idToken: string, ip?: string): Promise<string> {
+  const headers = ip ? { ...SAME_ORIGIN_JSON, "x-forwarded-for": ip } : SAME_ORIGIN_JSON;
+  const res = await postSession(sessionReq(idToken, headers));
   expect(res.status).toBe(200);
   return cookiePair(res);
 }
@@ -448,6 +455,62 @@ describe("AUTH_MODE=optional: session, /api/me, claim, join auto-link", () => {
     expect(mine.map((b) => b.slug).sort()).toEqual([first, second].sort());
     expect(mine[0]).toMatchObject({ myPinCount: 0 });
     expect(body.boards.every((b) => typeof b.title === "string")).toBe(true);
+  });
+
+  it("PIN-166: Remove from My boards unlinks the caller only; opening the board brings it back", async () => {
+    const aliceCookie = await signIn("token-alice", "10.166.0.1");
+    const bobCookie = await signIn("token-bob", "10.166.0.1");
+    const slug = await makeBoard("Remove me board", "10.166.0.1");
+    const aye = await join(slug, "Aye", aliceCookie);
+    const bee = await join(slug, "Bee", bobCookie);
+    const ayeId = await participantIdOf(aye.res);
+    const beeId = await participantIdOf(bee.res);
+    const remove = (cookie?: string, site = "same-origin", target = slug) =>
+      removeMyBoardRoute(
+        req(`http://t/api/me/boards/${target}`, {
+          method: "DELETE",
+          headers: { "sec-fetch-site": site, ...(cookie ? { cookie } : {}) },
+        }),
+        slugParams(target),
+      );
+    const listed = async (cookie: string) => {
+      const res = await myBoardsRoute(req("http://t/api/me/boards", { headers: { cookie } }));
+      return ((await res.json()) as { boards: { slug: string }[] }).boards.map((b) => b.slug);
+    };
+    const aliceLinked = { userId: "synthetic-alice", indexed: ayeId };
+
+    // Signed out: 401 like GET /api/me/boards; cross-site: 403. Nothing changes.
+    const anon = await remove();
+    expect(anon.status).toBe(401);
+    expect(await anon.json()).toEqual({ error: "Not signed in." });
+    expect((await remove(aliceCookie, "cross-site")).status).toBe(403);
+    expect(await linkState(slug, ayeId)).toEqual(aliceLinked);
+
+    const removed = await remove(aliceCookie);
+    expect(removed.status).toBe(204);
+    expect(await removed.text()).toBe("");
+    expect(await indexedFor("synthetic-alice", slug)).toBeUndefined();
+    expect(await linkState(slug, ayeId)).toEqual({});
+    expect(await listed(aliceCookie)).not.toContain(slug);
+    // Bob's row + claim, the roster and the board are untouched.
+    expect(await linkState(slug, beeId)).toEqual({ userId: "synthetic-bob", indexed: beeId });
+    expect(await listed(bobCookie)).toContain(slug);
+    expect(await participantCount(slug)).toBe(2);
+
+    // No row (a repeat, or a board never joined): the same answer.
+    for (const res of [await remove(aliceCookie), await remove(aliceCookie, "same-origin", "AAAAAAAAAAAAAAAAAAAAAQ")]) {
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe("");
+    }
+
+    // PIN-160: opening the board in the browser holding the place re-links + re-indexes.
+    const opened = await boardGetRoute(
+      req("http://t/x", { headers: { cookie: `${aye.participantCookie}; ${aliceCookie}` } }),
+      slugParams(slug),
+    );
+    expect(opened.status).toBe(200);
+    expect(await linkState(slug, ayeId)).toEqual(aliceLinked);
+    expect(await listed(aliceCookie)).toContain(slug);
   });
 
   it("My pins (PIN-85): library list, owner thumbnail, pin-from-library + repeat", async () => {
