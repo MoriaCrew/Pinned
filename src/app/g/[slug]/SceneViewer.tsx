@@ -59,8 +59,9 @@ export function SceneViewer({
   return (
     <div ref={ref} className={styles.viewer} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <div className={styles.viewerStage}>
+        {/* A fresh <img> per scene: stepping shows the dark ground, never the last print, until it loads. */}
         {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked scene image, full size */}
-        <img src={slot.src} alt={slot.alt} draggable={false} />
+        <img key={slot.id} src={slot.src} alt={slot.alt} draggable={false} />
       </div>
       <section className={cx("pn-sheet", styles.viewerPanel)}>
         <div className="pn-sheet-head">
