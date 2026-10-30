@@ -41,11 +41,20 @@ export function encodeWavPcm16(samples: Float32Array, sampleRate: number): Uint8
  * Browser-only (Web Audio); throws when decode fails so the
  * caller can show the friendly dictation failure line.
  */
-export async function blobToDictationWav(blob: Blob): Promise<Uint8Array> {
+export async function blobToDictationWav(blob: Blob, maxSeconds?: number): Promise<Uint8Array> {
   const decodeContext = new AudioContext();
   try {
     const decoded = await decodeContext.decodeAudioData(await blob.arrayBuffer());
-    const frames = Math.max(1, Math.ceil(decoded.duration * DICTATION_SAMPLE_RATE));
+    // Cap the frame count at the Policy clip limit so the
+    // header-derived duration can never land a frame over it.
+    const capFrames =
+      maxSeconds !== undefined
+        ? Math.max(1, Math.floor(maxSeconds * DICTATION_SAMPLE_RATE))
+        : Number.POSITIVE_INFINITY;
+    const frames = Math.min(
+      Math.max(1, Math.ceil(decoded.duration * DICTATION_SAMPLE_RATE)),
+      capFrames,
+    );
     const offline = new OfflineAudioContext(1, frames, DICTATION_SAMPLE_RATE);
     const source = offline.createBufferSource();
     source.buffer = decoded;

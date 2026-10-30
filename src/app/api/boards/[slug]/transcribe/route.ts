@@ -53,6 +53,24 @@ export async function POST(
       );
     }
 
+    // Same pre-buffer size guard as the photos route: require a
+    // declared length and bound the whole multipart body (clip
+    // cap + framing slack) before formData() buffers anything.
+    const lengthHeader = request.headers.get("content-length");
+    const contentLength = Number(lengthHeader ?? NaN);
+    if (!lengthHeader || !Number.isFinite(contentLength) || contentLength <= 0) {
+      return NextResponse.json(
+        { error: t("en", "dictate.badAudio") },
+        { status: 411, headers: JSON_HEADERS },
+      );
+    }
+    if (contentLength > policy.dictationMaxBytes + 65_536) {
+      return NextResponse.json(
+        { error: t("en", "dictate.tooLong") },
+        { status: 413, headers: JSON_HEADERS },
+      );
+    }
+
     let form: FormData;
     try {
       form = await request.formData();

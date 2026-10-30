@@ -147,6 +147,18 @@ describe("transcribeDictation gates (PIN-119)", () => {
     expect(capErr).toMatchObject({ status: 429, code: "participant_cap" });
     expect((capErr as Error).message).toContain("today's limit");
 
+    // Shared-budget denials are also a friendly 429, never 5xx.
+    const overBudget: SpeechTranscriber = {
+      async transcribe() {
+        return { status: "failed", errorCode: "budget", message: "Today's AI budget is used up. Try again tomorrow." };
+      },
+    };
+    const budgetErr = await transcribeDictation(SLUG, viewer, clip, {
+      transcriber: overBudget,
+      policy,
+    }).catch((e: unknown) => e);
+    expect(budgetErr).toMatchObject({ status: 429, code: "budget" });
+
     const providerBoom: SpeechTranscriber = {
       async transcribe() {
         return { status: "failed", errorCode: "http_500", message: "raw provider detail" };

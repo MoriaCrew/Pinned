@@ -150,6 +150,15 @@ export async function transcribeDictation(
     outcome.errorCode && FRIENDLY_CODES.has(outcome.errorCode)
       ? (outcome.message ?? t("en", "ai.failed"))
       : t("en", "ai.failed");
-  const status = outcome.errorCode === "participant_cap" ? 429 : 503;
+  // Budget denials are a friendly 429, never a 5xx (live-AI
+  // budget contract); only genuine provider failures stay 503.
+  const BUDGET_CODES = new Set([
+    "participant_cap",
+    "board_cap",
+    "budget",
+    "call_limit",
+    "budget_off",
+  ]);
+  const status = outcome.errorCode && BUDGET_CODES.has(outcome.errorCode) ? 429 : 503;
   throw new BoardApiError(friendly, status, outcome.errorCode ?? "transcribe_failed");
 }

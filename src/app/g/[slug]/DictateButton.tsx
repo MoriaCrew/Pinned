@@ -32,14 +32,23 @@ export function DictateButton({
   const sessionRef = useRef<{ recorder: MediaRecorder; stream: MediaStream; timer: number } | null>(
     null,
   );
+  // Unmount + double-start guard: a getUserMedia promise can
+  // resolve after the sheet closed; only a live owner may keep
+  // the stream, otherwise the mic would stay on with no owner.
+  const liveRef = useRef(true);
+  const startingRef = useRef(false);
 
   useEffect(() => {
+    liveRef.current = true;
     setSupported(
       typeof window !== "undefined" &&
         typeof window.MediaRecorder !== "undefined" &&
         Boolean(navigator.mediaDevices?.getUserMedia),
     );
-    return () => stopSession();
+    return () => {
+      liveRef.current = false;
+      stopSession();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,13 +57,22 @@ export function DictateButton({
     sessionRef.current = null;
     if (!session) return;
     window.clearTimeout(session.timer);
+    if (session.recorder.state === "recording") {
+      // Detach first so teardown can never trigger an upload.
+      session.recorder.onstop = null;
+      try {
+        session.recorder.stop();
+      } catch {
+        // Already stopping; tracks are killed below regardless.
+      }
+    }
     session.stream.getTracks().forEach((track) => track.stop());
   }
 
   async function upload(blob: Blob) {
     setState("working");
     try {
-      const wav = await blobToDictationWav(blob);
+      const wav = await blobToDictationWav(blob, maxSeconds);
       const form = new FormData();
       form.append("audio", new Blob([wav as BlobPart], { type: "audio/wav" }), "clip.wav");
       const response = await fetch(`/api/boards/${slug}/transcribe`, {
@@ -77,12 +95,22 @@ export function DictateButton({
   }
 
   async function start() {
+    if (startingRef.current || sessionRef.current) return;
+    startingRef.current = true;
     setError(null);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setError(t("en", "make.dictateNoMic"));
+      startingRef.current = false;
+      if (liveRef.current) setError(t("en", "make.dictateNoMic"));
+      return;
+    }
+    startingRef.current = false;
+    // Sheet closed while the permission prompt was up: kill the
+    // stream instead of recording with no owner.
+    if (!liveRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
     const chunks: Blob[] = [];
@@ -91,12 +119,17 @@ export function DictateButton({
       if (event.data.size > 0) chunks.push(event.data);
     };
     recorder.onstop = () => {
+      const wasLive = liveRef.current;
       stopSession();
-      void upload(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+      if (wasLive) {
+        void upload(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+      }
     };
+    // Stop a beat early: MediaRecorder framing can run a little
+    // past the timer, and the WAV conversion also caps frames.
     const timer = window.setTimeout(() => {
       if (recorder.state === "recording") recorder.stop();
-    }, Math.max(1, maxSeconds) * 1000);
+    }, Math.max(300, maxSeconds * 1000 - 300));
     sessionRef.current = { recorder, stream, timer };
     recorder.start();
     setState("recording");
