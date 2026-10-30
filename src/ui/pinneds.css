@@ -264,9 +264,13 @@
 .pn-pin-tag { display: inline-block; min-width: 0; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
   font: 650 var(--tag-size)/1.25 var(--tag-font); letter-spacing: var(--tag-tracking); text-transform: var(--tag-transform); }
 .pn-pin-tag-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: break-word; hyphens: auto; text-wrap: balance; }
-.pn-pin-tag { text-decoration: var(--tag-deco); text-underline-offset: 4px; }
+/* Decorations sit on the clamped text span itself (they need not carry
+   into a -webkit-box in every engine), and the underline stays inside the
+   line box so the clamp's clip can't cut it off the last line. */
+.pn-pin-tag-text { text-decoration: var(--tag-deco); text-underline-offset: 0.12em; }
 .pn-pin-owner { display: inline-flex; align-items: center; gap: 6px; margin-top: -2px; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pn-pin[data-state="dropped"] .pn-pin-tag { text-decoration: line-through; opacity: .7; }
+.pn-pin[data-state="dropped"] .pn-pin-tag { opacity: .7; }
+.pn-pin[data-state="dropped"] .pn-pin-tag-text { text-decoration: line-through; }
 .pn-pins { --sticker: 104px; display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: var(--space-4) var(--space-2); list-style: none; padding: 0; margin: 0; }
 
 /* ---------- Credit line ---------- */
