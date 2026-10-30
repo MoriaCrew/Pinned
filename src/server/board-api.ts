@@ -684,15 +684,20 @@ export interface DeleteMyElementResult {
  * same-board pins today, but if pins on OTHER boards ever
  * reference this element the element record and its stored
  * objects must survive for them — delete only this board's
- * pins, hide only this board's scenes, leave storage alone.
+ * pins, hide only this board's scenes, leave the element's
+ * storage alone.
  *
  * Storage cleanup is best-effort AFTER the cascade: only the
  * element's own persistent `elements/` refs (cutout/flattened)
  * are deleted, each in its own try/catch so one missing object
  * cannot block the other or fail the request (the records are
  * already gone; an orphaned object is unreachable through any
- * route). Forged refs outside `elements/` are never touched —
- * never a `tmp/` working copy, never a `scenes/` image.
+ * route). Forged element refs outside `elements/` are never
+ * touched — never a `tmp/` working copy. The scenes the cascade
+ * hid lose their stored objects too (PIN-133), through
+ * deleteSceneObjects: only this board's, only inside each
+ * scene's own folder. An in-flight remix of such a scene fails
+ * typed `parent_missing` (request time already refuses it).
  *
  * No BoardEvent is written and no activity line added (PIN-77
  * decision): docs/11 section 5.4 fixes the event vocabulary
@@ -731,6 +736,7 @@ export async function deleteMyElement(
       await deps.boards.putScene({ ...scene, hidden: true });
       hiddenSceneIds.push(scene.id);
     }
+    await deleteHiddenSceneObjects(slug, hiddenSceneIds, deps);
     return { deleted: false, unpinnedOnly: true, removedPinIds, hiddenSceneIds, storageDeleted: false };
   }
 
@@ -763,6 +769,7 @@ export async function deleteMyElement(
       // Best-effort: records are gone, object is unreachable.
     }
   }
+  await deleteHiddenSceneObjects(slug, result.hiddenSceneIds, deps);
   return {
     deleted: true,
     unpinnedOnly: false,
@@ -770,6 +777,18 @@ export async function deleteMyElement(
     hiddenSceneIds: result.hiddenSceneIds,
     storageDeleted,
   };
+}
+
+/** Stored objects of the scenes a delete cascade hid (PIN-133): best-effort, this board's only. */
+async function deleteHiddenSceneObjects(slug: string, sceneIds: readonly string[], deps: BoardApiDeps): Promise<void> {
+  for (const id of sceneIds) {
+    try {
+      const scene = await deps.boards.getScene(id);
+      if (scene?.boardId === slug) await deleteSceneObjects(scene, deps.store);
+    } catch {
+      // The scene is hidden and never served; an orphan is unreachable.
+    }
+  }
 }
 
 export type ElementImageKind = "cutout" | "flattened";
