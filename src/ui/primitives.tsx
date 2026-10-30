@@ -273,6 +273,7 @@ export function TextField({
   multiline,
   rows = 3,
   maxLength,
+  softMaxLength,
   help,
   error,
   id,
@@ -291,6 +292,12 @@ export function TextField({
   multiline?: boolean;
   rows?: number;
   maxLength?: number;
+  /**
+   * Shows the "n/limit" count (code points) but sets no native
+   * `maxlength`, which counts UTF-16 units and stops emoji early.
+   * The caller enforces the limit with its own check.
+   */
+  softMaxLength?: number;
   help?: string;
   error?: string;
   id?: string;
@@ -309,7 +316,8 @@ export function TextField({
   const [uncontrolled, setUncontrolled] = useState(defaultValue ?? "");
   const current = value ?? uncontrolled;
   const length = [...current].length;
-  const count = maxLength ? `${length}/${maxLength}` : null;
+  const limit = maxLength ?? softMaxLength;
+  const count = limit ? `${length}/${limit}` : null;
   const shared = {
     id: fieldId,
     name,

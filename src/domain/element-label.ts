@@ -25,3 +25,38 @@ export function normalizeElementLabel(raw: unknown, maxChars: number): ElementLa
   if (Array.from(label).length > maxChars) return { ok: false, reason: "tooLong" };
   return { ok: true, label };
 }
+
+/**
+ * The board view with one thing's label replaced (the rename sheet's
+ * optimistic patch and its reconcile, PIN-157). The grid, the credits
+ * and the scene viewer all read `elements`, so this one change
+ * reaches them. Returns the same view when the thing is not in it.
+ */
+export function withElementLabel<V extends { elements: readonly { id: string; label: string }[] }>(
+  view: V,
+  elementId: string,
+  label: string,
+): V {
+  if (!view.elements.some((element) => element.id === elementId)) return view;
+  return {
+    ...view,
+    elements: view.elements.map((element) => (element.id === elementId ? { ...element, label } : element)),
+  };
+}
+
+/**
+ * Undo an optimistic rename (PIN-157), but only while the board still
+ * shows that optimistic label. By the time a failure lands, a newer
+ * rename of the same thing or a refetch may have moved on, and a late
+ * answer must never overwrite it. Otherwise returns the same view.
+ */
+export function rollbackElementLabel<V extends { elements: readonly { id: string; label: string }[] }>(
+  view: V,
+  elementId: string,
+  optimistic: string,
+  previous: string,
+): V {
+  const current = view.elements.find((element) => element.id === elementId);
+  if (!current || current.label !== optimistic) return view;
+  return withElementLabel(view, elementId, previous);
+}

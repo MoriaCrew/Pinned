@@ -324,6 +324,19 @@
   font: 650 15px/20px var(--font-ui);
 }
 
+/* Rename sheet (PIN-157): the error line keeps its height, so it never moves the sheet. */
+.renameForm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.renameError {
+  min-height: 20px;
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
 /* Scene viewer (PIN-131): the whole picture on the skin's dark ground, the paper panel under it. */
 .viewer {
   position: fixed;

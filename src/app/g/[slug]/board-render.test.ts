@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
 import { BoardScenes, type PrintSlot } from "./BoardScenes";
-import { BoardThings, type DeleteControls } from "./BoardThings";
+import { BoardThings, pinMenuItems, type DeleteControls } from "./BoardThings";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
@@ -59,6 +59,17 @@ describe("board things grid (PIN-98)", () => {
     expect(picking).not.toContain("More for");
     expect(picking).toContain('data-state="picked"');
     expect(picking).toContain("picked 1");
+  });
+
+  it("lists Rename above Delete in my More menu, and Delete alone when the board cannot rename (PIN-157)", () => {
+    const items = pinMenuItems({ onRename: noop, onDelete: noop });
+    expect(items.map((item) => item.label)).toEqual(["Rename", "Delete"]);
+    expect(items.map((item) => "danger" in item && item.danger === true)).toEqual([false, true]);
+    expect(pinMenuItems({ onDelete: noop }).map((item) => item.label)).toEqual(["Delete"]);
+    const mine = html(
+      h(BoardThings, { cards, count: 2, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion, onRename: noop }),
+    );
+    expect(mine.match(/More for Teal mug/g)?.length).toBe(2); // the menu itself starts closed
   });
 
   it("shows no More to someone who has not joined", () => {
