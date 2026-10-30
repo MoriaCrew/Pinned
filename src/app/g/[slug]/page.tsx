@@ -20,23 +20,25 @@ import { BoardClient, type BoardClientView } from "./BoardClient";
 export const dynamic = "force-dynamic";
 
 /**
- * Link preview (PIN-72, docs/11 section 6): OG/Twitter image is
- * the latest ready non-hidden scene via the board-link-checked
- * image route (absolute URL via the public-origin helper), or
- * the branded public/og-card.png when there is none. The slug
+ * Link preview (PIN-72, docs/11 section 6): title/description
+ * here; since PIN-102 the OG/Twitter image is the board card
+ * (opengraph-image.tsx), resolved against the public origin. The slug
  * capability link is what a chat crawler already holds when it
- * fetches this page, so the image route leaks nothing beyond
- * board-visible scenes — never candidate elements or tmp/ refs
- * (pickLatestPreviewScene + resolveSceneImage both enforce
- * scenes/). noindex is preserved. Any failure degrades to the
- * branded fallback instead of breaking the page.
+ * fetches this page, so the card leaks nothing beyond board-visible
+ * pins — never candidate elements or tmp/ refs. noindex is
+ * preserved. Any failure degrades to the branded fallback instead
+ * of breaking the page.
  */
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
+  // The public origin goes on every path, the fallback included, so
+  // the card URL never resolves against an internal request host.
+  const origin = await publicOrigin();
   const fallback: Metadata = {
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
     title: "Pinneds board",
     description: t("en", "board.previewDescription"),
     robots: { index: false, follow: false },
@@ -47,11 +49,8 @@ export async function generateMetadata({
     const boards = getBoardRepository();
     const board = await boards.getBoard(slug);
     if (!board) return fallback;
+    if (!origin) return fallback;
     const scenes = await boards.listScenes(slug);
-    const origin = getPublicOriginFromHeaders(
-      await headers(),
-      getConfig().appBaseUrl,
-    );
     const preview = buildBoardPreview({
       boardTitle: board.title,
       slug,
@@ -60,6 +59,11 @@ export async function generateMetadata({
       fallbackDescription: t("en", "board.previewDescription"),
     });
     return {
+      // PIN-102: og:image / twitter:image come from the board card
+      // (opengraph-image.tsx, twitter-image.tsx). Next only uses the
+      // file convention when no `images` are set here, and resolves
+      // its URL against metadataBase (the public origin).
+      metadataBase: new URL(origin),
       title: preview.title,
       description: preview.description,
       robots: { index: false, follow: false },
@@ -68,17 +72,26 @@ export async function generateMetadata({
         description: preview.description,
         url: preview.pageUrl,
         type: "website",
-        images: [{ url: preview.imageUrl, alt: preview.description }],
       },
       twitter: {
         card: "summary_large_image",
         title: preview.title,
         description: preview.description,
-        images: [preview.imageUrl],
       },
     };
   } catch {
     return fallback;
+  }
+}
+
+/** The public origin for metadata, or null when it can't be resolved. */
+async function publicOrigin(): Promise<string | null> {
+  try {
+    const origin = getPublicOriginFromHeaders(await headers(), getConfig().appBaseUrl);
+    new URL(origin);
+    return origin;
+  } catch {
+    return null;
   }
 }
 

@@ -110,6 +110,31 @@ fill on its cream ground (2.1:1).
   `public/fonts/LICENSES.md`); the reading face and Bricolage
   Grotesque are preloaded.
 
+## Link card (PIN-102)
+
+A board link pasted into a chat shows a 1200 x 630 card in the
+board's skin (`src/app/g/[slug]/opengraph-image.tsx`, reused by
+`twitter-image.tsx`): wordmark, "{name} invited you to pin your
+things to" (earliest participant; dropped when nobody joined), the
+title in the skin's display face, a mono counts line, and the latest
+five pinned cut-outs piled as die-cut stickers (never candidates).
+No pins yet: three dashed ghost outlines.
+
+- Layout and per-skin look: `src/domain/board-card.ts` (mirrors
+  `pinneds.css`; a test fails when they drift). Colours come from
+  `tokens.json`.
+- next/og has no CSS filters, so `src/server/board-card.ts` bakes
+  each sticker's keyline and shadow with sharp (alpha dilation, blurred
+  offset alpha; Zine gets the hard black offset and no keyline, Cork a
+  pushpin) and lays the pile over the rendered copy.
+- next/og reads TTF only: Latin subsets of the faces live in
+  `src/server/og-fonts/` (OFL, see its `LICENSES.md`), traced into the
+  server bundle by `next.config.ts`. Characters outside them (emoji,
+  other scripts) are left off the card so the renderer never fetches
+  fonts or emoji from a CDN; an empty title falls back to the brand line.
+- A bad slug, a missing board or any render error answers 200 with the
+  generic Paper card, then `public/og-card.png` as a last resort.
+
 ## Decisions log
 
 | Date | Decision | Why |
