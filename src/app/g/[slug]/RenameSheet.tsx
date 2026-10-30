@@ -22,6 +22,7 @@ export function RenameSheet({
   busy = false,
   error = "",
   onSave,
+  onEdit,
   onClose,
 }: {
   /** The thing's current name: the field starts with it. */
@@ -30,6 +31,8 @@ export function RenameSheet({
   busy?: boolean;
   error?: string;
   onSave: (label: string) => void;
+  /** The field changed: the board can drop an error line that was about the old text. */
+  onEdit?: () => void;
   onClose: () => void;
 }) {
   const formId = useId();
@@ -69,7 +72,10 @@ export function RenameSheet({
           softMaxLength={maxChars}
           enterKeyHint="done"
           required
-          onChange={setDraft}
+          onChange={(value) => {
+            setDraft(value);
+            onEdit?.();
+          }}
         />
         <p className={styles.renameError} role="alert">
           {error || hint}

@@ -1251,6 +1251,9 @@ function BoardBody({
               if (label === renamingElement.label) setRenamingElementId(null);
               else renameElement.mutate({ elementId: renamingElement.id, label });
             }}
+            onEdit={() => {
+              if (renameElement.isError) renameElement.reset();
+            }}
             onClose={() => setRenamingElementId(null)}
           />
         ) : null}
