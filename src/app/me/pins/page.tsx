@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getConfig } from "../../../config";
 import { resolveAuthUi } from "../../../domain/auth-ui";
 import { isValidSlug } from "../../../domain/tokens";
-import { t } from "../../../i18n";
+import { t, tCount } from "../../../i18n";
 import { getPolicy } from "../../../policy/server";
 import { getBoardRepository } from "../../../server/board-repository";
 import { listMyElements } from "../../../server/my-pins";
@@ -12,7 +12,9 @@ import {
   resolveUserSession,
   USER_COOKIE_NAME,
 } from "../../../server/user-session";
-import { PinToBoardButton } from "./PinToBoardButton";
+import { ButtonLink } from "../../../ui";
+import { SignInButton } from "../../auth/SignInButton";
+import { LibraryEmpty, LibraryHeader, PinLibrary } from "../LibraryParts";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +23,9 @@ export const dynamic = "force-dynamic";
  * any claimed board, newest first, each labelled with its
  * source board's TITLE (never its slug). Opened with
  * ?board=<slug> (from a board's Add sheet) each card gains a
- * Pin-to-this-board button. The route does not exist in
- * link-only mode (uniform 404, like the auth API routes).
+ * Pin-here button. The route does not exist in link-only mode
+ * (uniform 404, like the auth API routes). PIN-104: restyled as
+ * a sticker library on the design system.
  */
 export default async function MyPinsPage({
   searchParams,
@@ -50,64 +53,94 @@ export default async function MyPinsPage({
   ).catch(() => null);
 
   return (
-    <main className="board-main">
-      <p className="eyebrow">
-        <a href="/">📌 Pinneds</a>
-      </p>
-      <h1>{t("en", "myPins.title")}</h1>
+    <main className="pn-skin-root pn-lib-page" data-theme="paper">
       {!user ? (
-        <p className="lede">
-          {ui.enabled
-            ? t("en", "myPins.signInPrompt")
-            : t("en", "auth.notConfigured")}
-        </p>
+        <SignedOut enabled={ui.enabled} boardSlug={boardSlug} />
       ) : (
-        <MyPinsList uid={user.uid} boardSlug={boardSlug} />
+        <MyPinsList
+          uid={user.uid}
+          boardSlug={boardSlug}
+          signInEnabled={ui.enabled}
+        />
       )}
     </main>
+  );
+}
+
+/** "Back to board" when the page was opened from a board's Add sheet. */
+function backAction(boardSlug: string | null) {
+  return boardSlug ? (
+    <ButtonLink variant="quiet" icon="back" href={`/g/${boardSlug}`}>
+      {t("en", "myPins.backToBoard")}
+    </ButtonLink>
+  ) : undefined;
+}
+
+function SignedOut({
+  enabled,
+  boardSlug,
+}: {
+  enabled: boolean;
+  boardSlug: string | null;
+}) {
+  return (
+    <>
+      <LibraryHeader title={t("en", "myPins.title")} action={backAction(boardSlug)} />
+      {enabled ? (
+        <LibraryEmpty title={t("en", "myPins.signInPrompt")}>
+          <SignInButton variant="primary" size="lg" stacked />
+        </LibraryEmpty>
+      ) : (
+        <LibraryEmpty title={t("en", "auth.notConfigured")}>
+          <ButtonLink variant="secondary" size="lg" href="/">
+            {t("en", "notFound.home")}
+          </ButtonLink>
+        </LibraryEmpty>
+      )}
+    </>
   );
 }
 
 async function MyPinsList({
   uid,
   boardSlug,
+  signInEnabled,
 }: {
   uid: string;
   boardSlug: string | null;
+  signInEnabled: boolean;
 }) {
   const users = getUserRepository();
   const profile = await users.getUser(uid);
-  if (!profile) return <p className="lede">{t("en", "myPins.signInPrompt")}</p>;
+  if (!profile) return <SignedOut enabled={signInEnabled} boardSlug={boardSlug} />;
   const page = await listMyElements(profile, {
     boards: getBoardRepository(),
     users,
     policy: getPolicy(),
   });
-  if (page.elements.length === 0) {
-    return <p className="lede">{t("en", "myPins.empty")}</p>;
-  }
+  const empty = page.elements.length === 0;
   return (
     <>
-      {boardSlug ? (
-        <p className="lede">
-          <a href={`/g/${boardSlug}`}>← {t("en", "myPins.backToBoard")}</a>
-        </p>
-      ) : null}
-      <ul className="pins-grid">
-        {page.elements.map((card) => (
-          <li key={card.elementId} className="pin-card">
-            {/* eslint-disable-next-line @next/next/no-img-element -- owner-checked API image */}
-            <img src={card.imageUrl} alt={card.label} loading="lazy" />
-            <p className="pin-label">{card.label}</p>
-            <p className="my-pin-source">
-              {t("en", "myPins.fromBoard")} {card.sourceBoardTitle}
-            </p>
-            {boardSlug ? (
-              <PinToBoardButton slug={boardSlug} elementId={card.elementId} />
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      <LibraryHeader
+        title={t("en", "myPins.title")}
+        meta={empty ? undefined : tCount("en", "meta.things", page.total)}
+        action={backAction(boardSlug)}
+      />
+      {empty ? (
+        <LibraryEmpty title={t("en", "myPins.empty")} body={t("en", "myPins.emptyBody")}>
+          {boardSlug ? (
+            <ButtonLink variant="primary" size="lg" icon="back" href={`/g/${boardSlug}`}>
+              {t("en", "myPins.backToBoard")}
+            </ButtonLink>
+          ) : (
+            <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
+              {t("en", "myPins.emptyAction")}
+            </ButtonLink>
+          )}
+        </LibraryEmpty>
+      ) : (
+        <PinLibrary cards={page.elements} boardSlug={boardSlug} />
+      )}
     </>
   );
 }

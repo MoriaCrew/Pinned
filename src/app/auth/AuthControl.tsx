@@ -1,88 +1,100 @@
 "use client";
 
-import { useState } from "react";
-import { authInitials } from "../../domain/auth-ui";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { Avatar, Menu } from "../../ui";
 import { useAuth } from "./AuthProvider";
+import { SignInButton } from "./SignInButton";
 
 /**
- * Quiet sign-in surface (PIN-84, docs/08: icon + short words,
- * 44px targets). Renders null whenever sign-in is disabled, so
- * link-only pages carry zero auth DOM. Signed in: avatar (photo
- * or initials) opening a small menu — who you are, My boards,
- * My pins (PIN-85), Sign out.
+ * Quiet sign-in surface (PIN-84, restyled for the design system
+ * in PIN-104). Renders null whenever sign-in is disabled, so
+ * link-only pages carry zero auth DOM. Signed out: a quiet
+ * "Sign in" button. Signed in: the person's avatar (photo or
+ * initials) opening a small menu: My boards, My pins (PIN-85),
+ * Sign out. Escape or a tap outside closes it.
  */
 export function AuthControl() {
-  const { enabled, status, user, signInError, signIn, signOut } = useAuth();
+  const { enabled, status, user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const items = () =>
+      Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    items()[0]?.focus({ preventScroll: true });
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        buttonRef.current?.focus({ preventScroll: true });
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const list = items();
+      if (list.length === 0) return;
+      event.preventDefault();
+      const at = list.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === "ArrowDown" ? (at + 1) % list.length : (at - 1 + list.length) % list.length;
+      list[next].focus({ preventScroll: true });
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
   if (!enabled) return null;
   if (status === "loading") {
-    return <span className="auth-skeleton" aria-hidden="true" />;
+    return <span className="pn-lib-auth-skeleton" aria-hidden="true" />;
   }
   if (!user) {
     return (
-      <span className="auth-control">
-        <button
-          type="button"
-          className="btn"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void signIn().finally(() => setBusy(false));
-          }}
-        >
-          🔐 {busy ? t("en", "auth.signingIn") : t("en", "auth.signIn")}
-        </button>
-        {signInError ? (
-          <span className="error" role="alert">
-            {t("en", "auth.failed")}
-          </span>
-        ) : null}
+      <span className="pn-lib-auth">
+        <SignInButton />
       </span>
     );
   }
   const label = `${t("en", "auth.signedInAs")} ${user.displayName ?? ""}`.trim();
+  const go = (href: string) => () => {
+    setMenuOpen(false);
+    window.location.assign(href);
+  };
   return (
-    <span className="auth-control">
+    <span className="pn-lib-auth" ref={rootRef}>
       <button
+        ref={buttonRef}
         type="button"
-        className="auth-avatar"
+        className="pn-lib-avatar"
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((open) => !open)}
       >
-        {user.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- provider photo URL
-          <img src={user.photoUrl} alt="" width={44} height={44} />
-        ) : (
-          <span aria-hidden="true">{authInitials(user.displayName)}</span>
-        )}
+        <Avatar id={user.uid} name={user.displayName ?? ""} src={user.photoUrl ?? undefined} size="lg" />
       </button>
       {menuOpen ? (
-        <span className="auth-menu" role="menu">
-          <span className="auth-menu-who" role="presentation">
-            {label}
-          </span>
-          <a className="btn" href="/me/boards" role="menuitem">
-            📌 {t("en", "auth.myBoards")}
-          </a>
-          <a className="btn" href="/me/pins" role="menuitem">
-            📌 {t("en", "auth.myPins")}
-          </a>
-          <button
-            type="button"
-            className="btn"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              void signOut();
-            }}
-          >
-            {t("en", "auth.signOut")}
-          </button>
-        </span>
+        <Menu
+          label={label}
+          className="pn-lib-auth-menu"
+          items={[
+            { label: t("en", "auth.myBoards"), onSelect: go("/me/boards") },
+            { label: t("en", "auth.myPins"), onSelect: go("/me/pins") },
+            {
+              label: t("en", "auth.signOut"),
+              onSelect: () => {
+                setMenuOpen(false);
+                void signOut();
+              },
+            },
+          ]}
+        />
       ) : null}
     </span>
   );

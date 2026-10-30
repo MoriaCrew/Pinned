@@ -59,6 +59,26 @@ Principles:
   skin with synthetic samples from `public/lab/`; use it for QA and
   PR screenshots.
 
+## Landing and library screens (PIN-104)
+
+- Landing (`/`), My boards, My pins and the not-found page sit on the
+  Paper skin (`data-theme="paper"` + `pn-skin-root`, class
+  `pn-lib-page` to drop the first-generation `main` width). Their
+  small bits of CSS are the `pn-landing-…` / `pn-lib-…` block in
+  `pinneds.css`.
+- The landing's sticker pile and "How it works" visuals use synthetic
+  images from `public/landing/` (provenance in its README), not
+  `public/lab/`. The secondary "See a board" button exists only when
+  `DEMO_BOARD_SLUG` is set; unset shows nothing.
+- My boards draws each board as a mini board in **its own skin**
+  (`skinForTheme(themeId)`): the skin's ground, display face and print
+  around the latest scene, with mono counts. My pins is the sticker
+  library: the kit `Pin` grid with the source board's title, and a
+  "Pin here" button per pin when opened with `?board=`.
+- The header strip above every page (`pn-lib-header`, only when
+  sign-in is on) holds `AuthControl`: a quiet "Sign in", or the
+  avatar opening the kit `Menu` (My boards, My pins, Sign out).
+
 ## Skins
 
 A board stores its skin id in `Board.themeId`
