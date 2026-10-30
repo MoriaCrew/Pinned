@@ -244,6 +244,8 @@ function BoardBody({
   // it, Back pops it, and a link that carries it opens the viewer.
   const [viewerId, setViewerId] = useState<string | null>(initialSceneId);
   const [sceneMissing, setSceneMissing] = useState(false);
+  // PIN-143: the scene whose delete confirm is open in the viewer.
+  const [confirmDeleteSceneId, setConfirmDeleteSceneId] = useState<string | null>(null);
   // While true, the entry is the one we pushed, so closing goes Back.
   const viewerPushed = useRef(false);
   // Runs once that entry has popped (Remix scrolls the board after it).
@@ -422,6 +424,40 @@ function BoardBody({
     onError: (_cause, elementId) => setDeleteErrorElementId(elementId),
   });
 
+  // PIN-143: delete a scene (maker or host; the route enforces). Not
+  // optimistic: the viewer stays open with its confirm until the
+  // answer, so a failure's line stays on screen. The body carries no
+  // code, so a 409 (still developing) is known by its status.
+  const removeScene = useMutation({
+    mutationFn: async (sceneId: string) => {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(sceneId)}`,
+        { method: "DELETE" },
+      ).catch(() => null);
+      if (!response?.ok) {
+        throw new Error(t("en", response?.status === 409 ? "board.sceneDeleteDeveloping" : "board.deleteFailed"));
+      }
+      return sceneId;
+    },
+    onSuccess: (sceneId) => {
+      // Drop the polled copy and my attempt, else the poll merges it back.
+      queryClient.removeQueries({ queryKey: ["board-scene", slug, sceneId] });
+      if (attempt?.sceneId === sceneId) {
+        setAttempt(null);
+        setLiveSceneId(null);
+        setAttemptError("");
+      }
+      setConfirmDeleteSceneId(null);
+      // Close first, so the deleter never gets "That scene isn't here
+      // any more"; then it leaves the strip and the poll reconciles.
+      if (viewerId === sceneId) closeViewer();
+      queryClient.setQueryData<BoardClientView>(boardQueryKey(slug), (current) =>
+        current ? { ...current, scenes: current.scenes.filter((scene) => scene.id !== sceneId) } : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
+    },
+  });
+
   // Poll my in-flight scene at job cadence so the strip's print
   // lands faster than the board poll; both share the TanStack
   // cache and the poll stops at a terminal status.
@@ -457,9 +493,14 @@ function BoardBody({
     }
   }, [polledStatus, queryClient, slug]);
 
+  // The scene poll has no viewer: keep the board view's per-viewer flags (PIN-143).
+  const polledInView = polledScene ? view.scenes.find((scene) => scene.id === polledScene.id) : undefined;
   const scenes = scenesNewestFirst(
     polledScene
-      ? [polledScene, ...view.scenes.filter((scene) => scene.id !== polledScene.id)]
+      ? [
+          { ...polledScene, canDelete: polledInView?.canDelete, parentDeleted: polledInView?.parentDeleted },
+          ...view.scenes.filter((scene) => scene.id !== polledScene.id),
+        ]
       : view.scenes,
   );
   const attemptScene = attempt ? scenes.find((scene) => scene.id === attempt.sceneId) : undefined;
@@ -893,6 +934,10 @@ function BoardBody({
 
   const viewerSlot = slots.find((slot): slot is PrintSlot => slot.type === "print" && slot.id === viewerId);
   const viewerOpen = viewerSlot !== undefined;
+  // Host-only Delete appears after the first poll (the page render has no host cookie).
+  const viewerCanDelete = viewerSlot ? scenes.find((scene) => scene.id === viewerSlot.id)?.canDelete === true : false;
+  // A confirm belongs to one opening of one scene.
+  useEffect(() => setConfirmDeleteSceneId(null), [viewerId]);
   // An unknown, hidden or deleted scene: the board with one quiet line,
   // and no `?scene=` left for Back to reopen.
   useEffect(() => {
@@ -1161,6 +1206,33 @@ function BoardBody({
           onClose={() => closeViewer()}
           onStep={stepViewer}
           onRemix={viewerSlot.onRemix ? () => closeViewer(viewerSlot.onRemix) : undefined}
+          more={
+            viewerCanDelete
+              ? [
+                  {
+                    label: t("en", "board.delete"),
+                    danger: true,
+                    onSelect: () => {
+                      removeScene.reset();
+                      setConfirmDeleteSceneId(viewerSlot.id);
+                    },
+                  },
+                ]
+              : undefined
+          }
+          confirmDelete={
+            confirmDeleteSceneId === viewerSlot.id
+              ? {
+                  deleting: removeScene.isPending,
+                  error: removeScene.isError && removeScene.variables === viewerSlot.id ? removeScene.error.message : null,
+                  onConfirm: () => removeScene.mutate(viewerSlot.id),
+                  onKeep: () => {
+                    removeScene.reset();
+                    setConfirmDeleteSceneId(null);
+                  },
+                }
+              : null
+          }
         />
       ) : null}
     </div>

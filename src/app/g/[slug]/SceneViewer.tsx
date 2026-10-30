@@ -1,13 +1,22 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
+import { viewerEscapeTarget } from "../../../domain/scene-viewer";
 import { t } from "../../../i18n";
 import { Button, CreditLine, IconButton, Menu, cx } from "../../../ui";
 import type { PrintSlot } from "./BoardScenes";
 import styles from "./board.module.css";
 
-/** One "More" entry (PIN-132 brings Delete). With none, there is no More button. */
+/** One "More" entry (PIN-143 brings Delete). With none, there is no More button. */
 export type ViewerMoreItem = ComponentProps<typeof Menu>["items"][number];
+
+/** The inline delete confirm (PIN-143): it holds the error line, so a failure stays on screen. */
+export interface ViewerDeleteConfirm {
+  deleting: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onKeep: () => void;
+}
 
 /**
  * Scene viewer (PIN-131): one print full screen. The whole picture
@@ -24,6 +33,7 @@ export function SceneViewer({
   onStep,
   onRemix,
   more = [],
+  confirmDelete = null,
 }: {
   slot: PrintSlot;
   onClose: () => void;
@@ -31,23 +41,43 @@ export function SceneViewer({
   onStep: (step: 1 | -1) => void;
   onRemix?: () => void;
   more?: ViewerMoreItem[];
+  confirmDelete?: ViewerDeleteConfirm | null;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLSpanElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  // Latest handlers without re-running the open effect (it owns focus and scroll).
-  const handlers = useRef({ onClose, onStep });
+  const confirming = confirmDelete !== null;
+  // Latest handlers and state without re-running the open effect (it owns focus and scroll).
+  const handlers = useRef({ onClose, onStep, moreOpen, confirmDelete });
   useEffect(() => {
-    handlers.current = { onClose, onStep };
+    handlers.current = { onClose, onStep, moreOpen, confirmDelete };
   });
+  const moreButton = () => moreRef.current?.querySelector("button");
+  const keep = () => {
+    confirmDelete?.onKeep();
+    moreButton()?.focus();
+  };
+  // The confirm takes focus when it opens (its first live button).
+  useEffect(() => {
+    if (confirming) moreRef.current?.querySelector<HTMLElement>("[role=group] button:not([disabled])")?.focus();
+  }, [confirming]);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
     const body = document.body.style;
     const overflow = body.overflow;
     body.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") handlers.current.onClose();
-      else if (event.key === "ArrowRight") handlers.current.onStep(1);
+      const { moreOpen: menuOpen, confirmDelete: asked } = handlers.current;
+      if (event.key === "Escape") {
+        const target = viewerEscapeTarget({ menuOpen, confirming: asked !== null });
+        if (target === "menu") setMoreOpen(false);
+        else if (target === "confirm" && !asked?.deleting) asked?.onKeep();
+        else if (target === "viewer") handlers.current.onClose();
+        if (target !== "viewer") moreRef.current?.querySelector("button")?.focus();
+      } else if (menuOpen || asked !== null) {
+        return; // stepping waits until the menu or confirm is closed
+      } else if (event.key === "ArrowRight") handlers.current.onStep(1);
       else if (event.key === "ArrowLeft") handlers.current.onStep(-1);
     };
     document.addEventListener("keydown", onKey);
@@ -82,16 +112,43 @@ export function SceneViewer({
           ) : null}
           <span className="pn-spacer" />
           {more.length > 0 ? (
-            <span className={styles.viewerMore}>
+            <span ref={moreRef} className={styles.viewerMore}>
               <IconButton
                 icon="more"
                 label={t("en", "ui.more")}
                 variant="ghost"
                 aria-haspopup="menu"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((open) => !open)}
+                aria-expanded={moreOpen || confirming}
+                onClick={() => (confirming ? keep() : setMoreOpen((open) => !open))}
               />
-              {moreOpen ? <Menu items={more} label={t("en", "ui.more")} className={styles.viewerMenu} /> : null}
+              {confirmDelete ? (
+                <div className={cx("pn-menu", styles.viewerMenu)} role="group" aria-label={t("en", "board.sceneDeleteConfirm")}>
+                  <p className={styles.menuText}>{t("en", "board.sceneDeleteConfirm")}</p>
+                  <button type="button" className="pn-menu-item" data-danger="" disabled={confirmDelete.deleting} onClick={confirmDelete.onConfirm}>
+                    {confirmDelete.deleting ? t("en", "board.deleting") : t("en", "board.delete")}
+                  </button>
+                  <button type="button" className="pn-menu-item" disabled={confirmDelete.deleting} onClick={keep}>
+                    {t("en", "board.deleteKeep")}
+                  </button>
+                  {confirmDelete.error ? (
+                    <p className={styles.menuError} role="alert">
+                      {confirmDelete.error}
+                    </p>
+                  ) : null}
+                </div>
+              ) : moreOpen ? (
+                <Menu
+                  items={more.map((item) => ({
+                    ...item,
+                    onSelect: () => {
+                      setMoreOpen(false);
+                      item.onSelect?.();
+                    },
+                  }))}
+                  label={t("en", "ui.more")}
+                  className={styles.viewerMenu}
+                />
+              ) : null}
             </span>
           ) : null}
         </div>

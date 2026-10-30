@@ -37,3 +37,9 @@ export function stepScene(ids: readonly string[], current: string, step: 1 | -1)
   const index = ids.indexOf(current);
   return index < 0 ? null : (ids[index + step] ?? null);
 }
+
+/** What Esc closes (PIN-143): an open More menu first, then the delete confirm, then the viewer itself. */
+export function viewerEscapeTarget(state: { menuOpen: boolean; confirming: boolean }): "menu" | "confirm" | "viewer" {
+  if (state.menuOpen) return "menu";
+  return state.confirming ? "confirm" : "viewer";
+}

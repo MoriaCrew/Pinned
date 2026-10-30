@@ -192,6 +192,11 @@ describe("scene tag and remix source (PIN-98)", () => {
     expect(remixSource({ parentSceneId: "missing" }, [parent], participants)).toBeNull();
     expect(remixSource({}, [parent], participants)).toBeNull();
   });
+
+  it("says the parent was deleted when the board view flags it (PIN-143)", () => {
+    expect(remixSource({ parentSceneId: "gone", parentDeleted: true }, [], participants)).toEqual({ deleted: true });
+    expect(remixSource({ parentDeleted: true }, [], participants)).toBeNull();
+  });
 });
 
 describe("scenes strip (PIN-98)", () => {

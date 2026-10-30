@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, ElementType, ReactNode } from "react";
+import type { RemixSource } from "../domain/board-ui";
 import { stickerTilt } from "../domain/skins";
 import { t, tf } from "../i18n";
 import { Avatar, cx, type Person } from "./primitives";
@@ -194,18 +195,20 @@ export function CreditLine({
 }: {
   items: Credit[];
   label?: string;
-  remixOf?: { title: string; owner?: string } | null;
+  remixOf?: RemixSource | null;
   onItem?: (item: Credit, index: number) => void;
   compact?: boolean;
   onOpen?: () => void;
   className?: string;
 }) {
-  const remix = remixOf ? (
+  const remix = !remixOf ? null : "deleted" in remixOf ? (
+    <p className="pn-credit-remix">{t("en", "ui.remixOfDeleted")}</p>
+  ) : (
     <p className="pn-credit-remix">
       {t("en", "ui.remixOf")} <b>{remixOf.title}</b>
       {remixOf.owner ? ` ${t("en", "ui.by")} ${remixOf.owner}` : null}
     </p>
-  ) : null;
+  );
   if (compact) {
     const { shown, more } = splitCompactCredits(items, COMPACT_CREDIT_SLOTS);
     const name = compactCreditsName(

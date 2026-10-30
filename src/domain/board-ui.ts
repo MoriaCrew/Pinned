@@ -142,13 +142,17 @@ export function sceneTag(scene: Pick<BoardViewScene, "kind" | "parentSceneId">):
   return "scene";
 }
 
-/** "Remix of “A tiny picnic” by Robin": the parent's idea and its maker, when still on the board. */
+/** A remix's credit line: the parent's idea and maker, or that it was deleted (PIN-143). */
+export type RemixSource = { title: string; owner?: string } | { deleted: true };
+
+/** "Remix of “A tiny picnic” by Robin" while the parent is on the board; "Remix of a deleted scene" once deleted. */
 export function remixSource(
-  scene: Pick<BoardViewScene, "parentSceneId">,
+  scene: Pick<BoardViewScene, "parentSceneId" | "parentDeleted">,
   scenes: readonly BoardViewScene[],
   participants: readonly BoardViewParticipant[],
-): { title: string; owner?: string } | null {
+): RemixSource | null {
   if (!scene.parentSceneId) return null;
+  if (scene.parentDeleted) return { deleted: true };
   const parent = scenes.find((candidate) => candidate.id === scene.parentSceneId);
   if (!parent) return null;
   const owner = participants.find((p) => p.id === parent.createdBy)?.displayName;

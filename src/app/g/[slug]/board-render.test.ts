@@ -228,6 +228,27 @@ describe("scene viewer (PIN-131)", () => {
     expect(viewer({ slot: { ...remix, sharing: true } })).toMatch(/disabled=""[^>]*>.*Share<\/button>/);
   });
 
+  it("asks inline before a delete and keeps the error line in the viewer (PIN-143)", () => {
+    const confirmDelete = { deleting: false, error: null, onConfirm: noop, onKeep: noop };
+    const more = [{ label: "Delete", onSelect: noop, danger: true }];
+    const asked = viewer({ more, confirmDelete });
+    expect(asked).toContain("Delete this scene? It&#x27;s gone for everyone on this board.");
+    expect(asked).toMatch(/data-danger=""[^>]*>Delete<\/button>.*>Keep<\/button>/);
+    expect(asked).toContain('aria-expanded="true"');
+    expect(asked).not.toContain('role="menu"');
+    expect(asked).not.toContain('role="alert"');
+    const failed = viewer({ more, confirmDelete: { ...confirmDelete, error: "Couldn't delete. Try again." } });
+    expect(failed).toContain('role="alert">Couldn&#x27;t delete. Try again.</p>');
+    const busy = viewer({ more, confirmDelete: { ...confirmDelete, deleting: true } });
+    expect(busy).toMatch(/disabled=""[^>]*>Deleting…<\/button>/);
+    expect(busy).toMatch(/disabled=""[^>]*>Keep<\/button>/);
+    expect(viewer({ more })).not.toContain("Delete this scene?");
+  });
+
+  it("shows Remix of a deleted scene in the viewer's credits", () => {
+    expect(viewer({ slot: { ...remix, remixOf: { deleted: true } } })).toContain("Remix of a deleted scene");
+  });
+
   it("makes the print's picture and credits row open the viewer", () => {
     const out = html(h(BoardScenes, { count: 1, slots: [{ ...remix, onOpen: noop }] }));
     expect(out).toContain('data-scene-id="s7"');
