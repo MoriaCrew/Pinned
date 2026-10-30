@@ -186,6 +186,52 @@ Check a backend with `GET /api/health` → `plusMode`.
 | `requestMaxBytes` | 1024 | JSON body cap on the host routes |
 | `hostRoutesPerIp` | 60 / 600,000 ms | in-process per-IP brake, both host routes |
 
+## Stripe catalog (PIN-146)
+
+What Pinneds sells is committed code: `src/billing/catalog.ts`
+(`CATALOG_ITEMS`, catalog version `dev-v1`). Amounts are EUR
+cents, tax-inclusive (TTC) — the displayed price is the charged
+price. Runtime slices import the manifest; nothing reads Stripe
+object ids from config.
+
+| Item (lookup key) | Grants | Price | Status |
+| --- | --- | --- | --- |
+| `pinneds_credits_25` | 25 makes | €4.99 one-time | live |
+| `pinneds_credits_60` | 60 makes | €9.99 one-time | live |
+| `pinneds_credits_150` | 150 makes | €19.99 one-time | live |
+| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not yet offered |
+
+Every catalog product and price carries metadata
+`catalog=pinneds`, `item_key`, `credits` (packs only) and
+`catalog_version`. Product identity is that metadata, never the
+name; price identity is the `lookup_key`, which stays stable
+when a price is replaced.
+
+`scripts/seed-stripe-catalog.mjs` converges a Stripe **sandbox**
+onto the manifest (plain `fetch`, no SDK; it mirrors the
+manifest — a test pins the mirror). It is a dry-run unless
+`--apply` is passed, takes the secret from the env var named by
+`--env-var` (never printed; live keys refused), and prints item
+keys and object ids only:
+
+```
+node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_LOCAL_AGENT_KEY
+node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_LOCAL_AGENT_KEY --apply
+```
+
+Convergence: a product matched by metadata is reused (updated
+in place on copy/metadata drift); a price matched by lookup key
+is reused only when amount, currency, product, tax behavior and
+recurrence all match — those fields are immutable, so drift
+mints a new price with `transfer_lookup_key=true` and archives
+the old one. POSTs carry idempotency keys, and re-running a
+converged sandbox creates nothing. The pure decision functions
+(`catalogValidationErrors`, `planProduct`, `planPrice`,
+`buildCatalogPlan`) are unit-tested in
+`src/billing/catalog.test.ts`. This slice changes no runtime
+behavior: checkout still runs `off`/`mock` until the Stripe
+adapter slice lands.
+
 ## Stripe plan (not built)
 
 1. Add `PLUS_MODE=stripe`, with `STRIPE_SECRET_KEY` and
