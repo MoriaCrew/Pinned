@@ -151,7 +151,11 @@ gates (404 in link-only mode, 401 signed out):
    list the signed-in user's elements across every board
    where their claim is live (user board index -> claimed
    participant -> `listElementsByOwner`), newest first,
-   capped at Policy `libraryPageSize` (default 60). Cards
+   capped at Policy `libraryPageSize` (default 60). Only
+   PINNED things are listed (PIN-125): a candidate still in
+   review, left out, or cleared from the board's leftovers
+   line keeps its element but never shows in the library
+   (one pin read per board filters them). Cards
    carry the source board's TITLE only — a slug never appears
    in a library payload or URL. Each card also carries
    `familyId` (PIN-121): the original element's id for a

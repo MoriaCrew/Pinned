@@ -87,6 +87,15 @@ beforeAll(async () => {
       faceFlag: false,
       createdAt: 1,
     });
+    // The library lists pinned things only (PIN-125).
+    await getBoardRepository().createPin({
+      id: "route-pin-1",
+      boardId,
+      elementId: "route-el-1",
+      pinnedBy: ownerId,
+      status: "pinned",
+      createdAt: 1,
+    });
     await getDerivativeStore().put(
       "elements/route-el-1/cutout.png",
       Buffer.from("png-bytes"),

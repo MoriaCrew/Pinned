@@ -152,6 +152,14 @@ async function makeHarness(): Promise<Harness> {
     status: "pinned",
     createdAt: T0 + 6,
   });
+  await boards.createPin({
+    id: "pin-bobs",
+    boardId: bobs.boardId,
+    elementId: bobs.id,
+    pinnedBy: "pc",
+    status: "pinned",
+    createdAt: T0 + 10,
+  });
 
   let seq = 0;
   const newId = () => `gen-${++seq}`;
@@ -231,6 +239,32 @@ describe("listMyElements (PIN-85)", () => {
     });
     // Still no capability slug in the payload.
     expect(JSON.stringify(page)).not.toContain("secret-slug");
+  });
+
+  it("lists pinned things only: candidates in review, left out or cleared stay out (PIN-125)", async () => {
+    const h = await makeHarness();
+    const board = "board-a-secret-slug-a";
+    // Still in review: a candidate pin.
+    await h.boards.createElement(element({ id: "el-review", boardId: board, ownerId: "pa", createdAt: T0 + 20 }));
+    await h.boards.createPin({ id: "pin-review", boardId: board, elementId: "el-review", pinnedBy: "pa", status: "candidate", createdAt: T0 + 20 });
+    // Left out or cleared: confirm deleted its pin, the element stays.
+    await h.boards.createElement(element({ id: "el-cleared", boardId: board, ownerId: "pa", createdAt: T0 + 21 }));
+    await h.boards.createPin({ id: "pin-cleared", boardId: board, elementId: "el-cleared", pinnedBy: "pa", status: "candidate", createdAt: T0 + 21 });
+    expect(await h.boards.deletePin("pin-cleared")).toBe(true);
+    // A library copy is pinned, so it is listed.
+    const copy = await pinFromLibrary("board-b-secret-slug-b", h.aliceOnB, ALICE, "el-lamp", h.pins);
+
+    const page = await listMyElements(ALICE, h.pins);
+    const ids = page.elements.map((c) => c.elementId);
+    expect(ids).not.toContain("el-review");
+    expect(ids).not.toContain("el-cleared");
+    expect(ids).toEqual(expect.arrayContaining(["el-lamp", "el-mug", copy.elementId]));
+    expect(page.total).toBe(3);
+
+    // Pinning the candidate later brings it in.
+    await h.boards.setPinStatus("pin-review", "pinned", T0 + 30);
+    const after = await listMyElements(ALICE, h.pins);
+    expect(after.elements.map((c) => c.elementId)).toContain("el-review");
   });
 
   it("clamps the limit to Policy.libraryPageSize", async () => {

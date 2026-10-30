@@ -68,8 +68,10 @@ export interface MyPinsPage {
 }
 
 /**
- * The signed-in user's elements across every board they hold a
- * live claim on, newest first, capped at the Policy page size.
+ * The signed-in user's pinned elements across every board they
+ * hold a live claim on, newest first, capped at the Policy page
+ * size. Candidates (still in review, left out, or cleared) are
+ * not listed (PIN-125).
  * Index entries whose board is gone or whose participant no
  * longer carries this user's claim are skipped (My boards
  * parity), and each element's owner must be that claimed
@@ -95,7 +97,16 @@ export async function listMyElements(
       entry.boardId,
       participant.id,
     );
+    if (elements.length === 0) continue;
+    // PIN-125: only things that are pinned. A candidate the user
+    // left out or cleared loses its pin but keeps its element, and
+    // must not come back through the library. One pin read per
+    // board, not one per element.
+    const pinned = new Set(
+      (await deps.boards.listPins(entry.boardId, "pinned")).map((pin) => pin.elementId),
+    );
     for (const element of elements) {
+      if (!pinned.has(element.id)) continue;
       cards.push({
         elementId: element.id,
         familyId: element.sourceElementId ?? element.id,
