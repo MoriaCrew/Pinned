@@ -236,20 +236,54 @@ async function deadLetter(
   return "dead_letter";
 }
 
+/** A BalanceTransaction object from an id string or an expanded value, else null. */
+async function balanceTransactionObject(
+  deps: StripeWebhookDeps,
+  value: unknown,
+): Promise<Obj | null> {
+  const expanded = obj(value);
+  if (expanded) return expanded;
+  const txnId = str(value);
+  if (!txnId || !deps.client) return null;
+  return obj(await deps.client.retrieveBalanceTransaction(txnId));
+}
+
 /** Settled EUR cents from a BalanceTransaction value (id string, or expanded object), else null. Negative refund/debit amounts count by magnitude. */
 async function balanceTransactionEurCents(
   deps: StripeWebhookDeps,
   value: unknown,
 ): Promise<number | null> {
-  const client = deps.client;
-  if (!client) return null;
-  let txn = obj(value);
-  const txnId = str(value);
-  if (!txn && txnId) txn = obj(await client.retrieveBalanceTransaction(txnId));
+  const txn = await balanceTransactionObject(deps, value);
   if (!txn) return null;
   const amount = int(txn.amount);
   if (amount === null || str(txn.currency)?.toLowerCase() !== "eur") return null;
   return Math.abs(amount);
+}
+
+/**
+ * Convert a presentment-currency amount on a charge to settled
+ * EUR cents via the charge BalanceTransaction's Stripe-reported
+ * `exchange_rate` (documented: charge-currency amount times
+ * exchange_rate equals the settled amount), else null. This is
+ * Stripe's own rate for this charge, never a guessed FX rate;
+ * used for a dispute whose payload carries no balance
+ * transactions yet (`charge.dispute.created` usually has none),
+ * where the freeze is provisional and the final clawback still
+ * prefers the dispute's own BalanceTransaction when it lands.
+ */
+async function eurCentsViaChargeExchangeRate(
+  deps: StripeWebhookDeps,
+  chargeId: string | null,
+  presentmentCents: number | null,
+): Promise<number | null> {
+  if (!chargeId || presentmentCents === null || presentmentCents < 0 || !deps.client) return null;
+  const charge = obj(await deps.client.retrieveCharge(chargeId));
+  if (!charge) return null;
+  const txn = await balanceTransactionObject(deps, charge.balance_transaction);
+  if (!txn || str(txn.currency)?.toLowerCase() !== "eur") return null;
+  const rate = txn.exchange_rate;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) return null;
+  return Math.round(presentmentCents * rate);
 }
 
 /** Settled EUR cents for a charge via its BalanceTransaction, else null. */
@@ -595,8 +629,7 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
 
   const resolved = await resolveStripePurchase(deps, ctx, { chargeId, paymentIntentId }, ids);
   if (typeof resolved === "string") return resolved;
-  const { intent, purchase, pack } = resolved;
-  if ((intent.countedRefundIds ?? []).includes(refundId)) return "duplicate_refund";
+  const { intent, pack } = resolved;
 
   const settledCents =
     str(refund.currency)?.toLowerCase() === "eur"
@@ -610,11 +643,33 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
     });
   }
 
-  const cumulative = (intent.refundedEurCents ?? 0) + settledCents;
-  const targetMakes = makesFloorForCents(cumulative, pack);
-  let delta = targetMakes - (intent.refundClawedMakes ?? 0);
-  const clawableLeft = purchase.credits - purchase.clawedCredits;
-  if (delta > clawableLeft) delta = clawableLeft;
+  // Count + price the delta atomically against the stored
+  // cumulative, never this handler's snapshot: two concurrent
+  // refunds must not both price themselves as the first
+  // increment. A repeat returns the original delta, and the
+  // ledger clawback below dedupes by refund id, so a crash
+  // between the count and the claw converges on retry.
+  const counted = await deps.intents.countRefund(
+    intent.id,
+    refundId,
+    settledCents,
+    pack.eurCents,
+    pack.credits,
+  );
+  if (!counted.intent) {
+    return deadLetter(deps, ctx, "unknown_purchase", {
+      ...ids,
+      intentId: intent.id,
+      boardId: intent.boardId,
+    });
+  }
+  let delta = counted.deltaMakes;
+  const freshAccount = await deps.ledger.getAccount(intent.boardId);
+  const freshPurchase = freshAccount?.purchases[intent.purchaseId];
+  if (freshPurchase) {
+    const clawableLeft = freshPurchase.credits - freshPurchase.clawedCredits;
+    if (delta > clawableLeft) delta = clawableLeft;
+  }
   if (delta < 0) delta = 0;
 
   if (delta > 0) {
@@ -637,12 +692,11 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
       throw error;
     }
   }
-  const counted = await deps.intents.applyRefundAccounting(intent.id, refundId, settledCents, delta);
   if (!counted.applied) return "duplicate_refund";
   return delta > 0 ? "refund_clawed" : "refund_recorded_zero_makes";
 }
 
-/** Settled EUR cents for a dispute: its own EUR amount, else the first BalanceTransaction it carries that reads as EUR. */
+/** Settled EUR cents for a dispute: its own EUR amount, else the first BalanceTransaction it carries that reads as EUR, else the disputed presentment amount converted at the charge's Stripe-reported exchange rate (a fresh dispute usually carries no balance transactions yet, and its credits must freeze now, not at funds_withdrawn). */
 async function disputeSettledEurCents(
   deps: StripeWebhookDeps,
   dispute: Obj,
@@ -653,7 +707,7 @@ async function disputeSettledEurCents(
     const cents = await balanceTransactionEurCents(deps, txn);
     if (cents !== null) return cents;
   }
-  return null;
+  return eurCentsViaChargeExchangeRate(deps, idOf(dispute.charge), int(dispute.amount));
 }
 
 async function freezeDispute(
@@ -742,30 +796,107 @@ async function restoreDispute(
   }
 }
 
+/**
+ * Release the freeze's ceil excess over the final floor
+ * amount, whichever terminal dispute event is current and
+ * whichever landed first. Re-reads the account, so it is a
+ * no-op once the hold is gone. Returns a dead-letter outcome
+ * on a ledger refusal, else whether anything was restored.
+ */
+async function restoreFreezeExcess(
+  deps: StripeWebhookDeps,
+  ctx: HandlerContext,
+  intent: CheckoutIntent,
+  disputeId: string,
+  ids: DeadLetterExtra,
+): Promise<{ restored: boolean } | string> {
+  const account = await deps.ledger.getAccount(intent.boardId);
+  const purchase = account?.purchases[intent.purchaseId];
+  if (!account || !purchase) return { restored: false };
+  const leftover =
+    (account.frozenByDispute[disputeId] ?? 0) + (purchase.deferredFreezes[disputeId] ?? 0);
+  if (leftover <= 0) return { restored: false };
+  try {
+    const result = await deps.ledger.restore(intent.boardId, {
+      eventId: `${ctx.event.id}:excess-restore`,
+      purchaseId: intent.purchaseId,
+      disputeId,
+      at: ctx.at,
+    });
+    return { restored: result.applied };
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return deadLetter(deps, ctx, "ledger_refused", {
+        ...ids,
+        intentId: intent.id,
+        boardId: intent.boardId,
+      });
+    }
+    throw error;
+  }
+}
+
 async function finalClawbackDispute(
   deps: StripeWebhookDeps,
   ctx: HandlerContext,
   resolved: ResolvedPurchase,
   disputeId: string,
   ids: DeadLetterExtra,
-  fromClosedLost: boolean,
 ): Promise<string> {
-  const { intent, account, purchase, pack } = resolved;
-  if (intent.finalDisputeClawbacks && disputeId in intent.finalDisputeClawbacks) {
-    if (fromClosedLost) {
-      // The freeze rounded up past the floor amount already
-      // clawed; the excess hold comes back when the dispute
-      // closes out as the final word.
-      const leftover = account.frozenByDispute[disputeId] ?? 0;
-      if (leftover > 0) {
+  const { intent, pack } = resolved;
+  // Claim the final clawback atomically BEFORE touching the
+  // ledger: whichever terminal event (`funds_withdrawn` or
+  // `closed lost`, in any order, even concurrently) records
+  // the claim owns the one claw; the loser of that race does
+  // not claw at all. A handler that finds a pre-existing
+  // claim still ensures the ledger claw landed (a crash
+  // between claim and claw retries into the entry check
+  // below), then releases the freeze's ceil excess - from
+  // either terminal event, not only `closed`.
+  const preExistingMakes = intent.finalDisputeClawbacks?.[disputeId];
+  let makes: number;
+  let claimedNow = false;
+  if (preExistingMakes !== undefined) {
+    makes = preExistingMakes;
+  } else {
+    const cents = await disputeSettledEurCents(deps, ctx.event.object);
+    if (cents === null || cents < 0) {
+      return deadLetter(deps, ctx, "fx_unverifiable", {
+        ...ids,
+        intentId: intent.id,
+        boardId: intent.boardId,
+      });
+    }
+    makes = makesFloorForCents(cents, pack);
+    const claim = await deps.intents.recordFinalDisputeClawback(intent.id, disputeId, makes);
+    if (!claim.applied) return "duplicate_final_clawback";
+    claimedNow = true;
+  }
+
+  if (makes > 0) {
+    const fresh = await deps.ledger.getAccount(intent.boardId);
+    const freshPurchase = fresh?.purchases[intent.purchaseId];
+    if (!fresh || !freshPurchase) {
+      return deadLetter(deps, ctx, "unknown_purchase", {
+        ...ids,
+        intentId: intent.id,
+        boardId: intent.boardId,
+      });
+    }
+    const alreadyClawed = fresh.entries.some(
+      (entry) => entry.type === "clawback" && entry.disputeId === disputeId,
+    );
+    if (!alreadyClawed) {
+      const amount = Math.min(makes, freshPurchase.credits - freshPurchase.clawedCredits);
+      if (amount > 0) {
         try {
-          await deps.ledger.restore(intent.boardId, {
+          await deps.ledger.clawback(intent.boardId, {
             eventId: ctx.event.id,
             purchaseId: intent.purchaseId,
+            amount,
             disputeId,
             at: ctx.at,
           });
-          return "final_clawback_duplicate_excess_restored";
         } catch (error) {
           if (error instanceof RangeError) {
             return deadLetter(deps, ctx, "ledger_refused", {
@@ -778,43 +909,12 @@ async function finalClawbackDispute(
         }
       }
     }
-    return "duplicate_final_clawback";
   }
 
-  const cents = await disputeSettledEurCents(deps, ctx.event.object);
-  if (cents === null || cents < 0) {
-    return deadLetter(deps, ctx, "fx_unverifiable", {
-      ...ids,
-      intentId: intent.id,
-      boardId: intent.boardId,
-    });
-  }
-  let makes = makesFloorForCents(cents, pack);
-  const clawableLeft = purchase.credits - purchase.clawedCredits;
-  if (makes > clawableLeft) makes = clawableLeft;
-  if (makes < 0) makes = 0;
-  if (makes > 0) {
-    try {
-      await deps.ledger.clawback(intent.boardId, {
-        eventId: ctx.event.id,
-        purchaseId: intent.purchaseId,
-        amount: makes,
-        disputeId,
-        at: ctx.at,
-      });
-    } catch (error) {
-      if (error instanceof RangeError) {
-        return deadLetter(deps, ctx, "ledger_refused", {
-          ...ids,
-          intentId: intent.id,
-          boardId: intent.boardId,
-        });
-      }
-      throw error;
-    }
-  }
-  await deps.intents.recordFinalDisputeClawback(intent.id, disputeId, makes);
-  return "dispute_final_clawed";
+  const excess = await restoreFreezeExcess(deps, ctx, intent, disputeId, ids);
+  if (typeof excess === "string") return excess;
+  if (claimedNow) return "dispute_final_clawed";
+  return excess.restored ? "final_clawback_duplicate_excess_restored" : "duplicate_final_clawback";
 }
 
 /** All four `charge.dispute.*` events through one resolution path. */
@@ -840,14 +940,14 @@ async function handleDispute(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     case "charge.dispute.funds_reinstated":
       return restoreDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.funds_withdrawn":
-      return finalClawbackDispute(deps, ctx, resolved, disputeId, ids, false);
+      return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.closed": {
       const status = str(dispute.status);
       if (status === "won" || status === "warning_closed") {
         return restoreDispute(deps, ctx, resolved, disputeId, ids);
       }
       if (status === "lost") {
-        return finalClawbackDispute(deps, ctx, resolved, disputeId, ids, true);
+        return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
       }
       return "dispute_closed_ignored_status";
     }

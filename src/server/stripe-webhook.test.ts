@@ -411,6 +411,24 @@ describe("refunds (PIN-150)", () => {
     });
   });
 
+  it("concurrent partial refunds still sum to the full pack (atomic count, no snapshot pricing)", async () => {
+    const { h, intent } = await granted();
+    const outcomes = await Promise.all([
+      h.deliver(evt("evt_re_a", "refund.created", refund({ id: "re_test_fake_a", amount: 250 }))),
+      h.deliver(evt("evt_re_b", "refund.created", refund({ id: "re_test_fake_b", amount: 249 }))),
+    ]);
+    expect(outcomes.map((o) => o.outcome)).toEqual(["refund_clawed", "refund_clawed"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, available: 0 });
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      refundedEurCents: 499,
+      refundClawedMakes: 25,
+    });
+    const clawedTotal = (await h.ledger.listEntries(SLUG))
+      .filter((e) => e.type === "clawback")
+      .reduce((sum, e) => sum + e.amount, 0);
+    expect(clawedTotal).toBe(25);
+  });
+
   it("a sub-make refund records its cents (zero makes) so the next partial sums correctly", async () => {
     const { h } = await granted();
     expect(
@@ -526,20 +544,76 @@ describe("disputes (PIN-150)", () => {
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
   });
 
-  it("funds_withdrawn final-claws the floor amount; closed lost restores only the ceil excess", async () => {
+  it("funds_withdrawn final-claws the floor amount and releases the ceil excess at once", async () => {
     const { h, intent } = await granted();
     await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
     expect(
       (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 })))).outcome,
     ).toBe("dispute_final_clawed");
-    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 1, available: 12 });
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
     expect(await h.intents.get(intent.id)).toMatchObject({
       finalDisputeClawbacks: { du_test_fake_1: 12 },
     });
     expect(
       (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" })))).outcome,
-    ).toBe("final_clawback_duplicate_excess_restored");
+    ).toBe("duplicate_final_clawback");
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+  });
+
+  it("closed lost landing first also releases the ceil excess; a later funds_withdrawn claws nothing more", async () => {
+    const { h } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ frozen: 13, available: 12 });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" })))).outcome,
+    ).toBe("dispute_final_clawed");
+    // Floor 12 clawed, the 13th frozen make (ceil excess) is back, not stranded.
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+    expect(
+      (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 })))).outcome,
+    ).toBe("duplicate_final_clawback");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+    const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
+    expect(clawbacks).toHaveLength(1);
+    expect(clawbacks[0]).toMatchObject({ amount: 12, disputeId: "du_test_fake_1" });
+  });
+
+  it("concurrent terminal dispute events claw exactly once", async () => {
+    const { h } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
+    const outcomes = await Promise.all([
+      h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 }))),
+      h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" }))),
+    ]);
+    expect(outcomes.map((o) => o.outcome).sort()).toEqual([
+      "dispute_final_clawed",
+      "duplicate_final_clawback",
+    ]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+    const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
+    expect(clawbacks).toHaveLength(1);
+  });
+
+  it("a foreign-currency dispute with no balance transactions freezes via the charge's Stripe exchange rate", async () => {
+    const { h } = await granted();
+    // 540 presentment cents at the charge's reported rate settles to 250 EUR cents.
+    h.client.balanceTransactions["txn_test_fake_charge"] = {
+      id: "txn_test_fake_charge",
+      amount: 499,
+      currency: "eur",
+      exchange_rate: 250 / 540,
+    };
+    expect(
+      (await h.deliver(
+        evt("evt_du_fx", "charge.dispute.created", dispute({
+          currency: "usd",
+          amount: 540,
+          balance_transactions: [],
+        })),
+      )).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 13, available: 12 });
+    expect(await h.records.listDeadLetters()).toEqual([]);
   });
 
   it("a reinstate after a final clawback dead-letters for an operator instead of un-clawing", async () => {

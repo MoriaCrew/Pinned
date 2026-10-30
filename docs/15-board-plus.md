@@ -535,7 +535,16 @@ the same ratio with `ceil` (round up protects the pool; the
 excess over the final floor amount is restored at close).
 Foreign-presentment refund/dispute amounts are never
 FX-guessed: settled EUR comes from the reported
-BalanceTransaction, and when that does not read as EUR the
+BalanceTransaction - or, for a fresh dispute carrying no
+balance transactions yet, from its presentment amount at
+the charge BalanceTransaction's own Stripe-reported
+`exchange_rate`, so the freeze lands at `created`. Refund
+counting is atomic in the intent store (`countRefund`
+prices the delta from the stored cumulative inside the
+write), and a dispute's final clawback is claimed
+atomically by whichever terminal event lands first; the
+other, in any order, only releases the freeze's ceil
+excess. When none of that reads as EUR the
 event dead-letters (`fx_unverifiable`).
 
 Durable records: `stripeWebhookEvents/{eventId}` is the

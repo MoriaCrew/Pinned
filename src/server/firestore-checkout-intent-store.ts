@@ -25,6 +25,7 @@ import {
 } from "@google-cloud/firestore";
 import {
   applyRefundAccountingToIntent,
+  countRefundOnIntent,
   mergeStripeMapping,
   recordFinalDisputeClawbackOnIntent,
   assertCreateCheckoutIntentInput,
@@ -259,6 +260,32 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
       if (!next) return { intent: structuredClone(intent), applied: false };
       tx.set(ref, toFirestoreData(next));
       return { intent: structuredClone(next), applied: true };
+    });
+  }
+
+  async countRefund(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; deltaMakes: number }> {
+    assertIntentId(intentId);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return { intent: null, applied: false, deltaMakes: 0 };
+      const { next, deltaMakes } = countRefundOnIntent(
+        intent,
+        refundId,
+        refundEurCents,
+        packEurCents,
+        packCredits,
+      );
+      if (!next) return { intent: structuredClone(intent), applied: false, deltaMakes };
+      tx.set(ref, toFirestoreData(next));
+      return { intent: structuredClone(next), applied: true, deltaMakes };
     });
   }
 

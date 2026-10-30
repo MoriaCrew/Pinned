@@ -66,6 +66,8 @@ export interface CheckoutIntent {
   refundClawedMakes?: number;
   /** Refund ids whose EUR amount is already inside `refundedEurCents` (including zero-make deltas the ledger never saw). */
   countedRefundIds?: string[];
+  /** Makes each counted refund clawed, by refund id (PIN-150): a retry after the atomic count replays exactly this delta into the ledger, which dedupes by refund id. */
+  refundMakesById?: Record<string, number>;
   /** Makes finally clawed back per dispute id (PIN-150): a second final-clawback event for the same dispute is a no-op. */
   finalDisputeClawbacks?: Record<string, number>;
 }
@@ -162,6 +164,25 @@ export interface CheckoutIntentStore {
     refundEurCents: number,
     clawedMakesDelta: number,
   ): Promise<{ intent: CheckoutIntent | null; applied: boolean }>;
+  /**
+   * Atomically count one refund AND compute its make delta
+   * inside the same read-modify-write (PIN-150): the cumulative
+   * floor formula `min(packCredits, floor(cumulativeCents *
+   * packCredits / packEurCents)) - refundClawedMakes` must be
+   * evaluated against the stored cumulative, never a caller
+   * snapshot, or two concurrent refunds would both price
+   * themselves as the first increment. A repeat refund id
+   * returns `applied: false` with the originally computed
+   * `deltaMakes`, so a retry replays the same ledger clawback
+   * (the ledger itself dedupes by refund id).
+   */
+  countRefund(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; deltaMakes: number }>;
   /** Record a dispute's final clawback makes once per dispute id (PIN-150); a repeat returns `applied: false`. */
   recordFinalDisputeClawback(
     intentId: string,
@@ -296,7 +317,42 @@ export function applyRefundAccountingToIntent(
     refundedEurCents: (intent.refundedEurCents ?? 0) + refundEurCents,
     refundClawedMakes: (intent.refundClawedMakes ?? 0) + clawedMakesDelta,
     countedRefundIds: [...counted, refundId],
+    refundMakesById: { ...(intent.refundMakesById ?? {}), [refundId]: clawedMakesDelta },
   };
+}
+
+/**
+ * Count one refund and price its make delta from the stored
+ * cumulative (PIN-150, see countRefund on the port). Returns
+ * the next intent plus the delta, or the original delta with
+ * `next: null` when the refund id is already counted. Shared
+ * by both stores so the formula lives in exactly one place.
+ */
+export function countRefundOnIntent(
+  intent: CheckoutIntent,
+  refundId: string,
+  refundEurCents: number,
+  packEurCents: number,
+  packCredits: number,
+): { next: CheckoutIntent | null; deltaMakes: number } {
+  assertId(refundId, "refundId");
+  if (!Number.isInteger(refundEurCents) || refundEurCents < 0) {
+    throw new RangeError(`refundEurCents must be a non-negative integer, got ${refundEurCents}`);
+  }
+  assertPositiveInt(packEurCents, "packEurCents");
+  assertPositiveInt(packCredits, "packCredits");
+  if ((intent.countedRefundIds ?? []).includes(refundId)) {
+    return { next: null, deltaMakes: intent.refundMakesById?.[refundId] ?? 0 };
+  }
+  const cumulativeCents = (intent.refundedEurCents ?? 0) + refundEurCents;
+  const targetMakes = Math.min(
+    packCredits,
+    Math.floor((cumulativeCents * packCredits) / packEurCents),
+  );
+  const deltaMakes = Math.max(0, targetMakes - (intent.refundClawedMakes ?? 0));
+  const next = applyRefundAccountingToIntent(intent, refundId, refundEurCents, deltaMakes);
+  if (!next) return { next: null, deltaMakes: intent.refundMakesById?.[refundId] ?? 0 };
+  return { next, deltaMakes };
 }
 
 /** Record a dispute final clawback on a clone (PIN-150). Returns null when that dispute is already recorded. Shared by both stores. */
@@ -411,6 +467,28 @@ export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
     if (!next) return { intent: structuredClone(intent), applied: false };
     this.intents.set(intentId, structuredClone(next));
     return { intent: structuredClone(next), applied: true };
+  }
+
+  async countRefund(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; deltaMakes: number }> {
+    assertId(intentId, "intentId");
+    const intent = this.intents.get(intentId);
+    if (!intent) return { intent: null, applied: false, deltaMakes: 0 };
+    const { next, deltaMakes } = countRefundOnIntent(
+      intent,
+      refundId,
+      refundEurCents,
+      packEurCents,
+      packCredits,
+    );
+    if (!next) return { intent: structuredClone(intent), applied: false, deltaMakes };
+    this.intents.set(intentId, structuredClone(next));
+    return { intent: structuredClone(next), applied: true, deltaMakes };
   }
 
   async recordFinalDisputeClawback(

@@ -257,6 +257,33 @@ function describeCheckoutIntentStore(
       await expect(store.applyRefundAccounting(intent.id, "re_bad", -1, 0)).rejects.toThrow(
         RangeError,
       );
+      // countRefund prices from the stored cumulative atomically:
+      // independent of the accounting above (fresh intent), two
+      // partials reach the whole pack and a repeat replays its delta.
+      const countedIntent = await store.create(createInput());
+      expect(await store.countRefund(countedIntent.id, "re_test_fake_a", 250, 499, 25)).toMatchObject({
+        applied: true,
+        deltaMakes: 12,
+      });
+      expect(await store.countRefund(countedIntent.id, "re_test_fake_b", 249, 499, 25)).toMatchObject({
+        applied: true,
+        deltaMakes: 13,
+        intent: {
+          refundedEurCents: 499,
+          refundClawedMakes: 25,
+          refundMakesById: { re_test_fake_a: 12, re_test_fake_b: 13 },
+        },
+      });
+      expect(await store.countRefund(countedIntent.id, "re_test_fake_a", 250, 499, 25)).toMatchObject({
+        applied: false,
+        deltaMakes: 12,
+        intent: { refundedEurCents: 499, refundClawedMakes: 25 },
+      });
+      expect(await store.countRefund("nope", "re_x", 1, 499, 25)).toEqual({
+        intent: null,
+        applied: false,
+        deltaMakes: 0,
+      });
     });
 
     it("rejects invalid create inputs with RangeError and stores nothing resolvable", async () => {
