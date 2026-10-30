@@ -10,7 +10,12 @@ import "server-only";
  * attempts are not billed by the provider, and the reserve estimate
  * is conservative). Over budget is a friendly `failed` outcome —
  * never a silent mock swap, never a throw. Timeout outcomes are
- * never retried.
+ * never retried. Segmenter is the reserve exception (PIN-92): it
+ * reserves PER ATTEMPT, so concept, tap-add and retry invocations
+ * all count against its per-participant/per-photo caps — a failed
+ * or refused call consumed its reservation exactly like a ready
+ * one, and the AiCallLog below still records every logical call
+ * that reached the provider.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -21,6 +26,7 @@ import {
   dayBucketFor,
   type BudgetStore,
   type ReserveDenyReason,
+  type ReserveResult,
 } from "./budget";
 import {
   estimateMetaCostUsd,
@@ -70,6 +76,12 @@ interface CallMeta {
   participantId?: string;
   participantCap?: number;
   boardCap?: number;
+  /** PIN-92: Segmenter-only per-participant / per-photo caps. */
+  participantSegmentCap?: number;
+  photoId?: string;
+  photoCap?: number;
+  /** PIN-92: reserve before EVERY attempt so retries count too. */
+  reservePerAttempt?: boolean;
 }
 
 const SAFE_ID = /^[A-Za-z0-9_-]+$/;
@@ -86,6 +98,7 @@ function deniedOutcome<T>(reason: ReserveDenyReason | "budget_unavailable"): Por
     budget: t("en", "ai.budgetExhausted"),
     participant_cap: t("en", "ai.participantCap"),
     board_cap: t("en", "ai.boardCap"),
+    photo_cap: t("en", "ai.photoCap"),
     budget_unavailable: t("en", "ai.failed"),
   } as const;
   return {
@@ -152,32 +165,52 @@ async function runDecorated<T>(
   const dayBucket = dayBucketFor(startedAt);
   const boardId = safeId(meta.boardId);
   const participantId = safeId(meta.participantId);
+  const photoId = safeId(meta.photoId);
 
-  let reserve;
-  try {
-    reserve = await deps.budget.reserve({
-      dayBucket,
-      estimatedCostUsd: estimateReserveUsd(meta.operation, {
-        sparkElementsMaxTokens: policy.maxTokens.sparkElements,
-        sparkChipsMaxTokens: policy.maxTokens.sparkChips,
-      }),
-      budgetUsd: policy.dailyBudgetUsd,
-      callLimit: policy.dailyCallLimit,
-      participantId,
-      participantCap: participantId ? meta.participantCap : undefined,
-      boardId,
-      boardCap: boardId ? meta.boardCap : undefined,
-    });
-  } catch {
-    // Fail closed: no reservation, no provider call.
-    return deniedOutcome("budget_unavailable");
-  }
-  if (!reserve.ok) return deniedOutcome(reserve.reason);
+  const tryReserve = async (): Promise<ReserveResult | "unavailable"> => {
+    try {
+      return await deps.budget.reserve({
+        dayBucket,
+        estimatedCostUsd: estimateReserveUsd(meta.operation, {
+          sparkElementsMaxTokens: policy.maxTokens.sparkElements,
+          sparkChipsMaxTokens: policy.maxTokens.sparkChips,
+        }),
+        budgetUsd: policy.dailyBudgetUsd,
+        callLimit: policy.dailyCallLimit,
+        participantId,
+        participantCap: participantId ? meta.participantCap : undefined,
+        boardId,
+        boardCap: boardId ? meta.boardCap : undefined,
+        participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
+        photoId,
+        photoCap: photoId ? meta.photoCap : undefined,
+      });
+    } catch {
+      // Fail closed: the loop below turns this into no provider call.
+      return "unavailable";
+    }
+  };
 
   const collected: MetaCallLog[] = [];
   let outcome: PortOutcome<T> = { status: "failed", errorCode: "not_run" };
+  let attemptsRun = 0;
   for (let attempt = 0; attempt <= policy.retries; attempt += 1) {
     if (attempt > 0) await deps.sleep(policy.retryBackoffMs);
+    if (attempt === 0 || meta.reservePerAttempt) {
+      const reserve = await tryReserve();
+      if (reserve === "unavailable" || !reserve.ok) {
+        const denied = deniedOutcome<T>(
+          reserve === "unavailable" ? "budget_unavailable" : reserve.reason,
+        );
+        // Before any provider call: fail closed, no log (PIN-61). A
+        // mid-retry denial falls through so the attempts that did
+        // reach the provider still get their AiCallLog.
+        if (attemptsRun === 0) return denied;
+        outcome = denied;
+        break;
+      }
+    }
+    attemptsRun += 1;
     outcome = await metaLogCollector.run(collected, () =>
       withTimeout(call, meta.timeoutMs),
     );
@@ -265,6 +298,10 @@ export function decoratePorts(
           {
             operation: "segment",
             model: policy.models.sam,
+            participantSegmentCap: policy.segmentsPerParticipantPerDay,
+            photoId: input.photoId,
+            photoCap: policy.segmentsPerPhoto,
+            reservePerAttempt: true,
             timeoutMs: input.timeoutMs,
             boardId: input.boardId,
             participantId: input.participantId,

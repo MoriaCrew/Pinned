@@ -37,6 +37,8 @@ describe("evaluateReserve (PIN-61)", () => {
       reservedMicroUsd: 0,
       participants: {},
       boards: {},
+      participantSegments: {},
+      photos: {},
     };
     expect(evaluateReserve(state, req())).toMatchObject({
       ok: false,
@@ -66,6 +68,54 @@ describe("evaluateReserve (PIN-61)", () => {
   });
 });
 
+describe("segment caps (PIN-92)", () => {
+  it("evaluateReserve denies on segment-participant and photo caps, independently of the photo quota", () => {
+    const state = {
+      ...emptyBudgetDay(),
+      participantSegments: { p1: 150 },
+      photos: { "job-1": 18 },
+    };
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantSegmentCap: 150 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    expect(
+      evaluateReserve(state, req({ photoId: "job-1", photoCap: 18 })),
+    ).toMatchObject({ ok: false, reason: "photo_cap" });
+    // Different participant/photo unaffected.
+    expect(
+      evaluateReserve(
+        state,
+        req({ participantId: "p2", participantSegmentCap: 150, photoId: "job-2", photoCap: 18 }),
+      ).ok,
+    ).toBe(true);
+    // Segment spend does not trip the namer photo quota.
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantCap: 20 })).ok,
+    ).toBe(true);
+  });
+
+  it("store counts segments/photos apart from participants; a denied reserve writes nothing", async () => {
+    const store = new InMemoryBudgetStore();
+    const seg = req({
+      participantId: "p1",
+      participantSegmentCap: 2,
+      photoId: "job-1",
+      photoCap: 5,
+    });
+    expect((await store.reserve(seg)).ok).toBe(true);
+    expect((await store.reserve(seg)).ok).toBe(true);
+    expect(await store.reserve(seg)).toEqual({
+      ok: false,
+      reason: "participant_cap",
+    });
+    const snap = store.snapshot(DAY);
+    expect(snap.calls).toBe(2);
+    expect(snap.participants).toEqual({});
+    expect(snap.participantSegments).toEqual({ p1: 2 });
+    expect(snap.photos).toEqual({ "job-1": 2 });
+  });
+});
+
 describe("InMemoryBudgetStore (PIN-61)", () => {
   it("counts calls, reserved micro-USD and per-id counters per day", async () => {
     const store = new InMemoryBudgetStore();
@@ -78,6 +128,8 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
       reservedMicroUsd: 10_000,
       participants: { p1: 1 },
       boards: { b1: 1 },
+      participantSegments: {},
+      photos: {},
     });
     expect(store.snapshot("2026-10-30").calls).toBe(0);
   });

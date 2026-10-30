@@ -22,10 +22,14 @@ export interface BudgetDayState {
   reservedMicroUsd: number;
   participants: Record<string, number>;
   boards: Record<string, number>;
+  /** Segmenter-only per-participant counts (PIN-92): kept apart from `participants` (photo/scene quotas) so SAM spend neither consumes nor is masked by those budgets. */
+  participantSegments: Record<string, number>;
+  /** Segmenter counts per photo (job id) for the day (PIN-92). */
+  photos: Record<string, number>;
 }
 
 export function emptyBudgetDay(): BudgetDayState {
-  return { calls: 0, reservedMicroUsd: 0, participants: {}, boards: {} };
+  return { calls: 0, reservedMicroUsd: 0, participants: {}, boards: {}, participantSegments: {}, photos: {} };
 }
 
 export interface ReserveRequest {
@@ -39,6 +43,11 @@ export interface ReserveRequest {
   participantCap?: number;
   boardId?: string;
   boardCap?: number;
+  /** Segmenter-only daily cap for participantId (PIN-92), counted in `participantSegments`, not `participants`. */
+  participantSegmentCap?: number;
+  /** Photo (job) id + Policy segmentsPerPhoto cap (PIN-92). */
+  photoId?: string;
+  photoCap?: number;
 }
 
 export type ReserveDenyReason =
@@ -46,7 +55,8 @@ export type ReserveDenyReason =
   | "call_limit"
   | "budget"
   | "participant_cap"
-  | "board_cap";
+  | "board_cap"
+  | "photo_cap";
 
 export type ReserveResult =
   | { ok: true; estimatedMicroUsd: number }
@@ -84,6 +94,16 @@ export function evaluateReserve(
       return { ok: false, reason: "board_cap" };
     }
   }
+  if (request.participantId && request.participantSegmentCap !== undefined) {
+    if ((state.participantSegments[request.participantId] ?? 0) >= request.participantSegmentCap) {
+      return { ok: false, reason: "participant_cap" };
+    }
+  }
+  if (request.photoId && request.photoCap !== undefined) {
+    if ((state.photos[request.photoId] ?? 0) >= request.photoCap) {
+      return { ok: false, reason: "photo_cap" };
+    }
+  }
   return { ok: true, estimatedMicroUsd };
 }
 
@@ -98,6 +118,8 @@ export function applyReserve(
     reservedMicroUsd: state.reservedMicroUsd + estimatedMicroUsd,
     participants: { ...state.participants },
     boards: { ...state.boards },
+    participantSegments: { ...state.participantSegments },
+    photos: { ...state.photos },
   };
   if (request.participantId && request.participantCap !== undefined) {
     next.participants[request.participantId] =
@@ -105,6 +127,13 @@ export function applyReserve(
   }
   if (request.boardId && request.boardCap !== undefined) {
     next.boards[request.boardId] = (next.boards[request.boardId] ?? 0) + 1;
+  }
+  if (request.participantId && request.participantSegmentCap !== undefined) {
+    next.participantSegments[request.participantId] =
+      (next.participantSegments[request.participantId] ?? 0) + 1;
+  }
+  if (request.photoId && request.photoCap !== undefined) {
+    next.photos[request.photoId] = (next.photos[request.photoId] ?? 0) + 1;
   }
   return next;
 }

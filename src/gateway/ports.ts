@@ -77,12 +77,15 @@ export interface SegmentInput {
   /** Policy timeoutsMs.sam. */
   timeoutMs: number;
   maskEncoding?: "lossless" | "one_bit";
+  /** PIN-92 per-photo cap key: the DecomposeJob id (= Element.sourcePhotoId). */
+  photoId?: string;
   includeConfidence?: boolean;
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;
 }
 
+/** Segmenter port: every invocation is budget-reserved per attempt (PIN-92). */
 export interface Segmenter {
   segment(
     input: SegmentInput,
