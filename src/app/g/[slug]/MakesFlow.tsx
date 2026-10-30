@@ -298,10 +298,20 @@ export function useMakesFlow({
   const [error, setError] = useState<CreditCheckoutErrorKind | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [flag] = useState<BillingFlag | null>(() => parseBillingFlag(billingParam));
-  const [baseline] = useState<number | null>(() =>
-    typeof window === "undefined" ? initialAvailableMakes : readBaseline(slug, initialAvailableMakes),
+  // First paint must match the server render: start from the
+  // server count everywhere, then adopt the stored buy-time
+  // count after mount (sessionStorage differs after a fast
+  // webhook grant, and reading it during render would
+  // hydrate mismatched banner markup).
+  const [baseline, setBaseline] = useState<number | null>(initialAvailableMakes);
+  useEffect(() => {
+    const stored = readBaseline(slug, null);
+    if (stored !== null) setBaseline(stored);
+  }, [slug]);
+  const [exhausted, setExhausted] = useState(
+    false
   );
-  const [exhausted, setExhausted] = useState(false);
+
   const [dismissed, setDismissed] = useState(false);
   const buying = useRef(false);
 

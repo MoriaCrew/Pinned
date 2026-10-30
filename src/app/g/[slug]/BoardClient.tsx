@@ -238,6 +238,10 @@ function BoardBody({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState<SceneAttempt | null>(null);
   const [attemptError, setAttemptError] = useState("");
+  // PIN-152: the attempt scene whose POST job already failed
+  // pool-empty (terminal in the POST answer, so its poll may
+  // never run — the copy must not depend on the poll alone).
+  const [scenePoolEmptyId, setScenePoolEmptyId] = useState<string | null>(null);
   // Client clock start of the in-flight attempt (developing clock).
   const [attemptStartedAt, setAttemptStartedAt] = useState<number | null>(null);
   // Set only when a POST actually created the scene — polling a
@@ -404,11 +408,15 @@ function BoardBody({
       );
       const data = (await response.json()) as {
         scene?: BoardViewScene;
+        job?: { errorCode?: string } | null;
         error?: string;
       };
       if (!response.ok || !data.scene) {
         throw new Error(data.error || t("en", "board.sceneFailed"));
       }
+      // PIN-152: a terminal pool-empty failure can arrive right
+      // here; remember it for the problem card's copy.
+      setScenePoolEmptyId(isPoolEmptyCode(data.job?.errorCode) ? data.scene.id : null);
       return data.scene;
     },
     onSuccess: (scene) => {
@@ -576,7 +584,9 @@ function BoardBody({
   const polledScene = scenePoll.data?.scene;
   // PIN-152: my scene lost the last-make race (PIN-151): its job
   // says so, and the problem card gets make-aware copy.
-  const sceneJobPoolEmpty = isPoolEmptyCode(scenePoll.data?.job?.errorCode);
+  const sceneJobPoolEmpty =
+    isPoolEmptyCode(scenePoll.data?.job?.errorCode) ||
+    (attempt !== null && scenePoolEmptyId === attempt.sceneId);
   const polledStatus = polledScene?.status;
   // My scene is gone: drop the attempt and its poll like a pin delete does.
   const attemptGone = polledScene === null;
@@ -696,6 +706,7 @@ function BoardBody({
     // reuses it, which the server treats idempotently (PIN-69).
     const sceneAttempt: SceneAttempt = { ...input, sceneId: newSceneId() };
     setAttempt(sceneAttempt);
+    setScenePoolEmptyId(null);
     setAttemptError("");
     setAttemptStartedAt(Date.now());
     setLiveSceneId(null);

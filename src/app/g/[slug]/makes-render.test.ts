@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -147,6 +149,24 @@ describe("pool-empty outcomes (PIN-152)", () => {
     const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop }));
     expect(scene).toContain("ran out of makes, so that scene couldn&#x27;t be made");
     expect(scene).not.toContain("Add makes");
+  });
+});
+
+describe("makes flow wiring guards (PIN-152)", () => {
+  const read = (name: string) => readFileSync(path.join(process.cwd(), "src/app/g/[slug]", name), "utf8");
+
+  it("keeps the billing baseline hydration-safe: server count first, stored count after mount", () => {
+    const source = read("MakesFlow.tsx");
+    expect(source).toContain("useState<number | null>(initialAvailableMakes)");
+    // sessionStorage is read only inside an effect, never while rendering.
+    expect(source).not.toMatch(/useState[^;]*readBaseline/);
+    expect(source).toMatch(/useEffect\(\(\) => \{\s*const stored = readBaseline\(slug, null\)/);
+  });
+
+  it("takes scene pool-empty from the scene POST job too, not only the disabled-on-terminal poll", () => {
+    const source = read("BoardClient.tsx");
+    expect(source).toContain("isPoolEmptyCode(data.job?.errorCode)");
+    expect(source).toContain("scenePoolEmptyId === attempt.sceneId");
   });
 });
 
