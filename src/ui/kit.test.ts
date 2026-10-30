@@ -32,8 +32,8 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 20 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(20);
+  it("ships 21 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(21);
     expect(html(h(Icon, { name: "camera" }))).toContain('aria-hidden="true"');
     expect(html(h(Icon, { name: "share", title: "Share" }))).toContain('aria-label="Share"');
   });
@@ -127,6 +127,58 @@ describe("SceneCard body (PIN-100)", () => {
   it("drops the print body when there is nothing to put in it", () => {
     expect(html(h(SceneCard, { src: "/s.webp" }))).not.toContain("pn-print-body");
     expect(html(h(SceneCard, { src: "/s.webp", idea: "A picnic" }))).toContain("pn-print-body");
+  });
+});
+
+describe("BoardHeader with the you button (PIN-120)", () => {
+  const people = [
+    { id: "p2", name: "Sam" },
+    { id: "p3", name: "Ana Ruiz" },
+  ];
+
+  it("keeps the top row to wordmark, Share and you, and starts the meta line with a small people stack", () => {
+    const markup = html(
+      h(BoardHeader, {
+        title: "Mia's 7th birthday",
+        people,
+        peopleLabel: "Also here: Sam, Ana Ruiz",
+        counts: { people: 3, things: 5, scenes: 2 },
+        onShare: () => {},
+        homeHref: "/",
+        you: h("button", { type: "button", className: "test-you" }, "R"),
+      }),
+    );
+    const row = markup.match(/<div class="pn-head-row">[^]*?<\/div><\/div>/)?.[0] ?? "";
+    expect(row).toContain('aria-label="Share board link"');
+    expect(row).toContain("test-you");
+    expect(row).not.toContain("pn-avatars");
+    expect(row.indexOf("Share board link")).toBeLessThan(row.indexOf("test-you"));
+    const meta = markup.match(/<p class="pn-board-meta pn-head-meta">[^]*<\/p>/)?.[0] ?? "";
+    expect(meta).toMatch(/^<p[^>]*><span class="pn-avatars pn-avatars-sm" role="img" aria-label="Also here: Sam, Ana Ruiz">/);
+    expect(meta.match(/pn-avatar pn-avatar-sm/g)).toHaveLength(2);
+    expect(meta).toContain(">AR<");
+    expect(meta).toContain("<span>3 people · 5 things · 2 scenes</span>");
+  });
+
+  it("drops the stack when nobody else is here", () => {
+    const markup = html(h(BoardHeader, { title: "Sunday pancakes", people: [], counts: { people: 1, things: 0 } }));
+    expect(markup).not.toContain("pn-avatars");
+    expect(markup).toContain("1 person · 0 things");
+  });
+
+  it("caps the small stack at three with a +n", () => {
+    const many = ["A", "B", "C", "D", "E"].map((name, i) => ({ id: `p${i}`, name }));
+    const markup = html(h(BoardHeader, { title: "Party", people: many, counts: { people: 6 } }));
+    expect(markup.match(/pn-avatar pn-avatar-sm/g)).toHaveLength(3);
+    expect(markup).toContain("+2");
+  });
+});
+
+describe("Menu note (PIN-120)", () => {
+  it("shows a quiet line above the items without speaking it twice", () => {
+    const markup = html(h(Menu, { label: "You: Sam", note: "You're Sam here", items: [{ label: "Edit name" }] }));
+    expect(markup).toContain('aria-label="You: Sam"');
+    expect(markup).toMatch(/role="menu"[^>]*><p class="pn-menu-note" aria-hidden="true">You&#x27;re Sam here<\/p><button/);
   });
 });
 

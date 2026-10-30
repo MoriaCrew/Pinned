@@ -220,6 +220,8 @@
 .pn-avatars { display: inline-flex; align-items: center; }
 .pn-avatars > * + * { margin-left: -8px; }
 .pn-avatars-more { background: var(--surface-sunk); color: var(--ink); }
+.pn-avatar-sm, .pn-avatars-sm > .pn-avatar { width: var(--avatar-sm); height: var(--avatar-sm); font-size: 9.5px; letter-spacing: 0; box-shadow: 0 0 0 1.5px var(--surface-raised); }
+.pn-avatars-sm > * + * { margin-left: -6px; }
 
 /* ---------- Sticker ---------- */
 .pn-sticker {
@@ -303,6 +305,7 @@
 .pn-head-right { display: flex; align-items: center; gap: var(--space-3); }
 .pn-board-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(36px * var(--display-scale)); line-height: 1.05; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); text-wrap: balance; }
 .pn-board-meta { margin: 0; font: 500 13px/18px var(--font-mono); letter-spacing: .02em; color: var(--ink-muted); }
+.pn-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
 .pn-section-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
 .pn-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: 0 var(--space-4); margin: var(--space-5) 0 var(--space-3); }
 
@@ -470,15 +473,15 @@ textarea.pn-input { resize: none; min-height: 88px; }
 .pn-og-pile .pn-sticker { position: absolute; }
 
 /* ---------- Landing and library (PIN-104) ---------- */
-/* The sign-in strip above every page (layout.tsx; only exists when sign-in is on). */
-.pn-lib-header { display: flex; align-items: center; justify-content: flex-end; min-height: 52px; padding: var(--space-1) var(--space-4) 0; }
-.pn-lib-auth { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); }
-.pn-lib-auth-skeleton { display: inline-block; width: var(--tap); height: var(--tap); border-radius: 50%; background: var(--surface-sunk); }
-.pn-lib-avatar { display: inline-grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.pn-lib-avatar:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.pn-lib-avatar:active { scale: .94; }
-.pn-lib-avatar .pn-avatar { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 3.5px var(--line-strong); }
-.pn-lib-auth-menu { right: 0; top: calc(100% + 6px); }
+/* The "you" button (PIN-120), last in each page's own header: photo, initials or a person icon, opening a Menu. */
+.pn-you { position: relative; display: inline-flex; flex: none; align-items: center; gap: var(--space-2); }
+.pn-you-skeleton { display: inline-block; width: var(--tap); height: var(--tap); border-radius: 50%; background: var(--surface-sunk); }
+.pn-you-btn { display: inline-grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pn-you-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pn-you-btn:active { scale: .94; }
+.pn-you-btn .pn-avatar { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 3.5px var(--line-strong); }
+.pn-you-icon { display: grid; place-items: center; width: var(--avatar-lg); height: var(--avatar-lg); border-radius: 50%; background: var(--surface-raised); box-shadow: 0 0 0 1.5px var(--secondary-edge); }
+.pn-you-menu { right: 0; top: calc(100% + 6px); }
 .pn-lib-signin { display: inline-flex; align-items: center; gap: var(--space-2); }
 .pn-lib-signin[data-stacked] { display: grid; justify-items: stretch; gap: var(--space-2); }
 .pn-lib-signin-error { color: var(--danger); font: 650 14px/20px var(--font-ui); }
@@ -486,7 +489,6 @@ textarea.pn-input { resize: none; min-height: 88px; }
 
 /* Pages on the Paper skin: landing, My boards, My pins, not found. */
 .pn-lib-page { min-height: 100dvh; padding-bottom: var(--space-7); }
-.pn-lib-header + .pn-lib-page { min-height: calc(100dvh - 52px); }
 .pn-lib-page > :not(.pn-landing-inner) { width: min(100%, 960px); margin-inline: auto; }
 .pn-lib-empty { padding-top: var(--space-7); }
 
@@ -523,7 +525,9 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 
 /* Landing: wordmark, the sticker pile, the promise, how it works. */
 .pn-landing { overflow-x: clip; }
-.pn-landing-inner { display: grid; grid-template-areas: "brand" "pile" "copy" "how" "foot"; gap: var(--space-5); width: min(100%, 960px); margin: 0 auto; padding: var(--space-4) var(--space-4) var(--space-6); }
+.pn-landing-inner { position: relative; display: grid; grid-template-areas: "brand" "pile" "copy" "how" "foot"; gap: var(--space-5); width: min(100%, 960px); margin: 0 auto; padding: var(--space-4) var(--space-4) var(--space-6); }
+/* The "you" button sits top right over the hero, so the wordmark never moves down. */
+.pn-landing-you { position: absolute; top: var(--space-4); right: var(--space-4); z-index: 3; }
 .pn-landing-brand { grid-area: brand; }
 .pn-landing-pile { --tilt: 9deg; grid-area: pile; position: relative; width: min(100%, 440px); aspect-ratio: 1 / .84; margin-inline: auto; }
 .pn-landing-copy { grid-area: copy; display: grid; gap: var(--space-4); min-width: 0; }
@@ -598,6 +602,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-menu-item:hover { background: var(--surface-sunk); }
 .pn-menu-item[data-danger] { color: var(--danger); }
 .pn-menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pn-menu-note { margin: 0 0 var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
 
 /* ---------- Make sheet (PIN-100) ---------- */
 /* Long on a small phone (base scene + picks + field + chips): the body scrolls, title and "Make it" stay put. */
