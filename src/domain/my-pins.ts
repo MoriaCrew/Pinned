@@ -10,6 +10,15 @@
 
 export interface MyPinCard {
   elementId: string;
+  /**
+   * The family a library copy belongs to (PIN-121): the original
+   * element's id (Element.sourceElementId), or the element's own
+   * id when it is an original. Copies are only ever made from the
+   * user's own things, so it tells the Add sheet which things are
+   * already on a board without exposing anything new. Optional for
+   * older payloads.
+   */
+  familyId?: string;
   label: string;
   description: string;
   faceFlag: boolean;

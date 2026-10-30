@@ -219,6 +219,20 @@ describe("listMyElements (PIN-85)", () => {
     expect(bobs.elements.map((c) => c.elementId)).toEqual(["el-bobs"]);
   });
 
+  it("tags every card with its family: a copy points at its original (PIN-121)", async () => {
+    const h = await makeHarness();
+    const copy = await pinFromLibrary("board-b-secret-slug-b", h.aliceOnB, ALICE, "el-lamp", h.pins);
+    const page = await listMyElements(ALICE, h.pins);
+    const families = Object.fromEntries(page.elements.map((c) => [c.elementId, c.familyId]));
+    expect(families).toEqual({
+      [copy.elementId]: "el-lamp",
+      "el-lamp": "el-lamp",
+      "el-mug": "el-mug",
+    });
+    // Still no capability slug in the payload.
+    expect(JSON.stringify(page)).not.toContain("secret-slug");
+  });
+
   it("clamps the limit to Policy.libraryPageSize", async () => {
     const h = await makeHarness();
     const one = await listMyElements(ALICE, h.pins, 1);
