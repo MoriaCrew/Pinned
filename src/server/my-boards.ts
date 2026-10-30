@@ -4,7 +4,7 @@ import "server-only";
  * user's board index joined to live board data. Entries whose
  * board is gone, or whose participant no longer carries this
  * user's claim, are skipped rather than shown stale. Board links
- * in the cards are the slugs themselves — the index only holds
+ * in the cards are the slugs themselves â€” the index only holds
  * boards the user already reached by link and claimed.
  */
 import type { BoardRepository } from "../domain/board-repository";
@@ -73,13 +73,20 @@ export async function listMyBoards(
 /**
  * "Remove from My boards" (PIN-166): touches the caller's own data
  * only, never the board or anyone else's row or claim. Deleting the
- * index row alone would not hold — the next signed-in join or fresh
- * /claim rewrites it, so reappearance would hang on sign-in age —
- * so the caller's own participant (the one the row names, only when
- * it carries this uid) is unlinked first. Opening the board again in
- * a browser that holds that participant re-links it (PIN-160). The
- * unlink runs before the row delete so a failure in between still
- * hides the card and a retry finishes the job. Idempotent.
+ * index row alone would not hold â€” the next signed-in join or fresh
+ * /claim rewrites it, so reappearance would hang on sign-in age â€”
+ * so the caller's own participants on that board (only those that
+ * carry this uid) are unlinked too. Opening the board again in a
+ * browser that holds one of them re-links it (PIN-160).
+ *
+ * Order: the row goes first, then the unlink. The board-GET auto-link
+ * only touches an UNLINKED participant, so a poll from a tab with this
+ * board open can't rewrite the row while the claim is still set; with
+ * the reverse order it could re-link between the two writes and the
+ * row delete would then strand a linked participant with no row.
+ * Unlinking every participant that carries this uid (found on the
+ * board, not through the row) lets a retry repair a half-done removal
+ * even after the row is gone. Idempotent.
  */
 export async function removeMyBoard(
   user: UserProfile,
@@ -87,14 +94,11 @@ export async function removeMyBoard(
   deps: MyBoardsDeps,
 ): Promise<void> {
   if (!isSafeUid(user.uid) || !isValidSlug(slug)) return;
-  const entry = await deps.users.getUserBoard(user.uid, slug);
-  if (!entry) return;
-  if (await deps.boards.getBoard(slug)) {
-    const participant = await deps.boards.getParticipant(slug, entry.participantId);
-    if (participant?.userId === user.uid) {
-      const { userId: _unlinked, ...rest } = participant;
-      await deps.boards.putParticipant(rest);
-    }
-  }
   await deps.users.deleteUserBoard(user.uid, slug);
+  if (!(await deps.boards.getBoard(slug))) return;
+  for (const participant of await deps.boards.listParticipants(slug)) {
+    if (participant.userId !== user.uid) continue;
+    const { userId: _unlinked, ...rest } = participant;
+    await deps.boards.putParticipant(rest);
+  }
 }
