@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PinCard } from "../../../domain/board-view";
-import { applyChip, chipThumbs, scenePayload } from "../../../domain/make-sheet";
+import { appendDictation, applyChip, chipThumbs, scenePayload } from "../../../domain/make-sheet";
 import { t } from "../../../i18n";
 import { Button, Chip, Hint, Pin, SceneCard, Sheet, Tag, TextField } from "../../../ui";
+import { DictateButton } from "./DictateButton";
 
 /**
  * Make-a-scene sheet (PIN-70, restyled on the design system in
@@ -22,6 +23,7 @@ export function MakeSheet({
   promptMaxChars,
   initialPrompt,
   remixParent = null,
+  dictate = null,
   onMake,
   onClose,
 }: {
@@ -32,6 +34,8 @@ export function MakeSheet({
   initialPrompt: string;
   /** Remix mode (PIN-79): the parent scene being extended. */
   remixParent?: { id: string; imageUrl: string; prompt: string } | null;
+  /** Dictation (PIN-119): board slug + Policy clip cap; null hides the mic. */
+  dictate?: { slug: string; maxSeconds: number } | null;
   onMake: (payload: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) => void;
   onClose: () => void;
 }) {
@@ -127,6 +131,15 @@ export function MakeSheet({
           rows={3}
           maxLength={promptMaxChars}
         />
+        {dictate ? (
+          <DictateButton
+            slug={dictate.slug}
+            maxSeconds={dictate.maxSeconds}
+            onText={(text) =>
+              setPrompt((current) => appendDictation(current, text, promptMaxChars))
+            }
+          />
+        ) : null}
       </div>
 
       {chips.length > 0 ? (

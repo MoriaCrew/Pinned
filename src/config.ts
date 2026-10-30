@@ -9,6 +9,7 @@ export const DEFAULT_META_MODELS = {
   spark: "muse-spark-1.3",
   sam: "sam-3.1",
   image: "muse-image-1.0",
+  voice: "muse-voice-transcribe-1.0",
 } as const;
 
 export interface MetaConfig {
@@ -17,6 +18,7 @@ export interface MetaConfig {
   sparkModel: string;
   samModel: string;
   imageModel: string;
+  voiceModel: string;
 }
 
 export type DataBackend = "firestore" | "memory";
@@ -135,6 +137,7 @@ export function parseConfig(
       sparkModel: nonEmpty(env.META_MODEL_SPARK) ?? DEFAULT_META_MODELS.spark,
       samModel: nonEmpty(env.META_MODEL_SAM) ?? DEFAULT_META_MODELS.sam,
       imageModel: nonEmpty(env.META_MODEL_IMAGE) ?? DEFAULT_META_MODELS.image,
+      voiceModel: nonEmpty(env.META_MODEL_VOICE) ?? DEFAULT_META_MODELS.voice,
     },
   };
 }

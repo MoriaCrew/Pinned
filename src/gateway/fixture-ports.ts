@@ -17,6 +17,7 @@ import {
   normalizeTapName,
   type ElementNamer,
   type TapNamer,
+  type SpeechTranscriber,
   type SceneComposer,
   type ChipSuggester,
   templateChips,
@@ -91,6 +92,33 @@ export function fixtureTapNamer(fixtures: StudioFixtures): TapNamer {
       return {
         status: "ready",
         value: { name, promptVersion: input.promptVersion },
+      };
+    },
+  };
+}
+
+/**
+ * No dictation was recorded by PIN-50, so the fixture transcriber
+ * replays the first recorded scene prompt as the spoken idea:
+ * same fixtures in, same text out, zero provider calls (PIN-119).
+ */
+export function fixtureSpeechTranscriber(fixtures: StudioFixtures): SpeechTranscriber {
+  return {
+    async transcribe(input) {
+      const prompt = fixtures.scenes?.find((s) => s.outcome === "ok")?.prompt;
+      if (!prompt) {
+        return {
+          status: "failed",
+          errorCode: "fixture_not_found",
+          message: "No recorded scene prompt to replay as a transcript.",
+        };
+      }
+      return {
+        status: "ready",
+        value: {
+          text: [...prompt].slice(0, input.maxChars).join(""),
+          audioDurationMs: Math.round(input.durationSeconds * 1000),
+        },
       };
     },
   };

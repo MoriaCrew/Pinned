@@ -606,6 +606,59 @@ export function normalizeTapName(
   };
 }
 
+/**
+ * SpeechTranscriber port (PIN-119): one Muse Voice file-endpoint
+ * call turning a short dictated clip into idea text for the Make
+ * sheet. The audio is mono 16-bit PCM WAV (the only container the
+ * file endpoint accepts; the client encodes it), lives only in
+ * memory for the call, and is never persisted — same stance as
+ * original photos. Typed outcome like every port: a failed or
+ * refused transcription is data, never a 500.
+ */
+export interface TranscribeInput {
+  /** WAV bytes (mono 16-bit PCM, 16kHz from our client). */
+  audio: Uint8Array;
+  /** Clip length from the WAV header; prices the reserve + log. */
+  durationSeconds: number;
+  /** Policy scenePromptMaxChars: the transcript must fit the idea field. */
+  maxChars: number;
+  /** Policy timeoutsMs.voice. */
+  timeoutMs: number;
+  /** Budget attribution for the PIN-61 decorator caps (optional). */
+  boardId?: string;
+  participantId?: string;
+}
+
+export interface SpeechTranscriber {
+  transcribe(
+    input: TranscribeInput,
+  ): Promise<PortOutcome<{ text: string; audioDurationMs?: number }>>;
+}
+
+/**
+ * Normalize a raw Muse Voice file-endpoint payload to one line of
+ * idea text: PUSH_TO_TALK returns a top-level `transcript`; speech
+ * modes return `turns` whose transcripts join in order. Capped at
+ * the idea-field limit by code points. Empty when nothing usable.
+ */
+export function normalizeTranscript(raw: unknown, maxChars: number): string {
+  if (typeof raw !== "object" || raw === null) return "";
+  const r = raw as Record<string, unknown>;
+  const turns = Array.isArray(r.turns) ? r.turns : [];
+  const fromTurns = turns
+    .map((turn) =>
+      typeof turn === "object" && turn !== null
+        ? String((turn as Record<string, unknown>).transcript ?? "")
+        : "",
+    )
+    .filter(Boolean)
+    .join(" ");
+  const text = (fromTurns || String(r.transcript ?? ""))
+    .replace(/\s+/g, " ")
+    .trim();
+  return [...text].slice(0, Math.max(0, maxChars)).join("");
+}
+
 export type SceneContentPart =
   | { type: "input_text"; text: string }
   | { type: "input_image"; image_url: string };

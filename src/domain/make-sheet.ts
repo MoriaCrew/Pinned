@@ -83,6 +83,25 @@ export function applyChip(
  * chip would carry the same thumbnail, which reads as noise, so no
  * chip gets one. Result is parallel to `chips`.
  */
+/**
+ * Append a dictated transcript to the idea (PIN-119): fills an
+ * empty prompt, else joins with one space. A trailing full stop
+ * on the transcript drops (idea fragments read better without),
+ * and text that would bust Policy.scenePromptMaxChars is cut at
+ * the cap rather than rejected — the words already typed win.
+ */
+export function appendDictation(
+  prompt: string,
+  transcript: string,
+  maxChars: number,
+): string {
+  const spoken = transcript.replace(/\s+/g, " ").trim().replace(/[.!\s]+$/, "");
+  if (!spoken) return prompt;
+  const current = prompt.trim();
+  const joined = current ? `${current} ${spoken}` : spoken;
+  return [...joined].slice(0, Math.max(0, maxChars)).join("");
+}
+
 export function chipThumbs(
   chips: readonly string[],
   cards: readonly PinCard[],

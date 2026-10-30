@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendDictation,
   applyChip,
   chipThumbs,
   chipsForSelection,
@@ -109,6 +110,14 @@ describe("make sheet logic (PIN-70)", () => {
       "a tiny picnic floating in space",
     );
     expect(applyChip("1234567890", CHIPS[1], CHIPS, 12)).toBe("1234567890");
+  });
+
+  it("appendDictation fills, appends, trims the stop and caps (PIN-119)", () => {
+    expect(appendDictation("", "A tiny picnic on the lawn.", 500)).toBe("A tiny picnic on the lawn");
+    expect(appendDictation("a tiny picnic", "floating in space", 500)).toBe("a tiny picnic floating in space");
+    expect(appendDictation("a tiny picnic", "   ", 500)).toBe("a tiny picnic");
+    expect(appendDictation("abcdefghij", "klmnopqrst", 12)).toBe("abcdefghij k");
+    expect(appendDictation("", "one   two\nthree!", 500)).toBe("one two three");
   });
 
   it("builds the scene payload only inside the Policy ranges", () => {

@@ -11,6 +11,7 @@ import {
   classifyPortError,
   type ElementNamer,
   type TapNamer,
+  type SpeechTranscriber,
   type SceneComposer,
   type ChipSuggester,
   type Segmenter,
@@ -41,6 +42,26 @@ export function metaTapNamer(gateway: MetaGateway): TapNamer {
           status: "ready",
           value: { name, promptVersion: input.promptVersion },
         };
+      } catch (cause) {
+        return classifyPortError(cause);
+      }
+    },
+  };
+}
+
+export function metaSpeechTranscriber(gateway: MetaGateway): SpeechTranscriber {
+  return {
+    async transcribe(input) {
+      try {
+        const result = await gateway.transcribeAudio(input);
+        if (!result.text) {
+          return {
+            status: "failed",
+            errorCode: "no_speech",
+            message: "No speech was heard in that clip.",
+          };
+        }
+        return { status: "ready", value: result };
       } catch (cause) {
         return classifyPortError(cause);
       }

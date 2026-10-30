@@ -11,6 +11,7 @@ import {
   normalizeElements,
   type ElementNamer,
   type TapNamer,
+  type SpeechTranscriber,
   type TapName,
   type NamedElement,
   type SceneComposer,
@@ -64,6 +65,21 @@ export const mockTapNamer: TapNamer = {
     return {
       status: "ready",
       value: { name: { ...MOCK_TAP_NAME }, promptVersion: input.promptVersion },
+    };
+  },
+};
+
+/** Stable synthetic dictation (PIN-119): any clip in, same idea out. */
+export const MOCK_TRANSCRIPT = "a tiny picnic on the lawn";
+
+export const mockSpeechTranscriber: SpeechTranscriber = {
+  async transcribe(input) {
+    return {
+      status: "ready",
+      value: {
+        text: [...MOCK_TRANSCRIPT].slice(0, input.maxChars).join(""),
+        audioDurationMs: Math.round(input.durationSeconds * 1000),
+      },
     };
   },
 };
