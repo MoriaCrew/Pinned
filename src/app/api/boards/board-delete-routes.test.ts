@@ -269,4 +269,47 @@ describe("board delete storage clean-up (PIN-169)", () => {
     expect(await objectsOf(slug)).toEqual([]);
     expect((await image()).status).toBe(404);
   });
+
+  it("a decompose, tap or scene job writing after the delete leaves nothing behind", async () => {
+    /** The real DELETE (tombstone + sweep) lands just before the job's first write under `root`. */
+    const deleteBeforeFirstPut = (slug: string, host: string, root: string) => {
+      const real = store().put.bind(store());
+      let armed = true;
+      return vi.spyOn(store(), "put").mockImplementation(async (ref, bytes, type) => {
+        if (armed && ref.startsWith(`${root}/boards/${slug}/`)) {
+          armed = false;
+          expect((await del(slug, host)).status).toBe(204);
+        }
+        return real(ref, bytes, type);
+      });
+    };
+    const uploaded = async (slug: string, cookie: string) =>
+      ((await (await upload(slug, cookie)).json()) as { job: { id: string; pinIds: string[]; elementIds: string[] } }).job;
+    const cases: [string, (slug: string, cookie: string, host: string) => Promise<Response>][] = [
+      ["decompose", async (slug, cookie, host) => {
+        const spy = deleteBeforeFirstPut(slug, host, "elements");
+        return upload(slug, cookie).finally(() => spy.mockRestore());
+      }],
+      ["tap-add", async (slug, cookie, host) => {
+        const job = await uploaded(slug, cookie);
+        const spy = deleteBeforeFirstPut(slug, host, "elements");
+        const body = { x: 0.5, y: 0.5 };
+        return m.tap.POST(req(cookie, { method: "POST", body }), p({ slug, jobId: job.id })).finally(() => spy.mockRestore());
+      }],
+      ["scene", async (slug, cookie, host) => {
+        const job = await uploaded(slug, cookie);
+        await m.confirm.POST(req(cookie, { method: "POST", body: { jobId: job.id, pinIds: job.pinIds } }), p({ slug }));
+        const spy = deleteBeforeFirstPut(slug, host, "scenes");
+        const body = { elementIds: [job.elementIds[0]], prompt: "late" };
+        return m.scenes.POST(req(cookie, { method: "POST", body }), p({ slug })).finally(() => spy.mockRestore());
+      }],
+    ];
+    for (const [name, run] of cases) {
+      const { slug, host } = await newBoard();
+      const robin = await join(slug, "Robin");
+      const res = await run(slug, robin.cookie, host);
+      expect({ name, gone: await repo().getBoard(slug), status: res.status }).toMatchObject({ name, gone: null });
+      expect({ name, left: await objectsOf(slug) }).toEqual({ name, left: [] });
+    }
+  });
 });

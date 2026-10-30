@@ -35,7 +35,7 @@ import {
   type TapPoint,
 } from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
-import { elementBytesStillNeeded } from "./board-storage";
+import { elementBytesStillNeeded, sweepDeletedBoardStorage } from "./board-storage";
 import {
   SCENE_PREVIEW_FILE,
   SceneJobRequestError,
@@ -1219,6 +1219,8 @@ async function scenePreview(scene: Scene, imageRef: string, deps: BoardApiDeps):
     if (!full) return null;
     const preview = await renderScenePreview(full, deps.policy);
     await deps.store.put(ref, preview, "image/webp");
+    // PIN-169: a board deleted since the check above loses this put too.
+    await sweepDeletedBoardStorage(scene.boardId, deps);
     return preview;
   } catch (error) {
     console.error("Scene preview failed; serving the full image.", {
