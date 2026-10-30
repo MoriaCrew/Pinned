@@ -24,6 +24,10 @@ import {
   type DocumentReference,
 } from "@google-cloud/firestore";
 import {
+  applyRefundAccountingToIntent,
+  countRefundOnIntent,
+  mergeStripeMapping,
+  recordFinalDisputeClawbackOnIntent,
   assertCreateCheckoutIntentInput,
   buildCheckoutIntent,
   capExceededError,
@@ -34,6 +38,8 @@ import {
   type CheckoutIntentStore,
   type CheckoutIntentStoreOptions,
   type CreateCheckoutIntentInput,
+  type StripeIntentLookup,
+  type StripeIntentMapping,
 } from "./checkout-intent";
 
 const CHECKOUT_INTENTS = "checkoutIntents";
@@ -197,6 +203,107 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
       return isCheckoutIntentResolvable(intent, at)
         ? structuredClone(intent)
         : null;
+    });
+  }
+
+  async recordStripeMapping(
+    intentId: string,
+    mapping: StripeIntentMapping,
+    at: number,
+    grantedAt?: number,
+  ): Promise<CheckoutIntent | null> {
+    assertIntentId(intentId);
+    assertAt(at);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return null;
+      const next = mergeStripeMapping(intent, mapping, grantedAt);
+      tx.set(ref, toFirestoreData(next));
+      return structuredClone(next);
+    });
+  }
+
+  async findByStripeIds(lookup: StripeIntentLookup): Promise<CheckoutIntent | null> {
+    const queries: Array<[string, string | undefined]> = [
+      ["stripeChargeId", lookup.chargeId],
+      ["stripePaymentIntentId", lookup.paymentIntentId],
+      ["stripeSessionId", lookup.sessionId],
+    ];
+    for (const [field, value] of queries) {
+      if (!value) continue;
+      const snap = await this.db
+        .collection(CHECKOUT_INTENTS)
+        .where(field, "==", value)
+        .limit(1)
+        .get();
+      const doc = snap.docs[0];
+      if (doc) return intentFrom(doc.data());
+    }
+    return null;
+  }
+
+  async applyRefundAccounting(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    clawedMakesDelta: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertIntentId(intentId);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return { intent: null, applied: false };
+      const next = applyRefundAccountingToIntent(intent, refundId, refundEurCents, clawedMakesDelta);
+      if (!next) return { intent: structuredClone(intent), applied: false };
+      tx.set(ref, toFirestoreData(next));
+      return { intent: structuredClone(next), applied: true };
+    });
+  }
+
+  async countRefund(
+    intentId: string,
+    refundId: string,
+    refundEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; deltaMakes: number }> {
+    assertIntentId(intentId);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return { intent: null, applied: false, deltaMakes: 0 };
+      const { next, deltaMakes } = countRefundOnIntent(
+        intent,
+        refundId,
+        refundEurCents,
+        packEurCents,
+        packCredits,
+      );
+      if (!next) return { intent: structuredClone(intent), applied: false, deltaMakes };
+      tx.set(ref, toFirestoreData(next));
+      return { intent: structuredClone(next), applied: true, deltaMakes };
+    });
+  }
+
+  async recordFinalDisputeClawback(
+    intentId: string,
+    disputeId: string,
+    makes: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertIntentId(intentId);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return { intent: null, applied: false };
+      const next = recordFinalDisputeClawbackOnIntent(intent, disputeId, makes);
+      if (!next) return { intent: structuredClone(intent), applied: false };
+      tx.set(ref, toFirestoreData(next));
+      return { intent: structuredClone(next), applied: true };
     });
   }
 

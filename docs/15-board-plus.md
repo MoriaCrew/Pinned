@@ -4,7 +4,7 @@ Server seam for an optional paid add-on. The UI is built
 separately; this page is the contract it builds on.
 `PLUS_MODE` is `off` (nothing can be bought), `mock` (demo) or
 `stripe` (credit packs via hosted Checkout, PIN-149; the
-credits themselves still land by webhook, PIN-150).
+credits themselves land by webhook only, PIN-150).
 
 ## What it is
 
@@ -440,32 +440,128 @@ Hosted wiring in this slice is reference-only: dev references
 exists yet). No hosted backend takes a Stripe payment until
 webhook grants land.
 
-## Stripe webhook plan (not built — PIN-150)
+## Stripe webhook (PIN-150)
 
-1. Add `STRIPE_WEBHOOK_SECRET` from Secret Manager (referenced
-   in `apphosting.*.yaml`, never values in git). `PLUS_MODE=stripe`
-   and `STRIPE_SECRET_KEY` already exist (PIN-149); prices resolve
-   by lookup key, never by configured price ids.
-2. Webhook events resolve their board by the opaque intent id
-   (`client_reference_id` / `metadata.checkout_intent_id`) —
-   never by slug, which Stripe has never seen. Plus-plan
-   (board/host) Stripe sales stay unbuilt: the draft
-   `pinneds_host_monthly` price is seeded only (PIN-146).
-3. `POST /api/billing/stripe/webhook` verifies the signature on
-   the raw body.
-   - `checkout.session.completed` (paid) resolves the intent and
-     calls the ledger's `grantPurchase` for exactly the pack the
-     intent recorded.
-   - Refunds claw back and disputes freeze/restore via the
-     ledger ops (PIN-147 shapes).
-   - The success redirect never grants — only the webhook does.
-4. **Idempotency by Checkout Session id:** record each processed
-   session id with a create-if-absent doc (e.g.
-   `billing/sessions/{sessionId}`) in the same transaction as the
-   grant, so a webhook retry or replay is a no-op. Session
-   creation already sends an idempotency key (PIN-149).
-5. The host plan becomes truly cross-board only once host status
-   lives on a signed-in user (see the follow-up above).
+`POST /api/billing/stripe/webhook` (Node runtime) is the only
+grant authority for credit packs: it hands the RAW body +
+`Stripe-Signature` header to the SDK's `constructEvent` with
+`STRIPE_WEBHOOK_SECRET` (env name via `src/config.ts`; no
+apphosting yaml references it yet and no hosted `PLUS_MODE`
+flips to `stripe` in this slice - the secret cannot exist
+until PIN-153 registers the endpoint, and a dangling reference
+would break deploys). The route fails closed with 503 when
+stripe mode, the API key, or the signing secret is absent;
+400 only for a bad/missing signature; 500 only for unexpected
+store/API failures so Stripe retries them. Every handled
+decision answers 200: processed, duplicate, unhandled type,
+and every dead letter below. The service
+(`src/server/stripe-webhook.ts`) takes an injected Stripe
+client (`src/billing/stripe-webhook.ts`), so tests verify
+real signatures with the SDK signer and fake only retrievals.
+
+Events PIN-153 must register on the endpoint (snapshot
+payloads, API version pinned in lockstep with the SDK) -
+exactly `STRIPE_WEBHOOK_EVENT_TYPES` in the service:
+
+- `checkout.session.completed`
+- `checkout.session.async_payment_succeeded`
+- `checkout.session.async_payment_failed`
+- `checkout.session.expired`
+- `refund.created`
+- `refund.updated`
+- `refund.failed`
+- `charge.dispute.created`
+- `charge.dispute.funds_withdrawn`
+- `charge.dispute.funds_reinstated`
+- `charge.dispute.closed`
+
+How each is handled (semantics checked against current
+docs.stripe.com webhook, Checkout fulfilment, Refund object
+and dispute lifecycle pages):
+
+- Fulfilment (`completed` + `async_payment_succeeded`, one
+  path) grants only when `payment_status` is `paid` - an
+  async method's `completed` arrives `unpaid` and grants
+  nothing (its ids are still mapped). The session must name
+  its intent by `metadata.checkout_intent_id` /
+  `client_reference_id` (never a slug), and before granting
+  the handler cross-checks the pack (`pack_lookup_key`,
+  metadata + intent + `Policy.credits.packs` credits) and
+  the money (`amount_total`/`currency` against the pack's
+  `eurCents`; for a foreign presentment currency the settled
+  EUR amount is read from the charge's BalanceTransaction -
+  its amount/currency are the settlement values - after
+  retrieving the session/PaymentIntent/charge through the
+  injected client when the snapshot lacks fields). Unknown
+  intent, dead board/intent (TTL passed at event time), or
+  any mismatch writes a dead letter and grants nothing. On
+  grant the Stripe session/payment_intent/charge mapping is
+  persisted on the intent (additive fields; a conflicting
+  remap refuses) so later refund/dispute events, which carry
+  only charge/payment_intent ids, resolve back via
+  `findByStripeIds`; the intent then closes.
+- `async_payment_failed` + `expired` close (expire) the
+  intent and its ledger purchase, never grant; a purchase
+  the ledger refuses to close (e.g. partially pre-clawed)
+  dead-letters for an operator.
+- Refunds claw back per-refund, never from the cumulative
+  `charge.refunded`: a Refund's status transitions
+  (`pending`/`requires_action` -> `succeeded`/`failed`/
+  `canceled`, notified on `refund.updated`/`refund.failed`),
+  so only `succeeded` refunds count, on `refund.created` or
+  `refund.updated`, once per refund id.
+- Disputes: `created` freezes, `funds_withdrawn` is the
+  final clawback, `funds_reinstated` restores, and `closed`
+  restores on `won`/`warning_closed` and final-clawbacks on
+  `lost` when `funds_withdrawn` has not already done so
+  (restoring only the freeze's rounding excess then). Funds
+  reinstated after a final clawback cannot be un-clawed by
+  the ledger, so that case dead-letters as
+  `reinstated_after_final_clawback` instead of pretending.
+- Out-of-order delivery follows the PIN-147 ledger
+  semantics: a refund clawed before its grant nets the grant
+  to zero, an early restore tombstones the dispute so a late
+  freeze no-ops, and a pre-grant freeze defers, capped at
+  what actually lands in the pool.
+
+Money -> makes (one documented formula): for a pack of
+`credits` makes at `eurCents`, clawbacks use
+`min(credits, floor(cents * credits / eurCents))` on the
+CUMULATIVE settled-EUR amount - the intent stores cumulative
+refunded EUR cents + makes already clawed for refunds, and
+each refund claws the difference, so partial refunds sum to
+exactly the pack with no rounding drift. Dispute freezes use
+the same ratio with `ceil` (round up protects the pool; the
+excess over the final floor amount is restored at close).
+Foreign-presentment refund/dispute amounts are never
+FX-guessed: settled EUR comes from the reported
+BalanceTransaction - or, for a fresh dispute carrying no
+balance transactions yet, from its presentment amount at
+the charge BalanceTransaction's own Stripe-reported
+`exchange_rate`, so the freeze lands at `created`. Refund
+counting is atomic in the intent store (`countRefund`
+prices the delta from the stored cumulative inside the
+write), and a dispute's final clawback is claimed
+atomically by whichever terminal event lands first; the
+other, in any order, only releases the freeze's ceil
+excess. When none of that reads as EUR the
+event dead-letters (`fx_unverifiable`).
+
+Durable records: `stripeWebhookEvents/{eventId}` is the
+processed-event record (written only after handling, so a
+crash retries into the ledger's own event/purchase/refund/
+dispute idempotency, and a replay after restart short-
+circuits), and `billingDeadLetters/{eventId:reason}` is the
+operator flag PIN-153 reconciliation drains - reasons include
+`unknown_intent`, `dead_intent`, `dead_board`,
+`amount_mismatch`, `amount_unverifiable`, `pack_mismatch`,
+`unknown_purchase`, `unknown_mapping` (refund/dispute for a
+charge we never mapped), `mapping_conflict`,
+`freeze_no_available`, `ledger_refused`, `fx_unverifiable`
+and `reinstated_after_final_clawback`. Records carry ids
+only - no payloads, no secrets. Plus-plan (board/host)
+Stripe sales stay unbuilt: the draft `pinneds_host_monthly`
+price is seeded only (PIN-146).
 
 ## Follow-ups
 
@@ -491,6 +587,18 @@ webhook grants land.
 - Route tests: `src/app/api/boards/plus-routes.test.ts` (mock: real
   registry, cookie path, guards, 429) and `plus-routes.off.test.ts`
   (off: unavailable, leftover mock grant inert).
+- PIN-150: `src/server/stripe-webhook.test.ts` (real SDK
+  signatures: fail-closed config, bad signature, unpaid vs
+  paid fulfilment, exact-once grant, cumulative refunds,
+  dispute freeze/final/restore, dead letters, settled-EUR
+  FX), `src/server/firestore-stripe-webhook-records.test.ts`
+  (processed/dead-letter store contract incl. replay after
+  reload), the PIN-150 cases in
+  `src/server/checkout-intent.test.ts` (Stripe mapping +
+  refund/dispute accounting, memory + fake Firestore), and
+  route wire tests `src/app/api/billing/stripe-webhook-routes.test.ts`
+  (400/200 + end-to-end grant) and
+  `stripe-webhook-routes.off.test.ts` (503 fail-closed).
 - PIN-149: `src/billing/stripe-checkout.test.ts` (fake client:
   lookup resolution + cache, exact session params, no-slug
   guarantee), `src/server/credit-checkout.test.ts` (buy order,

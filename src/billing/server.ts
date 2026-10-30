@@ -8,6 +8,10 @@ import type { Checkout, CreditCheckout } from "./checkout";
 import { MockCheckout } from "./mock-checkout";
 import { OffCheckout } from "./off-checkout";
 import { StripeCreditCheckout, createStripeClient } from "./stripe-checkout";
+import {
+  createStripeWebhookSdkClient,
+  type StripeWebhookClientLike,
+} from "./stripe-webhook";
 
 export interface CheckoutDeps {
   boards: BoardRepository;
@@ -43,6 +47,30 @@ export function createCreditCheckout(
   return new StripeCreditCheckout({
     client: createStripeClient(config.stripeSecretKey, config.stripeApiVersion),
   });
+}
+
+/**
+ * Webhook client selection (PIN-150): an SDK client only when
+ * PLUS_MODE=stripe actually parsed and the key is present; null
+ * otherwise, and the webhook route fails closed (503) without
+ * verifying or granting anything. The webhook *signing* secret
+ * is checked separately by the service - it gates signature
+ * verification, not SDK construction.
+ */
+export function createStripeWebhookClient(
+  config: AppConfig = getConfig(),
+): StripeWebhookClientLike | null {
+  if (config.plusMode !== "stripe" || !config.stripeSecretKey) return null;
+  return createStripeWebhookSdkClient(config.stripeSecretKey, config.stripeApiVersion);
+}
+
+const globalWebhookClient = globalThis as typeof globalThis & {
+  __pinnedStripeWebhookClient?: StripeWebhookClientLike | null;
+};
+
+export function getStripeWebhookClient(): StripeWebhookClientLike | null {
+  globalWebhookClient.__pinnedStripeWebhookClient ??= createStripeWebhookClient();
+  return globalWebhookClient.__pinnedStripeWebhookClient;
 }
 
 const globalCreditCheckout = globalThis as typeof globalThis & {

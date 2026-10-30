@@ -67,6 +67,15 @@ export interface AppConfig {
    * of erroring per request. Never log or expose this value.
    */
   stripeSecretKey: string | null;
+  /**
+   * Stripe webhook signing secret (PIN-150): env-name only
+   * (STRIPE_WEBHOOK_SECRET), never a value in git. Null unless
+   * set; the webhook route fails closed (503, nothing granted)
+   * without it. The hosted value does not exist until the
+   * endpoint is registered (PIN-153), so no apphosting yaml
+   * references it yet. Never log or expose this value.
+   */
+  stripeWebhookSecret: string | null;
   /** Pinned Stripe API version (STRIPE_API_VERSION); bump deliberately with the SDK. */
   stripeApiVersion: typeof STRIPE_API_VERSION;
   storageBucket: string | null;
@@ -149,6 +158,7 @@ export function parseConfig(
           ? "stripe"
           : "off",
     stripeSecretKey: nonEmpty(env.STRIPE_SECRET_KEY),
+    stripeWebhookSecret: nonEmpty(env.STRIPE_WEBHOOK_SECRET),
     stripeApiVersion: STRIPE_API_VERSION,
     storageBucket:
       nonEmpty(env.STORAGE_BUCKET) ??
