@@ -185,6 +185,92 @@ export function describeBoardRepositoryContract(
       ).rejects.toThrow(RangeError);
     });
 
+    it("createParticipantIfBelowCap enforces the cap atomically (PIN-91)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      expect(
+        await repo.createParticipantIfBelowCap(makeParticipant(), 2),
+      ).toBe(true);
+      expect(
+        await repo.createParticipantIfBelowCap(
+          makeParticipant({ id: "part-2", createdAt: 1_150 }),
+          2,
+        ),
+      ).toBe(true);
+
+      // At cap: refused, and nothing was written — no participant,
+      // no counter bump, no participant_joined event.
+      expect(
+        await repo.createParticipantIfBelowCap(
+          makeParticipant({ id: "part-3", displayName: "Third", createdAt: 1_160 }),
+          2,
+        ),
+      ).toBe(false);
+      expect(await repo.getParticipant(SLUG, "part-3")).toBeNull();
+      expect((await repo.listParticipants(SLUG)).map((p) => p.id)).toEqual([
+        "part-1",
+        "part-2",
+      ]);
+      expect((await repo.getBoard(SLUG))?.counters.participantCount).toBe(2);
+      expect(
+        (await repo.listEvents(SLUG)).filter((e) => e.type === "participant_joined"),
+      ).toHaveLength(2);
+
+      // An existing roster member upserts past the cap (renames,
+      // cookie rotation and reclaims are never cap-blocked).
+      expect(
+        await repo.createParticipantIfBelowCap(
+          makeParticipant({ displayName: "Aye A." }),
+          2,
+        ),
+      ).toBe(true);
+      expect((await repo.getParticipant(SLUG, "part-1"))?.displayName).toBe("Aye A.");
+      expect((await repo.getBoard(SLUG))?.counters.participantCount).toBe(2);
+
+      await expect(
+        repo.createParticipantIfBelowCap(makeParticipant({ boardId: "ghost" }), 2),
+      ).rejects.toThrow(RangeError);
+    });
+
+    it("concurrent cap-checked creates stop exactly at the cap (PIN-91)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      const results = await Promise.all(
+        Array.from({ length: 10 }, (_, i) =>
+          repo.createParticipantIfBelowCap(
+            makeParticipant({ id: `racer-${i}`, createdAt: 2_000 + i }),
+            3,
+          ),
+        ),
+      );
+      expect(results.filter(Boolean)).toHaveLength(3);
+      expect(await repo.listParticipants(SLUG)).toHaveLength(3);
+      expect((await repo.getBoard(SLUG))?.counters.participantCount).toBe(3);
+    });
+
+    it("tryRecordJoin: fixed-window budget, denials record nothing (PIN-91)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createBoard(makeBoard({ slug: "board-b" }));
+      const params = { maxJoins: 2, windowMs: 60_000 };
+
+      expect(await repo.tryRecordJoin(SLUG, "key-a", 10_000, params)).toBe(true);
+      expect(await repo.tryRecordJoin(SLUG, "key-a", 11_000, params)).toBe(true);
+      expect(await repo.tryRecordJoin(SLUG, "key-a", 12_000, params)).toBe(false);
+      // A different key, and the same key on another board, are
+      // separate budgets.
+      expect(await repo.tryRecordJoin(SLUG, "key-b", 12_000, params)).toBe(true);
+      expect(await repo.tryRecordJoin("board-b", "key-a", 12_000, params)).toBe(true);
+      // Denials did not extend the window: it still rolls 60s
+      // after the first recorded join.
+      expect(await repo.tryRecordJoin(SLUG, "key-a", 69_999, params)).toBe(false);
+      expect(await repo.tryRecordJoin(SLUG, "key-a", 70_000, params)).toBe(true);
+
+      await expect(
+        repo.tryRecordJoin("ghost-board", "key-a", 70_000, params),
+      ).rejects.toThrow(RangeError);
+    });
+
     it("rejects writes against a missing board", async () => {
       const repo = makeRepo();
       await expect(repo.putParticipant(makeParticipant())).rejects.toThrow(RangeError);

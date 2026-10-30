@@ -42,6 +42,15 @@ export const PolicySchema = z
     reclaimFailureWindowMs: z.number().int().min(1).default(900_000),
     reclaimLockoutBaseMs: z.number().int().min(0).default(60_000),
     reclaimLockoutMaxMs: z.number().int().min(0).default(3_600_000),
+    /** New-join rate budget (PIN-91): fresh roster entries one
+     * (board, IP) may mint per fixed window, counted in the board
+     * store (shared across instances). Only creations count —
+     * updates, reclaims and restores are free — and 20 new people
+     * behind one household NAT in an hour stays well inside it
+     * (matches the route's long-standing 20-per-10-min join brake,
+     * which counts every join POST). */
+    joinMaxNewPerIp: z.number().int().min(1).default(20),
+    joinNewWindowMs: z.number().int().min(1).default(3_600_000),
     /** Signed-in user cookie life (PIN-83). Retention note: the
      * users/{uid} profile + board index persist until account
      * deletion lands (PIN-57c) — this TTL bounds the cookie only. */
@@ -185,6 +194,8 @@ export const PolicyOverridesSchema = z.object({
   reclaimFailureWindowMs: z.number().int().min(1).optional(),
   reclaimLockoutBaseMs: z.number().int().min(0).optional(),
   reclaimLockoutMaxMs: z.number().int().min(0).optional(),
+  joinMaxNewPerIp: z.number().int().min(1).optional(),
+  joinNewWindowMs: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
   signInNudge: z.boolean().optional(),
   libraryPageSize: z.number().int().min(1).optional(),

@@ -27,6 +27,16 @@
  *   hash; `mutateReclaimAttempt` applies the transform atomically
  *   (transactional in Firestore) so concurrent failures across
  *   instances cannot lose increments. Returning null clears.
+ * - The participant cap (PIN-91) is enforced inside
+ *   `createParticipantIfBelowCap`, never by a caller's
+ *   read-then-write: in Firestore the check reads the board doc's
+ *   participantCount and the create increments that same doc in
+ *   one transaction, so concurrent joins serialize on it (a
+ *   participants-collection count would be a phantom read). A
+ *   refused create writes nothing — no participant, no counter,
+ *   no event. Join-rate counters (PIN-91) work like the reclaim
+ *   counters: `tryRecordJoin` checks and increments atomically,
+ *   and a denied join records nothing.
  */
 import type {
   Board,
@@ -38,6 +48,7 @@ import type {
   PinStatus,
   Scene,
 } from "./board";
+import { decideJoin, type JoinAttemptState, type JoinRateParams } from "./join-rate";
 import type { ReclaimAttemptState } from "./reclaim-lockout";
 
 export interface DeleteElementResult {
@@ -55,6 +66,26 @@ export interface BoardRepository {
    * insert, which also appends `participant_joined` (PIN-74).
    */
   putParticipant(participant: Participant): Promise<void>;
+  /**
+   * Atomically create `participant` only if the board roster is
+   * below `cap` (PIN-91). Returns false — writing nothing — when
+   * the participant is new and the roster is already at cap. An
+   * existing participant id upserts like putParticipant and
+   * returns true: roster members are never cap-blocked.
+   */
+  createParticipantIfBelowCap(participant: Participant, cap: number): Promise<boolean>;
+  /**
+   * Atomically record one new-participant creation against an
+   * opaque key (PIN-91): true consumes one unit of the fixed-
+   * window budget; false means the budget is spent and nothing
+   * was recorded, so retries cannot extend the window.
+   */
+  tryRecordJoin(
+    boardId: string,
+    key: string,
+    now: number,
+    params: JoinRateParams,
+  ): Promise<boolean>;
   getParticipant(boardId: string, participantId: string): Promise<Participant | null>;
   listParticipants(boardId: string): Promise<Participant[]>;
 
@@ -133,6 +164,7 @@ export class InMemoryBoardRepository implements BoardRepository {
   private scenes = new Map<string, Scene>();
   private events = new Map<string, BoardEvent[]>();
   private reclaimAttempts = new Map<string, ReclaimAttemptState>();
+  private joinAttempts = new Map<string, JoinAttemptState>();
   private eventSeq = 0;
 
   private requireBoard(slug: string): Board {
@@ -166,10 +198,15 @@ export class InMemoryBoardRepository implements BoardRepository {
     return board ? clone(board) : null;
   }
 
-  async putParticipant(participant: Participant): Promise<void> {
-    this.requireBoard(participant.boardId);
+  // Cap check and insert share one synchronous body: no awaits
+  // between them, so the cap cannot be raced in-process (PIN-91).
+  private storeParticipant(participant: Participant, cap: number | null): boolean {
+    const board = this.requireBoard(participant.boardId);
     const key = `${participant.boardId}/${participant.id}`;
     const isNew = !this.participants.has(key);
+    if (isNew && cap !== null && board.counters.participantCount >= cap) {
+      return false;
+    }
     this.participants.set(key, clone(participant));
     if (isNew) {
       this.adjustCounters(participant.boardId, { participantCount: 1 });
@@ -180,6 +217,34 @@ export class InMemoryBoardRepository implements BoardRepository {
         createdAt: participant.createdAt,
       });
     }
+    return true;
+  }
+
+  async putParticipant(participant: Participant): Promise<void> {
+    this.storeParticipant(participant, null);
+  }
+
+  async createParticipantIfBelowCap(
+    participant: Participant,
+    cap: number,
+  ): Promise<boolean> {
+    return this.storeParticipant(participant, cap);
+  }
+
+  // No awaits between read and write: atomic in-process.
+  async tryRecordJoin(
+    boardId: string,
+    key: string,
+    now: number,
+    params: JoinRateParams,
+  ): Promise<boolean> {
+    this.requireBoard(boardId);
+    const mapKey = `${boardId}/${key}`;
+    const current = this.joinAttempts.get(mapKey) ?? null;
+    const decision = decideJoin(boardId, key, current ? clone(current) : null, now, params);
+    if (!decision.allowed || decision.next === null) return false;
+    this.joinAttempts.set(mapKey, clone(decision.next));
+    return true;
   }
 
   async getParticipant(boardId: string, participantId: string): Promise<Participant | null> {
