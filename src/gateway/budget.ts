@@ -145,8 +145,7 @@ export interface BudgetStore {
 /**
  * In-process store (memory backend + tests). The reserve body has
  * no awaits between read and write, so it runs to completion
- * synchronously — the same atomicity argument as
- * InMemoryGameRepository.recordSubmission.
+ * synchronously, which is what makes it atomic in-process.
  */
 export class InMemoryBudgetStore implements BudgetStore {
   private days = new Map<string, BudgetDayState>();

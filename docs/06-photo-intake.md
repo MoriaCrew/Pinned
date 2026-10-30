@@ -13,7 +13,9 @@
 
 ## Layout
 
-- Working images: `tmp/games/{gameId}/players/{playerId}/submissions/{submissionId}/working.webp`
+- Working images: `tmp/boards/{boardId}/jobs/{jobId}/working.webp`
+  (Studio layout; the pre-pivot `tmp/games/.../submissions/...`
+  layout went with the legacy routes in PIN-93.)
 - Everything ephemeral lives under the `tmp/` prefix so one bucket
   lifecycle rule covers it. Longer-lived reveal/poster assets (later
   slices) must use a different prefix with its own policy.

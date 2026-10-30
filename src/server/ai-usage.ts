@@ -6,9 +6,9 @@ import "server-only";
  *
  * PIN-61: pricing moved to src/gateway/costs.ts and the day bucket
  * to src/gateway/budget.ts (re-exported here for existing callers).
- * The scan-based guard below still serves the legacy ModelGateway
- * routes until PIN-53 migrates them to the decorated ports, whose
- * atomic counter (src/gateway/budget.ts) replaces it.
+ * The scan-based guard below now serves only the operator SAM lab
+ * (PIN-93 deleted the legacy ModelGateway routes); Studio traffic
+ * uses the decorated ports' atomic counter (src/gateway/budget.ts).
  */
 import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
