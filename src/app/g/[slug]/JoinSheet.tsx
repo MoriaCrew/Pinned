@@ -49,11 +49,6 @@ export function JoinSheet({
     if (prefill) setDisplayName(prefill);
   }, [me, nameTouched, profileName]);
 
-  // The name is the one thing this sheet asks for: put the caret there.
-  useEffect(() => {
-    document.getElementById(nameId)?.focus({ preventScroll: true });
-  }, [nameId]);
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -91,6 +86,8 @@ export function JoinSheet({
     <Sheet
       title={me ? t("en", "join.editTitle") : t("en", "join.title")}
       onClose={onClose}
+      // The name is the one thing this sheet asks for: the caret goes there.
+      initialFocusId={nameId}
       footer={
         <Button
           variant="primary"

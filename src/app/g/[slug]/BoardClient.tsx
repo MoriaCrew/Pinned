@@ -473,6 +473,7 @@ function BoardBody({
   // Picking starts from a clean tray (a remix sets its parent first).
   function startPicking() {
     setSelected(new Set());
+    setSheetPrompt("");
     setPicking(true);
     window.scrollTo({ top: 0 });
   }
@@ -480,6 +481,7 @@ function BoardBody({
   function exitPicking() {
     setPicking(false);
     setSelected(new Set());
+    setSheetPrompt("");
     setRemixOfId(null);
   }
 
@@ -493,6 +495,7 @@ function BoardBody({
     setLiveSceneId(null);
     setMakeOpen(false);
     setPicking(false);
+    setSheetPrompt("");
     makeScene.mutate(sceneAttempt);
   }
 
@@ -538,8 +541,9 @@ function BoardBody({
     startPicking();
   }
 
+  // Keeps any idea restored by Change idea; a new picking session
+  // (startPicking / exitPicking / submit) is what clears it.
   function openMakeSheet() {
-    setSheetPrompt("");
     setMakeOpen(true);
   }
 
