@@ -50,9 +50,12 @@ Principles:
   style, button and print shape, ground pattern, band) is a set of
   CSS variables declared on the `[data-theme]` element itself, so a
   nested skin always wins over an outer one.
-- Give a rebuilt screen its own `data-theme` + `pn-skin-root`
-  wrapper: until PIN-104 removes the first-generation stylesheet,
-  its `:root` variables still win on `<html>`.
+- Give a screen its own `data-theme` + `pn-skin-root` wrapper: it
+  paints the ground, ink and reading face, and lets a board wear a
+  different skin than `<html>`. `src/app/globals.css` is only a reset
+  (box-sizing, body margin and default-skin ground, reduced motion);
+  never add classes or tokens there. Screen-local layout goes in a
+  CSS module next to the screen, built from tokens.
 - Strings go through `src/i18n` (`ui.*`, `meta.*`, `skin.*`); `tf`
   fills `{placeholders}` and `tCount` picks singular/plural.
 - `/lab/ui` (same gate as `/lab/sam`) shows every component in every
@@ -63,7 +66,7 @@ Principles:
 
 - Landing (`/`), My boards, My pins and the not-found page sit on the
   Paper skin (`data-theme="paper"` + `pn-skin-root`, class
-  `pn-lib-page` to drop the first-generation `main` width). Their
+  `pn-lib-page` for the full-height page shell). Their
   small bits of CSS are the `pn-landing-…` / `pn-lib-…` block in
   `pinneds.css`.
 - The landing's sticker pile and "How it works" visuals use synthetic
@@ -146,3 +149,4 @@ No pins yet: three dashed ghost outlines.
 | Oct 29 | Board Plus, host pays, guests never pay; one-time per board and monthly host plan; Stripe later | Money story without touching the free core loop |
 | Oct 29 | Marigold seasonal skin (Plus) | Demo week includes Día de Muertos |
 | Oct 29 | Atkinson Hyperlegible for reading | Usable by anyone from day one |
+| Oct 30 | First-generation `globals.css` removed (PIN-114); only a reset remains | Its `:root` tokens and bare `main`/`h1`/`footer` rules fought the skins; `/lab/sam` keeps its styles in a CSS module |
