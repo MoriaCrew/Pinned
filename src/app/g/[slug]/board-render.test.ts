@@ -228,22 +228,28 @@ describe("scene viewer (PIN-131)", () => {
     expect(viewer({ slot: { ...remix, sharing: true } })).toMatch(/disabled=""[^>]*>.*Share<\/button>/);
   });
 
-  it("asks inline before a delete and keeps the error line in the viewer (PIN-143)", () => {
+  it("asks in the actions row's place, never over the idea and Close, and keeps the error line (PIN-143)", () => {
     const confirmDelete = { deleting: false, error: null, onConfirm: noop, onKeep: noop };
     const more = [{ label: "Delete", onSelect: noop, danger: true }];
     const asked = viewer({ more, confirmDelete });
-    expect(asked).toContain("Delete this scene? It&#x27;s gone for everyone on this board.");
-    expect(asked).toMatch(/data-danger=""[^>]*>Delete<\/button>.*>Keep<\/button>/);
-    expect(asked).toContain('aria-expanded="true"');
-    expect(asked).not.toContain('role="menu"');
+    const line = "Delete this scene? It&#x27;s gone for everyone on this board.";
+    expect(asked).toContain(`class="${styles.viewerConfirm}" role="group"`);
+    expect(asked).toMatch(/>Delete<\/button>.*>Keep<\/button>/);
+    // In the panel's flow after the credits; the header keeps Close; no popover, no Share/More row.
+    expect(asked.indexOf(line)).toBeGreaterThan(asked.indexOf(styles.viewerCredits));
+    expect(asked).toContain('aria-label="Close"');
+    expect(asked).not.toContain("pn-menu");
+    expect(asked).not.toContain("Share</button>");
+    expect(asked).not.toContain('aria-label="More"');
     expect(asked).not.toContain('role="alert"');
     const failed = viewer({ more, confirmDelete: { ...confirmDelete, error: "Couldn't delete. Try again." } });
     expect(failed).toContain('role="alert">Couldn&#x27;t delete. Try again.</p>');
     const busy = viewer({ more, confirmDelete: { ...confirmDelete, deleting: true } });
     expect(busy).toMatch(/disabled=""[^>]*>Deleting…<\/button>/);
     expect(busy).toMatch(/disabled=""[^>]*>Keep<\/button>/);
-    expect(busy).toMatch(/aria-label="More"[^>]*disabled=""|disabled=""[^>]*aria-label="More"/);
     expect(viewer({ more })).not.toContain("Delete this scene?");
+    const css = readFileSync(path.join(process.cwd(), "src/app/g/[slug]/board.module.css"), "utf8");
+    expect(css).not.toMatch(/\.viewerConfirm \{[^}]*position:/);
   });
 
   it("shows Remix of a deleted scene in the viewer's credits", () => {

@@ -381,3 +381,14 @@
   right: 0;
   bottom: 100%;
 }
+
+/* The delete confirm (PIN-143) takes the actions row's place in the panel's flow: the idea and Close stay in view. */
+.viewerConfirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.viewerConfirm > p {
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}
