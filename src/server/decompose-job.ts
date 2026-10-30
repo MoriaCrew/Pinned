@@ -35,6 +35,7 @@ import {
   type Segmenter,
   type TapNamer,
 } from "../gateway/ports";
+import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
 import {
   assertDerivativeRef,
@@ -592,7 +593,7 @@ export async function addTapElement(
     // TapNamer). Any non-ready outcome — refusal, failure, cap
     // denial, absent port — keeps the generic i18n label and
     // faceFlag:false; naming never fails the tap.
-    let label = genericLabel.trim() || "My thing";
+    let label = genericLabel.trim() || t("en", "add.tapLabel");
     let description = label;
     let faceFlag = false;
     if (deps.tapNamer) {
