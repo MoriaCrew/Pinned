@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { GcsDerivativeStore, buildWorkingImageRef } from "./derivative-store";
+import { GcsDerivativeStore } from "./derivative-store";
 
 /**
  * Opt-in live test against a real bucket. Run with:
@@ -14,7 +14,7 @@ const project = process.env.PINNED_LIVE_STORAGE_PROJECT;
 describe.skipIf(!bucket)("GcsDerivativeStore (live)", () => {
   it("puts, gets, and deletes a derivative", async () => {
     const store = new GcsDerivativeStore(bucket as string, project ?? null);
-    const ref = buildWorkingImageRef("pinned-live-test", "probe", randomUUID());
+    const ref = `tmp/pinned-live-test/${randomUUID()}/working.webp`;
     const payload = Buffer.from("pinned live derivative probe");
     await store.put(ref, payload, "image/webp");
     const got = await store.get(ref);

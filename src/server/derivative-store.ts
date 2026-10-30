@@ -32,17 +32,6 @@ export function assertDerivativeRef(ref: string): string {
   return ref;
 }
 
-/** Working-image ref for one submission attempt. */
-export function buildWorkingImageRef(
-  gameId: string,
-  playerId: string,
-  submissionId: string,
-): string {
-  return assertDerivativeRef(
-    `tmp/games/${gameId}/players/${playerId}/submissions/${submissionId}/working.webp`,
-  );
-}
-
 export class InMemoryDerivativeStore implements DerivativeStore {
   private readonly objects = new Map<string, { bytes: Buffer; contentType: string }>();
 

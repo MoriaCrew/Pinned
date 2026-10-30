@@ -9,7 +9,6 @@ import {
 import {
   InMemoryDerivativeStore,
   assertDerivativeRef,
-  buildWorkingImageRef,
   getDerivativeStore,
 } from "./derivative-store";
 
@@ -104,19 +103,19 @@ describe("processPhoto", () => {
 });
 
 describe("derivative refs and in-memory store", () => {
-  it("builds tmp-prefixed refs and rejects path traversal", () => {
-    expect(buildWorkingImageRef("game1", "player1", "sub1")).toBe(
-      "tmp/games/game1/players/player1/submissions/sub1/working.webp",
+  it("accepts tmp-prefixed refs and rejects path traversal", () => {
+    expect(assertDerivativeRef("tmp/boards/b1/working.webp")).toBe(
+      "tmp/boards/b1/working.webp",
     );
     expect(() => assertDerivativeRef("../escape")).toThrow();
     expect(() => assertDerivativeRef("/absolute")).toThrow();
     expect(() => assertDerivativeRef("a//b")).toThrow();
-    expect(() => buildWorkingImageRef("../x", "p", "s")).toThrow();
+    expect(() => assertDerivativeRef("tmp/../escape.webp")).toThrow();
   });
 
   it("round-trips and deletes derivatives", async () => {
     const store = new InMemoryDerivativeStore();
-    const ref = buildWorkingImageRef("g", "p", "s");
+    const ref = "tmp/boards/b1/working.webp";
     await store.put(ref, Buffer.from("webp-bytes"), "image/webp");
     expect((await store.get(ref))?.toString()).toBe("webp-bytes");
     await store.delete(ref);

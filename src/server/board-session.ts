@@ -2,7 +2,9 @@ import "server-only";
 /**
  * Board participant identity (PIN-65, docs/11 section 5.4): the
  * Studio name for the existing link-only join identity. Same
- * mechanics as player-session.ts — HMAC-signed cookie under
+ * mechanics as the game-era player session (deleted in PIN-93;
+ * the helpers Studio shared with it live below) —
+ * HMAC-signed cookie under
  * SESSION_SECRET, the cookie value hashed into the Participant
  * record (a replacement cookie revokes the old one), an optional
  * 4-digit reclaim PIN whose domain-separated hash only is stored —
@@ -45,16 +47,37 @@ import {
   verifyToken,
 } from "../domain/tokens";
 import type { Policy } from "../policy/policy";
-import {
-  PlayerJoinError,
-  normalizeDisplayName,
-  playerCookieName,
-  readCookieValue,
-} from "./player-session";
-
-export { playerCookieName, readCookieValue };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function playerCookieName(slug: string): string {
+  return `pinned_player_${slug}`;
+}
+
+export function readCookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0) continue;
+    if (part.slice(0, index).trim() !== name) continue;
+    const raw = part.slice(index + 1).trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return null;
+}
+
+export function normalizeDisplayName(value: unknown): string {
+  if (typeof value !== "string") throw new BoardApiError("Choose a display name.");
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name || [...name].length > 30 || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new BoardApiError("Choose a display name up to 30 characters.");
+  }
+  return name;
+}
 
 export class BoardApiError extends Error {
   constructor(
@@ -157,14 +180,7 @@ export function parseJoinBoardInput(value: unknown): JoinBoardInput {
     }
     reclaimPin = body.reclaimPin;
   }
-  try {
-    return { displayName: normalizeDisplayName(body.displayName), reclaimPin };
-  } catch (error) {
-    if (error instanceof PlayerJoinError) {
-      throw new BoardApiError(error.message, 400);
-    }
-    throw error;
-  }
+  return { displayName: normalizeDisplayName(body.displayName), reclaimPin };
 }
 
 /** Sign a fresh cookie and bind its hash into the record (pure). */

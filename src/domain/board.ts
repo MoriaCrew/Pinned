@@ -54,7 +54,7 @@ export interface Board {
 
 /**
  * One person's identity on one board — the Studio name for the
- * existing join identity (`src/server/player-session.ts`): signed
+ * link-only join identity (`src/server/board-session.ts`): signed
  * cookie hashed into the record, optional reclaim PIN hash.
  * `userId` stays absent until PIN-57 sign-in claims the record.
  */
