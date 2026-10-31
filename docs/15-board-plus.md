@@ -24,11 +24,13 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 > pool (`credits.starterMakes`, 5) on each of their first
 > `credits.starterBoardsPerMaker` (3) new boards per
 > `credits.starterMakerWindowMs` (7 days, counted from their first
-> board in the window). After that, a new board starts at 0: it
-> still works (people join, signed-in members add things from
-> their other boards, scenes fall back to free collages) and
-> shows the usual Get Plus invitation. Paid creations are never limited
-> by this rule, and creating a board is never blocked by it.
+> board in the window), together with the board's free photos
+> (rule below). After that, a new board starts at 0 creations and
+> 0 free photos: it still works (people join, signed-in members
+> add things from their other boards, scenes fall back to free
+> collages) and shows the usual Get Plus invitation. Paid creations
+> are never limited by this rule, and creating a board is never
+> blocked by it.
 >
 > - **Who is a maker:** the signed-in user when sign-in is on and
 >   the request carries a session, else the client address the
@@ -57,6 +59,49 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   (`dailyBudgetUsd` / `dailyCallLimit`), which free and paid
 >   makes share today (PIN-206 splits it). Tuning ideas after
 >   launch: PIN-207.
+
+> **Free photos rule (PIN-230).** Since a creation is an AI scene
+> (PIN-229), a free board's photo cost (~$0.02 a photo, docs/16)
+> is bounded by a limit, not a meter: while credits are on, a
+> board without Plus cuts `credits.freePhotosPerBoard` (15)
+> photos. **A board with Plus has no photo limit**; the Policy
+> daily caps (`photosPerParticipantPerDay`,
+> `segmentsPerParticipantPerDay`) apply to everyone.
+>
+> - **What counts:** a photo whose job finished `ready` (it gave
+>   cut-outs), or one still pending/running and not yet stale (the
+>   stale sweep's bound), so a photo already cutting holds its slot
+>   and a dead job never does. Only truly simultaneous requests
+>   (both read before either job exists) can pass together, at
+>   most the upload concurrency over the limit, as with the daily
+>   cap. Failed and refused
+>   photos never count. Discarding cut-outs does not give the
+>   photo back: the limit bounds AI cost the photo already spent.
+>   Counted from the board's photo jobs (`listForBoard`), no new
+>   storage.
+> - **How many:** board creation decides it with the maker slot
+>   above and stores it (`Board.freePhotos`, server-only): the
+>   Policy value on a win, 0 past the maker's free boards (else
+>   new boards would farm free photos). Boards without the field
+>   use the Policy value. A board's own override
+>   (`policyOverrides.credits.freePhotosPerBoard`) wins over the
+>   stored amount: an operator's explicit choice for that one
+>   board. (The demo board needs none: it is a normal board and
+>   gets Plus, so no photo limit, once billing is live, DEPLOY
+>   §6.4.)
+> - **At the limit:** `POST /photos` answers a typed 429
+>   `{ code: "free_photos_used" }` before intake, any job or any
+>   AI call — checked before the daily cap, since waiting a day
+>   would not help. The batch queue stops on it like the other
+>   coded 429s. A lost-response replay of a counted photo still
+>   gets its job back.
+> - **Board view:** `credits.freePhotosLeft` while credits are on
+>   and the board has no Plus; absent with Plus (no limit) or
+>   credits off. A failed job-list read omits the field, never
+>   the page.
+> - **Plus that counts:** a Stripe grant always; a demo
+>   (`source: "mock"`) grant only while `PLUS_MODE=mock` (as for
+>   skins).
 - **One purchase (PIN-181).** €2.99 once for this board buys
   Board Plus (every look, foil stickers) plus 20 creations. Any
   joined member, or the host, can buy it for the board; it is a
@@ -220,9 +265,10 @@ host-only but answers every failure with the uniform 404
     the board has Plus; the skin route re-checks)
   - `plus: { active: boolean, plan?: "board" | "host", mode:
     "off" | "mock" | "stripe" }`
-  - `credits: { availableMakes: number }` (PIN-151, only while
-    `Policy.credits.enabled`; absent otherwise, so the disabled
-    shape is unchanged)
+  - `credits: { availableMakes: number, freePhotosLeft?: number }`
+    (PIN-151, only while `Policy.credits.enabled`; absent
+    otherwise, so the disabled shape is unchanged.
+    `freePhotosLeft`, PIN-230: only for a board without Plus)
 
   The entitlement's `source` and `grantedAt` and the host hash
   never leave the server.
@@ -311,6 +357,7 @@ list.
 | `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
 | `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
 | `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `freePhotosPerBoard` | 15 | PIN-230: photos a board without Plus cuts while credits are on (ready or in-flight count; failed/refused never). Stored per board at creation with the maker slot (0 past the maker's free boards). 0 = no free photos |
 | `photosUseMakes` | `false` | PIN-229: a creation is an AI scene, so photos never touch the pool. `true` restores the PIN-151 photo debit (1 per finished photo job) |
 | `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation since PIN-205) |
 | `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
@@ -868,7 +915,8 @@ always has.
 **Board API.** `GET /api/boards/{slug}` adds
 `credits: { availableMakes }` while credits are on (the read
 PIN-152 renders; no money or per-person fields ever) and omits
-it while off. A ledger failure on that read omits the field
+it while off. Since PIN-230 it also carries `freePhotosLeft`
+for a board without Plus (Free photos rule above). A ledger failure on that read omits the field
 instead of failing the board page, logged without the slug.
 
 Tests: `src/server/credit-pool.test.ts` (disabled = zero

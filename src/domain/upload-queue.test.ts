@@ -24,9 +24,10 @@ describe("createQueueItems", () => {
 });
 
 describe("classifyUploadFailure", () => {
-  it("stops the queue on coded pool-empty and per-day 429s", () => {
+  it("stops the queue on coded pool-empty, per-day and free-photos-used 429s", () => {
     expect(classifyUploadFailure({ httpStatus: 429, code: "credits_pool_empty" })).toBe("stop");
     expect(classifyUploadFailure({ httpStatus: 429, code: "photos_per_day" })).toBe("stop");
+    expect(classifyUploadFailure({ httpStatus: 429, code: "free_photos_used" })).toBe("stop");
   });
 
   it("backs off on code-less 429 brakes and on 503", () => {
