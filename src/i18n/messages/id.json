@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "ID upload itu tidak valid.",
   "error.uploadIdConflict": "Upload itu sudah dipakai.",
   "error.makesPoolEmpty": "Kreasi di papan ini sudah habis.",
+  "error.freePhotosUsed": "Papan ini sudah memakai foto gratisnya.",
   "error.tapMissing": "Ketuk satu titik di foto.",
   "error.keepMissing": "Pilih pin mana yang mau disimpan.",
   "error.tooManyPinsPhoto": "Terlalu banyak pin untuk satu foto.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "Siapa pun di papan ini bisa dapat Plus. Semua orang di sini ikut menikmatinya.",
   "ui.plusPerkCreations.one": "+{n} kreasi",
   "ui.plusPerkCreations.other": "+{n} kreasi",
-  "ui.plusPerkCreationsBody": "Untuk semua orang di papan ini. Foto dan adegan.",
+  "ui.plusPerkCreationsBody": "Untuk semua orang di papan ini. Satu per adegan AI.",
+  "ui.plusPerkPhotos": "Foto tanpa batas",
+  "ui.plusPerkPhotosBody": "Tambah foto sebanyak yang kamu mau ke papan ini",
   "ui.plusPerkSkins": "Semua tampilan",
   "ui.plusPerkSkinsBody": "Darkroom, Postcard dan koleksi musiman seperti Marigold",
   "ui.plusPerkFoil": "Stiker foil",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Papan ini kehabisan kreasi. Dapatkan Plus untuk lanjut.",
   "makes.poolEmptyPlus": "Papan ini kehabisan kreasi. Tambah lagi untuk lanjut.",
   "makes.poolEmptyPhoto": "Papan ini kehabisan kreasi, jadi foto tidak bisa dipotong sekarang.",
-  "makes.poolEmptyScene": "Papan ini kehabisan kreasi, jadi adegan itu tidak bisa dibuat."
+  "makes.poolEmptyScene": "Papan ini kehabisan kreasi, jadi adegan itu tidak bisa dibuat.",
+  "makes.freePhotosLeft.one": "{n} foto gratis tersisa di papan ini",
+  "makes.freePhotosLeft.other": "{n} foto gratis tersisa di papan ini",
+  "makes.freePhotosUsed": "Papan ini sudah memakai foto gratisnya. Dapatkan Plus untuk foto tanpa batas.",
+  "makes.freePhotosUsedOff": "Papan ini sudah memakai foto gratisnya, jadi foto baru belum bisa ditambahkan sekarang.",
+  "makes.freePhotosPlusOn": "Papan ini sekarang punya Plus, jadi foto tanpa batas. Coba lagi."
 }

@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "ID caricamento non valido.",
   "error.uploadIdConflict": "Caricamento già in uso.",
   "error.makesPoolEmpty": "Questa bacheca ha esaurito le creazioni.",
+  "error.freePhotosUsed": "Questa bacheca ha esaurito le foto gratuite.",
   "error.tapMissing": "Tocca un punto nella foto.",
   "error.keepMissing": "Scegli quali pin tenere.",
   "error.tooManyPinsPhoto": "Troppi pin per una foto sola.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "Chiunque in questa bacheca può prendere Plus. Vale per tutti qui.",
   "ui.plusPerkCreations.one": "+{n} creazione",
   "ui.plusPerkCreations.other": "+{n} creazioni",
-  "ui.plusPerkCreationsBody": "Per tutti in questa bacheca. Foto e scene.",
+  "ui.plusPerkCreationsBody": "Per tutti in questa bacheca. Una per scena AI.",
+  "ui.plusPerkPhotos": "Foto illimitate",
+  "ui.plusPerkPhotosBody": "Aggiungi tutte le foto che vuoi a questa bacheca",
   "ui.plusPerkSkins": "Tutti i look",
   "ui.plusPerkSkinsBody": "Camera oscura, Cartolina e i drop stagionali come Marigold",
   "ui.plusPerkFoil": "Sticker foil",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Questa bacheca ha finito le creazioni. Passa a Plus per continuare.",
   "makes.poolEmptyPlus": "Questa bacheca ha finito le creazioni. Aggiungine altre per continuare.",
   "makes.poolEmptyPhoto": "Questa bacheca ha esaurito le creazioni, quindi le foto non possono essere ritagliate al momento.",
-  "makes.poolEmptyScene": "Questa bacheca ha esaurito le creazioni, quindi quella scena non è stata creata."
+  "makes.poolEmptyScene": "Questa bacheca ha esaurito le creazioni, quindi quella scena non è stata creata.",
+  "makes.freePhotosLeft.one": "{n} foto gratuita rimasta in questa bacheca",
+  "makes.freePhotosLeft.other": "{n} foto gratuite rimaste in questa bacheca",
+  "makes.freePhotosUsed": "Questa bacheca ha esaurito le foto gratuite. Passa a Plus per foto illimitate.",
+  "makes.freePhotosUsedOff": "Questa bacheca ha esaurito le foto gratuite, quindi non puoi aggiungere nuove foto al momento.",
+  "makes.freePhotosPlusOn": "Questa bacheca ora ha Plus, quindi le foto sono illimitate. Riprova."
 }
