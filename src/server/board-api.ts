@@ -752,8 +752,10 @@ export async function uploadPhoto(
     // PIN-230 free photos: a free board (credits on, no Plus) that
     // used its free photos stops here — before the daily cap, since
     // waiting a day would not help — with a typed 429 before intake,
-    // any job or any AI spend. Concurrent uploads are bounded too:
-    // live in-flight photos already count.
+    // any job or any AI spend. Photos still cutting count, so only
+    // truly simultaneous requests (both read before either job
+    // exists) can pass together: at most the upload concurrency
+    // over the limit, like the daily cap below.
     const allowance = boardFreePhotoAllowance(board, deps);
     if (allowance !== null && boardCountedPhotos(boardJobs, now, deps.policy) >= allowance) {
       throw new BoardApiError(userMessage("error.freePhotosUsed"), 429, FREE_PHOTOS_USED);
