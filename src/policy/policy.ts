@@ -41,7 +41,7 @@ export const PolicySchema = z
     elementsPerPhoto: Range.default({ min: 1, max: 6 }),
     /** In-process brake on simultaneously running decompose jobs (memory guard beside the runConfig concurrency; busy answers a code-less 429 the client backs off on). */
     maxConcurrentDecomposeJobs: z.number().int().min(1).default(2),
-    /** Stale-job sweep margin past the summed Policy timeouts bound: the runner fails itself at the bound before debiting; only jobs still pending/running past bound + margin are swept to failed. */
+    /** Stale-job margin past the summed Policy timeouts (AI-only) bound: the runner fails itself at bound + margin before debiting (the margin covers its non-AI render/store/persist tail); only jobs still pending/running past bound + 2 x margin are swept to failed. */
     staleJobMarginMs: z.number().int().min(0).default(60_000),
     conceptMaxWords: z.number().int().min(1).default(3),
     pinsPerScene: Range.default({ min: 1, max: 4 }),

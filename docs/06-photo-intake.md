@@ -49,8 +49,9 @@
 - Job-store updates are compare-and-set on the expected status:
   blind progress/finish writes can no longer resurrect a terminal
   job. A runner checks its own deadline (the summed Policy
-  timeouts) before the PIN-151 debit and fails without debiting
-  past it; a sweep at bound + `Policy.staleJobMarginMs` fails
+  timeouts + `Policy.staleJobMarginMs`, the margin covering its
+  non-AI render/store/persist tail) before the PIN-151 debit and
+  fails without debiting past it; a sweep at bound + 2 x margin fails
   still-pending/running jobs as `stale_running` (never debits; a
   debited runner that loses its guarded finish is refunded under
   `refund:photo:{jobId}` — see docs/15).

@@ -420,9 +420,10 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
 
 /**
  * Fail one pending/running job that outlived the summed Policy
- * timeouts bound + Policy.staleJobMarginMs. The runner checks its
- * own deadline at the bound before debiting, so by bound + margin
- * a still-live job belongs to a dead request. The transition is
+ * timeouts bound + 2 x Policy.staleJobMarginMs. The runner checks
+ * its own deadline at bound + margin before debiting (the margin
+ * covers its non-AI render/store/persist tail), so by bound +
+ * 2 x margin a still-live job belongs to a dead request. The transition is
  * CAS on the read status and never debits; a runner that debited
  * just before losing this race sees its guarded finish fail and
  * refunds (decompose-job). With credits on, landed-but-undebited
@@ -456,7 +457,7 @@ export async function failStaleJobIfNeeded(
   now: number,
 ): Promise<DecomposeJob> {
   if (job.status !== "pending" && job.status !== "running") return job;
-  const boundMs = decomposeBoundMs(deps.policy) + deps.policy.staleJobMarginMs;
+  const boundMs = decomposeBoundMs(deps.policy) + 2 * deps.policy.staleJobMarginMs;
   if (now - job.updatedAt <= boundMs) return job;
   const failed: DecomposeJob = {
     ...job,

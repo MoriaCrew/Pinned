@@ -804,7 +804,7 @@ describe("idempotent upload + stale-job sweep", () => {
     ).rejects.toMatchObject({ status: 409, code: "upload_conflict" });
   });
 
-  it("sweep fails pending and running jobs past bound + margin, and getJobView shows it", async () => {
+  it("sweep fails pending and running jobs past bound + 2 x margin, and getJobView shows it", async () => {
     const h = makeHarness();
     const { board, owner } = await makeBoardWithTwo(h);
     const stale = (id: string, status: "pending" | "running") => ({
@@ -824,7 +824,13 @@ describe("idempotent upload + stale-job sweep", () => {
     await h.jobs.create(stale("stale-pending", "pending"));
     await h.jobs.create(stale("stale-running", "running"));
 
-    // Not yet stale at T0; stale once past the default bound (141.5s) + margin (60s).
+    // Not yet stale at T0. Still not stale past the runner's own
+    // deadline (default bound 141.5s + margin 60s = 201.5s): the
+    // sweep only fires a further margin later (261.5s), so a run
+    // that spent its AI budgets and is rendering/persisting its
+    // candidates is never swept out from under itself.
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(0);
+    h.setNow(T0 + 210_000);
     expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(0);
     h.setNow(T0 + 300_000);
     expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(2);

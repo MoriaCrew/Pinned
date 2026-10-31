@@ -762,11 +762,11 @@ claim gates already refuse a second run).
 client-minted `uploadId` that becomes the job id (docs/06): a
 replay returns the existing job before the pool preflight, so it
 can never reach this seam twice. The runner also checks its own
-deadline (the summed Policy timeouts) *before* debiting — past it
+deadline (the summed Policy timeouts + `Policy.staleJobMarginMs` for its non-AI tail) *before* debiting — past it
 the job fails `stale_running` with no debit — and every job-store
 write is compare-and-set on the expected status. If a debited
 runner nevertheless loses its guarded `ready` finish (the
-board-api stale sweep at bound + `Policy.staleJobMarginMs` failed
+board-api stale sweep at bound + 2 x margin failed
 the job first), it discards the unexposed candidates and refunds
 the make under the deterministic ledger event
 `refund:photo:{jobId}` (a `debit_refund` entry naming

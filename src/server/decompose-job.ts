@@ -346,12 +346,17 @@ export async function discardJobCandidates(deps: DecomposeDeps, job: DecomposeJo
 export const STALE_JOB_ERROR = "stale_running";
 
 /**
- * The longest a claimed decompose run may legitimately take, summed
- * from Policy alone: every port attempt at its Policy timeout
- * (timeouts are per attempt in the decorator chain), the retry
- * backoffs, and SAM's sequential waves at Policy concurrency. The
- * runner refuses to debit past this bound; the board-api sweep
- * fails still-pending/running jobs only past bound + margin.
+ * The longest the AI portion of a claimed decompose run may
+ * legitimately take, summed from Policy alone: every port attempt
+ * at its Policy timeout (timeouts are per attempt in the decorator
+ * chain), the retry backoffs, and SAM's sequential waves at Policy
+ * concurrency. This bound covers AI calls only, so each consumer
+ * adds Policy.staleJobMarginMs on top: the runner refuses to debit
+ * past bound + margin (the margin is the allowance for the non-AI
+ * render/store/persist work a successful run still does after its
+ * last AI call), and the board-api sweep fails still-pending/
+ * running jobs only past bound + 2 x margin, keeping a full margin
+ * between the runner's own deadline and the sweep.
  */
 export function decomposeBoundMs(policy: Policy): number {
   const attempts = policy.retries + 1;
@@ -409,13 +414,15 @@ export async function runDecomposeJob(
   // terminal-write failure never discards a paid result.
   let makeDebited = false;
   // Own-deadline + sweep defence: claim stamped updatedAt, and the
-  // summed Policy timeouts bound how long this run may take. Past
-  // the bound the runner fails WITHOUT debiting (the board-api
-  // sweep only fires at bound + margin). `aborted` flips when a
+  // summed Policy timeouts plus one staleJobMarginMs (allowance
+  // for render/store/persist after the last AI call) bound how
+  // long this run may take. Past that deadline the runner fails
+  // WITHOUT debiting (the board-api sweep only fires a further
+  // margin later, at bound + 2 x margin). `aborted` flips when a
   // guarded progress write loses its CAS — the sweep already
   // failed this job, so no further spend or candidates.
   const claimedAt = job.updatedAt;
-  const boundMs = decomposeBoundMs(policy);
+  const boundMs = decomposeBoundMs(policy) + policy.staleJobMarginMs;
   const pastDeadline = (): boolean => now() - claimedAt > boundMs;
   let aborted = false;
   // The flag clears only AFTER the refund lands, and ledger
