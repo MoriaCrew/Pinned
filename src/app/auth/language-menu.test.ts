@@ -28,7 +28,17 @@ describe("language list (PIN-191)", () => {
   });
 
   it("adds Language to the menu only with more than one language", () => {
-    const board = { me: null, isHost: false, onJoin() {}, onEditName() {}, onChangeLook() {}, onDeleteBoard() {} };
+    const board = {
+      me: null,
+      isHost: false,
+      canChangeLook: false,
+      plus: null,
+      onJoin() {},
+      onEditName() {},
+      onChangeLook() {},
+      onBoardPlus() {},
+      onDeleteBoard() {},
+    };
     const open = (enabled: ("en" | "fr")[]) =>
       withLocales(enabled, "en", h(YouView, { auth: linkOnly, board, initialOpen: true }));
     expect(open(["en"])).not.toContain("Language");

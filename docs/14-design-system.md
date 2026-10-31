@@ -1,7 +1,7 @@
 # 14 — Pinneds design system (PIN-95)
 
 Status: **Accepted** by Robin on Oct 29, 2026. Replaces the
-first-generation Studio look (`docs/09`), which read as
+first-generation Studio look (`docs/archive/09`), which read as
 AI-generated. The product flow (`docs/11` §6) is unchanged; the
 look and the interaction design are rebuilt from scratch.
 
@@ -147,8 +147,11 @@ Principles:
   your person colour once you joined the board, else a person icon.
   It opens the kit `Menu`, each entry only when it applies: "You're
   {name} here" (a quiet `note` line) + Edit name, or Join this board;
-  My boards + My pins when signed in; Change look and a danger
-  Delete board (asks first, PIN-168) for the host; Sign in with
+  My boards + My pins when signed in; Board Plus with the creations
+  left as a quiet `detail` subline, for everyone on a board with
+  creations (PIN-183); Change look for the host, or a member once the
+  board has Plus (PIN-183); a danger Delete board (asks first,
+  PIN-168) for the host; Sign in with
   Google / Sign out when sign-in is on. Off a board it is
   account-only: nothing in link-only, a quiet "Sign in" when signed
   out (left out where the page itself asks you to sign in), the
@@ -212,7 +215,10 @@ No pins yet: three dashed ghost outlines.
   other scripts) are left off the card so the renderer never fetches
   fonts or emoji from a CDN; an empty title falls back to the brand line.
 - A bad slug, a missing board or any render error answers 200 with the
-  generic Paper card, then `public/og-card.png` as a last resort.
+  generic Paper card, then `public/og-card.png` as a last resort. That
+  PNG (and its copy in `src/server/og-assets/`) is the generic card
+  itself: regenerate both with `npm run og:card` after changing the
+  card design or the `card.fallback*` copy (PIN-203).
 
 ## Decisions log
 
@@ -230,3 +236,4 @@ No pins yet: three dashed ghost outlines.
 | Oct 30 | A thing's name tag wraps to up to 3 lines, "…" only past that (PIN-164) | One line cut most names after ~9 letters in the wide uppercase looks |
 | Oct 31 | One purchase replaces the Plus plans and makes packs: €2.99 once per board for Plus + 20 creations, bought by any joined member for the board; free pool 5; members change the look once the board has Plus; no host plan sold (PIN-181; supersedes the Oct 29 Plus row) | One clear thing to buy; guests never have to pay, and anyone who wants more can give it to the board |
 | Oct 31 | One Board Plus sheet is the only screen that asks for money: the perks plus one €2.99 purchase (Plus + 20 creations) for the board, through the credits checkout; no plan cards, no Host plan, no separate "Add makes" sheet; makes are called "creations" in the UI (PIN-182) | One clear thing to buy and one word for what it buys; any member can give it to the board, and nobody sees a price list |
+| Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |

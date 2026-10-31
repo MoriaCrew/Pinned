@@ -17,6 +17,7 @@ const board = (over: Partial<MyBoardCard>): MyBoardCard => ({
   themeId: null,
   themeLabel: null,
   themeMotif: null,
+  plus: false,
   myPinCount: 3,
   latestSceneImageUrl: null,
   lastActivityAt: Date.UTC(2026, 9, 29, 12),
@@ -41,6 +42,12 @@ describe("My boards cards (PIN-104)", () => {
     expect(markup).toContain('href="/g/a"');
   });
 
+  it("tags a board that has Plus, and only that one (PIN-183)", () => {
+    const out = html(h(BoardCards, { locale: "en", boards: [board({ slug: "a", plus: true }), board({ slug: "b" })] }));
+    expect(out.match(/pn-lib-board-plus/g)).toHaveLength(1);
+    expect(out).toMatch(/pn-tag pn-tag-outline pn-lib-board-plus">Plus</);
+  });
+
   it("shows the latest scene as a print, or ghost outlines when there is none", () => {
     const withScene = html(h(BoardCards, { locale: "en", boards: [board({ latestSceneImageUrl: "/api/boards/s/scenes/1/image" })] }));
     expect(withScene).toContain("pn-lib-board-print");
@@ -62,7 +69,7 @@ describe("My boards cards (PIN-104)", () => {
 
   it("sets the counts in mono lines", () => {
     const markup = html(h(BoardCards, { locale: "en", boards: [board({ myPinCount: 1 })] }));
-    expect(markup).toContain("1 thing of yours");
+    expect(markup).toContain("1 pin of yours");
     expect(markup).toContain("Oct 29");
   });
 });

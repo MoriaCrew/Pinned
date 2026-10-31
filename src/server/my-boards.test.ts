@@ -115,6 +115,33 @@ describe("listMyBoards", () => {
   });
 });
 
+describe("listMyBoards Plus flag (PIN-183)", () => {
+  async function cardsFor(plus: Board["plus"], plusMode?: "off" | "mock" | "stripe") {
+    const boards = new InMemoryBoardRepository();
+    const users = new InMemoryUserRepository();
+    await users.putUser(USER);
+    await boards.createBoard({ ...board("board-a", 100), ...(plus ? { plus } : {}) });
+    await boards.putParticipant(participant("p1", "board-a", USER.uid));
+    await users.putUserBoard(USER.uid, { boardId: "board-a", participantId: "p1", claimedAt: 1, updatedAt: 1 });
+    return listMyBoards(USER, { boards, users, ...(plusMode ? { plusMode } : {}) });
+  }
+
+  it("is false for a free board, whatever the mode", async () => {
+    expect((await cardsFor(undefined, "stripe"))[0].plus).toBe(false);
+    expect((await cardsFor(null, "mock"))[0].plus).toBe(false);
+  });
+
+  it("is true for a paid grant in any mode, and for a mock grant only in mock", async () => {
+    const stripe = { plan: "board" as const, source: "stripe" as const, grantedAt: 1 };
+    const mock = { plan: "board" as const, source: "mock" as const, grantedAt: 1 };
+    expect((await cardsFor(stripe, "off"))[0].plus).toBe(true);
+    expect((await cardsFor(stripe))[0].plus).toBe(true);
+    expect((await cardsFor(mock, "mock"))[0].plus).toBe(true);
+    expect((await cardsFor(mock, "off"))[0].plus).toBe(false);
+    expect((await cardsFor(mock))[0].plus).toBe(false);
+  });
+});
+
 describe("findClaimedParticipant (restore lookup)", () => {
   it("index + matching userId restores; mismatched userId restores nobody", async () => {
     const boards = new InMemoryBoardRepository();

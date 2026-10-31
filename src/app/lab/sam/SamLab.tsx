@@ -221,7 +221,6 @@ export function SamLab({ aiMock }: { aiMock: boolean }) {
           onPointerCancel={() => setDragStart(null)}
         >
           {stageImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={stageImage} alt="Lab subject" draggable={false} className={view === "cutout" ? styles.checker : undefined} />
           ) : (
             <p className={styles.empty}>📷 Pick a photo</p>

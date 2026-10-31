@@ -21,7 +21,7 @@ describe("i18n catalog (FR9)", () => {
   it("picks singular and plural count forms (PIN-97)", () => {
     expect(tCount("en", "meta.people", 1)).toBe("1 person");
     expect(tCount("en", "meta.people", 6)).toBe("6 people");
-    expect(tCount("en", "meta.things", 0)).toBe("0 things");
+    expect(tCount("en", "meta.things", 0)).toBe("0 pins");
     expect(tCount("en", "meta.scenes", 1)).toBe("1 scene");
   });
 });

@@ -50,6 +50,8 @@ export type SceneSlot =
       line: string;
       onChangeIdea?: () => void;
       onTryAgain?: () => void;
+      /** An extra way out (PIN-183): "Get Plus" when the pool ran dry, shown first. */
+      action?: { label: string; onSelect: () => void };
     };
 
 export type PrintSlot = Extract<SceneSlot, { type: "print" }>;
@@ -139,14 +141,20 @@ function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }
     <article className="pn-print-wrap" style={{ "--t": 0 } as CSSProperties} aria-label={`${t(locale, "ui.scene")}: ${slot.idea}`}>
       <div className="pn-print">
         <div className={cx("pn-print-frame", styles.problem)} style={{ aspectRatio: slot.ratio }}>
-          <p className={styles.problemLine} role="alert">
+          {/* An invitation (a Plus action) is a status, not an error (PIN-183). */}
+          <p className={styles.problemLine} role={slot.action ? "status" : "alert"}>
             {slot.line}
           </p>
         </div>
         <div className="pn-print-body">
           {slot.idea ? <p className="pn-print-idea">{tf(locale, "ui.quoted", { text: slot.idea })}</p> : null}
-          {slot.onChangeIdea || slot.onTryAgain ? (
+          {slot.action || slot.onChangeIdea || slot.onTryAgain ? (
             <div className={styles.problemActions}>
+              {slot.action ? (
+                <Button size="sm" variant="primary" onClick={slot.action.onSelect}>
+                  {slot.action.label}
+                </Button>
+              ) : null}
               {slot.onChangeIdea ? (
                 <Button size="sm" onClick={slot.onChangeIdea}>
                   {t(locale, "board.changeIdea")}

@@ -127,7 +127,6 @@ export function Dock(
           {slots.map((slot, i) => (
             <li key={i} className={cx("pn-tray-slot", slot && "is-filled")}>
               {slot ? (
-                // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
                 <img src={slot.src} alt={slot.label ?? ""} />
               ) : null}
             </li>
@@ -301,8 +300,18 @@ export function Menu({
   className,
   style,
 }: {
-  /** An item with `href` is a real link (client-side navigation); onSelect still runs on click. */
-  items: { label: string; onSelect?: () => void; href?: string; danger?: boolean; disabled?: boolean }[];
+  /**
+   * An item with `href` is a real link (client-side navigation); onSelect still runs on click.
+   * `detail` is a quiet second line under the label (e.g. "3 creations left"), read with it.
+   */
+  items: {
+    label: string;
+    detail?: string;
+    onSelect?: () => void;
+    href?: string;
+    danger?: boolean;
+    disabled?: boolean;
+  }[];
   label: string;
   /**
    * A quiet line above the items (e.g. "You're Sam here"). Shown, not
@@ -319,17 +328,24 @@ export function Menu({
           {note}
         </p>
       ) : null}
-      {items.map((item) =>
-        item.href && !item.disabled ? (
+      {items.map((item) => {
+        const text = (
+          <>
+            {item.label}
+            {item.detail ? <span className="pn-menu-detail">{item.detail}</span> : null}
+          </>
+        );
+        return item.href && !item.disabled ? (
           <Link
             key={item.label}
             href={item.href}
             role="menuitem"
             className="pn-menu-item"
             data-danger={item.danger ? "" : undefined}
+            data-detail={item.detail ? "" : undefined}
             onClick={item.onSelect}
           >
-            {item.label}
+            {text}
           </Link>
         ) : (
           <button
@@ -338,13 +354,14 @@ export function Menu({
             role="menuitem"
             className="pn-menu-item"
             data-danger={item.danger ? "" : undefined}
+            data-detail={item.detail ? "" : undefined}
             disabled={item.disabled}
             onClick={item.onSelect}
           >
-            {item.label}
+            {text}
           </button>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

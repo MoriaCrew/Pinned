@@ -11,6 +11,8 @@ export interface MyBoardCard {
   themeId: string | null;
   themeLabel: string | null;
   themeMotif: string | null;
+  /** The board has Board Plus (an entitlement that counts in this PLUS_MODE, PIN-183). */
+  plus: boolean;
   /** Pinned pins whose element this participant owns. */
   myPinCount: number;
   /** Latest scene image route URL, or null when no scene is ready. */

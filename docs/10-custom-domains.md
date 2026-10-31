@@ -42,7 +42,7 @@ What each hostname needs at the registrar:
 2. Flip `APP_BASE_URL` in `apphosting.dev.yaml` /
    `apphosting.prod.yaml` to the custom domains (separate PRs;
    prod flip still rides the weekend promotion).
-3. Smoke: create a game on each domain and confirm generated
+3. Smoke: create a board on each domain and confirm generated
    links use it (public-origin prefers configured origin).
 4. Sign-in on the domain (PIN-163): add the OAuth redirect URI
    `https://{domain}/__/auth/handler` and set `AUTH_SAME_ORIGIN=1`

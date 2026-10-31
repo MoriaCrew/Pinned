@@ -30,13 +30,14 @@ import {
 import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
-import { isPoolEmptyCode } from "../../../domain/makes-ui";
+import { isPoolEmptyCode, poolEmptyCopy } from "../../../domain/makes-ui";
 import { formatList, t, tCount, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import type { UploadItemStatus } from "../../../domain/upload-queue";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
+import { boardQueryKey } from "./board-query";
 import { LibraryList, LibraryStrip, useLibraryPins } from "./LibraryPins";
 import { PhotoPick } from "./PhotoPick";
 import {
@@ -69,8 +70,6 @@ interface JobView {
   pins: (BoardViewPin & { boardId: string })[];
   elements: (CandidateElement & { flattenedUrl: string; createdAt: number })[];
 }
-
-export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
 /** The review's help line (PIN-126). */
 export function reviewHelpLine(help: ReviewHelp, locale: Locale): string {
@@ -211,7 +210,6 @@ function CutPhoto({
   return (
     <div className="pn-cut-photo" data-stage={stage} data-working={tap?.working ? "" : undefined} style={style}>
       <div className="pn-cut-frame">
-        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
         <img
           src={src}
           alt={t(locale, "add.photoAlt")}
@@ -316,7 +314,7 @@ export function AddSheet({
   /** Open at this photo job's review (PIN-122 leftovers). */
   resumeJobId?: string | null;
   photoMemory?: PhotoMemory;
-  /** PIN-152: out of makes — open the buy sheet (only passed while buying can work). */
+  /** PIN-152, PIN-183: out of creations — open the Plus sheet (only passed while buying can work). */
   onAddMakes?: () => void;
   /** Batch pick: several files go to the BoardClient queue instead of the legacy single upload. */
   onPickFiles?: (files: File[]) => void;
@@ -437,7 +435,6 @@ export function AddSheet({
       };
     },
     // Unmount only; photoMemory is the board page's stable ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -449,7 +446,6 @@ export function AddSheet({
       setPreviewUrl(rememberedLive);
     }
     // Only when the remembered photo changes, not on later resets.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rememberedLive]);
 
   // A batch step's preview lands once the driver downscales the file.
@@ -568,7 +564,6 @@ export function AddSheet({
   useEffect(() => {
     setSelected((current) => selectionWithCandidates(current, dropped, candidateIds));
     // candidateIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateIds.join(","), dropped]);
 
   const confirm = useMutation({
@@ -839,6 +834,8 @@ export function AddSheet({
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
   const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  // PIN-183: where buying works this is an invitation, not an error.
+  const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive: boardView.plus?.active === true });
   const batchPoolEmpty = isPoolEmptyCode(batch?.errorCode);
   const batchCounts = batch
     ? {
@@ -859,10 +856,10 @@ export function AddSheet({
     : "";
   const outOfMakes = (
     <>
-      <SheetLine tone="error">{t(locale, "makes.poolEmptyPhoto")}</SheetLine>
-      {onAddMakes ? (
+      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t(locale, poolEmpty.line)}</SheetLine>
+      {onAddMakes && poolEmpty.action ? (
         <Button variant="primary" onClick={onAddMakes}>
-          {t(locale, "makes.add")}
+          {t(locale, poolEmpty.action)}
         </Button>
       ) : null}
     </>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getConfig } from "../../../../config";
 import { t } from "../../../../i18n";
 import { getLocale } from "../../../../i18n/server";
 import { getBoardRepository } from "../../../../server/board-repository";
@@ -29,6 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const boards = await listMyBoards(user, {
       boards: getBoardRepository(),
       users: getUserRepository(),
+      plusMode: getConfig().plusMode,
     });
     return NextResponse.json({ boards }, { headers: JSON_HEADERS });
   } catch (error) {

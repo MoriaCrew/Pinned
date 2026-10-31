@@ -7,7 +7,7 @@ import { afterBoardDeleteHref, runBoardDelete, type BoardDeletePhase } from "../
 import { t, tf } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { Button, Sheet } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import styles from "./board.module.css";
 
 /** What the sheet says when a delete did not happen: "" (nothing), a retryable failure, or "already gone / not the host". */

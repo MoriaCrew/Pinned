@@ -26,8 +26,8 @@
   get their preview on its first request. Scene delete and the
   element-delete cascade remove both objects.
 - Everything ephemeral lives under the `tmp/` prefix so one bucket
-  lifecycle rule covers it. Longer-lived reveal/poster assets (later
-  slices) must use a different prefix with its own policy.
+  lifecycle rule covers it. Persistent derived assets (`elements/`,
+  `scenes/`) use their own prefixes; nothing persistent goes in `tmp/`.
 
 ## Multi-photo batches and idempotent uploads
 
@@ -63,10 +63,19 @@
 
 ## Lifecycle runbook
 
-Dev bucket `moriacrew-pinned-dev.firebasestorage.app` expires
-`tmp/` objects after 14 days (game max 72 h + reveal/derivation
-tail). The applied rule lives in
-`storage.lifecycle.json` at the repo root.
+A working copy is deleted in two layers (`docs/11` A6):
+
+1. **The app, first.** `confirmPins` (`src/server/board-api.ts`)
+   deletes it when the uploader taps "Pin selected", and an
+   opportunistic per-board sweep (`sweepExpiredWorkingCopies`, run on
+   the next upload or confirm; no cron) deletes any copy older than
+   `Policy.workingCopyTtlHours`. Tap-add refuses an expired copy
+   (`addTapElement`, `src/server/decompose-job.ts`).
+2. **The bucket rule, as backstop** for copies the app never got to
+   (an abandoned review on a quiet board): `storage.lifecycle.json`
+   at the repo root expires `tmp/` objects by age: 1 day after
+   PIN-209 (it was 14 days before). Until that rule is applied to a
+   bucket, user-facing copy must not promise a hard 24-hour deletion.
 
 Apply or re-apply to an environment bucket:
 
@@ -75,9 +84,8 @@ gcloud storage buckets update gs://<bucket> --lifecycle-file=storage.lifecycle.j
 gcloud storage buckets describe gs://<bucket> --format="json(lifecycle)"
 ```
 
-Prod: apply the same file to
-`moriacrew-pinned-prod.firebasestorage.app` before the PIN-35
-promotion, together with the prod `SESSION_SECRET`.
+Apply the file to the dev and prod buckets before promoting; the
+steps are in `docs/DEPLOY.md`.
 
 ## Access
 

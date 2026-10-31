@@ -70,7 +70,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
 /** Sign out: clear the user cookie (idempotent). */
 export async function DELETE(request: Request): Promise<NextResponse> {
-  const locale = await getLocale();
   const gated = authDisabledGate();
   if (gated) return gated;
   return NextResponse.json(

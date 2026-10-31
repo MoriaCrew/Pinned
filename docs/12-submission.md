@@ -1,44 +1,51 @@
 # 12 — Submission packet (PIN-81)
 
-_Status: freeze-prep packet, Oct 29, 2026. Feature freeze Tue
-Nov 3, 2026 (end of day); submission due Wed Nov 4, 2026,
-9:00 PM ET (`docs/11-studio.md` §1, `README.md`). Robin records
-the video and submits; this file only prepares it. It contains
-no board link, slug, or secret — board links are capability
-secrets (`README.md`, "Try it"), so every board URL below is a
-placeholder to fill in from private notes (the PIN-81 tracker
-entry) at record/submit time, never committed._
+_Status: freeze-prep packet, Oct 29, 2026, refreshed Oct 31
+(PIN-219). Feature freeze Tue Nov 3, 2026 (end of day);
+submission due Wed Nov 4, 2026, 9:00 PM ET (`docs/11-studio.md`
+§1, `README.md`). Robin records the video and submits; this file
+only prepares it. It contains no board link, slug, or secret —
+board links are capability secrets (`README.md`, "Try it"), so
+every board URL below is a placeholder to fill in from private
+notes (the PIN-81 tracker entry) at record/submit time, never
+committed._
 
 Every feature and number claim here was verified against `dev`
 code and docs on Oct 29, 2026 (see §3 for the source of each
-number). If code and this packet disagree at freeze, the code
-wins — re-run §4 and the test command before submitting.
+number). The Oct 31 refresh re-checked tap-add naming, UI labels,
+models, budgets and the TTL story; test and PR counts are marked
+"recount at freeze". If code and this packet disagree at freeze,
+the code wins — re-run §4 and the test command before submitting.
 
 ## 1. One-page pitch
 
-**Pinneds Studio — a shared pinboard of real things.**
+**Pinneds Studio — your stuff, pinned together.**
 
 Anyone with the board link uploads a photo. Muse Spark names
 the things in it, SAM 3.1 cuts each one out, and the cut-outs
 are pinned to the board with the owner's name. Anyone then
 picks 1–4 pins from anyone (Policy `pinsPerScene`,
-`src/policy/policy.ts`), writes or taps a scene prompt, and
-Muse Image composes them into a new image in the board's
-gallery — credited to the people whose things are in it. Any
+`src/policy/policy.ts`), writes, dictates (Muse Voice) or taps
+an idea chip, and Muse Image composes them into a new image in
+the board's gallery — credited to the people whose things are
+in it. Any
 scene can be remixed statelessly (parent scene image plus new
 pins as references, `store: false`). A pin's owner can delete
 their element; its pins go and scenes that used it are hidden.
 No sign-up needed: the link is the invitation. Optional
 Google sign-in adds a personal library (My boards, My pins)
-without ever gating the loop. Solo works too.
+without ever gating the loop. The UI comes in seven languages.
+Solo works too.
 
 Why it matters (*Build for Your World*): group chats are full
 of photos of real things — a mug, a cat, a weird lamp. Pinneds
 turns those into a shared toy: your friends' actual things,
-remixed together, in under a minute, with credit kept. Three
-Meta models each do the job they are best at (see §6), behind
-one typed Policy object and a fail-closed budget decorator, so
-the demo that ships is also the system that is safe to hand to
+remixed together, in under a minute, with credit kept. Four
+Meta models at runtime (Muse Spark, SAM 3.1, Muse Image, Muse
+Voice) and one at build time (Muse Spark Open, which translated
+the UI) each do the job they are best at (see §6), behind one
+typed Policy object and a fail-closed budget decorator, so the
+demo that ships is also the system that is safe to hand to
 family.
 
 ### Links block (fill in at submit time — do not commit real values)
@@ -46,17 +53,17 @@ family.
 | Link | Value |
 | --- | --- |
 | Repository (public, AGPL-3.0) | https://github.com/MoriaCrew/Pinned |
-| Deployed product (prod) | `<PROD_URL>` |
+| Deployed product (prod) | https://pinneds.com (live from Nov 1; `<PROD_URL>` below means this) |
 | Demo board (from the PIN-81 tracker entry; never commit) | `<DEMO_BOARD_URL from Linear>` |
 | Pitch video (~3 min, §2) | `<VIDEO_URL>` |
-| Live dev demo today (prod pending, Oct 29) | https://dev.pinneds.com |
+| Dev backend (live models; the only live demo before Nov 1) | https://dev.pinneds.com |
 
 Notes for whoever fills this in:
 
-- `<PROD_URL>`: prod promotion rides the Nov 3 freeze
-  (`README.md`, "Known v1 limits"). Until it lands, the live
-  model-backed demo is the dev URL above. Do not submit a prod
-  URL that has not been opened and played end-to-end.
+- `<PROD_URL>`: https://pinneds.com from the Nov 1 promotion
+  (`docs/DEPLOY.md`). Do not submit it until it has been opened
+  and played end-to-end; if prod is not ready, submit the dev URL
+  and say so.
 - `<DEMO_BOARD_URL from Linear>`: paste it only into the
   submission form and the video description. It must never be
   committed to this repo or shown in the video (§2, capture
@@ -89,17 +96,17 @@ Global capture rules (every shot):
 
 | # | Time | s | Screen action | Narration line | Capture notes |
 | --- | --- | --- | --- | --- | --- |
-| S1 | 0:00–0:15 | 15 | Hook: a real photo on the phone (desk with a mug, a duck, a lamp). Open the board; the same things are already there as cut-out pins. Quick zoom from photo → pins. | "This is my desk. These are my actual things — cut out of one photo, pinned to a board I share with friends. Watch what happens when we remix them." | Real phone in hand over the real desk if possible; end on the board full-screen. No URL in frame. |
-| S2 | 0:15–0:40 | 25 | Tap 📷 Add, pick a fresh photo. "Finding things…" then pins pop in one by one, pre-selected, each labelled. Tap "Pin N →"; pins land on the board with the owner's name. | "Anyone with the board link adds a photo. Muse Spark names the things in it, SAM 3.1 cuts each one out, and they land on the board as pins — with your name on them." | One continuous take; if decomposition runs past ~15 s, jump-cut on the first pin popping in (measured mean 10.6 s, §3). If the photo has a person, hold 1 s on the "everyone OK with being remixed?" note. |
-| S3 | 0:40–0:55 | 15 | Tap-add miss: point at something naming missed in the same photo (e.g. a small plant). Tap it on the photo; a new cut-out appears as a candidate pin. Pin it. | "Missed something? Tap it. A point prompt to SAM cuts out exactly the thing you touched." | Finger tap must be visible — record the phone in hand, or enable touch indicators. The tapped pin's label is "My thing" in v1 (known limit, `README.md`); don't zoom on the label. |
-| S4 | 0:55–1:20 | 25 | Two friends, one board: second phone opens the same board link, joins with a name, pins a photo of their cat. First phone's board updates (polling) — the cat pin appears with the friend's name. | "There's no sign-up — the link is the invitation. My friend opened it on her phone, pinned her cat, and it showed up on my board, credited to her." | Two real phones side by side on a table, single wide shot or split-screen edit. Keep both address bars out of frame. Board polls every 5 s (Policy `boardPollIntervalMs`); hold the shot until the pin lands. |
-| S5 | 1:20–1:50 | 30 | Make a scene: select 3 pins from two different people, tap a suggestion chip (or type a short prompt), tap "Make it ✨". "Cooking…" card, then the composed image lands in the gallery. Zoom the credit line ("made from …'s mug + …'s cat"). | "Now anyone picks a few pins — mine, hers, anyone's — and Muse Image composes them into a brand-new scene. And it credits the people whose things are in it." | Cut the compose wait to ~3 s of "cooking…" (measured scene mean 14.4 s, §3). End the shot holding the finished scene + credits for a full 2 s. |
-| S6 | 1:50–2:10 | 20 | Remix: tap Remix on that scene, add one new pin, new prompt ("…now at a birthday party"). New scene lands next to the parent; credits now include the new contributor too. | "Every scene can be remixed: the original image plus new pins go back in as references — statelessly — and the credits carry everyone who's in it now." | Show parent → child side by side at the end so continuity reads. Same wait-cut as S5. |
-| S7 | 2:10–2:25 | 15 | Share: tap Share on a scene (system share sheet), send the board link to a chat; the chat preview shows the latest scene as the link image. | "Scenes share straight to the group chat — and the board link itself previews with the latest scene, so the next friend sees why to tap in." | Use a private test chat; blur names/avatars if real people appear. The OG/Twitter preview is the latest ready scene (`src/app/g/[slug]/page.tsx`); let the preview card fully load before cutting. |
-| S8 | 2:25–2:40 | 15 | Trust beat: on the second phone, the pin's owner deletes their element. Its pin disappears from the board and the scene that used it is hidden. | "And it's yours to take back: delete your element and its pins go, and every scene built from it is hidden." | Delete from the *owner's* phone (owner-only). Cut to the first phone to show the board after the delete. This destroys the demo scene — record S8 last, or use a throwaway board. |
-| S9 | 2:40–2:50 | 10 | Close: back to the full board (pins + gallery), then end card: product name, repo URL, `<PROD_URL>`. On screen, the usage line from §4 (people / pins / scenes, real counts). | "Built in one week for the Meta hackathon, already played by real friends and family: `<N>` people, `<N>` pins, `<N>` scenes. Pinneds — pin your world." | Fill the three counts from a fresh §4 run on record day; never reuse stale numbers. End card shows no board link — the demo link lives in the submission form only. |
+| S1 | 0:00–0:15 | 15 | Hook: a real photo on the phone (desk with a mug, a duck, a lamp). Open the board; the same things are already there as cut-out pins. Quick zoom from photo → pins. Alternative open: a landing showcase set (`docs/17`), friends' things landing in one scene. | "This is my desk. These are my actual things — cut out of one photo, pinned to a board I share with friends. Watch what happens when we remix them." | Real phone in hand over the real desk if possible; end on the board full-screen. No URL in frame. Showcase photos are synthetic (Muse Image made them, SAM 3.1 cut them); the older landing set and `/start` samples are Higgsfield images, so say so if asked (§6). |
+| S2 | 0:15–0:40 | 25 | Tap Add photo, pick a fresh photo. "Looking for what to cut out…" then pins pop in one by one, pre-selected, each labelled. Tap "Pin 3" (the count); pins land on the board with the owner's name. | "Anyone with the board link adds a photo. Muse Spark names the things in it, SAM 3.1 cuts each one out, and they land on the board as pins — with your name on them." | One continuous take; if decomposition runs past ~15 s, jump-cut on the first pin popping in (measured mean 10.6 s, §3). If the photo has a person, hold 1 s on the face note ("There's a face in this photo. Pin it if they're happy to be here."). |
+| S3 | 0:40–0:55 | 15 | Tap-add miss: point at something naming missed in the same photo (e.g. a small plant). Tap it on the photo; a new cut-out appears as a candidate pin. Pin it. | "Missed something? Tap it. A point prompt to SAM cuts out exactly the thing you touched, and Spark names it." | Finger tap must be visible — record the phone in hand, or enable touch indicators. A tapped cut-out gets a Spark name and a face flag like any other pin (PIN-117, `tap-name.v1`); only if that pass fails does it keep the label "My find". |
+| S4 | 0:55–1:20 | 25 | Two friends, one board: second phone opens the same board link, joins with a name, pins a photo of their cat. First phone's board updates (polling) — the cat pin appears with the friend's name. The friend's phone is set to Spanish or French, so her UI reads in that language (translated by Muse Spark Open). | "There's no sign-up — the link is the invitation. My friend opened it on her phone, in Spanish, pinned her cat, and it showed up on my board, credited to her." | Two real phones side by side on a table, single wide shot or split-screen edit. Set the friend's phone language beforehand (the app follows the browser language, `docs/18`). Keep both address bars out of frame. Board polls every 5 s (Policy `boardPollIntervalMs`); hold the shot until the pin lands. |
+| S5 | 1:20–1:55 | 35 | Make a scene: select 3 pins from two different people. Spark's generated idea chips appear; tap one, then dictate a tweak with the mic ("Say it instead", Muse Voice) and tap "Make it". "Cooking…" card, then the composed image lands in the gallery. Zoom the credit line ("made from …'s mug + …'s cat"). | "Now anyone picks a few pins — mine, hers, anyone's. Spark suggests ideas, or just say it and Muse Voice writes it down. Muse Image composes a brand-new scene and credits the people whose things are in it." | Open the Make sheet once beforehand so the chips are cached; keep the dictated clip short (the audio is never stored). Cut the compose wait to ~3 s of "cooking…" (measured scene mean 14.4 s, §3). End the shot holding the finished scene + credits for a full 2 s. |
+| S6 | 1:55–2:15 | 20 | Remix: tap Remix on that scene, add one new pin, new prompt ("…now at a birthday party"). New scene lands next to the parent; credits now include the new contributor too. | "Every scene can be remixed: the original image plus new pins go back in as references — statelessly — and the credits carry everyone who's in it now." | Show parent → child side by side at the end so continuity reads. Same wait-cut as S5. |
+| S7 | 2:15–2:25 | 10 | Share: tap Share on a scene (system share sheet), send the board link to a chat; the chat preview shows the latest scene as the link image. | "Scenes share straight to the group chat, and the board link previews with the latest scene." | Use a private test chat; blur names/avatars if real people appear. The OG/Twitter preview is the latest ready scene (`src/app/g/[slug]/opengraph-image.tsx`); let the preview card fully load before cutting. |
+| S8 | 2:25–2:35 | 10 | Trust beat: on the second phone, the pin's owner deletes their element. Its pin disappears from the board and the scene that used it is hidden. | "And it's yours to take back: delete your element and its scenes are hidden." | Delete from the *owner's* phone (owner-only). Cut to the first phone to show the board after the delete. This destroys the demo scene — record S8 last, or use a throwaway board. |
+| S9 | 2:35–2:50 | 15 | Close: back to the full board (pins + gallery), then end card: product name, repo URL, `<PROD_URL>`, the models (Muse Spark, SAM 3.1, Muse Image, Muse Voice at runtime; Muse Spark Open at build time). On screen, the usage line from §4 (people / pins / scenes, real counts). | "Built in one week for the Meta hackathon with Muse Spark, SAM 3.1, Muse Image and Muse Voice, and already played by real friends and family: `<N>` people, `<N>` pins, `<N>` scenes. Pinneds — pin your world." | Fill the three counts from a fresh §4 run on record day; never reuse stale numbers. End card shows no board link — the demo link lives in the submission form only. |
 
-Shot total: 15 + 25 + 15 + 25 + 30 + 20 + 15 + 15 + 10 =
+Shot total: 15 + 25 + 15 + 25 + 35 + 20 + 10 + 10 + 15 =
 **170 s**.
 
 Record order tip: S8 (delete) is destructive — shoot it last
@@ -124,23 +131,25 @@ synthetic images.
 | Cost per photo (T5, **estimate**) | **≈ $0.020**/photo (bar ≤ $0.05). SAM bills one image per concept call (`usage.images_processed=1`); provider dashboard is authoritative | `eval/studio-findings.md` (T5); `docs/11` §8 |
 | Cost per scene (T5, **estimate**) | **≈ $0.01**/scene (bar ≤ $0.10). Meta's published Muse Image price is a flat $0.01 per generated image, whatever the tokens; the PIN-50 spike had priced tokens at Spark rates (≈ $0.022). Provider dashboard is authoritative | `src/gateway/costs.ts`; `docs/16-ai-usage.md`; `eval/studio-findings.md` (T5) |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
-| Automated tests | **408 passed / 1 skipped** (56 files), `AI_MOCK=1`, live run Oct 29, 2026 at `dev` tip `fc406c9` (the PIN-87 merge). Re-run at freeze; CI never makes paid calls | Oct 29 live run of `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
-| Pull requests | **78 total / 74 merged** as counted Oct 29, 2026 — a moving number; recount at freeze (command below) | `gh pr list --state all --limit 200` (Oct 29 live count) |
+| Automated tests | **1,507 passed / 2 skipped** (133 files), `AI_MOCK=1`, as of Oct 31, 2026 on `dev` (tip `f010eb7`). **Recount at freeze**; CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
+| Pull requests | **About 170** as of Oct 31, 2026 (highest PR number #173) — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
 | Repo public | `MoriaCrew/Pinned`, visibility PUBLIC, AGPL-3.0 | `gh repo view` (Oct 29); `LICENSE`, `README.md` |
+| UI languages | Six translated by Muse Spark Open plus a reviewer pass; first pass **$0.98** in total. No native-speaker review yet | `docs/18-i18n.md` ("Costs", "Who reviewed what") |
 | Usage (people / pins / scenes) | Not a fixed number — captured fresh per §4 on record and submit days | `scripts/usage-report.mjs` (`npm run usage:report`) |
 
 Recount PRs at freeze (before the video end card or any
 "built in N PRs" line is finalised):
 
 ```bash
-gh pr list --state all --limit 200 --json number,state
-gh pr list --state merged --limit 200 --json number
+gh pr list --state all --limit 500 --json number,state
+gh pr list --state merged --limit 500 --json number
 ```
 
 Policy values quoted in §1–§2 (`pinsPerScene` 1–4,
 `elementsPerPhoto` 1–6, `boardPollIntervalMs` 5000, timeouts
 30 s / 20 s / 120 s, `faces: note`, `sceneStore: false`,
-models `muse-spark-1.3` / `sam-3.1` / `muse-image-1.0`) are
+models `muse-spark-1.3` / `sam-3.1` / `muse-image-1.0` /
+`muse-voice-transcribe-1.0`) are
 the defaults in `src/policy/policy.ts` — one object the UI,
 validators and prompts all read (`docs/11` §5.1).
 
@@ -204,9 +213,9 @@ approves.
 | F2 | `dev` green end-to-end: `npm run typecheck`, `npm test` (`AI_MOCK=1`), `npm run build` (exact gates from `package.json`) | Agent | All three pass at the freeze commit; test count updated in §3 if it moved |
 | F3 | Prod promotion: `dev` → `main`/prod per the hosting setup, then a real end-to-end play on `<PROD_URL>` (create board → pin → scene → remix → share → delete) | Robin + Agent (Robin owns promotion/approval; agent must never push `main`/prod itself) | `<PROD_URL>` plays the full loop with live models; `/api/health` answers |
 | F4 | Demo board seeded on the submit host (`npm run seed:demo`; slug recorded privately, `DEMO_BOARD_SLUG` set in host env if the landing demo link is wanted) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board |
-| F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2 proposed $10/day + per-board caps; the committed yaml only names the variables, so verify the live values — do not assume) | Robin | Live values checked in the hosting env; budget not the $2 local default unless intended |
+| F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2: code default $5 / 500 calls, dev the same; prod $50 / 10,000 during judging per Robin, Oct 31, see `docs/DEPLOY.md`; verify the live values, do not assume) | Robin | Live values checked in the hosting env and matching A2 |
 | F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners | Agent | Packet matches freeze-commit reality |
-| F7 | Known-v1-limits honesty pass on `README.md` + this file (tap-add "My thing" label, 14-day `tmp/` lifecycle vs 24 h Policy TTL, cost-estimate labelling, optional sign-in scope) | Agent | No claim in the packet or README that the code doesn't back |
+| F7 | Known-v1-limits honesty pass on `README.md` + this file (1-day `tmp/` lifecycle backstop applied vs the app-side delete, cost-estimate labelling, optional sign-in scope, non-Meta Higgsfield assets disclosed) | Agent | No claim in the packet or README that the code doesn't back |
 
 ### Video (Nov 3–4)
 
@@ -238,11 +247,14 @@ removed, re-encoded) into a short-lived working copy under
 `tmp/` so tap-to-add can re-prompt SAM; only cut-outs
 (`elements/`) and scenes (`scenes/`) persist, served through
 routes that check the board link, with client storage rules
-deny-all (`docs/06-photo-intake.md`, `docs/11` §5.5). Honest
-gap: Policy sets `workingCopyTtlHours: 24`, but the bucket
-lifecycle backstop in `storage.lifecycle.json` deletes `tmp/`
-at 14 days — so we don't claim a hard 24-hour deletion
-guarantee yet (`docs/11` A6, `README.md`).
+deny-all (`docs/06-photo-intake.md`, `docs/11` §5.5). The app
+deletes the working copy when the uploader taps "Pin selected"
+and sweeps any copy older than Policy `workingCopyTtlHours`
+(24) on the board's next upload or confirm; the bucket rule in
+`storage.lifecycle.json` (1 day from PIN-209) is the backstop.
+The sweep is opportunistic, not a cron, so we say "deleted when
+you pin" and make no hard 24-hour promise (`docs/11` A6).
+Dictated audio is never stored either.
 
 **"Who can see a board?"**
 Only people with the link. Slugs are 128-bit base64url
@@ -258,14 +270,15 @@ the user already joined by link. Board pages are `noindex`.
 
 **"People in photos?"**
 Allowed, never blocked. When Spark flags a face, the app
-shows one line — "everyone in this photo OK with being
-remixed?" — and proceeds either way (Policy `faces: note`).
+shows one line ("There's a face in this photo. Pin it if
+they're happy to be here.") and proceeds either way (Policy
+`faces: note`).
 The provider's guardrails refuse what they refuse; a refusal
 is a typed, friendly outcome in the UI, never an error page.
-Known v1 limit to state out loud: a tap-added cut-out gets
-the generic label "My thing" and `faceFlag: false`, so a
-tapped person doesn't trigger the note
-(`src/server/decompose-job.ts`, `README.md`).
+A tap-added cut-out is named by Spark from its crop, with a
+face flag, so a tapped person triggers the same note (PIN-117,
+`src/server/decompose-job.ts`); only if that pass fails does it
+keep the label "My find" and no flag.
 
 **"Is my data used for training / retained by Meta?"**
 Inputs go to Meta under Standard mode — not used for
@@ -303,11 +316,17 @@ per concept call — that pair is the pin interaction.
 scene via `/v1/responses`, which is the whole product: real
 things from different people in one new image, recognisably
 themselves (T1 fidelity 4.86/5, §3) — and `store: false`
-makes remix stateless. The gateway hides all three behind
-capability ports (`ElementNamer`, `Segmenter`,
-`SceneComposer`) with mock and recorded-fixture adapters, so
-the 408-test suite runs offline and a model swap is an
-adapter, not a rewrite (`docs/adr/003-studio-architecture.md`).
+makes remix stateless. **Muse Voice Transcribe** turns a
+spoken idea into the scene prompt (short clip, audio never
+stored). **Muse Spark Open** on Baseten ran at build time only:
+it translated and reviewed the UI into six languages, and the
+app never calls it. The gateway hides the runtime models
+behind six capability ports (`ElementNamer`, `Segmenter`,
+`SceneComposer`, `ChipSuggester`, `TapNamer`,
+`SpeechTranscriber`) with mock and recorded-fixture adapters,
+so the offline test suite (§3, recount at freeze) never spends
+and a model swap is an adapter, not a rewrite
+(`docs/adr/003-studio-architecture.md`).
 
 **"How was fidelity measured?"**
 Five composed scenes, 14 elements scored 0–5 against their
@@ -315,12 +334,20 @@ cut-outs by a Spark vision judge — mean 4.86/5, with contact
 sheets saved for human review because an LLM judge is a
 proxy, not ground truth (`eval/studio-findings.md`, T1/T2).
 
+**"Is everything made with Meta models?"**
+Everything the app does at runtime is. Not every shipped
+image is: the older landing showcase set, the `/start`
+samples and the theme art are Higgsfield images (SAM cut the
+landing cut-outs). The newer showcase sets were made end to
+end with Muse Image and this app (`docs/17`,
+`public/landing/README.md`).
+
 **"What breaks / what's next?"**
 SAM returns no match for some named things (those simply
 don't become pins; tap-to-add is the workaround). The
-tap-add label/faceFlag limit and the 14-day lifecycle gap
-above are the stated v1 limits. Optional sign-in (PIN-57)
-already shipped on dev — elements follow their owner via
-the My pins library, as the owned `Element` / board `Pin`
-split anticipated (`docs/11` §5.4). Next: prod promotion,
-then UI/UX iteration on real family feedback.
+1-day lifecycle backstop (PIN-209), estimate-only costs and
+no native-speaker review of the translations are the stated
+limits. Optional sign-in (PIN-57) shipped — elements follow
+their owner via the My pins library, as the owned `Element` /
+board `Pin` split anticipated (`docs/11` §5.4). Next: iterate
+on real family feedback.

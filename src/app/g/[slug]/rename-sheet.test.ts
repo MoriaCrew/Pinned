@@ -14,7 +14,7 @@ const saveDisabled = (out: string) => /<button[^>]*disabled=""[^>]*>Save<\/butto
 describe("rename sheet (PIN-157)", () => {
   it("shows the name field with the current label, the code point count, Save and Cancel", () => {
     const out = sheet();
-    expect(out).toContain("Rename this thing");
+    expect(out).toContain("Rename this pin");
     expect(out).toContain('value="Teal mug"');
     expect(out).toContain(`8/${CAP}`);
     expect(out).toContain(">Save<");

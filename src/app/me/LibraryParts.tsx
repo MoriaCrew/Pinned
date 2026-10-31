@@ -2,8 +2,8 @@ import type { CSSProperties, ReactNode } from "react";
 import type { MyBoardCard } from "../../domain/my-boards";
 import type { MyPinCard } from "../../domain/my-pins";
 import { skinForTheme } from "../../domain/skins";
-import { tf, type Locale } from "../../i18n";
-import { Pin, Wordmark } from "../../ui";
+import { t, tf, type Locale } from "../../i18n";
+import { Pin, Tag, Wordmark } from "../../ui";
 import { You } from "../auth/You";
 import { MyBoardItem } from "./boards/MyBoardItem";
 import { PinToBoardButton } from "./pins/PinToBoardButton";
@@ -82,9 +82,13 @@ export function BoardCards({ locale, boards }: { locale: Locale; boards: MyBoard
           <a className="pn-lib-board" data-theme={skinForTheme(board.themeId)} href={`/g/${board.slug}`}>
             <span className="pn-skin-band" aria-hidden="true" />
             <span className="pn-lib-board-title">{board.title}</span>
+            {board.plus ? (
+              <Tag tone="outline" className="pn-lib-board-plus">
+                {t(locale, "ui.plus")}
+              </Tag>
+            ) : null}
             {board.latestSceneImageUrl ? (
               <span className="pn-lib-board-print" aria-hidden="true">
-                {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked image route */}
                 <img src={board.latestSceneImageUrl} alt="" loading="lazy" />
               </span>
             ) : (

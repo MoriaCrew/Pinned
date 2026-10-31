@@ -70,6 +70,14 @@ describe("errorResponse in the request's language (PIN-196)", () => {
     expect(await response.json()).toEqual({ error: "This board is full." });
   });
 
+  it("sends the empty-pool code with the 429 so the Add sheet can offer Plus (PIN-183), translated bodies keep theirs too", async () => {
+    const empty = errorResponse(new BoardApiError(userMessage("error.makesPoolEmpty"), 429, "credits_pool_empty"), "x");
+    expect(empty.status).toBe(429);
+    expect(await empty.json()).toEqual({ error: "This board is out of makes.", code: "credits_pool_empty" });
+    const other = errorResponse(new BoardApiError(userMessage("error.boardFull"), 409, "board_full"), "x");
+    expect(await other.json()).toEqual({ error: "Ce tableau est complet.", code: "board_full" });
+  });
+
   it("keeps the uniform 404 and the generic 500", async () => {
     const missing = errorResponse(new BoardApiError("Board not found.", 404), "x");
     expect(missing.status).toBe(404);

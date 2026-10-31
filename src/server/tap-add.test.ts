@@ -390,7 +390,7 @@ describe("tapAddPin API layer (PIN-78)", () => {
     const { deps, slug, owner, job } = await makeApiHarness();
     const before = job.pinIds.length;
     const result = await tapAddPin(slug, owner, job.id, { x: 0.4, y: 0.6 }, deps);
-    expect(result.element.label).toBe("My thing"); // i18n add.tapLabel
+    expect(result.element.label).toBe("My find"); // i18n add.tapLabel
     expect(result.pin.status).toBe("candidate");
     expect(result.job.pinIds).toHaveLength(before + 1);
     expect(result.job.workingCopyGone).toBe(false);

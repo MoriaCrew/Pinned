@@ -18,6 +18,7 @@ import {
   readSkinResponse,
   returnSkinStep,
   safeRedirectUrl,
+  shownLook,
   urlWithoutTryOn,
   type LookFlowEvent,
   type LookFlowState,
@@ -38,6 +39,37 @@ describe("effective skin (PIN-111)", () => {
     expect(activeTryOn("marigold", "marigold", true)).toBeNull();
     expect(activeTryOn("paper", "darkroom", true)).toBe("darkroom");
     expect(activeTryOn("paper", "darkroom", false)).toBeNull();
+  });
+});
+
+describe("the look a viewer sees (PIN-183)", () => {
+  const base = { tryOn: null, applying: null, isHost: false, canChangeLook: false };
+
+  it("shows a member the look they are saving, and the board's own skin otherwise", () => {
+    const member = { ...base, canChangeLook: true };
+    expect(shownLook("paper", member)).toBe("paper");
+    expect(shownLook("paper", { ...member, applying: "darkroom" })).toBe("darkroom");
+  });
+
+  it("never gives a member a try-on, and never shows a look to someone who cannot change it", () => {
+    const member = { ...base, canChangeLook: true };
+    expect(shownLook("paper", { ...member, tryOn: "marigold" })).toBe("paper");
+    expect(shownLook("paper", { ...base, applying: "darkroom" })).toBe("paper");
+  });
+
+  it("keeps the host's try-on, and the look being saved over it", () => {
+    const host = { ...base, isHost: true, canChangeLook: true };
+    expect(shownLook("paper", { ...host, tryOn: "marigold" })).toBe("marigold");
+    expect(shownLook("paper", { ...host, tryOn: "marigold", applying: "zine" })).toBe("zine");
+    // The host's own flag is enough, as before canChangeLook existed.
+    expect(shownLook("paper", { ...base, isHost: true, applying: "zine" })).toBe("zine");
+  });
+
+  it("lets a member with Plus pick any skin directly, no try-on", () => {
+    const plusOn = { active: true };
+    for (const skin of SKINS) {
+      expect(chooseLook(skin.id, { boardSkin: "paper", tryOn: null, plus: plusOn }).kind).toBe(skin.id === "paper" ? "none" : "apply");
+    }
   });
 });
 

@@ -3,50 +3,87 @@ import path from "node:path";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { plusActionKey, poolEmptyCopy } from "../../../domain/makes-ui";
+import { t } from "../../../i18n";
 import en from "../../../i18n/messages/en.json";
 import fr from "../../../i18n/messages/fr.json";
-import { BillingBanner, MakesIndicator, MakesPoolEmpty, checkoutErrorLine } from "./MakesFlow";
+import { BillingBanner, MakesIndicator, checkoutErrorLine } from "./MakesFlow";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const noop = () => {};
 
-describe("creations indicator (PIN-152, PIN-182)", () => {
-  it("renders nothing at all while the board view carries no credits", () => {
-    expect(html(h(MakesIndicator, { credits: undefined, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }))).toBe("");
-  });
-
-  it("shows the count left, announced politely, with no low line while healthy", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 12 }, lowMakesWarning: 5, canBuy: false, onAddMakes: noop, locale: "en" }));
-    expect(out).toContain("12 creations left");
-    expect(out).toContain('aria-live="polite"');
-    expect(out).toContain('data-state="ok"');
-    expect(out).not.toContain("Running low");
-    // The way into the Plus sheet is hidden while billing is off.
-    expect(out).not.toContain("Get Plus");
-  });
-
-  it("goes low at the Policy threshold and opens the Plus sheet from a Get Plus button", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 5 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
-    expect(out).toContain('data-state="low"');
-    expect(out).toContain("Running low");
-    expect(out).toContain("Get Plus");
-    const one = html(h(MakesIndicator, { credits: { availableMakes: 1 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
-    expect(one).toContain("1 creation left");
-  });
-
-  it("at empty, says new scenes will be collages until someone adds more", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 0 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
-    expect(out).toContain('data-state="empty"');
-    expect(out).toContain("0 creations left");
-    expect(out).toContain("New scenes will be collages");
-  });
-
-  it("renders the count in French", () => {
-    const out = html(
-      h(MakesIndicator, { credits: { availableMakes: 3 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "fr" }),
+describe("creations indicator (PIN-152, PIN-182, PIN-183)", () => {
+  /** The shipped threshold: Policy.credits.lowMakesWarning is 2. */
+  const indicator = (
+    availableMakes: number | null,
+    { locale = "en", ...over }: Partial<Parameters<typeof MakesIndicator>[0]> = {},
+  ) =>
+    html(
+      h(MakesIndicator, {
+        credits: availableMakes === null ? undefined : { availableMakes },
+        lowMakesWarning: 2,
+        plusActive: false,
+        canBuy: true,
+        onAddMakes: noop,
+        locale,
+        ...over,
+      }),
     );
-    expect(out).toContain("3 créations restantes");
-    expect(out).toContain("Obtenir Plus");
+
+  it("renders nothing at all while the board view carries no credits", () => {
+    expect(indicator(null)).toBe("");
+  });
+
+  it("renders nothing while there are more creations than the threshold, so the board looks like a credits-off board", () => {
+    expect(indicator(12)).toBe("");
+    expect(indicator(3)).toBe("");
+    expect(indicator(3, { plusActive: true })).toBe("");
+    // A threshold of 0 means no low state at all.
+    expect(indicator(1, { lowMakesWarning: 0 })).toBe("");
+  });
+
+  it("goes low at the threshold: one quiet line with a Get Plus text button, no card", () => {
+    const out = indicator(2);
+    expect(out).toContain('data-state="low"');
+    expect(out).toContain("2 creations left");
+    expect(out).toContain("pn-board-meta");
+    expect(out).toContain('aria-live="polite"');
+    expect(out).toMatch(/<button[^>]*pn-btn-quiet[^>]*>Get Plus<\/button>/);
+    // The separator is for the eye only.
+    expect(out).toMatch(/aria-hidden="true">\s*·\s*</);
+    expect(out).not.toContain("Running low");
+    expect(indicator(1)).toContain("1 creation left");
+  });
+
+  it("says Add creations instead once the board has Plus", () => {
+    const out = indicator(1, { plusActive: true });
+    expect(out).toMatch(/<button[^>]*>Add creations<\/button>/);
+    expect(out).not.toContain("Get Plus");
+    expect(indicator(0, { plusActive: true })).toMatch(/<button[^>]*>Add creations<\/button>/);
+  });
+
+  it("at empty, says new scenes will be collages, with the same button", () => {
+    const out = indicator(0);
+    expect(out).toContain('data-state="empty"');
+    expect(out).toContain("Out of creations. New scenes will be collages.");
+    expect(out).not.toContain("0 creations left");
+    expect(out).toMatch(/<button[^>]*>Get Plus<\/button>/);
+    // Empty speaks even with the low state switched off.
+    expect(indicator(0, { lowMakesWarning: 0 })).toContain("Out of creations.");
+  });
+
+  it("keeps the line and drops the button while billing is off", () => {
+    expect(indicator(2, { canBuy: false })).toContain("2 creations left");
+    expect(indicator(2, { canBuy: false })).not.toContain("<button");
+    expect(indicator(0, { canBuy: false })).not.toContain("<button");
+    expect(indicator(0, { canBuy: false })).toContain("Out of creations.");
+  });
+
+  it("renders in French", () => {
+    expect(indicator(2, { locale: "fr" })).toContain("2 créations restantes");
+    expect(indicator(2, { locale: "fr" })).toContain("Prendre Plus");
+    expect(indicator(2, { locale: "fr", plusActive: true })).toContain("Ajouter des créations");
+    expect(indicator(0, { locale: "fr" })).toContain("Plus de créations. Les nouvelles scènes seront des collages.");
   });
 });
 
@@ -83,15 +120,28 @@ describe("billing return banner (PIN-152, PIN-182)", () => {
   });
 });
 
-describe("pool-empty outcomes (PIN-152, PIN-182)", () => {
-  it("give creation-aware copy and a way into the Plus sheet when buying works", () => {
-    const photo = html(h(MakesPoolEmpty, { kind: "photo", canBuy: true, onAddMakes: noop, locale: "en" }));
-    expect(photo).toContain("out of creations, so photos can&#x27;t be cut out");
-    expect(photo).toContain('role="alert"');
-    expect(photo).toContain("Get Plus");
-    const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop, locale: "en" }));
-    expect(scene).toContain("ran out of creations, so that scene couldn&#x27;t be made");
-    expect(scene).not.toContain("Get Plus");
+describe("pool-empty outcomes (PIN-152, PIN-182, PIN-183)", () => {
+  const line = (kind: "photo" | "scene", flags: { canBuy: boolean; plusActive: boolean }, locale: "en" | "fr" = "en") =>
+    t(locale, poolEmptyCopy(kind, flags).line);
+
+  it("invite instead of failing when buying works: the same line for a photo and a scene", () => {
+    const flags = { canBuy: true, plusActive: false };
+    expect(line("photo", flags)).toBe("This board is out of creations. Get Plus to keep going.");
+    expect(line("scene", flags)).toBe(line("photo", flags));
+    expect(t("en", plusActionKey(false))).toBe("Get Plus");
+    expect(line("photo", flags, "fr")).toBe("Ce tableau n'a plus de créations. Prends Plus pour continuer.");
+  });
+
+  it("ask for more instead of Plus once the board has it", () => {
+    const flags = { canBuy: true, plusActive: true };
+    expect(line("photo", flags)).toBe("This board is out of creations. Add more to keep going.");
+    expect(t("en", plusActionKey(true))).toBe("Add creations");
+    expect(line("scene", flags, "fr")).toBe("Ce tableau n'a plus de créations. Ajoutes-en pour continuer.");
+  });
+
+  it("keep the plain fact, and no button, when billing is off", () => {
+    expect(line("photo", { canBuy: false, plusActive: false })).toContain("photos can't be cut out");
+    expect(line("scene", { canBuy: false, plusActive: false })).toContain("that scene couldn't be made");
   });
 });
 
@@ -120,6 +170,28 @@ describe("makes flow wiring guards (PIN-152, PIN-182)", () => {
     const source = read("BoardClient.tsx");
     expect(source).toContain("isPoolEmptyCode(data.job?.errorCode)");
     expect(source).toContain("scenePoolEmptyId === attempt.sceneId");
+  });
+
+  it("opens the Plus sheet from the indicator, both pool-empty outcomes and the you menu (PIN-183)", () => {
+    expect(read("AddSheet.tsx")).toContain('poolEmptyCopy("photo"');
+    const board = read("BoardClient.tsx");
+    expect(board).toContain('poolEmptyCopy("scene"');
+    expect(board).toMatch(/action: poolEmpty\?\.action \? \{ label: t\(locale, poolEmpty\.action\), onSelect: openBuyMakes \}/);
+    expect(board).toContain("onBoardPlus: openBuyMakes");
+    expect(board).toMatch(/<MakesIndicator[^>]*plusActive=\{view\.plus\?\.active === true\}/);
+  });
+
+  it("lets a member who may change the look through, while try-on and Delete stay host-only (PIN-183)", () => {
+    const board = read("BoardClient.tsx");
+    expect(board).toMatch(/const canChangeLook = view\.viewer\?\.canChangeLook === true/);
+    expect(board).toMatch(/useLookFlow\(\{[^}]*isHost,\s*canChangeLook,/);
+    expect(board).toMatch(/isHost && deleteBoardOpen/);
+  });
+
+  it("dropped the old indicator card: no frame, count or note classes left", () => {
+    const css = read("board.module.css");
+    expect(css).not.toMatch(/\.makesCount|\.makesNote|\.makesPoolEmpty/);
+    expect(css).not.toMatch(/\.makes\s*\{[^}]*border/);
   });
 
   it("has one sheet that asks for money: the Plus sheet, mounted for everyone", () => {
