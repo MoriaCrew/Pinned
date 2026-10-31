@@ -68,7 +68,7 @@ A working copy is deleted in two layers (`docs/11` A6):
 1. **The app, first.** `confirmPins` (`src/server/board-api.ts`)
    deletes it when the uploader taps "Pin selected", and an
    opportunistic per-board sweep (`sweepExpiredWorkingCopies`, run on
-   the next upload or confirm; no cron) deletes any copy older than
+   the next photo upload to that board; no cron) deletes any copy older than
    `Policy.workingCopyTtlHours`. Tap-add refuses an expired copy
    (`addTapElement`, `src/server/decompose-job.ts`).
 2. **The bucket rule, as backstop** for copies the app never got to
