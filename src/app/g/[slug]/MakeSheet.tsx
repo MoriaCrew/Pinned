@@ -65,15 +65,19 @@ export function MakeSheet({
   const locale = useLocale();
   const ideasId = useId();
   const [prompt, setPrompt] = useState(initialPrompt);
-  // Every chip shown in this sheet stays "known", so a prompt that is
-  // just an earlier chip still swaps (not appends) on a later tap.
-  const [knownChips, setKnownChips] = useState<readonly string[]>(chips);
+  // The row shows the fixed chips plus the generated ones. Every chip
+  // shown in this sheet stays "known", so a prompt that is just an
+  // earlier chip (fixed or generated) still swaps, not appends.
+  const ideas = ideaChips(fixedChips, chips);
+  const ideasKey = ideas.join("\u0000");
+  const [knownChips, setKnownChips] = useState<readonly string[]>(ideas);
   useEffect(() => {
     setKnownChips((current) => {
-      const extra = chips.filter((chip) => !current.includes(chip));
+      const extra = ideas.filter((chip) => !current.includes(chip));
       return extra.length > 0 ? [...current, ...extra] : current;
     });
-  }, [chips]);
+    // Keyed on ideasKey (the content of `ideas`): the array is new each render.
+  }, [ideasKey]);
 
   // A dropped pick's button goes away: focus moves to "+" instead of the page.
   const addRef = useRef<HTMLButtonElement>(null);
@@ -96,7 +100,6 @@ export function MakeSheet({
     },
   });
 
-  const ideas = ideaChips(fixedChips, chips);
   const recording = dictation.state === "recording";
   const busy = dictation.state !== "idle";
   // Validation only — the board assigns the client sceneId per

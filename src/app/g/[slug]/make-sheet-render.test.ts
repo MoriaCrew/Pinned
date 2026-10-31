@@ -99,4 +99,12 @@ describe("Make sheet as a chat-style composer (PIN-216)", () => {
     const source = readFileSync(path.join(__dirname, "MakeSheet.tsx"), "utf8");
     expect(source).not.toContain('setPrompt("")');
   });
+
+  it("treats fixed and generated chips alike as known, so tapping one after another swaps", () => {
+    // Bugbot on PR #188: knownChips followed only the generated list while the row also shows the fixed chips.
+    const source = readFileSync(path.join(__dirname, "MakeSheet.tsx"), "utf8");
+    expect(source).toMatch(/const ideas = ideaChips\(fixedChips, chips\);/);
+    expect(source).toMatch(/useState<readonly string\[\]>\(ideas\)/);
+    expect(source).not.toMatch(/useState<readonly string\[\]>\(chips\)/);
+  });
 });

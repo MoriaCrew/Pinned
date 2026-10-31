@@ -131,6 +131,9 @@ describe("make sheet logic (PIN-70)", () => {
   it("chips fill, swap, extend after a comma, and never duplicate or bust the cap", () => {
     expect(applyChip("", CHIPS[0], CHIPS, 500)).toBe("on a sunny picnic blanket");
     expect(applyChip("on a sunny picnic blanket", CHIPS[1], CHIPS, 500)).toBe("floating in space");
+    // A fixed chip and a generated chip are both "known": tapping one after the other swaps.
+    const known = ideaChips(["at a birthday party"], ["floating in space"]);
+    expect(applyChip("at a birthday party", "floating in space", known, 500)).toBe("floating in space");
     // PIN-75 swap: with fixed + generated chips both known, a
     // prompt that is just a fixed chip still swaps, not appends.
     expect(
