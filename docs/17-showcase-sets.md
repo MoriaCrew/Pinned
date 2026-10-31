@@ -34,9 +34,38 @@ Related:
 | 8 | Check | tests, phone and desktop screenshots | the PR |
 | 9 | Record provenance | per-set table and prompts | `public/landing/README.md` |
 
-Steps 2 to 6 run on scratch scripts today. PIN-172 adds the set
-manifest (`eval/showcase/sets.json`) and PIN-173 turns the driver into
-`scripts/showcase-build.mjs`. This page is the contract they follow.
+Steps 2 to 6 run with one script, `scripts/showcase-build.mjs`
+(PIN-173; helpers in `scripts/showcase/`, tests next to them):
+
+| Step | Command |
+| --- | --- |
+| 2 | `photos <items.json> --live` |
+| 3 | `serve [--live --env-file <file>]` |
+| 4 | `plan <spec>`, then `run <spec> [set...]` |
+| 5 | `run` writes `contact-sheet.html`; `sheet <set>` rebuilds it |
+| 6 | `web <web-spec>` |
+
+Run it as `node scripts/showcase-build.mjs <command>` or
+`npm run showcase -- <command>`; `--help` prints the options.
+
+- **Paths and env.** Every path and the env file come from an option or
+  an environment variable (`--work-dir` / `SHOWCASE_WORK_DIR`,
+  `--photos-dir` / `SHOWCASE_PHOTOS_DIR`, `--base-url` /
+  `SHOWCASE_BASE_URL`, `--env-file` / `SHOWCASE_ENV_FILE`). The work
+  folder defaults to `.showcase-work/`, which git ignores. Nothing
+  about the operator's machine is written into the repo.
+- **Paid calls need a flag.** `photos` only plans until you pass
+  `--live`. `serve` starts a mock app (`AI_MOCK=1`, free) unless you
+  pass `--live`. `run` refuses a live app unless you pass `--live`.
+- **Specs hold no local paths.** A friend's photo is a relative name
+  inside the photos folder (`cat/aye.webp`), so a spec can be
+  committed. PIN-172's manifest (`eval/showcase/sets.json`) is read the
+  same way: `plan` and `run` take one set spec, or a manifest
+  `{ "sets": [ ... ] }` plus set ids.
+- **Nothing secret in output.** Board slugs, session cookies and keys
+  are never printed, logged or written to `run.json`.
+
+This page stays the contract the script follows.
 
 ## 1. Write the brief
 
@@ -99,6 +128,31 @@ returns 1280x1920 or 1920x1280 **WebP**, whatever name you save it
 under. Save it as `.webp`: the upload takes the picture's type from the
 file extension.
 
+The `photos` command does this. Its items file has one entry per photo,
+named relative to the photos folder:
+
+```json
+[
+  { "out": "cat/aye.webp", "size": "1536x1024", "prompt": "Casual smartphone photo of ..." }
+]
+```
+
+```sh
+node scripts/showcase-build.mjs photos items.json --env-file <env file> --live
+```
+
+- It makes one photo at a time and saves each under its real type
+  (WebP, whatever name you asked for).
+- It skips a photo that already exists; `--force` makes it again.
+- It counts every generated image in `photos-state.json` in the work
+  folder, against `--image-cap` (40 by default, PIN-172's cap), and
+  stops before a call that would pass the cap. Start the count from the
+  images made elsewhere with `--baseline N` on the first run.
+- The state file also keeps each image's model, size, request id and
+  time, for the provenance table.
+- Without `--live` it only prints the plan. The log shows status,
+  time and size, never the key, a prompt or an answer.
+
 What cuts well, from the runs so far:
 
 - **Contrast.** Put a thing on a plain surface of another colour. A
@@ -118,9 +172,16 @@ What cuts well, from the runs so far:
 ## 3. Run the app locally with live models
 
 Run the worktree's app on `localhost:3000` with the operator's env
-file loaded at start-up. For example, a small launcher outside the
-repo calls `process.loadEnvFile(<path>)`, sets the overrides below and
-starts `next dev`.
+file loaded at start-up:
+
+```sh
+node scripts/showcase-build.mjs serve --live --env-file <env file>
+```
+
+`serve` loads the env file, forces the overrides below, and starts
+`next dev` listening on localhost only. Without `--live` it starts a
+mock app (`AI_MOCK=1`): free, and its scenes are collages. Use that
+for a dry run of the whole chain before any live run.
 
 | Variable | Value | Why |
 | --- | --- | --- |
@@ -133,8 +194,11 @@ starts `next dev`.
 | `AI_DAILY_CALL_LIMIT` | `2000` | room for a full run |
 
 Also unset the Stripe variables, `DEMO_BOARD_SLUG` and
-`FIRESTORE_EMULATOR_HOST`. Live calls run only on the operator's
-machine. CI stays on `AI_MOCK=1`.
+`FIRESTORE_EMULATOR_HOST` (`serve` does). A live server also gets
+longer model timeouts through `POLICY_OVERRIDES_JSON` (Spark 90 s,
+SAM 60 s, scene 180 s; a longer value in the env file wins), and a
+throwaway `SESSION_SECRET` when the env has none. Live calls run only on
+the operator's machine. CI stays on `AI_MOCK=1`.
 
 Limits that matter on a local run:
 
@@ -152,8 +216,14 @@ Limits that matter on a local run:
 
 ## 4. Drive one board per set
 
-Drive the local app over its public boards API, one board per set.
-These are the same calls `scripts/seed-demo-board.mjs` makes:
+```sh
+node scripts/showcase-build.mjs plan spec.json          # no network: checks the spec and the photos
+node scripts/showcase-build.mjs run spec.json cat --live # one set; --live only for a live app
+```
+
+`run` drives the local app over its public boards API, one board per
+set, and sets run one after another. These are the same calls
+`scripts/seed-demo-board.mjs` makes:
 
 1. `POST /api/boards` with `{ title, themeId }` creates the board.
    Keep its slug in memory only. A board slug is the board's access
@@ -179,16 +249,17 @@ Pick a scene's elements by a pattern on the label or description, not
 by an exact label. Spark names the same thing differently from run to
 run ("Smiling Woman", then "Selfie Woman").
 
-The spike's driver read a spec like this one, with photo paths
-pointing into the work folder:
+`run` reads a set spec like this one. Photo names are relative to the
+photos folder, so the spec holds no local path:
 
 ```json
 {
+  "id": "cat",
   "title": "Showcase: cat (synthetic)",
   "friends": [
-    { "name": "Aye", "photo": "<work folder>/cat.webp" },
-    { "name": "Ben", "photo": "<work folder>/beanie.webp" },
-    { "name": "Kim", "photo": "<work folder>/skateboard.webp" }
+    { "name": "Aye", "photo": "cat/aye.webp" },
+    { "name": "Ben", "photo": "cat/ben.webp" },
+    { "name": "Kim", "photo": "cat/kim.webp" }
   ],
   "scenes": [
     {
@@ -199,20 +270,63 @@ pointing into the work folder:
         { "friend": "Ben", "match": "beanie|hat" },
         { "friend": "Ben", "match": "heart|sunglass|glasses" },
         { "friend": "Kim", "match": "skate|board" }
-      ]
+      ],
+      "names": ["cat", "beanie", "sunglasses", "skateboard"]
     }
   ]
 }
 ```
 
-It wrote the downloads and a run record next to them: status and time
-per photo, labels, face flags, and each scene's status, kind and
-prompt version. Keep all of it in the work folder.
+The script checks the spec before it starts, so a mistake costs nothing:
+
+- 2 to 6 friends with made-up first names, and at most 3 scenes.
+- A scene prompt is at most 500 characters and has 1 to 4 picks
+  (`Policy.pinsPerScene`), from at least 2 friends.
+- The prompt must name every picked thing (each `match` must match
+  the prompt).
+- **Every item the prompt names must be a picked pin.** List those
+  items in `names`: each must be in the prompt and match some pick.
+  Muse Image draws an unpinned item from the text alone (PIN-171).
+- A scene runs only if every pick found a thing in the photos. A pick
+  prefers a label match to a description match, and one thing never
+  fills two picks.
+
+What `run` does and refuses:
+
+- It only talks to `localhost`, `127.0.0.1` or `[::1]`. A deployed app
+  needs `--allow-remote-base`.
+- It reads `/api/health` first. A live app (`aiMock: false`) needs
+  `--live`, because the run then makes paid calls.
+- It retries a failed photo once and logs each job's `errorCode`. A
+  refusal is not retried. It tries a scene up to `--scene-tries` times
+  (3) when it is refused, failed or came back as a collage.
+- It counts every photo and scene job against `--max-jobs` (24), and
+  refuses to start if the sets need more than that at the least.
+- It fails loudly (exit 1) on a scene that is refused or, on a live
+  app, a collage; a photo with no usable pin; a pick with no thing;
+  and a run over the cap. It still writes `run.json` and the contact
+  sheet, so the evidence is kept. After a failing set it stops
+  without starting the next.
+- A set's folder `out/<id>/` that already exists is moved aside to
+  `out/<id>-<time>/`, never overwritten or deleted.
+
+It writes, in `<work folder>/out/<set id>/`: each friend's photo
+(`photos/`), every cut-out (`<friend>-<n>-<label>-cutout.png`) and
+flattened picture (`...-flat.jpg`), each scene image, and `run.json`.
+The run record holds the labels, descriptions and mask boxes; face
+flags; each attempt's status, error code and time; each scene's status,
+kind, prompt version and pixel size; the model ids and the prompt
+versions (`elements.v1`, `scene.v1`); the job count and the failures.
+Keep all of it in the work folder.
 
 ## 5. Review and pick
 
-Put every cut-out and scene on one contact sheet (the spike's is
-`eval/contact-sheets/PIN-171-showcase-spike.jpg`). Pick:
+`run` writes `contact-sheet.html` next to `run.json` (open it in a
+browser; `node scripts/showcase-build.mjs sheet <set id>` rebuilds it).
+It shows each photo with the mask boxes and labels the app found, every
+cut-out on the Paper background with the sticker keyline, and every
+scene with its status, kind and tries. (The spike's was
+`eval/contact-sheets/PIN-171-showcase-spike.jpg`.) Pick:
 
 - the scene;
 - the step-1 photo and the two things to tag on it;
@@ -234,6 +348,33 @@ Write the picks into the set's folder, `public/landing/sets/<id>/`:
 
 360x640 is about twice the largest pile slot on a phone. A set weighs
 at most 220 KB in total (try-on: 148 KB, cat: 151 KB).
+
+`web` builds the files from the set's run record. Its spec names each
+picked file by a pattern on the label (as `run` does), never by a path:
+
+```json
+{
+  "set": "cat",
+  "items": [
+    { "type": "cutout", "id": "ginger-cat", "friend": "Aye", "match": "cat|tabby" },
+    { "type": "photo", "name": "photo-shelf-beanie-glasses", "friend": "Ben", "left": 0.14, "top": 0 },
+    { "type": "scene", "name": "scene-street-skate", "scene": "c1-street", "left": 0, "top": 0.1 }
+  ]
+}
+```
+
+```sh
+node scripts/showcase-build.mjs web web-spec.json            # writes public/landing/sets/<set>/
+node scripts/showcase-build.mjs web web-spec.json --out-dir <folder> --quality 78
+```
+
+- `left` and `top` place the square crop, as fractions of the picture's
+  width and height; the crop is kept inside the picture.
+- It writes only the files in the spec. It never deletes: a file left
+  from an earlier build stays, and the test fails on unused files, so
+  delete it yourself.
+- It reads each file back and fails (exit 1) on any EXIF, any IPTC
+  block, any XMP but the marker, or a set over the 220 KB budget.
 
 Metadata: write one XMP packet holding only the IPTC marker for media
 made by a trained model. Muse Image writes the same marker into its own
@@ -361,12 +502,17 @@ work folder, outside git.
 
 - Use synthetic pictures only, never a real person or a real photo,
   and made-up first names only.
-- Source photos, raw outputs, run records and specs stay outside git;
-  specs hold local paths.
+- Source photos, raw outputs and run records stay outside git: the
+  script's work folder, `.showcase-work/`, is git-ignored. A spec holds
+  only relative photo names, so it holds no local path and may be
+  committed (PIN-172's manifest is one).
 - The model key lives in the operator's env file outside the repo.
   Never copy, print or log it, and never paste it into a PR or Linear.
-- Board slugs are access keys: drivers keep them in memory and never
-  print them.
+  The script takes the env file path from `--env-file` or
+  `SHOWCASE_ENV_FILE`; the path is not written anywhere.
+- Board slugs are access keys: the driver keeps them in memory and never
+  prints them, logs them or writes them to `run.json` (a test checks
+  this, and every log line and error goes through a redactor).
 - Shipped pictures carry the AI-generated marker and no other
   metadata.
 
