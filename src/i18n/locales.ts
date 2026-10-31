@@ -100,3 +100,20 @@ export function negotiateLocale(input: {
   }
   return DEFAULT_LOCALE;
 }
+
+/**
+ * The language when no server or provider is around (global-error,
+ * PIN-212, where the root layout itself failed): the saved choice in
+ * the cookie jar, else the page's own `lang` (the server already
+ * negotiated it), else English. Every language counts as on, because
+ * the cookie is only ever written for an enabled one and `lang`
+ * came from the server's enabled list.
+ */
+export function localeFromDocument(cookieJar: string, htmlLang: string): Locale {
+  const saved = cookieJar
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
+    ?.slice(LOCALE_COOKIE.length + 1);
+  return negotiateLocale({ cookie: saved, acceptLanguage: htmlLang, enabled: LOCALES });
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LOCALE_NAMES,
   LOCALES,
+  localeFromDocument,
   matchLocale,
   negotiateLocale,
   parseAcceptLanguage,
@@ -96,6 +97,21 @@ describe("negotiateLocale", () => {
 
   it("stays English when only English is on (the default)", () => {
     expect(negotiateLocale({ cookie: "fr", acceptLanguage: "fr-FR", enabled: ["en"] })).toBe("en");
+  });
+});
+
+describe("localeFromDocument (global-error, PIN-212)", () => {
+  it("prefers the saved choice, then the page's lang, then English", () => {
+    expect(localeFromDocument("a=1; pinneds_locale=de; b=2", "fr")).toBe("de");
+    expect(localeFromDocument("a=1", "fr")).toBe("fr");
+    expect(localeFromDocument("", "pt-PT")).toBe("pt-BR");
+    expect(localeFromDocument("", "")).toBe("en");
+  });
+
+  it("ignores a cookie that is not a language and a lang we don't have", () => {
+    expect(localeFromDocument("pinneds_locale=klingon", "es")).toBe("es");
+    expect(localeFromDocument("pinneds_locale=", "ja")).toBe("en");
+    expect(localeFromDocument("xpinneds_locale=de", "")).toBe("en");
   });
 });
 
