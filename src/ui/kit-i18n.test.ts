@@ -1,7 +1,6 @@
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import fr from "../i18n/messages/fr.json";
+import { describe, expect, it } from "vitest";
 import { LocaleProvider } from "../i18n/client";
 import { t, tf } from "../i18n";
 import { AvatarStack, CreditLine, Developing, Pin, PlusSheet, SceneCard, TryOnBar, boardMetaLine, compactCreditsName, pickedCountLabel } from "./index";
@@ -42,24 +41,12 @@ describe("UI kit sentences (PIN-194), English unchanged", () => {
 });
 
 describe("UI kit follows the language (PIN-194)", () => {
-  // fr.json has no ui.* keys until PIN-189 fills it, so borrow a few here.
-  const borrowed: Record<string, string> = {
-    "ui.sceneLabel": "Scène : {idea}",
-    "ui.remixOfBy": "Remix de {title} par {owner}",
-    "ui.pinWithState": "{state} : {label}",
-    "ui.plusGetPrice": "Obtenir Plus · {price}",
-  };
-  beforeAll(() => Object.assign(fr, borrowed));
-  afterAll(() => {
-    for (const key of Object.keys(borrowed)) delete (fr as Record<string, string>)[key];
-  });
-
   it("renders each sentence in the provider's language and word order", () => {
     expect(inFrench(h(SceneCard, { src: "/s.webp", idea: "Bureau" }))).toContain('aria-label="Scène : Bureau"');
     expect(inFrench(h(CreditLine, { items: [], remixOf: { sceneId: "s", title: "Bureau", owner: "Robin" } as never }))).toContain(
       "Remix de <b>Bureau</b> par Robin",
     );
-    expect(inFrench(h(Pin, { src: "/a.webp", label: "Canard", state: "dropped", onToggle: () => {} }))).toContain("left out : Canard");
+    expect(inFrench(h(Pin, { src: "/a.webp", label: "Canard", state: "dropped", onToggle: () => {} }))).toContain('aria-label="Canard, laissé de côté"');
     expect(inFrench(h(PlusSheet, { plan: "board", onPlanChange: () => {}, prices: { board: "3 €", host: "5 €" }, available: true }))).toContain(
       "Obtenir Plus · 3 €",
     );
