@@ -236,6 +236,8 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
         { lookupKey: "pinneds_plus_20", credits: 20, eurCents: 299, label: "20 creations · €2.99" },
       ],
       starterMakes: 5,
+      // PIN-229: a creation is an AI scene; photos use no make.
+      photosUseMakes: false,
       starterBoardsPerMaker: 3,
       starterMakerWindowMs: 604_800_000,
       lowMakesWarning: 2,
@@ -277,6 +279,13 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([8, 900, 1]);
     expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
     expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
+    // PIN-229: a creation is an AI scene by default; photos use a make only when switched on.
+    expect(DEFAULT_POLICY.credits.photosUseMakes).toBe(false);
+    expect(resolvePolicy(null, { credits: { photosUseMakes: true } }).credits.photosUseMakes).toBe(true);
+    expect(parsePolicyOverridesJson('{"credits":{"photosUseMakes":true}}')).toEqual({
+      credits: { photosUseMakes: true },
+    });
+    expect(() => resolvePolicy({ credits: { photosUseMakes: 1 } } as never)).toThrow();
     // PIN-204 free creations per maker: deep-overridable, 0 boards allowed, window at least 1 ms.
     expect(
       resolvePolicy({ credits: { starterBoardsPerMaker: 10 } }, { credits: { starterMakerWindowMs: 60_000 } })

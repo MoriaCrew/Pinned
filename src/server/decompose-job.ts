@@ -42,7 +42,7 @@ import type { CreditLedgerStore } from "../domain/credit-ledger";
 import {
   CREDIT_DEBIT_FAILED,
   CREDITS_POOL_EMPTY,
-  creditsEnabled,
+  photosUseMakes,
   photoDebitEventId,
   photoRefundEventId,
   tryDebitMake,
@@ -658,7 +658,7 @@ export async function runDecomposeJob(
       // follow the PIN-151 unpaid rule (discarded while credits
       // are on; kept while off).
       if (aborted || pastDeadline()) {
-        if (creditsEnabled(policy)) {
+        if (photosUseMakes(policy)) {
           await discardJobCandidates(deps, job);
         }
         return finish(deps, job, "failed", STALE_JOB_ERROR);
@@ -672,10 +672,14 @@ export async function runDecomposeJob(
       // this job ran, the debit refuses atomically, the candidate
       // pins are discarded (still `running`, so unconfirmable)
       // and the job fails `credits_pool_empty` instead of
-      // exposing a free make. Disabled = no ledger call at all.
-      let debit: Awaited<ReturnType<typeof tryDebitMake>>;
+      // exposing a free make. Disabled = no ledger call at all, and
+      // so is a photo that uses no make (PIN-229, the default: a
+      // creation is an AI scene).
+      let debit: Awaited<ReturnType<typeof tryDebitMake>> = "disabled";
       try {
-        debit = await tryDebitMake(job.boardId, photoDebitEventId(job.id), deps);
+        if (photosUseMakes(policy)) {
+          debit = await tryDebitMake(job.boardId, photoDebitEventId(job.id), deps);
+        }
       } catch {
         await discardJobCandidates(deps, job);
         return finish(deps, job, "failed", CREDIT_DEBIT_FAILED);
@@ -731,10 +735,11 @@ export async function runDecomposeJob(
       }
       return retried;
     }
-    // PIN-151: while credits are on, candidates from a job that
+    // PIN-151: while photos use makes, candidates from a job that
     // never reached the debit seam are not left confirmable for
-    // free; while off, the PIN-64 keep-what-landed rule stands.
-    if (creditsEnabled(deps.policy) && job.pinIds.length > 0) {
+    // free; otherwise (credits off, or photos free since PIN-229)
+    // the PIN-64 keep-what-landed rule stands.
+    if (photosUseMakes(deps.policy) && job.pinIds.length > 0) {
       await discardJobCandidates(deps, job);
     }
     return finish(deps, job, "failed", "decompose_failed");

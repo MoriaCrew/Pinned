@@ -12,7 +12,10 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
   (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
   and the AI budget are unchanged. With credits on, AI makes
   ("creations" in the UI) spend the board pool instead (PIN-151
-  below). A new board starts with a free pool of 5
+  below). **A creation is one AI scene (PIN-229):** adding a photo
+  and its cut-outs never uses one, so discarding cut-outs costs
+  nothing; every AI scene uses one, even one the person does not
+  keep. A new board starts with a free pool of 5
   (`credits.starterMakes`) while its maker still has free boards
   left (the rule below). **Guests never have to pay.**
 
@@ -307,6 +310,7 @@ list.
 | `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
 | `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
 | `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `photosUseMakes` | `false` | PIN-229: a creation is an AI scene, so photos never touch the pool. `true` restores the PIN-151 photo debit (1 per finished photo job) |
 | `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation since PIN-205) |
 | `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
 | `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
@@ -781,11 +785,16 @@ granted board's poll costs one document read whatever the
 ledger size, and any number of concurrent first touches and
 replays still grant exactly once.
 
-**What a make is.** Exactly one successful AI production:
+**What a make is.** Exactly one successful AI scene (PIN-229).
+Photos use no make by default (`credits.photosUseMakes: false`):
+people pay for the thing they ask for, not for the AI's guesses,
+even though a photo (~$0.02 of naming + SAM calls, docs/16)
+costs us about twice a scene ($0.01). With the switch on, the
+PIN-151 photo row below applies again.
 
 | Flow | Debits 1 | Never debits |
 | --- | --- | --- |
-| Photo (`DecomposeJob`) | the job finishing `ready` (one completed job per photo, any element count) | failures/refusals, cap denies, tap-adds and tap naming on its working copy |
+| Photo (`DecomposeJob`) | only with `photosUseMakes`: the job finishing `ready` (one completed job per photo, any element count) | by default every photo; always failures/refusals, cap denies, tap-adds and tap naming on its working copy |
 | Scene/remix (`SceneJob`) | a ready scene recorded kind `ai` | refusals/failures, any collage (`AI_MOCK`, over-budget fallback, pool-empty lane) |
 | Riders | — | suggestion chips, dictation: still only Policy-capped |
 
@@ -794,12 +803,15 @@ replays still grant exactly once.
 replay of the same job can never double-debit (and the job
 claim gates already refuse a second run).
 
-- Photo: inside `runDecomposeJob`, after at least one
-  candidate pin has landed and before the job may finish
-  `ready`. `uploadPhoto` preflights first (after the Policy
-  daily photo cap): an empty pool gets the board API's typed
-  429 `{ code: "credits_pool_empty" }` before intake or any AI
-  call, so the happy path never starts unpaid.
+- Photo (only with `photosUseMakes`): inside `runDecomposeJob`,
+  after at least one candidate pin has landed and before the
+  job may finish `ready`. `uploadPhoto` preflights first (after
+  the Policy daily photo cap): an empty pool gets the board
+  API's typed 429 `{ code: "credits_pool_empty" }` before intake
+  or any AI call, so the happy path never starts unpaid. With
+  the switch off (the default) neither runs, and a photo's
+  candidates follow the credits-off rules (kept on a failure or
+  stale sweep, PIN-64), exactly as with credits off.
 - Scene: inside `runSceneJob`, after the composed image is
   stored and before the terminal `finish` syncs a `ready`
   Scene — the only state the image route serves.
@@ -839,7 +851,9 @@ the photo run before the seam also discards landed candidates
 while credits are on (off, the keep-what-landed PIN-64 rule
 stands).
 
-**Pool-empty lanes.** Photo: the 429 above, no AI spend.
+**Pool-empty lanes.** Photo (only with `photosUseMakes`): the
+429 above, no AI spend; by default an empty pool never stops a
+photo.
 Scene: the existing free collage lane composes instead (the
 composer port is never called, the scene is honestly kind
 `collage` at $0, nothing debits) — decided inside
@@ -907,7 +921,7 @@ announced (`aria-live="polite"`).
 - **Plus sheet.** Title, lead ("Anyone on the board can get Plus.
   Everyone here gets it."), a perks list and one button. Perks in
   order: "+N creations" (N = `Policy.credits.packs[0].credits`; "For
-  everyone on this board. Photos and scenes."), "Every skin",
+  everyone on this board. One per AI scene.", PIN-229), "Every skin",
   "Foil stickers", "Deeper scenes" and "Full-size downloads" (both
   tagged Soon: planned, not built). The button reads "Get Plus ·
   €2.99" with a quiet "Once, for this board."; the price is
@@ -979,7 +993,8 @@ announced (`aria-live="polite"`).
   and forgets it. A cancelled or failed return only forgets it.
 - **Pool-empty outcomes (PIN-183).** Running out is an offer, never
   an error. The photo 429 (`credits_pool_empty`, PIN-151) and a
-  photo job failing with that `errorCode` replace the Add sheet's
+  photo job failing with that `errorCode` (both only while
+  `credits.photosUseMakes` is on, PIN-229) replace the Add sheet's
   generic failure with "This board is out of creations. Get Plus to
   keep going." (a neutral status line, not an alert) and a button
   into the Plus sheet. A scene job failing with that code (the
