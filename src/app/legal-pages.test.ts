@@ -88,7 +88,12 @@ describe("privacy page (PIN-26)", () => {
       expect(html).not.toMatch(/zero[- ]?(data[- ])?retention/i);
       expect(html).not.toMatch(/Meta (never|does not|doesn't) (store|keep)/i);
     }
-    expect(text(await privacy())).toContain("ask Meta not to store the request");
+    // Defaults: scenes send store:false, SAM sends no flag (PIN-213).
+    expect(text(await privacy())).toContain("When making a scene, we also ask Meta not to store the request.");
+    state.policy = resolvePolicy({ samStore: false });
+    expect(text(await privacy())).toContain("When cutting things out and making a scene, we also ask Meta");
+    state.policy = resolvePolicy({ samStore: false, sceneStore: true });
+    expect(text(await privacy())).toContain("When cutting things out, we also ask Meta");
     state.policy = resolvePolicy({ sceneStore: true });
     expect(text(await privacy())).not.toContain("ask Meta not to store");
   });

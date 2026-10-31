@@ -25,6 +25,10 @@ export default async function PrivacyPage() {
   const policy = getPolicy();
   const signIn = cfg.authMode === "optional";
   const payments = cfg.plusMode === "stripe";
+  // Which calls send `store: false` (Policy sceneStore; samStore since PIN-213, unset = no flag sent).
+  const noStore = [policy.samStore === false ? "cutting things out" : null, policy.sceneStore ? null : "making a scene"]
+    .filter(Boolean)
+    .join(" and ");
   return (
     <LegalShell locale={locale} title={t(locale, "legal.privacyTitle")} current="privacy">
       <LegalSection id="who" title="Who runs Pinneds">
@@ -112,7 +116,7 @@ export default async function PrivacyPage() {
         <p>
           We use Meta&apos;s API in its Standard mode, where Meta does not use this data to train its models. That
           does not mean Meta stores nothing: what Meta keeps, and for how long, is set by Meta&apos;s own terms.
-          {policy.sceneStore ? null : " When making a scene, we also ask Meta not to store the request."}
+          {noStore ? ` When ${noStore}, we also ask Meta not to store the request.` : null}
         </p>
         <p>
           AI can be wrong or say no: names, cut-outs and scenes are generated, and Meta&apos;s safety checks may
