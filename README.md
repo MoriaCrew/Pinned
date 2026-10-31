@@ -104,9 +104,10 @@ Spec: [`docs/11-studio.md`](docs/11-studio.md) §5. Decisions:
     re-encoded into a working copy under `tmp/`. Only cut-outs (`elements/`) and scenes
     (`scenes/`) persist, served through routes that check the board link; client
     Firestore and Storage rules deny everything.
-  - The working copy is deleted when the uploader pins their picks. Any copy older than
-    Policy `workingCopyTtlHours` (24 h) is swept the next time someone adds a photo to
-    that board, and a bucket lifecycle rule backs this up (`storage.lifecycle.json`).
+  - The working copy is deleted when the uploader confirms their pins ("Pin N"). Any copy
+    older than Policy `workingCopyTtlHours` (24 h) is swept the next time someone adds a
+    photo to that board, and a bucket lifecycle rule in `storage.lifecycle.json` deletes
+    leftover working copies as the backstop.
   - Calls to Meta run in Standard mode: not used for training, which is not the same as
     not stored. The Muse Image compose call sends `store: false`. We make no "zero data
     retention" claim.
@@ -198,9 +199,6 @@ keys come from Secret Manager, never git. Design and runbook:
   stay English whatever the UI language (PIN-214, PIN-200).
 - **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
   checked them yet. Latin-script languages only.
-- **The working-copy backstop is long.** The app deletes a working copy at pin time, or
-  sweeps it after 24 h when the board is next used; the bucket lifecycle rule behind that
-  is 14 days today.
 
 ## Built with
 
