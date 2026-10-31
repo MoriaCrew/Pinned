@@ -43,10 +43,6 @@ export function usdToMicroUsd(usd: number): number {
   return Math.max(0, Math.round(usd * 1_000_000));
 }
 
-export function estimateMetaCostMicroUsd(entry: MetaCallLog): number {
-  return usdToMicroUsd(estimateMetaCostUsd(entry));
-}
-
 export type PortOperation =
   | "nameElements"
   | "segment"

@@ -7,74 +7,8 @@ import { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter, 
 import { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter, mockSpeechTranscriber, mockTapNamer } from "./mock-ports";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, SpeechTranscriber, TapNamer } from "./ports";
 
-export type { ModelGateway, ObjectLabel, SamSegment } from "./model-gateway";
-export { MetaApiError, MetaGateway } from "./meta-gateway";
-export type { MetaCallLog, MetaGatewayOptions } from "./meta-gateway";
-export type {
-  ComposeSceneInput,
-  ElementNamer,
-  NameElementsInput,
-  NamedElement,
-  PortOutcome,
-  SceneComposer,
-  Segmenter,
-  SegmentInput,
-  ChipSuggester,
-  SuggestChipsInput,
-  SegmentPrompt,
-  TapNamer,
-  SpeechTranscriber,
-  TranscribeInput,
-  TapName,
-  NameOneInput,
-} from "./ports";
-export {
-  buildSceneResponsesBody,
-  PARENT_SCENE_LABEL,
-  buildSegmentPromptText,
-  classifyPortError,
-  elementsSystemPrompt,
-  normalizeElements,
-  normalizeTapName,
-  normalizeTranscript,
-  tapNameSystemPrompt,
-  chipsSystemPrompt,
-  normalizeChips,
-  templateChips,
-  sceneElementLabel,
-  sceneImageOutcome,
-  scenePromptText,
-} from "./ports";
-export type {
-  ComposeSceneElement,
-  SceneContentPart,
-  SceneResponsesBody,
-} from "./ports";
-export {
-  collectMetaCallLog,
-  decoratePorts,
-} from "./decorators";
-export type { DecoratedPorts, PortDecoratorDeps } from "./decorators";
-export {
-  InMemoryBudgetStore,
-  applyReserve,
-  dayBucketFor,
-  emptyBudgetDay,
-  evaluateReserve,
-} from "./budget";
-export type {
-  BudgetDayState,
-  BudgetStore,
-  ReserveDenyReason,
-  ReserveRequest,
-  ReserveResult,
-} from "./budget";
-export { estimateMetaCostUsd, estimateReserveUsd } from "./costs";
-export type { PortOperation } from "./costs";
-export { metaChipSuggester, metaElementNamer, metaSceneComposer, metaSegmenter, metaSpeechTranscriber, metaTapNamer } from "./meta-ports";
-export { mockChipSuggester, mockElementNamer, mockSceneComposer, mockSegmenter, mockSpeechTranscriber, mockTapNamer, MOCK_TAP_NAME, MOCK_TRANSCRIPT } from "./mock-ports";
-export { fixtureChipSuggester, fixtureElementNamer, fixtureSceneComposer, fixtureSegmenter, fixtureSpeechTranscriber, fixtureTapNamer } from "./fixture-ports";
-export type { StudioFixtureElement, StudioFixtureScene, StudioFixtures } from "./fixture-ports";
+// Entry points only. Types, ports, decorators and costs are imported
+// from their own modules (./ports, ./decorators, ./costs, ...).
 
 /**
  * Mock stays the default (AI_MOCK=1). Live mode requires a Meta key
