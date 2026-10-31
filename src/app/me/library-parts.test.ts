@@ -69,7 +69,7 @@ describe("My boards cards (PIN-104)", () => {
 
   it("sets the counts in mono lines", () => {
     const markup = html(h(BoardCards, { locale: "en", boards: [board({ myPinCount: 1 })] }));
-    expect(markup).toContain("1 thing of yours");
+    expect(markup).toContain("1 pin of yours");
     expect(markup).toContain("Oct 29");
   });
 });

@@ -32,7 +32,7 @@ const line = (props: Partial<Parameters<typeof LeftoversLine>[0]> = {}) =>
 describe("leftovers line (PIN-122)", () => {
   it("says how many things from the last photo wait, with Pin them and Clear", () => {
     const out = line();
-    expect(out).toContain("3 things from your last photo aren&#x27;t pinned");
+    expect(out).toContain("3 from your last photo aren&#x27;t pinned yet");
     expect(out).toContain("Pin them");
     expect(out).toContain("Clear");
     expect(out).toContain("pn-btn-secondary");
@@ -42,18 +42,18 @@ describe("leftovers line (PIN-122)", () => {
 
   it("uses the singular forms for one thing", () => {
     const out = line({ leftovers: { groups: [group("j1", 1, 1)], count: 1 } });
-    expect(out).toContain("1 thing from your last photo isn&#x27;t pinned");
+    expect(out).toContain("1 from your last photo isn&#x27;t pinned yet");
     expect(out).toContain("Pin it");
   });
 
   it("counts every photo's leftovers", () => {
     const many: Leftovers = { groups: [group("new", 2, 9), group("old", 3, 1)], count: 5 };
-    expect(leftoversLine(many, "en")).toBe("5 things from your last photos aren't pinned");
+    expect(leftoversLine(many, "en")).toBe("5 from your last photos aren't pinned yet");
   });
 
   it("asks once before clearing, and says when clearing failed", () => {
     const ask = line({ confirming: true });
-    expect(ask).toContain("Clear 3 things? They won&#x27;t be pinned.");
+    expect(ask).toContain("Clear 3? They won&#x27;t be pinned.");
     expect(ask).toContain("Yes, clear");
     expect(ask).toContain("Keep");
     expect(ask).not.toContain("Pin them");

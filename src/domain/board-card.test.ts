@@ -56,8 +56,8 @@ describe("cardModel (PIN-102)", () => {
 
   it("drops the inviter when nobody joined yet", () => {
     expect(cardModel(input()).inviter).toBeNull();
-    expect(cardInviteLine(null)).toBe("Pin your things to");
-    expect(cardInviteLine("Robin")).toBe("Robin invited you to pin your things to");
+    expect(cardInviteLine(null)).toBe("Pin your stuff to");
+    expect(cardInviteLine("Robin")).toBe("Robin invited you to pin your stuff to");
   });
 
   it("piles only pinned elements of this board with a stored cut-out, newest first", () => {
@@ -131,7 +131,7 @@ describe("card text", () => {
         participants: [{ id: "p1", displayName: "🌻", createdAt: 1 }],
       }),
     );
-    expect(model.title).toBe("Everyone's things, pinned.");
+    expect(model.title).toBe("Your stuff, pinned together.");
     expect(model.inviter).toBeNull();
     expect(cardModel(input({ board: { slug: SLUG, title: " Mia 🎈 7 ", themeId: "paper" } })).title).toBe("Mia 7");
   });
@@ -139,8 +139,8 @@ describe("card text", () => {
 
 describe("card copy", () => {
   it("leaves zero counts out of the meta line", () => {
-    expect(cardMetaLine({ people: 6, things: 14, scenes: 0 })).toBe("6 people · 14 things");
-    expect(cardMetaLine({ people: 1, things: 1, scenes: 1 })).toBe("1 person · 1 thing · 1 scene");
+    expect(cardMetaLine({ people: 6, things: 14, scenes: 0 })).toBe("6 people · 14 pins");
+    expect(cardMetaLine({ people: 1, things: 1, scenes: 1 })).toBe("1 person · 1 pin · 1 scene");
     expect(cardMetaLine({ people: 0, things: 0, scenes: 0 })).toBe("");
   });
 

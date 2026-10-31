@@ -1,7 +1,7 @@
 {
   "name": "pinned",
   "version": "0.1.0",
-  "description": "Pinneds Studio - a shared pinboard of real things: Muse Spark names photo elements, SAM 3.1 cuts them out, friends pin them, Muse Image composes credited scenes.",
+  "description": "Pinneds Studio - your stuff, pinned together: Muse Spark names photo elements, SAM 3.1 cuts them out, friends pin them, Muse Image composes credited scenes.",
   "private": true,
   "license": "AGPL-3.0-only",
   "engines": {

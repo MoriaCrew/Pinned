@@ -35,7 +35,7 @@ describe("UI kit sentences (PIN-194), English unchanged", () => {
     const sheet = html(h(PlusSheet, { pack: { credits: 20, eurCents: 300 }, plusActive: false, available: true }));
     expect(sheet).toContain("Get Plus · €3.00");
     expect(html(h(TryOnBar, { skin: "paper" }))).toContain("Trying on <b>");
-    expect(boardMetaLine({ people: 2, things: 1 })).toBe("2 people · 1 thing");
+    expect(boardMetaLine({ people: 2, things: 1 })).toBe("2 people · 1 pin");
     expect(pickedCountLabel(1, 4)).toBe("1 of 4 picked");
   });
 });

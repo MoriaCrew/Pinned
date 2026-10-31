@@ -10,7 +10,6 @@
   "concepts": [
     "board",
     "pin",
-    "thing",
     "sticker",
     "scene",
     "make/makes",
@@ -24,7 +23,6 @@
     "fr": {
       "board": "tableau",
       "pin": "épingle (verbe : épingler)",
-      "thing": "chose",
       "sticker": "sticker",
       "scene": "scène",
       "make/makes": "création/créations",
@@ -37,7 +35,6 @@
     "es": {
       "board": "tablero",
       "pin": "pin (verbo: pinear)",
-      "thing": "cosa",
       "sticker": "sticker",
       "scene": "escena",
       "make/makes": "creación/creaciones",
@@ -50,7 +47,6 @@
     "pt-BR": {
       "board": "quadro",
       "pin": "pin (verbo: fixar)",
-      "thing": "coisa",
       "sticker": "figurinha",
       "scene": "cena",
       "make/makes": "criação/criações",
@@ -63,7 +59,6 @@
     "de": {
       "board": "Pinnwand",
       "pin": "Pin (Verb: anpinnen)",
-      "thing": "Ding",
       "sticker": "Sticker",
       "scene": "Szene",
       "make/makes": "Kreation/Kreationen",
@@ -76,7 +71,6 @@
     "it": {
       "board": "bacheca",
       "pin": "pin (verbo: appuntare)",
-      "thing": "cosa",
       "sticker": "sticker",
       "scene": "scena",
       "make/makes": "creazione/creazioni",
@@ -89,7 +83,6 @@
     "id": {
       "board": "papan",
       "pin": "pin (kata kerja: menyematkan)",
-      "thing": "benda",
       "sticker": "stiker",
       "scene": "adegan",
       "make/makes": "kreasi",

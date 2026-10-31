@@ -1,4 +1,4 @@
-# Pinneds Studio — a shared pinboard of real things
+# Pinneds Studio — your stuff, pinned together
 
 > Anyone with the board link uploads a photo. Muse Spark names the
 > things in it, SAM 3.1 cuts each one out, and the cut-outs are pinned
