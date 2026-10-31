@@ -28,7 +28,7 @@ function flow(state: Partial<LookFlowState>, tryOn: LookFlow["tryOn"] = null): L
     pickLook: noop,
     keep: noop,
     undo: noop,
-    getPlus: async () => false,
+    getPlus: async () => "skipped" as const,
     dismissNotice: noop,
   };
 }
