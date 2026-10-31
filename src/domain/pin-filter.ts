@@ -42,6 +42,18 @@ export function newestPinAt(cards: readonly PinCard[]): number | null {
 }
 
 /**
+ * The "last seen" watermark only moves forward: a stale background
+ * tab, or deleting the newest pin, must never move it back and mark
+ * already-seen pins New again. Returns the value to store, or null to
+ * leave storage as it is (nothing pinned yet, or not newer).
+ */
+export function advanceSeenAt(stored: number | null, newest: number | null): number | null {
+  if (newest === null || !Number.isFinite(newest) || newest <= 0) return null;
+  if (stored !== null && stored >= newest) return null;
+  return newest;
+}
+
+/**
  * The chips, in order: New (pins from others since `lastSeenAt`,
  * only when there are some), All, Mine (only when you have pins),
  * then one chip per other person with pins, most recently active

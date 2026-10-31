@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "./board-view";
 import {
+  advanceSeenAt,
   applyPinFilter,
   newestPinAt,
   optionFilter,
@@ -148,5 +149,23 @@ describe("applying and resolving a filter (PIN-218)", () => {
     expect(parsePinFilter(null)).toEqual({ kind: "all" });
     expect(parsePinFilter("person:")).toEqual({ kind: "all" });
     expect(parsePinFilter("{bad")).toEqual({ kind: "all" });
+  });
+});
+
+describe("advanceSeenAt (last-seen watermark)", () => {
+  it("stores the newest pin time the first time", () => {
+    expect(advanceSeenAt(null, 1_000)).toBe(1_000);
+  });
+  it("moves forward when newer pins were seen", () => {
+    expect(advanceSeenAt(1_000, 2_000)).toBe(2_000);
+  });
+  it("never moves back: a stale tab or a deleted newest pin leaves storage alone", () => {
+    expect(advanceSeenAt(2_000, 1_000)).toBeNull();
+    expect(advanceSeenAt(2_000, 2_000)).toBeNull();
+  });
+  it("writes nothing when the board has no pins", () => {
+    expect(advanceSeenAt(null, null)).toBeNull();
+    expect(advanceSeenAt(2_000, null)).toBeNull();
+    expect(advanceSeenAt(null, 0)).toBeNull();
   });
 });

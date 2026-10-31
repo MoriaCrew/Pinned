@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PinCard } from "../../../domain/board-view";
 import {
+  advanceSeenAt,
   newestPinAt,
   parsePinFilter,
   pinFilterOptions,
@@ -27,9 +28,12 @@ function readSeen(slug: string): number | null {
   }
 }
 
-function writeSeen(slug: string, at: number) {
+/** Moves the stored watermark forward only (see `advanceSeenAt`). */
+function writeSeen(slug: string, newest: number | null) {
+  const next = advanceSeenAt(readSeen(slug), newest);
+  if (next === null) return;
   try {
-    window.localStorage.setItem(seenKey(slug), String(at));
+    window.localStorage.setItem(seenKey(slug), String(next));
   } catch {
     // Private mode: no New chip next time, nothing else changes.
   }
@@ -77,7 +81,7 @@ export function usePinFilter(slug: string, cards: readonly PinCard[], meId: stri
     setLastSeenAt(readSeen(slug));
   }, [slug]);
 
-  const newest = newestPinAt(cards) ?? 0;
+  const newest = newestPinAt(cards);
   const newestRef = useRef(newest);
   useEffect(() => {
     newestRef.current = newest;
