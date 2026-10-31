@@ -294,10 +294,10 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(out).toContain("Board Plus");
     expect(out).toContain("Obtenir Plus · 2,99 €");
     expect(out).toContain("+20 créations");
-    expect(out).toContain("Une seule fois, pour ce tableau.");
+    expect(out).toContain("Une fois, pour ce tableau.");
     expect(out).toContain("Bientôt");
     expect(sheetFr({ plusActive: true }).replace(/[  ]/g, " ")).toContain("Ajouter 20 créations · 2,99 €");
-    expect(sheetFr({ available: false })).toContain("Bientôt disponible");
+    expect(sheetFr({ available: false })).toContain("Bientôt dispo");
   });
 });
 
