@@ -157,7 +157,7 @@ export function Chip({
       aria-pressed={selected === undefined ? undefined : selected}
     >
       {thumb ? (
-        <img className="pn-chip-thumb" src={thumb} alt="" />
+        <img className="pn-chip-thumb" src={thumb} alt="" width={28} height={28} loading="lazy" decoding="async" />
       ) : icon ? (
         <Icon name={icon} size={18} />
       ) : null}
