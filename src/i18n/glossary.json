@@ -1,0 +1,15 @@
+{
+  "doNotTranslate": ["Pinneds", "PINNEDS", "Google", "Stripe", "AGPL-3.0"],
+  "concepts": ["board", "pin", "thing", "sticker", "scene", "make/makes", "remix", "cut-out", "look/skin", "Plus", "TTC"],
+  "terms": {
+    "fr": {
+      "board": "tableau",
+      "make/makes": "création/créations"
+    },
+    "es": {},
+    "pt-BR": {},
+    "de": {},
+    "it": {},
+    "id": {}
+  }
+}

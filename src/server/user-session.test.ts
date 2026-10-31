@@ -304,7 +304,7 @@ describe("user session (PIN-83)", () => {
       "viewer",
       "plus",
     ]);
-    expect(view!.viewer).toEqual({ isHost: false });
+    expect(view!.viewer).toEqual({ isHost: false, canChangeLook: false });
     expect(view!.me).toEqual({
       id: "part-fixed",
       boardId: SLUG,

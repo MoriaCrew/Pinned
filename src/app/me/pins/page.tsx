@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getConfig } from "../../../config";
 import { resolveAuthUi } from "../../../domain/auth-ui";
 import { isValidSlug } from "../../../domain/tokens";
-import { t, tCount } from "../../../i18n";
+import { t, tCount, type Locale } from "../../../i18n";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import { getBoardRepository } from "../../../server/board-repository";
 import { listMyElements } from "../../../server/my-pins";
@@ -32,6 +33,7 @@ export default async function MyPinsPage({
 }: {
   searchParams: Promise<{ board?: string }>;
 }) {
+  const locale = await getLocale();
   const cfg = getConfig();
   if (cfg.authMode !== "optional") notFound();
   const ui = resolveAuthUi({
@@ -55,9 +57,10 @@ export default async function MyPinsPage({
   return (
     <main className="pn-skin-root pn-lib-page" data-theme="paper">
       {!user ? (
-        <SignedOut enabled={ui.enabled} boardSlug={boardSlug} />
+        <SignedOut locale={locale} enabled={ui.enabled} boardSlug={boardSlug} />
       ) : (
         <MyPinsList
+          locale={locale}
           uid={user.uid}
           boardSlug={boardSlug}
           signInEnabled={ui.enabled}
@@ -68,32 +71,34 @@ export default async function MyPinsPage({
 }
 
 /** "Back to board" when the page was opened from a board's Add sheet. */
-function backAction(boardSlug: string | null) {
+function backAction(locale: Locale, boardSlug: string | null) {
   return boardSlug ? (
     <ButtonLink variant="quiet" icon="back" href={`/g/${boardSlug}`}>
-      {t("en", "myPins.backToBoard")}
+      {t(locale, "myPins.backToBoard")}
     </ButtonLink>
   ) : undefined;
 }
 
 function SignedOut({
+  locale,
   enabled,
   boardSlug,
 }: {
+  locale: Locale;
   enabled: boolean;
   boardSlug: string | null;
 }) {
   return (
     <>
-      <LibraryHeader title={t("en", "myPins.title")} action={backAction(boardSlug)} offerSignIn={false} />
+      <LibraryHeader title={t(locale, "myPins.title")} action={backAction(locale, boardSlug)} offerSignIn={false} />
       {enabled ? (
-        <LibraryEmpty title={t("en", "myPins.signInPrompt")}>
+        <LibraryEmpty title={t(locale, "myPins.signInPrompt")}>
           <SignInButton variant="primary" size="lg" stacked />
         </LibraryEmpty>
       ) : (
-        <LibraryEmpty title={t("en", "auth.notConfigured")}>
+        <LibraryEmpty title={t(locale, "auth.notConfigured")}>
           <ButtonLink variant="secondary" size="lg" href="/">
-            {t("en", "notFound.home")}
+            {t(locale, "notFound.home")}
           </ButtonLink>
         </LibraryEmpty>
       )}
@@ -102,17 +107,19 @@ function SignedOut({
 }
 
 async function MyPinsList({
+  locale,
   uid,
   boardSlug,
   signInEnabled,
 }: {
+  locale: Locale;
   uid: string;
   boardSlug: string | null;
   signInEnabled: boolean;
 }) {
   const users = getUserRepository();
   const profile = await users.getUser(uid);
-  if (!profile) return <SignedOut enabled={signInEnabled} boardSlug={boardSlug} />;
+  if (!profile) return <SignedOut locale={locale} enabled={signInEnabled} boardSlug={boardSlug} />;
   const page = await listMyElements(profile, {
     boards: getBoardRepository(),
     users,
@@ -122,24 +129,24 @@ async function MyPinsList({
   return (
     <>
       <LibraryHeader
-        title={t("en", "myPins.title")}
-        meta={empty ? undefined : tCount("en", "meta.things", page.total)}
-        action={backAction(boardSlug)}
+        title={t(locale, "myPins.title")}
+        meta={empty ? undefined : tCount(locale, "meta.things", page.total)}
+        action={backAction(locale, boardSlug)}
       />
       {empty ? (
-        <LibraryEmpty title={t("en", "myPins.empty")} body={t("en", "myPins.emptyBody")}>
+        <LibraryEmpty title={t(locale, "myPins.empty")} body={t(locale, "myPins.emptyBody")}>
           {boardSlug ? (
             <ButtonLink variant="primary" size="lg" icon="back" href={`/g/${boardSlug}`}>
-              {t("en", "myPins.backToBoard")}
+              {t(locale, "myPins.backToBoard")}
             </ButtonLink>
           ) : (
             <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
-              {t("en", "myPins.emptyAction")}
+              {t(locale, "myPins.emptyAction")}
             </ButtonLink>
           )}
         </LibraryEmpty>
       ) : (
-        <PinLibrary cards={page.elements} boardSlug={boardSlug} />
+        <PinLibrary locale={locale} cards={page.elements} boardSlug={boardSlug} />
       )}
     </>
   );

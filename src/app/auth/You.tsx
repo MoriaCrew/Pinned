@@ -10,8 +10,10 @@ import {
   type YouState,
 } from "../../domain/you-menu";
 import { t, tf } from "../../i18n";
+import { useLocale, useLocaleSettings } from "../../i18n/client";
 import { Avatar, Icon, Menu, cx } from "../../ui";
 import { useAuth, type AuthContextValue } from "./AuthProvider";
+import { LanguageMenu } from "./LanguageMenu";
 import { SignInButton } from "./SignInButton";
 
 /** What a board page tells the button (absent everywhere else). */
@@ -58,7 +60,10 @@ export function YouView({
   /** Placement on the page (the root renders nothing when there is nothing to show). */
   className?: string;
 }) {
+  const locale = useLocale();
+  const { enabled } = useLocaleSettings();
   const [open, setOpen] = useState(initialOpen);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   useMenuKeys(open, setOpen, rootRef, buttonRef);
@@ -76,6 +81,7 @@ export function YouView({
     isHost: board?.isHost === true,
     authEnabled: auth.enabled,
     authStatus: auth.status,
+    languageCount: enabled.length,
   };
   const control = youControl(state, { offerSignIn });
   if (control === "none") return null;
@@ -91,13 +97,14 @@ export function YouView({
   const who = { onBoard, me: board?.me ?? null, user: auth.enabled ? auth.user : null };
   const face = youFace(who);
   const name = youName(who);
-  const label = name ? tf("en", "you.named", { name }) : t("en", "you.label");
-  const entries = youMenuEntries(state);
+  const label = name ? tf(locale, "you.named", { name }) : t(locale, "you.label");
+  // The sign-in page is itself the prompt: no second "Sign in" in the menu.
+  const entries = youMenuEntries(state).filter((entry) => offerSignIn || entry !== "signIn");
   const failed = auth.enabled && auth.signInError && auth.status !== "signedIn";
   const note = failed
-    ? t("en", "auth.failed")
+    ? t(locale, "auth.failed")
     : entries.includes("joinedAs") && board?.me
-      ? tf("en", "you.joinedAs", { name: board.me.displayName })
+      ? tf(locale, "you.joinedAs", { name: board.me.displayName })
       : undefined;
 
   const close = () => setOpen(false);
@@ -113,23 +120,25 @@ export function YouView({
       case "joinedAs":
         return [];
       case "editName":
-        return board ? [{ label: t("en", "you.editName"), onSelect: act(board.onEditName) }] : [];
+        return board ? [{ label: t(locale, "you.editName"), onSelect: act(board.onEditName) }] : [];
       case "join":
-        return board ? [{ label: t("en", "you.join"), onSelect: act(board.onJoin) }] : [];
+        return board ? [{ label: t(locale, "you.join"), onSelect: act(board.onJoin) }] : [];
       case "myBoards":
-        return [{ label: t("en", "you.myBoards"), href: "/me/boards", onSelect: close }];
+        return [{ label: t(locale, "you.myBoards"), href: "/me/boards", onSelect: close }];
       case "myPins":
-        return [{ label: t("en", "you.myPins"), href: "/me/pins", onSelect: close }];
+        return [{ label: t(locale, "you.myPins"), href: "/me/pins", onSelect: close }];
       case "changeLook":
-        return board ? [{ label: t("en", "you.changeLook"), onSelect: act(board.onChangeLook) }] : [];
+        return board ? [{ label: t(locale, "you.changeLook"), onSelect: act(board.onChangeLook) }] : [];
       case "deleteBoard":
         return board
-          ? [{ label: t("en", "you.deleteBoard"), danger: true, onSelect: act(board.onDeleteBoard) }]
+          ? [{ label: t(locale, "you.deleteBoard"), danger: true, onSelect: act(board.onDeleteBoard) }]
           : [];
+      case "language":
+        return [{ label: t(locale, "you.language"), onSelect: act(() => setLanguageOpen(true)) }];
       case "signIn":
-        return [{ label: t("en", "you.signIn"), onSelect: act(() => void auth.signIn()) }];
+        return [{ label: t(locale, "you.signIn"), onSelect: act(() => void auth.signIn()) }];
       case "signOut":
-        return [{ label: t("en", "you.signOut"), onSelect: act(() => void auth.signOut()) }];
+        return [{ label: t(locale, "you.signOut"), onSelect: act(() => void auth.signOut()) }];
     }
   };
 
@@ -154,9 +163,10 @@ export function YouView({
         )}
       </button>
       {open ? <Menu label={label} note={note} className="pn-you-menu" items={entries.flatMap(item)} /> : null}
+      {languageOpen ? <LanguageMenu onClose={() => setLanguageOpen(false)} /> : null}
       {auth.enabled ? (
         <span className="pn-sr" role="alert">
-          {failed ? t("en", "auth.failed") : ""}
+          {failed ? t(locale, "auth.failed") : ""}
         </span>
       ) : null}
     </span>

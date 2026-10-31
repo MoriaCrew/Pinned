@@ -1,14 +1,15 @@
 import "server-only";
 /**
- * Board Plus service (PIN-103, docs/15-board-plus.md): host-only
- * skin change and Plus checkout. Route handlers run the cheap,
- * I/O-free gates first (slug, request guards, rate limit, host
- * cookie shape, body cap — see src/app/api/boards/plus-shared.ts);
- * these functions then load the board and check, in order:
- * host token against the stored hash + age (403) -> input (400)
- * -> entitlement inside the repository write (402) -> write.
- * An unknown board is the same 403 as a wrong token, so neither
- * route is an existence oracle.
+ * Board Plus service (PIN-103, docs/15-board-plus.md): skin
+ * change (the host, or since PIN-181 a joined member while the
+ * board has Plus) and the host-only Plus checkout. Route handlers
+ * run the cheap, I/O-free gates first (slug, request guards, rate
+ * limit, body cap, a credential cookie present — see
+ * src/app/api/boards/plus-shared.ts); these functions then load
+ * the board and check, in order: the credential against the board
+ * (403) -> input (400) -> entitlement inside the repository write
+ * (402) -> write. An unknown board is the same 403 as a wrong
+ * credential, so neither route is an existence oracle.
  *
  * BoardPlusError carries 402/403, which BoardApiError (owned by
  * the session track) does not; routes map it with the same
@@ -20,6 +21,7 @@ import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import {
   canUseSkin,
+  hasPlus,
   isPlusPlan,
   plusView,
   type PlusMode,
@@ -96,21 +98,46 @@ async function requireHost(slug: string, hostToken: string | null, deps: HostRou
   return board;
 }
 
+/** Who may change the look (PIN-181): the host always, a joined member while the board has Plus. */
+export type SkinActor = "host" | "member";
+
 /**
- * PATCH skin: host only. The entitlement check and the "already
- * wearing it" no-op run inside the repository write, against the
- * board being written (a no-op writes nothing, bumps nothing).
+ * Decide the skin actor against the loaded board: a valid host
+ * token is the host; otherwise, only while Plus counts, a joined
+ * member (`isMember` resolves the board session cookie, so a
+ * board without Plus never reads it). Unknown board, no
+ * credential, a member without Plus: one uniform 403.
+ */
+export async function resolveSkinActor(
+  slug: string,
+  hostToken: string | null,
+  isMember: () => Promise<boolean>,
+  deps: HostRouteDeps,
+): Promise<SkinActor> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw hostOnlyError();
+  const now = deps.now?.() ?? Date.now();
+  if (hostToken && verifyHostToken(board, hostToken, deps.policy, now)) return "host";
+  if (hasPlus(board, deps.plusMode) && (await isMember())) return "member";
+  throw hostOnlyError();
+}
+
+/**
+ * PATCH skin for a decided actor. The member's Plus check, the
+ * skin entitlement and the "already wearing it" no-op run inside
+ * the repository write, against the board being written (a no-op
+ * writes nothing, bumps nothing).
  */
 export async function changeBoardSkin(
   slug: string,
-  hostToken: string | null,
+  actor: SkinActor,
   rawInput: unknown,
   deps: HostRouteDeps,
 ): Promise<Board> {
-  await requireHost(slug, hostToken, deps);
   const skinId = parseSkinInput(rawInput);
   const theme = getBoardTheme(skinId);
   const updated = await deps.boards.updateBoardSettings(slug, (current) => {
+    if (actor === "member" && !hasPlus(current, deps.plusMode)) throw hostOnlyError();
     if (!canUseSkin(current, skinId, deps.plusMode)) throw plusRequiredError();
     if (current.themeId === skinId) return null;
     return { skin: { themeId: skinId, ...(theme ? { theme: theme.tokens } : {}) } };
