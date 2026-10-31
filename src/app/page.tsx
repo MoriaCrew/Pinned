@@ -5,6 +5,7 @@ import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
 import { t, tf, type Locale } from "../i18n";
 import { getLocale } from "../i18n/server";
 import { ButtonLink, Sticker, Tag, Wordmark } from "../ui";
+import { SiteLinks } from "./_legal/LegalParts";
 import { You } from "./auth/You";
 import { LANDING_SETS, landingSetById } from "./landing-sets.data";
 import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
@@ -169,7 +170,7 @@ export default async function HomePage({
         </section>
 
         <footer className="pn-landing-foot">
-          <a href="https://github.com/MoriaCrew/Pinned">{t(locale, "footer.source")}</a>
+          <SiteLinks locale={locale} />
         </footer>
       </div>
     </main>

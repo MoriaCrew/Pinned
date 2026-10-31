@@ -73,6 +73,15 @@ describe("landing page showcase sets (PIN-175)", () => {
     expect(css).toMatch(/\.pn-landing-pile \{[^}]*position: relative;/);
   });
 
+  it("links Privacy, Terms and the source from the footer (PIN-26)", async () => {
+    const html = await landing({ set: "classic" });
+    const foot = /<footer class="pn-landing-foot">([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? "";
+    expect(foot).toContain(`<a href="/privacy">${en["footer.privacy"]}</a>`);
+    expect(foot).toContain(`<a href="/terms">${en["footer.terms"]}</a>`);
+    expect(foot).toContain(`<a href="https://github.com/MoriaCrew/Pinned">${en["footer.source"]}</a>`);
+    expect(foot).toContain(`aria-label="${en["footer.label"]}"`);
+  });
+
   it("loads the hero stickers at once and the pictures further down when needed", async () => {
     const set = landingSetById("classic");
     const html = await landing({ set: set.id });
