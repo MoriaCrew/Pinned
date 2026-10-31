@@ -213,9 +213,13 @@ export function PlusSheet({
     });
   }
   if (plusActive) {
+    // Plus is already on, so its photo limit is already gone: the sheet
+    // only sells creations, and "Plus is on" stands for every perk.
     perks.push({ icon: "check", title: t(locale, "ui.plusIsOn") });
   } else {
     perks.push(
+      // PIN-231: a board without Plus has free photos; Plus has no limit.
+      { icon: "camera", title: t(locale, "ui.plusPerkPhotos"), body: t(locale, "ui.plusPerkPhotosBody") },
       { icon: "skin", title: t(locale, "ui.plusPerkSkins"), body: t(locale, "ui.plusPerkSkinsBody") },
       { foil: true, title: t(locale, "ui.plusPerkFoil"), body: t(locale, "ui.plusPerkFoilBody") },
       { icon: "scene", soon: true, title: t(locale, "ui.plusPerkScenes"), body: t(locale, "ui.plusPerkScenesBody") },

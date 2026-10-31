@@ -448,6 +448,8 @@
   "ui.plusPerkCreations.one": "+{n} creation",
   "ui.plusPerkCreations.other": "+{n} creations",
   "ui.plusPerkCreationsBody": "For everyone on this board. One per AI scene.",
+  "ui.plusPerkPhotos": "Unlimited photos",
+  "ui.plusPerkPhotosBody": "Add as many photos as you like to this board",
   "ui.plusPerkSkins": "Every skin",
   "ui.plusPerkSkinsBody": "Darkroom, Postcard and seasonal drops like Marigold",
   "ui.plusPerkFoil": "Foil stickers",
