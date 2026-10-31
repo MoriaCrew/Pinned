@@ -62,7 +62,13 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
     expect(DEFAULT_POLICY.chipsMax).toBe(4);
     expect(DEFAULT_POLICY.maxTokens.sparkChips).toBe(1200);
-    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
+    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v2");
+    // PIN-214 fixed idea chips: Policy keeps the count, the text is i18n.
+    expect(DEFAULT_POLICY.sceneChipsCount).toBe(4);
+    expect(DEFAULT_POLICY).not.toHaveProperty("sceneChips");
+    expect(resolvePolicy(null, { sceneChipsCount: 2 }).sceneChipsCount).toBe(2);
+    expect(resolvePolicy({ sceneChipsCount: 0 }).sceneChipsCount).toBe(0);
+    for (const bad of [-1, 1.5]) expect(() => resolvePolicy({ sceneChipsCount: bad })).toThrow();
     // PIN-117 tap-name crop pass: own counter, token budget, prompt.
     expect(DEFAULT_POLICY.tapNamesPerParticipantPerDay).toBe(100);
     expect(DEFAULT_POLICY.maxTokens.sparkTapName).toBe(1200);

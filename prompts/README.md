@@ -24,8 +24,11 @@ element, scene, job or cached chips it made).
   `input_text` of the Muse Image compose request (PIN-68).
 - `tap-name.v1.md` — one tapped cut-out crop → its pin label,
   description and face flag (PIN-117).
-- `chips.v1.md` — selected pin labels → scene-idea suggestion chips
-  for the Make sheet, cached per label set (PIN-75).
+- `chips.v2.md` — selected pin labels + the viewer's UI language →
+  scene-idea suggestion chips in that language for the Make sheet,
+  cached per prompt version, language and label set (PIN-214).
+- `chips.v1.md` — the English-only chips prompt (PIN-75), kept for
+  history; superseded by `chips.v2`.
 - `translate-ui.v1.md` — dev-time UI translation of `en.json` batches
   for `npm run i18n:translate` (PIN-189); not an app call.
 - `review-ui.v1.md` — reviewer pass over those translations: returns

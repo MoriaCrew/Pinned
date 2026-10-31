@@ -2,19 +2,21 @@ import "server-only";
 /**
  * Generated suggestion chips service (PIN-75, docs/11 Q10 + s6).
  *
- * Read path is cache-first: a fresh entry for the sorted
- * lowercased label set (Policy.chipsCacheTtlHours) answers with
- * zero model calls. A miss goes through the decorated
- * ChipSuggester port (PIN-61 timeout/retry/budget/log) and only a
- * ready, non-empty outcome is cached. Refused, failed and
- * budget-denied outcomes — and a missing port or a broken cache —
- * all degrade to the fixed Policy chip list: chips never block or
- * break Make a scene.
+ * Read path is cache-first: a fresh entry for the prompt version,
+ * the request's language and the sorted lowercased label set
+ * (Policy.chipsCacheTtlHours) answers with zero model calls. A miss
+ * goes through the decorated ChipSuggester port (PIN-61
+ * timeout/retry/budget/log) and only a ready, non-empty outcome is
+ * cached. Refused, failed and budget-denied outcomes — and a missing
+ * port or a broken cache — all degrade to the fixed idea chips in
+ * the request's language (PIN-214): chips never block or break Make
+ * a scene.
  */
 import type { Participant } from "../domain/board";
 import type { BoardRepository } from "../domain/board-repository";
-import { chipsCacheKeyBase, isChipsCacheFresh } from "../domain/chips";
+import { chipsCacheKey, fixedSceneChips, isChipsCacheFresh } from "../domain/chips";
 import type { ChipSuggester } from "../gateway/ports";
+import type { Locale } from "../i18n/locales";
 import type { Policy } from "../policy/policy";
 import { BoardApiError } from "./board-session";
 import type { ChipsCacheStore } from "./chips-cache";
@@ -58,15 +60,21 @@ export function parseSceneChipsInput(
   return { elementIds };
 }
 
+/**
+ * `locale` is the request's UI language (route: getLocale()): the
+ * generated chips are asked for, cached and the fallback is picked
+ * in it (PIN-214).
+ */
 export async function resolveSceneChips(
   slug: string,
   participant: Participant,
   rawInput: unknown,
   deps: SceneChipsDeps,
+  locale: Locale,
 ): Promise<SceneChipsResult> {
   const { policy } = deps;
   const fallback: SceneChipsResult = {
-    chips: [...policy.sceneChips],
+    chips: fixedSceneChips(locale, policy.sceneChipsCount),
     source: "fallback",
   };
 
@@ -91,22 +99,24 @@ export async function resolveSceneChips(
 
   if (policy.chipsMax <= 0 || !deps.suggester) return fallback;
 
-  const keyBase = chipsCacheKeyBase(labels);
-  if (!keyBase) return fallback;
+  const promptVersion = policy.promptVersions.chips;
+  const key = chipsCacheKey(labels, { locale, promptVersion });
+  if (!key) return fallback;
   const now = deps.now?.() ?? Date.now();
 
-  const cached = await deps.cache.get(keyBase).catch(() => null);
+  const cached = await deps.cache.get(key).catch(() => null);
   if (cached && cached.chips.length > 0 && isChipsCacheFresh(cached, now, policy.chipsCacheTtlHours)) {
     return { chips: cached.chips.slice(0, policy.chipsMax), source: "cache" };
   }
 
   const outcome = await deps.suggester.suggestChips({
     labels,
+    locale,
     maxChips: policy.chipsMax,
     maxChipChars: policy.scenePromptMaxChars,
     maxTokens: policy.maxTokens.sparkChips,
     timeoutMs: policy.timeoutsMs.spark,
-    promptVersion: policy.promptVersions.chips,
+    promptVersion,
     boardId: slug,
     participantId: participant.id,
     userIdAtCall: participant.userId ?? null,
@@ -120,9 +130,10 @@ export async function resolveSceneChips(
   const chips = outcome.value.chips.slice(0, policy.chipsMax);
   await deps.cache
     .put({
-      key: keyBase,
+      key,
       chips,
       promptVersion: outcome.value.promptVersion,
+      locale,
       createdAt: now,
     })
     .catch(() => undefined);

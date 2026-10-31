@@ -24,3 +24,5 @@ scene-setting fragments, normalized and capped by
 Policy.chipsCacheTtlHours; any refused/failed/over-budget outcome
 falls back to the fixed Policy sceneChips list. Token budget:
 Policy.maxTokens.sparkChips.
+Superseded by chips.v2 (PIN-214), which writes the chips in the
+viewer's UI language.

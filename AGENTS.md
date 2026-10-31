@@ -37,7 +37,7 @@ dropped (Oct 28); its docs are in `docs/archive/` — do not apply them.
    is a review blocker.
 5. **Prompts are code.** Templates live in `prompts/` (start from
    `prompts/README.md`), versioned (`elements.v1`, `scene.v1`,
-   `tap-name.v1`, `chips.v1`); store the version with every
+   `tap-name.v1`, `chips.v2`); store the version with every
    generated output. Behavior changes bump the version and need
    fixture or spike evidence (`eval/README.md`) noted in the PR.
 6. **Privacy invariants (never break):** original photos are never

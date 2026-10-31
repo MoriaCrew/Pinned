@@ -319,6 +319,7 @@ describe("decorator chain: timeout + retry (PIN-61)", () => {
 describe("decorator chain: ChipSuggester (PIN-75)", () => {
   const chipsInput = {
     labels: ["Teal Mug"],
+    locale: "fr" as const,
     maxChips: 4,
     maxChipChars: 500,
     maxTokens: 1200,
@@ -330,9 +331,11 @@ describe("decorator chain: ChipSuggester (PIN-75)", () => {
 
   it("budget off denies before the provider; ready calls log suggestChips + chips.v1", async () => {
     let calls = 0;
+    const locales: string[] = [];
     const suggester: ChipSuggester = {
       async suggestChips(input) {
         calls += 1;
+        locales.push(input.locale);
         return {
           status: "ready",
           value: { chips: ["in space"], promptVersion: input.promptVersion },
@@ -355,6 +358,8 @@ describe("decorator chain: ChipSuggester (PIN-75)", () => {
     );
     expect((await on.ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
     expect(calls).toBe(1);
+    // PIN-214: the chain hands the request's language to the adapter.
+    expect(locales).toEqual(["fr"]);
     expect(on.logs).toMatchObject([
       { operation: "suggestChips", promptVersion: "chips.v1", outcome: "ok" },
     ]);
@@ -769,7 +774,7 @@ describe("AiCallLog v2 attribution (PIN-137)", () => {
       boardId: "b1", participantId: "p1", sceneId: "scene-1", jobId: "scene-1",
     });
     await ports.chipSuggester!.suggestChips({
-      labels: ["x"], maxChips: 1, maxChipChars: 10, maxTokens: 1,
+      labels: ["x"], locale: "de", maxChips: 1, maxChipChars: 10, maxTokens: 1,
       timeoutMs: 1, promptVersion: "chips.v1", boardId: "b1", participantId: "p1",
     });
     await ports.segmenter.segment({
