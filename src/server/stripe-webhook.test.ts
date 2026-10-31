@@ -771,6 +771,26 @@ describe("disputes (PIN-150)", () => {
     expect(await h.records.listDeadLetters()).toEqual([]);
   });
 
+  it("a zero- or three-decimal presentment currency never converts by the rate: fx_unverifiable (PIN-181)", async () => {
+    // 500 JPY or 0.500 KWD in minor units: the major-unit rate would misprice both.
+    for (const [currency, amount] of [["jpy", 500], ["KWD", 500]] as const) {
+      const { h } = await granted();
+      h.client.balanceTransactions["txn_test_fake_charge"] = {
+        id: "txn_test_fake_charge",
+        amount: 499,
+        currency: "eur",
+        exchange_rate: 0.5,
+      };
+      expect(
+        (await h.deliver(
+          evt(`evt_du_${currency}`, "charge.dispute.created", dispute({ currency, amount, balance_transactions: [] })),
+        )).outcome,
+      ).toBe("dead_letter");
+      expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["fx_unverifiable"]);
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+    }
+  });
+
   it("a reinstate after a final clawback dead-letters for an operator instead of un-clawing", async () => {
     const { h } = await granted();
     await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ status: "lost" })));

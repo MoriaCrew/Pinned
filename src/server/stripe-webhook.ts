@@ -109,6 +109,21 @@ export const STRIPE_WEBHOOK_EVENT_TYPES = [
   "charge.dispute.closed",
 ] as const;
 
+/**
+ * Stripe's zero-decimal and three-decimal currencies, from
+ * docs.stripe.com/currencies ("Zero-decimal currencies" and
+ * "Three-decimal currencies"). UGX stays listed although the
+ * page's special cases now take it as two-decimal: an extra
+ * dead letter is safe, a wrong conversion is not.
+ */
+export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga",
+  "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+]);
+export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "bhd", "jod", "kwd", "omr", "tnd",
+]);
+
 /** The price terms one purchase is held to (PIN-181): its stored intent terms, or the Policy pack for a legacy intent. */
 export type PackTerms = Pick<PolicyCreditPack, "credits" | "eurCents">;
 
@@ -295,13 +310,22 @@ async function balanceTransactionEurCents(
  * transactions yet (`charge.dispute.created` usually has none),
  * where the freeze is provisional and the final clawback still
  * prefers the dispute's own BalanceTransaction when it lands.
+ * The rate converts major units, so multiplying minor units is
+ * only right between two 2-decimal currencies (PIN-181): a
+ * zero- or three-decimal presentment currency, or none at all,
+ * returns null (the caller dead-letters `fx_unverifiable`).
  */
 async function eurCentsViaChargeExchangeRate(
   deps: StripeWebhookDeps,
   chargeId: string | null,
   presentmentCents: number | null,
+  presentmentCurrency: string | null,
 ): Promise<number | null> {
   if (!chargeId || presentmentCents === null || presentmentCents < 0 || !deps.client) return null;
+  const currency = presentmentCurrency?.toLowerCase();
+  if (!currency || ZERO_DECIMAL_CURRENCIES.has(currency) || THREE_DECIMAL_CURRENCIES.has(currency)) {
+    return null;
+  }
   const charge = obj(await deps.client.retrieveCharge(chargeId));
   if (!charge) return null;
   const txn = await balanceTransactionObject(deps, charge.balance_transaction);
@@ -763,7 +787,12 @@ async function disputeSettledEurCents(
     const cents = await balanceTransactionEurCents(deps, txn);
     if (cents !== null) return cents;
   }
-  return eurCentsViaChargeExchangeRate(deps, idOf(dispute.charge), int(dispute.amount));
+  return eurCentsViaChargeExchangeRate(
+    deps,
+    idOf(dispute.charge),
+    int(dispute.amount),
+    str(dispute.currency),
+  );
 }
 
 async function freezeDispute(
