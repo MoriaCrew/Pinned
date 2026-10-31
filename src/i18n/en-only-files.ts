@@ -13,48 +13,15 @@
  * on the server.
  */
 export const EN_ONLY_FILES: readonly string[] = [
-  // PIN-191 language switcher
-  "src/app/auth/You.tsx",
-
-  // PIN-192 add flow
-  "src/app/g/[slug]/AddSheet.tsx",
-  "src/app/g/[slug]/DictateButton.tsx",
-  "src/app/g/[slug]/Leftovers.tsx",
-  "src/app/g/[slug]/LibraryPins.tsx",
-  "src/app/g/[slug]/PhotoPick.tsx",
 
 
-  // PIN-194 UI kit
-  "src/ui/board.tsx",
-  "src/ui/primitives.tsx",
-  "src/ui/scenes.tsx",
-  "src/ui/skin-picker.tsx",
-  "src/ui/stickers.tsx",
 
-  // PIN-195 landing, start, My boards/pins, not-found, sign-in
-  "src/app/auth/SignInButton.tsx",
-  "src/app/me/BoardDeletedNotice.tsx",
-  "src/app/me/LibraryParts.tsx",
-  "src/app/me/boards/MyBoardItem.tsx",
-  "src/app/me/boards/page.tsx",
-  "src/app/me/library-format.ts",
-  "src/app/me/pins/page.tsx",
-  "src/app/new/StartFlow.tsx",
-  "src/app/new/page.tsx",
-  "src/app/not-found.tsx",
-  "src/app/page.tsx",
 
-  // PIN-196 server errors
+  // PIN-196 server errors (rest: PIN-201)
   "src/gateway/decorators.ts",
-  "src/server/board-api.ts",
-  "src/server/board-plus.ts",
-  "src/server/decompose-job.ts",
   "src/server/dictation.ts",
-  "src/server/scene-job.ts",
 
   // PIN-197 route errors
-  "src/app/api/boards/[slug]/transcribe/route.ts",
-  "src/app/api/boards/request-guards.ts",
 
   // Stays English: link-preview images are fetched by crawlers, which send no language
   "src/app/g/[slug]/opengraph-image.tsx",

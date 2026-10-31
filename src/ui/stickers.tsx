@@ -4,6 +4,8 @@ import type { CSSProperties, ElementType, ReactNode } from "react";
 import type { RemixSource } from "../domain/board-ui";
 import { stickerTilt } from "../domain/skins";
 import { t, tf } from "../i18n";
+import { useLocale } from "../i18n/client";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
 import { Avatar, cx, type Person } from "./primitives";
 
 export type StickerState = "rest" | "picked" | "dropped" | "arriving" | "cutting";
@@ -97,6 +99,7 @@ export function Pin({
   children?: ReactNode;
   className?: string;
 }) {
+  const locale = useLocale();
   const picked = state === "picked";
   const sticker = <Sticker src={src} seed={seed ?? label} state={state} pickIndex={pickIndex} size={size} foil={foil} />;
   const tag = (
@@ -111,13 +114,20 @@ export function Pin({
     </span>
   ) : null;
   if (onToggle) {
-    const parts = [owner ? tf("en", "ui.ownerThing", { owner: owner.name, thing: label }) : label];
-    if (picked) parts.push(pickIndex ? tf("en", "ui.pickedN", { n: pickIndex }) : t("en", "ui.picked"));
-    if (state === "dropped") parts.push(t("en", "ui.leftOut"));
+    const named = owner ? tf(locale, "ui.ownerThing", { owner: owner.name, thing: label }) : label;
+    // `picked` and `dropped` are different states, so at most one status applies.
+    const status = picked
+      ? pickIndex
+        ? tf(locale, "ui.pickedN", { n: pickIndex })
+        : t(locale, "ui.picked")
+      : state === "dropped"
+        ? t(locale, "ui.leftOut")
+        : null;
+    const spoken = status ? tf(locale, "ui.pinWithState", { label: named, state: status }) : named;
     const pressed = picked || (Boolean(pressedWhenRest) && state !== "dropped");
     return (
       <Root className={cx("pn-pin", className)} data-state={state}>
-        <button type="button" className="pn-pin-hit" aria-pressed={pressed} aria-label={parts.join(", ")} onClick={onToggle}>
+        <button type="button" className="pn-pin-hit" aria-pressed={pressed} aria-label={spoken} onClick={onToggle}>
           {sticker}
           {tag}
           {who}
@@ -165,17 +175,41 @@ export function splitCompactCredits<T>(items: readonly T[], slots: number): { sh
 }
 
 /**
+ * "teal mug, rubber duck and succulent". The shared `formatList` writes
+ * English with a serial comma ("a, b, and c"); this row has always been
+ * "a, b and c", so English uses the British list rules and every other
+ * language its own.
+ */
+function creditList(locale: Locale, things: readonly string[]): string {
+  return new Intl.ListFormat(locale === DEFAULT_LOCALE ? "en-GB" : locale, { style: "long", type: "conjunction" }).format(things);
+}
+
+/**
  * The compact row's accessible name: the label, then every thing
  * ("Made from teal mug, rubber duck and succulent"). The row shows
  * stickers only, so this is the one place the names are on the card.
  */
-export function compactCreditsName(label: string, things: readonly string[]): string {
+export function compactCreditsName(label: string, things: readonly string[], locale: Locale = DEFAULT_LOCALE): string {
   if (things.length === 0) return label;
-  const list =
-    things.length === 1
-      ? (things[0] ?? "")
-      : tf("en", "ui.listAnd", { rest: things.slice(0, -1).join(", "), last: things[things.length - 1] ?? "" });
-  return `${label} ${list}`;
+  return tf(locale, "ui.creditsNamed", { label, things: creditList(locale, things) });
+}
+
+/**
+ * "Remix of <b>title</b> by owner" as one sentence per language. The
+ * title stays bold, so the message is split around its placeholder.
+ */
+function remixLine(locale: Locale, title: string, owner?: string | null): ReactNode {
+  // Split first, then fill the owner, so a name can never be mistaken for the placeholder.
+  const [before = "", after = ""] = t(locale, owner ? "ui.remixOfBy" : "ui.remixOfTitle")
+    .split("{title}")
+    .map((piece) => piece.replace("{owner}", () => owner ?? ""));
+  return (
+    <>
+      {before}
+      <b>{title}</b>
+      {after}
+    </>
+  );
 }
 
 /**
@@ -190,7 +224,7 @@ export function compactCreditsName(label: string, things: readonly string[]): st
  */
 export function CreditLine({
   items,
-  label = t("en", "ui.madeFrom"),
+  label,
   remixOf,
   onItem,
   compact,
@@ -205,23 +239,23 @@ export function CreditLine({
   onOpen?: () => void;
   className?: string;
 }) {
+  const locale = useLocale();
+  const heading = label ?? t(locale, "ui.madeFrom");
   const remix = !remixOf ? null : "deleted" in remixOf ? (
-    <p className="pn-credit-remix">{t("en", "ui.remixOfDeleted")}</p>
+    <p className="pn-credit-remix">{t(locale, "ui.remixOfDeleted")}</p>
   ) : (
-    <p className="pn-credit-remix">
-      {t("en", "ui.remixOf")} <b>{remixOf.title}</b>
-      {remixOf.owner ? ` ${t("en", "ui.by")} ${remixOf.owner}` : null}
-    </p>
+    <p className="pn-credit-remix">{remixLine(locale, remixOf.title, remixOf.owner)}</p>
   );
   if (compact) {
     const { shown, more } = splitCompactCredits(items, COMPACT_CREDIT_SLOTS);
     const name = compactCreditsName(
-      label,
+      heading,
       items.map((item) => item.thing),
+      locale,
     );
     const content = (
       <>
-        <span className="pn-credit-label">{label}</span>
+        <span className="pn-credit-label">{heading}</span>
         <span className="pn-credit-stack">
           {shown.map((item, index) =>
             item.src ? (
@@ -231,7 +265,7 @@ export function CreditLine({
               <Avatar key={`${item.thing}-${index}`} id={item.owner?.id ?? item.thing} name={item.owner?.name ?? item.thing} size="lg" />
             ),
           )}
-          {more > 0 ? <span className="pn-credit-more">{tf("en", "ui.creditsMore", { n: more })}</span> : null}
+          {more > 0 ? <span className="pn-credit-more">{tf(locale, "ui.creditsMore", { n: more })}</span> : null}
         </span>
       </>
     );
@@ -252,7 +286,7 @@ export function CreditLine({
   }
   return (
     <div className={cx("pn-credit", className)}>
-      <span className="pn-credit-label">{label}</span>
+      <span className="pn-credit-label">{heading}</span>
       <ul className="pn-credit-list">
         {items.map((item, index) => {
           const body = (
@@ -274,7 +308,7 @@ export function CreditLine({
                   type="button"
                   className="pn-credit-item"
                   onClick={() => onItem(item, index)}
-                  aria-label={item.owner ? tf("en", "ui.ownerThing", { owner: item.owner.name, thing: item.thing }) : item.thing}
+                  aria-label={item.owner ? tf(locale, "ui.ownerThing", { owner: item.owner.name, thing: item.thing }) : item.thing}
                 >
                   {body}
                 </button>

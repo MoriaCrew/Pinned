@@ -22,6 +22,9 @@
  *   amount/currency/product/tax_behavior/recurrence, otherwise a
  *   new price is minted with transfer_lookup_key=true and the
  *   old price is archived. POSTs carry idempotency keys.
+ * - a "retired" item is archived (PIN-181): its product and every
+ *   active price under its lookup key get active=false; nothing
+ *   is ever created for it.
  * Re-running a converged sandbox is a no-op (zero duplicates).
  */
 
@@ -29,6 +32,18 @@
 const CATALOG_ID = "pinneds";
 const CATALOG_VERSION = "dev-v1";
 const CATALOG_ITEMS = [
+  {
+    itemKey: "plus_20",
+    lookupKey: "pinneds_plus_20",
+    name: "Board Plus · 20 creations",
+    description:
+      "Board Plus for one board: every look, foil stickers and 20 creations (photos and scenes). Nothing expires.",
+    unitAmount: 299,
+    currency: "eur",
+    taxBehavior: "inclusive",
+    credits: 20,
+    status: "live",
+  },
   {
     itemKey: "credits_25",
     lookupKey: "pinneds_credits_25",
@@ -39,7 +54,7 @@ const CATALOG_ITEMS = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 25,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "credits_60",
@@ -51,7 +66,7 @@ const CATALOG_ITEMS = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 60,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "credits_150",
@@ -63,7 +78,7 @@ const CATALOG_ITEMS = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 150,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "host_monthly",
@@ -133,6 +148,11 @@ function matchingProducts(item, products) {
 
 function planProduct(item, products) {
   const existing = matchingProducts(item, products)[0];
+  if (item.status === "retired") {
+    return existing && existing.active !== false
+      ? { kind: "archive", productId: existing.id }
+      : { kind: "retired" };
+  }
   if (!existing) return { kind: "create" };
   const drifted =
     existing.name !== item.name ||
@@ -145,6 +165,12 @@ function planProduct(item, products) {
 }
 
 function planPrice(item, productId, prices) {
+  if (item.status === "retired") {
+    const priceIds = prices
+      .filter((p) => p.lookup_key === item.lookupKey && p.active !== false)
+      .map((p) => p.id);
+    return priceIds.length > 0 ? { kind: "archive", priceIds } : { kind: "retired" };
+  }
   const existing = prices.find((p) => p.lookup_key === item.lookupKey);
   if (!existing) return { kind: "create" };
   const matches =
@@ -229,7 +255,30 @@ async function fetchState() {
 const idem = (what, item, extra = "") =>
   `pinneds-catalog-${CATALOG_VERSION}-${what}-${item.itemKey}${extra}`;
 
+/** Retired item: archive its active prices, then its product. Already archived = no-op. */
+async function retireItem(item, state) {
+  const pricePlan = planPrice(item, "", state.prices);
+  for (const priceId of pricePlan.kind === "archive" ? pricePlan.priceIds : []) {
+    await stripe("POST", `/prices/${priceId}`, { active: false }, idem("price-archive", item, `-${priceId}`));
+    console.log(`${item.itemKey} price=archive id=${priceId}`);
+  }
+  const plan = planProduct(item, state.products);
+  if (plan.kind === "archive") {
+    await stripe(
+      "POST",
+      `/products/${plan.productId}`,
+      { active: false },
+      idem("product-archive", item, `-${plan.productId}`),
+    );
+    console.log(`${item.itemKey} product=archive id=${plan.productId}`);
+  }
+  if (plan.kind === "retired" && pricePlan.kind === "retired") {
+    console.log(`${item.itemKey} retired (nothing active)`);
+  }
+}
+
 async function applyItem(item, state) {
+  if (item.status === "retired") return retireItem(item, state);
   const plan = planProduct(item, state.products);
   let productId;
   if (plan.kind === "create") {
@@ -318,8 +367,15 @@ async function applyItem(item, state) {
 function describePlan(state) {
   for (const item of CATALOG_ITEMS) {
     const product = planProduct(item, state.products);
-    const productId = product.kind === "create" ? "" : product.productId;
+    const productId = product.productId ?? "";
     const price = planPrice(item, productId, state.prices);
+    if (item.status === "retired") {
+      console.log(
+        `${item.itemKey} product=${product.kind} id=${productId || "none"} ` +
+          `price=${price.kind} ids=${(price.priceIds ?? []).join(",") || "none"}`,
+      );
+      continue;
+    }
     const priceId =
       price.kind === "reuse"
         ? price.priceId
@@ -378,18 +434,20 @@ async function main() {
 
   for (const item of CATALOG_ITEMS) await applyItem(item, state);
 
-  // Self-check: a converged sandbox plans as pure reuse.
+  // Self-check: a converged sandbox plans as pure reuse (retired: nothing active).
   const after = await fetchState();
   const ids = {};
   for (const item of CATALOG_ITEMS) {
     const product = planProduct(item, after.products);
-    const productId = product.kind === "create" ? "" : product.productId;
+    const productId = product.productId ?? "";
     const price = planPrice(item, productId, after.prices);
-    if (product.kind !== "reuse" || price.kind !== "reuse") {
+    const done = item.status === "retired" ? "retired" : "reuse";
+    if (product.kind !== done || price.kind !== done) {
       throw new Error(
         `Post-apply state did not converge for ${item.itemKey}: product=${product.kind} price=${price.kind}`,
       );
     }
+    if (item.status === "retired") continue;
     ids[item.itemKey] = { product: productId, price: price.priceId };
     console.log(`${item.itemKey} product=${productId} price=${price.priceId}`);
   }

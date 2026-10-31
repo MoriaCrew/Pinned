@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../../i18n";
+import { getLocale } from "../../../../../../i18n/server";
 import { deleteScene, getSceneView } from "../../../../../../server/board-api";
 import { hostTokenFrom } from "../../../../../../server/host-session";
 import { isSceneId } from "../../../../../../server/scene-job";
@@ -24,6 +26,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ slug: string; sceneId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, sceneId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -33,7 +36,7 @@ export async function GET(
     if (!view) return notFound();
     return NextResponse.json(view, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "Could not load this scene. Please try again.");
+    return errorResponse(error, t(locale, "request.loadSceneFailed"));
   }
 }
 
@@ -47,10 +50,11 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ slug: string; sceneId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, sceneId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
-  const crossSite = rejectCrossSite(request);
+  const crossSite = rejectCrossSite(request, locale);
   if (crossSite) return crossSite;
   if (!isSceneId(sceneId)) return notFound();
   try {
@@ -59,6 +63,6 @@ export async function DELETE(
     await deleteScene(slug, sceneId, viewer, { hostToken: hostTokenFrom(request, slug) }, boardApiDeps(policy));
     return new NextResponse(null, { status: 204, headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "That scene could not be deleted. Please try again.");
+    return errorResponse(error, t(locale, "request.deleteSceneFailed"));
   }
 }

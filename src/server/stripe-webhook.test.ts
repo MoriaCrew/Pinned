@@ -5,6 +5,7 @@ import { CONTRACT_SLUG as SLUG, seedBoard } from "../billing/mock-checkout.contr
 import { STRIPE_API_VERSION } from "../config";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
+import { hasPlus, type BoardPlus } from "../domain/plus";
 import { resolvePolicy, DEFAULT_POLICY } from "../policy/policy";
 import { InMemoryCheckoutIntentStore, type CheckoutIntent } from "./checkout-intent";
 import { resolveBillingReturn } from "./credit-checkout";
@@ -31,6 +32,8 @@ import { InMemoryStripeWebhookRecordStore } from "./stripe-webhook-records";
 const SECRET = "whsec_test_fake_signing_secret";
 const NOW = Math.floor(Date.now() / 1000) * 1000;
 const PACK = "pinneds_credits_25";
+/** Test-local pack on the retired 25-make terms: the handler is pack-agnostic (the shipped default is pinned below and in policy.test.ts). */
+const TEST_PACK = { lookupKey: PACK, credits: 25, eurCents: 499, label: "25 makes" };
 const SESSION_ID = "cs_test_fake_1";
 const PAYMENT_INTENT_ID = "pi_test_fake_1";
 const CHARGE_ID = "ch_test_fake_1";
@@ -90,7 +93,7 @@ async function harness() {
     ledger,
     records,
     boards,
-    policy: resolvePolicy(null),
+    policy: resolvePolicy({ credits: { packs: [TEST_PACK] } }),
     now: () => nowMs,
   };
   async function createIntent(): Promise<CheckoutIntent> {
@@ -98,6 +101,7 @@ async function harness() {
       boardId: SLUG,
       packLookupKey: PACK,
       credits: 25,
+      eurCents: 499,
       at: NOW,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 10,
@@ -173,9 +177,13 @@ function dispute(over: Record<string, unknown> = {}) {
 }
 
 describe("money -> makes formula (PIN-150)", () => {
-  const pack = DEFAULT_POLICY.credits.packs[0];
+  const pack = TEST_PACK;
   it("floor for clawbacks, ceil for freezes, capped at the pack", () => {
-    expect(pack).toMatchObject({ credits: 25, eurCents: 499 });
+    // The shipped pack (PIN-181): 20 makes for 299 cents.
+    const shipped = DEFAULT_POLICY.credits.packs[0];
+    expect(shipped).toMatchObject({ credits: 20, eurCents: 299 });
+    expect([makesFloorForCents(299, shipped), makesFloorForCents(150, shipped)]).toEqual([20, 10]);
+    expect([makesFreezeForCents(150, shipped), makesFreezeForCents(1, shipped)]).toEqual([11, 1]);
     expect(makesFloorForCents(499, pack)).toBe(25);
     expect(makesFloorForCents(250, pack)).toBe(12);
     expect(makesFloorForCents(10, pack)).toBe(0);
@@ -414,6 +422,7 @@ describe("paid sessions past the intent TTL (PIN-178)", () => {
       boardId: SLUG,
       packLookupKey: PACK,
       credits: 25,
+      eurCents: 499,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 1,
     };
@@ -763,6 +772,26 @@ describe("disputes (PIN-150)", () => {
     expect(await h.records.listDeadLetters()).toEqual([]);
   });
 
+  it("a zero- or three-decimal presentment currency never converts by the rate: fx_unverifiable (PIN-181)", async () => {
+    // 500 JPY or 0.500 KWD in minor units: the major-unit rate would misprice both.
+    for (const [currency, amount] of [["jpy", 500], ["KWD", 500]] as const) {
+      const { h } = await granted();
+      h.client.balanceTransactions["txn_test_fake_charge"] = {
+        id: "txn_test_fake_charge",
+        amount: 499,
+        currency: "eur",
+        exchange_rate: 0.5,
+      };
+      expect(
+        (await h.deliver(
+          evt(`evt_du_${currency}`, "charge.dispute.created", dispute({ currency, amount, balance_transactions: [] })),
+        )).outcome,
+      ).toBe("dead_letter");
+      expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["fx_unverifiable"]);
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+    }
+  });
+
   it("a reinstate after a final clawback dead-letters for an operator instead of un-clawing", async () => {
     const { h } = await granted();
     await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ status: "lost" })));
@@ -894,5 +923,163 @@ describe("dead letters are re-runnable (PIN-178)", () => {
     expect(await h.deliver(early)).toMatchObject({ outcome: "duplicate", duplicate: true });
     const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
     expect(clawbacks).toHaveLength(1);
+  });
+});
+
+describe("stored purchase terms (PIN-181)", () => {
+  const changes: Array<[string, Parameters<typeof resolvePolicy>[0]]> = [
+    ["the same pack repriced", { credits: { packs: [{ ...TEST_PACK, eurCents: 999 }] } }],
+    ["the pack retired", null],
+  ];
+  for (const [name, overrides] of changes) {
+    it(`an old purchase keeps its own price after a Policy change: ${name}`, async () => {
+      const h = await harness();
+      const intent = await h.createIntent(); // stored: 25 makes for 499 cents
+      h.deps.policy = resolvePolicy(overrides);
+      expect(
+        (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+      ).toBe("granted");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+      // floor(250 * 25 / 499) = 12 under the stored terms.
+      expect(
+        (await h.deliver(evt("evt_re", "refund.created", refund({ amount: 250 })))).outcome,
+      ).toBe("refund_clawed");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+      // ceil(100 * 25 / 499) = 6 frozen; the lost close claws floor = 5 and frees 1.
+      expect(
+        (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 100 })))).outcome,
+      ).toBe("frozen");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 6, available: 7 });
+      expect(
+        (await h.deliver(
+          evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 100, status: "lost" })),
+        )).outcome,
+      ).toBe("dispute_final_clawed");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 8, frozen: 0, available: 8 });
+      expect(await h.records.listDeadLetters()).toEqual([]);
+    });
+  }
+
+  it("a legacy intent without stored terms falls back to the Policy pack by lookup key", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    // Simulate a record written before PIN-181: no eurCents.
+    const legacy = (found: CheckoutIntent | null) => {
+      if (found) delete found.eurCents;
+      return found;
+    };
+    const realGet = h.intents.get.bind(h.intents);
+    h.intents.get = async (id) => legacy(await realGet(id));
+    const realFind = h.intents.findByStripeIds.bind(h.intents);
+    h.intents.findByStripeIds = async (lookup) => legacy(await realFind(lookup));
+
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(
+      (await h.deliver(evt("evt_re", "refund.created", refund({ amount: 250 })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+    // Once Policy no longer offers that pack, a legacy purchase has no terms: operator flag.
+    h.deps.policy = resolvePolicy(null);
+    expect(
+      (await h.deliver(evt("evt_re2", "refund.created", refund({ id: "re_test_fake_2", amount: 100 }))))
+        .outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["pack_mismatch"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+  });
+});
+
+describe("Plus on purchase (PIN-181)", () => {
+  const AT = NOW + 60_000; // evt()'s default event time, the ledger `at`
+  const PAID_BOARD: BoardPlus = { plan: "board", source: "stripe", grantedAt: AT };
+
+  async function setPlus(h: Awaited<ReturnType<typeof harness>>, plus: BoardPlus) {
+    await h.boards.updateBoardSettings(SLUG, () => ({ plus }));
+  }
+
+  it("the grant writes paid board Plus once; replays and the second session event leave it", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const before = (await h.boards.getBoard(SLUG))!.version;
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(paid)).outcome).toBe("granted");
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus).toEqual(PAID_BOARD);
+    expect(board.version).toBe(before + 1);
+    expect(["off", "mock", "stripe"].map((m) => hasPlus(board, m as "off"))).toEqual([true, true, true]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+
+    expect(await h.deliver(paid)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    expect(
+      (await h.deliver(evt("evt_async", "checkout.session.async_payment_succeeded", session(intent.id), AT + 5_000)))
+        .outcome,
+    ).toBe("duplicate_grant");
+    expect(await h.boards.getBoard(SLUG)).toMatchObject({ plus: PAID_BOARD, version: before + 1 });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("a Plus write that failed after the makes grant is repaired by Stripe's retry", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const realUpdate = h.boards.updateBoardSettings.bind(h.boards);
+    h.boards.updateBoardSettings = async () => {
+      throw new Error("board store unavailable");
+    };
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    await expect(h.deliver(paid)).rejects.toThrow("board store unavailable");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect((await h.boards.getBoard(SLUG))!.plus ?? null).toBeNull();
+    expect(await h.records.getProcessed("evt_paid")).toBeNull();
+
+    h.boards.updateBoardSettings = realUpdate;
+    expect((await h.deliver(paid)).outcome).toBe("duplicate_grant");
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+  });
+
+  it("a paid host grant is never downgraded; a mock grant is replaced", async () => {
+    const host: BoardPlus = { plan: "host", source: "stripe", grantedAt: 1_000 };
+    const h = await harness();
+    await setPlus(h, host);
+    const intent = await h.createIntent();
+    expect((await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome).toBe(
+      "granted",
+    );
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(host);
+
+    const m = await harness();
+    await setPlus(m, { plan: "host", source: "mock", grantedAt: 1_000 });
+    const second = await m.createIntent();
+    await m.deliver(evt("evt_paid", "checkout.session.completed", session(second.id)));
+    expect((await m.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+  });
+
+  it("plusOnPurchase off grants the makes and writes no Plus", async () => {
+    const h = await harness();
+    h.deps.policy = resolvePolicy({ credits: { packs: [TEST_PACK], plusOnPurchase: false } });
+    const intent = await h.createIntent();
+    const before = (await h.boards.getBoard(SLUG))!;
+    expect((await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome).toBe(
+      "granted",
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(await h.boards.getBoard(SLUG)).toMatchObject({ version: before.version });
+    expect((await h.boards.getBoard(SLUG))!.plus ?? null).toBeNull();
+  });
+
+  it("no board repository: the makes land and plus_grant_unavailable flags an operator", async () => {
+    const h = await harness();
+    h.deps.boards = null;
+    const intent = await h.createIntent();
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(paid)).outcome).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["plus_grant_unavailable"]);
+    // Re-runnable (no processed record): a resend once boards are wired grants Plus.
+    h.deps.boards = h.boards;
+    expect((await h.deliver(paid)).outcome).toBe("duplicate_grant");
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
   });
 });

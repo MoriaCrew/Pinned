@@ -36,7 +36,7 @@ import {
   type Segmenter,
   type TapNamer,
 } from "../gateway/ports";
-import { t } from "../i18n";
+import { DEFAULT_LOCALE, t } from "../i18n";
 import type { Policy } from "../policy/policy";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
 import {
@@ -544,6 +544,15 @@ export type TapAddOutcome =
   | { status: "failed" | "refused"; errorCode?: string };
 
 /**
+ * The tap fallback label is a thing name, and thing names stay
+ * English for now like the AI-made ones (docs/18 "Stays English",
+ * PIN-200), so it is stored as English text, not a catalog key.
+ */
+export function tapFallbackLabel(): string {
+  return t(DEFAULT_LOCALE, "add.tapLabel");
+}
+
+/**
  * Tap-to-add (PIN-78, docs/11 sections 5.7/6): one normalized
  * point on the job's still-live working copy -> Segmenter point
  * prompt (PIN-60 buildObjectPrompt via the decorated port) ->
@@ -674,7 +683,7 @@ export async function addTapElement(
     // TapNamer). Any non-ready outcome — refusal, failure, cap
     // denial, absent port — keeps the generic i18n label and
     // faceFlag:false; naming never fails the tap.
-    let label = genericLabel.trim() || t("en", "add.tapLabel");
+    let label = genericLabel.trim() || tapFallbackLabel();
     let description = label;
     let faceFlag = false;
     if (deps.tapNamer) {

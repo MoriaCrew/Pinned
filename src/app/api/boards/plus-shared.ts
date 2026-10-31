@@ -1,38 +1,52 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../config";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import type { Policy } from "../../../policy/policy";
 import { BoardPlusError, hostOnlyError, type HostRouteDeps } from "../../../server/board-plus";
+import { playerCookieName, readCookieValue } from "../../../server/board-session";
 import { getBoardRepository } from "../../../server/board-repository";
 import { hostTokenFrom } from "../../../server/host-session";
 import { readJsonCapped, rateLimit, rejectCrossSite, requireJson } from "./request-guards";
-import { JSON_HEADERS, errorResponse, notFound } from "./shared";
+import { errorResponse, localizedErrorJson, notFound } from "./shared";
 
-/** One per-IP budget shared by the two host-only routes. */
+/** One per-IP budget shared by the skin and plus routes. */
 const HOST_ROUTES_SCOPE = "board-host";
 
 export type HostRouteGate =
-  | { ok: true; hostToken: string; body: unknown }
+  | { ok: true; hostToken: string | null; body: unknown }
   | { ok: false; response: NextResponse };
 
 /**
- * Cheap gates for the host-only routes (PIN-103), in order and all
- * before any board read: cross-site 403 -> JSON 415 -> per-IP 429
- * -> host cookie present and well-formed 403 -> body cap 413.
- * Limits come from the env-level Policy (the board is not loaded
- * yet); the service then verifies the token against the board.
+ * Cheap gates for the skin and plus routes (PIN-103, PIN-181), in
+ * order and all before any board read: cross-site 403 -> JSON 415
+ * -> per-IP 429 -> body cap 413 -> a credential present 403: a
+ * well-formed host cookie, or with `allowMember` (the skin route)
+ * a board session cookie. Limits come from the env-level Policy
+ * (the board is not loaded yet); the service then verifies the
+ * credential against the board.
  */
-export async function hostRouteGate(request: Request, slug: string): Promise<HostRouteGate> {
+export async function hostRouteGate(
+  request: Request,
+  slug: string,
+  options: { allowMember?: boolean } = {},
+): Promise<HostRouteGate> {
+  const locale = await getLocale();
   const policy = getPolicy();
   const refused =
-    rejectCrossSite(request) ??
-    requireJson(request) ??
-    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp);
+    rejectCrossSite(request, locale) ??
+    requireJson(request, locale) ??
+    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp, locale);
   if (refused) return { ok: false, response: refused };
-  const hostToken = hostTokenFrom(request, slug);
-  if (!hostToken) return { ok: false, response: plusErrorResponse(hostOnlyError(), "") };
-  const body = await readJsonCapped(request, policy.plus.requestMaxBytes);
+  const body = await readJsonCapped(request, policy.plus.requestMaxBytes, locale);
   if (!body.ok) return { ok: false, response: body.response };
+  const hostToken = hostTokenFrom(request, slug);
+  const memberCookie = options.allowMember
+    ? readCookieValue(request.headers.get("cookie"), playerCookieName(slug))
+    : null;
+  if (!hostToken && !memberCookie) {
+    return { ok: false, response: plusErrorResponse(hostOnlyError(), "") };
+  }
   return { ok: true, hostToken, body: body.value };
 }
 
@@ -48,10 +62,7 @@ export function hostRouteDeps(policy: Policy): HostRouteDeps {
 export function plusErrorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof BoardPlusError) {
     if (error.status === 404) return notFound();
-    return NextResponse.json(
-      { error: error.message, ...(error.code ? { code: error.code } : {}) },
-      { status: error.status, headers: JSON_HEADERS },
-    );
+    return localizedErrorJson(error, error.status, error.code ? { code: error.code } : {});
   }
   return errorResponse(error, fallback);
 }

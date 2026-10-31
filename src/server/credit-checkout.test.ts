@@ -30,7 +30,7 @@ import { FirestoreCreditLedgerStore } from "./firestore-credit-ledger-store";
  * only then the provider session.
  */
 const NOW = 1_700_000_000_000;
-const PACK = "pinneds_credits_25";
+const PACK = "pinneds_plus_20";
 
 class FakeCreditCheckout implements CreditCheckout {
   readonly resolved: string[] = [];
@@ -96,7 +96,7 @@ describe("buyCredits (PIN-149)", () => {
     expect(order).toEqual(["resolvePrice", "intent", "recordPurchase", "session"]);
     const request = checkout.requests[0];
     expect(request.packLookupKey).toBe(PACK);
-    expect(request.credits).toBe(25);
+    expect(request.credits).toBe(20);
     expect(request.returnBaseUrl).toBe("https://app.example");
     expect(request.intentExpiresAt).toBe(NOW + 1_800_000);
     expect(JSON.stringify(request)).not.toContain(SLUG);
@@ -105,7 +105,8 @@ describe("buyCredits (PIN-149)", () => {
     expect(intent).toMatchObject({
       boardId: SLUG,
       packLookupKey: PACK,
-      credits: 25,
+      credits: 20,
+      eurCents: 299,
       purchaseId: request.intentId,
       status: "pending",
       createdAt: NOW,
@@ -113,7 +114,7 @@ describe("buyCredits (PIN-149)", () => {
     });
     const account = await ledger.getAccount(SLUG);
     expect(account?.purchases[request.intentId]).toMatchObject({
-      credits: 25,
+      credits: 20,
       state: "pending",
       grantedCredits: 0,
     });
@@ -206,7 +207,8 @@ describe("resolveBillingReturn (PIN-149)", () => {
     const intent = await intents.create({
       boardId: SLUG,
       packLookupKey: PACK,
-      credits: 25,
+      credits: 20,
+      eurCents: 299,
       at,
       intentTtlSeconds: ttlSeconds,
       pendingIntentCapPerBoard: 3,
@@ -217,7 +219,7 @@ describe("resolveBillingReturn (PIN-149)", () => {
   it("known intents return to the board; success reads processing and grants nothing", async () => {
     const { intents, intent } = await seedIntent();
     const ledger = new InMemoryCreditLedgerStore();
-    await ledger.recordPurchase(SLUG, { purchaseId: intent.purchaseId, credits: 25 });
+    await ledger.recordPurchase(SLUG, { purchaseId: intent.purchaseId, credits: 20 });
     const deps = { intents, now: () => NOW + 60_000 };
     expect(await resolveBillingReturn(intent.id, "success", deps)).toEqual({
       kind: "board",

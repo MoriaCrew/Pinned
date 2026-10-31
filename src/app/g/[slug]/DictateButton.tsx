@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Hint } from "../../../ui";
 import { blobToDictationWav } from "./dictate-audio";
 
@@ -26,6 +27,7 @@ export function DictateButton({
   maxSeconds: number;
   onText: (transcript: string) => void;
 }) {
+  const locale = useLocale();
   const [supported, setSupported] = useState(false);
   const [state, setState] = useState<DictateState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -83,12 +85,12 @@ export function DictateButton({
         | { text?: unknown; error?: unknown }
         | null;
       if (!response.ok || typeof data?.text !== "string" || !data.text) {
-        setError(typeof data?.error === "string" ? data.error : t("en", "make.dictateFailed"));
+        setError(typeof data?.error === "string" ? data.error : t(locale, "make.dictateFailed"));
         return;
       }
       onText(data.text);
     } catch {
-      setError(t("en", "make.dictateFailed"));
+      setError(t(locale, "make.dictateFailed"));
     } finally {
       setState("idle");
     }
@@ -103,7 +105,7 @@ export function DictateButton({
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       startingRef.current = false;
-      if (liveRef.current) setError(t("en", "make.dictateNoMic"));
+      if (liveRef.current) setError(t(locale, "make.dictateNoMic"));
       return;
     }
     startingRef.current = false;
@@ -148,13 +150,13 @@ export function DictateButton({
       {state === "recording" ? (
         <>
           <Button icon="mic" onClick={stop}>
-            {t("en", "make.dictateStop")}
+            {t(locale, "make.dictateStop")}
           </Button>
-          <Hint point="none">{t("en", "make.dictateListening")}</Hint>
+          <Hint point="none">{t(locale, "make.dictateListening")}</Hint>
         </>
       ) : (
         <Button icon="mic" disabled={state === "working"} onClick={() => void start()}>
-          {state === "working" ? t("en", "make.dictateWorking") : t("en", "make.dictate")}
+          {state === "working" ? t(locale, "make.dictateWorking") : t(locale, "make.dictate")}
         </Button>
       )}
       {error ? <Hint point="none">{error}</Hint> : null}

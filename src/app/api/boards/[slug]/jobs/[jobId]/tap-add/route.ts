@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../../../i18n";
+import { getLocale } from "../../../../../../../i18n/server";
 import { tapAddPin } from "../../../../../../../server/board-api";
 import {
   JSON_HEADERS,
@@ -24,6 +26,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string; jobId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, jobId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -32,7 +35,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Tap a spot in the photo." },
+      { error: t(locale, "request.tapSpot") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -43,6 +46,6 @@ export async function POST(
     const result = await tapAddPin(slug, viewer, jobId, body, boardApiDeps(policy));
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "That tap could not be added. Please try again.");
+    return errorResponse(error, t(locale, "request.addTapFailed"));
   }
 }

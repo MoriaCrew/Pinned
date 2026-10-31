@@ -26,6 +26,10 @@ call log once live calls land).
   description and face flag (PIN-117).
 - `chips.v1.md` — selected pin labels → scene-idea suggestion chips
   for the Make sheet, cached per label set (PIN-75).
+- `translate-ui.v1.md` — dev-time UI translation of `en.json` batches
+  for `npm run i18n:translate` (PIN-189); not an app call.
+- `review-ui.v1.md` — reviewer pass over those translations: returns
+  corrections with a reason (PIN-189).
 
 Segmentation uses the plain-noun `objectLabel` as the SAM concept
 prompt; it is not a chat prompt and has no template file.

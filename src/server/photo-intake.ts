@@ -11,6 +11,7 @@ import "server-only";
  * Callers store only the returned derivative.
  */
 import sharp from "sharp";
+import { englishText, userMessage, type UserMessage } from "../i18n/user-message";
 
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 export const MAX_WORKING_DIMENSION = 1600;
@@ -26,13 +27,16 @@ export type PhotoIntakeErrorCode =
   | "decode_failed";
 
 export class PhotoIntakeError extends Error {
+  readonly userMessage?: UserMessage;
+
   constructor(
-    message: string,
+    message: UserMessage | string,
     public readonly code: PhotoIntakeErrorCode,
     public readonly status: 400 | 413 | 415 = 400,
   ) {
-    super(message);
+    super(englishText(message));
     this.name = "PhotoIntakeError";
+    this.userMessage = typeof message === "string" ? undefined : message;
   }
 }
 
@@ -95,11 +99,11 @@ export async function processPhoto(
   const maxInputPixels = options.maxInputPixels ?? MAX_INPUT_PIXELS;
 
   if (!bytes || bytes.length === 0) {
-    throw new PhotoIntakeError("Choose a photo to upload.", "empty");
+    throw new PhotoIntakeError(userMessage("error.photoEmpty"), "empty");
   }
   if (bytes.length > maxBytes) {
     throw new PhotoIntakeError(
-      `That photo is too large. Keep it under ${Math.round(maxBytes / (1024 * 1024))} MB.`,
+      userMessage("error.photoTooLarge", { mb: Math.round(maxBytes / (1024 * 1024)) }),
       "too_large",
       413,
     );
@@ -107,7 +111,7 @@ export async function processPhoto(
   const sourceKind = detectPhotoKind(bytes);
   if (!sourceKind) {
     throw new PhotoIntakeError(
-      "That file is not a JPEG, PNG, or WebP photo.",
+      userMessage("error.photoType"),
       "unsupported_type",
       415,
     );
@@ -136,7 +140,7 @@ export async function processPhoto(
     height = result.info.height;
   } catch {
     throw new PhotoIntakeError(
-      "That photo could not be read. Try a different image.",
+      userMessage("error.photoUnreadable"),
       "decode_failed",
     );
   }
@@ -153,7 +157,7 @@ export async function processPhoto(
   }
   if (!clean) {
     throw new PhotoIntakeError(
-      "That photo could not be processed safely. Try a different image.",
+      userMessage("error.photoUnsafe"),
       "decode_failed",
     );
   }

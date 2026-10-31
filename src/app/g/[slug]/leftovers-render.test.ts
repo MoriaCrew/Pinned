@@ -48,7 +48,7 @@ describe("leftovers line (PIN-122)", () => {
 
   it("counts every photo's leftovers", () => {
     const many: Leftovers = { groups: [group("new", 2, 9), group("old", 3, 1)], count: 5 };
-    expect(leftoversLine(many)).toBe("5 things from your last photos aren't pinned");
+    expect(leftoversLine(many, "en")).toBe("5 things from your last photos aren't pinned");
   });
 
   it("asks once before clearing, and says when clearing failed", () => {

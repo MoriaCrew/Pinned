@@ -85,7 +85,7 @@ export interface BoardClientView extends BoardViewLike {
   scenes: BoardViewScene[];
   activity: ActivityLine[];
   /** PIN-103: false in the server render (the host cookie is API-path scoped); the first poll says. */
-  viewer?: { isHost: boolean };
+  viewer?: { isHost: boolean; /** PIN-181: host, or joined while the board has Plus. */ canChangeLook: boolean };
   /** PIN-103: the board's Plus state, billing mode and Policy price labels. */
   plus?: PlusView;
   /** PIN-151: present only while credits are enabled; PIN-152 renders it. */

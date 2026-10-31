@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { MyBoardCard } from "../../domain/my-boards";
 import type { MyPinCard } from "../../domain/my-pins";
 import { skinForTheme } from "../../domain/skins";
-import { t } from "../../i18n";
+import { tf, type Locale } from "../../i18n";
 import { Pin, Wordmark } from "../../ui";
 import { You } from "../auth/You";
 import { MyBoardItem } from "./boards/MyBoardItem";
@@ -74,7 +74,7 @@ export function LibraryEmpty({
  * as a small print, then your count and the last active day in mono.
  * Each card's More menu removes it from your list (PIN-166).
  */
-export function BoardCards({ boards }: { boards: MyBoardCard[] }) {
+export function BoardCards({ locale, boards }: { locale: Locale; boards: MyBoardCard[] }) {
   return (
     <ul className="pn-lib-boards">
       {boards.map((board) => (
@@ -94,7 +94,7 @@ export function BoardCards({ boards }: { boards: MyBoardCard[] }) {
                 <span className="pn-ghost pn-ghost-wide" style={{ "--t": -0.3 } as CSSProperties} />
               </span>
             )}
-            <BoardCardMeta myPinCount={board.myPinCount} lastActivityAt={board.lastActivityAt} />
+            <BoardCardMeta locale={locale} myPinCount={board.myPinCount} lastActivityAt={board.lastActivityAt} />
           </a>
         </MyBoardItem>
       ))}
@@ -102,8 +102,16 @@ export function BoardCards({ boards }: { boards: MyBoardCard[] }) {
   );
 }
 
-function BoardCardMeta({ myPinCount, lastActivityAt }: { myPinCount: number; lastActivityAt: number }) {
-  const meta = boardCardMeta(myPinCount, lastActivityAt);
+function BoardCardMeta({
+  locale,
+  myPinCount,
+  lastActivityAt,
+}: {
+  locale: Locale;
+  myPinCount: number;
+  lastActivityAt: number;
+}) {
+  const meta = boardCardMeta(locale, myPinCount, lastActivityAt);
   return (
     <span className="pn-lib-board-meta">
       <span>{meta.mine}</span>
@@ -117,13 +125,21 @@ function BoardCardMeta({ myPinCount, lastActivityAt }: { myPinCount: number; las
  * came from. With a board context (?board=) every pin also gets a
  * "Pin here" button.
  */
-export function PinLibrary({ cards, boardSlug }: { cards: MyPinCard[]; boardSlug: string | null }) {
+export function PinLibrary({
+  locale,
+  cards,
+  boardSlug,
+}: {
+  locale: Locale;
+  cards: MyPinCard[];
+  boardSlug: string | null;
+}) {
   return (
     <ul className="pn-pins pn-lib-pins" data-pinnable={boardSlug ? "" : undefined}>
       {cards.map((card) => (
         <Pin key={card.elementId} as="li" src={card.imageUrl} label={card.label} seed={card.elementId}>
           <span className="pn-lib-from">
-            {t("en", "myPins.fromBoard")} {card.sourceBoardTitle}
+            {tf(locale, "myPins.fromBoardTitle", { board: card.sourceBoardTitle })}
           </span>
           {boardSlug ? <PinToBoardButton slug={boardSlug} elementId={card.elementId} label={card.label} /> : null}
         </Pin>

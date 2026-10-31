@@ -20,6 +20,8 @@
     "seed:stripe-catalog": "node scripts/seed-stripe-catalog.mjs",
     "usage:report": "node scripts/usage-report.mjs",
     "usage:costs": "node scripts/usage-costs.mjs",
+    "i18n:translate": "node scripts/i18n-translate.mjs",
+    "i18n:check": "node scripts/i18n-check.mjs",
     "billing:reconcile": "node scripts/billing-reconciliation.mjs",
     "billing:webhook-endpoint": "node scripts/ensure-stripe-webhook-endpoint.mjs"
   },
