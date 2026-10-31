@@ -40,9 +40,9 @@ by the webhook (PIN-150 section). The plan ids `board` / `host`
 stay in the domain: `board` is what a purchase records, and the
 mock checkout still demos both. `host` covers `board`
 (`planCovers`). No host plan is sold: the draft
-`pinneds_host_monthly` price stays draft. `plus.priceLabels` are
-legacy display labels, never used to charge (a UI slice removes
-them).
+`pinneds_host_monthly` price stays draft. The price on screen is
+formatted from the pack's `eurCents` (`formatEur`); there are no
+price labels in Policy or in the board view (removed in PIN-182).
 
 ## Host identity
 
@@ -176,7 +176,7 @@ host-only but answers every failure with the uniform 404
     (`canChangeLook`, PIN-181: the host, or a joined viewer while
     the board has Plus; the skin route re-checks)
   - `plus: { active: boolean, plan?: "board" | "host", mode:
-    "off" | "mock" | "stripe", priceLabels: { board, host } }`
+    "off" | "mock" | "stripe" }`
   - `credits: { availableMakes: number }` (PIN-151, only while
     `Policy.credits.enabled`; absent otherwise, so the disabled
     shape is unchanged)
@@ -252,7 +252,6 @@ Check a backend with `GET /api/health` → `plusMode`.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `priceLabels.board` / `.host` | `$3.99` / `$4.99/month` | legacy display labels, never charged (a UI slice removes them) |
 | `hostCookieDays` | 365 | Server-side credential age, checked with the board's effective Policy, so a per-board override applies there. Cookie `Max-Age` is set once at create from the env-level Policy. |
 | `requestMaxBytes` | 1024 | JSON body cap on the skin and plus routes (and the credits buy route) |
 | `hostRoutesPerIp` | 60 / 600,000 ms | in-process per-IP brake shared by the skin and plus routes |
@@ -805,75 +804,114 @@ concurrent first touches grant once; replay after reload) runs
 against the fake Firestore in
 `src/server/firestore-credit-ledger-store.test.ts`.
 
-## Makes UI (PIN-152)
+## Plus sheet + creations UI (PIN-152, PIN-182)
+
+The user-facing word for makes is **creations** (the code keeps
+`makes` / `credits`). There is exactly one sheet that asks for
+money, the Board Plus sheet (`PlusSheet` in `src/ui/skin-picker.tsx`,
+mounted by `PlusFlow` in `src/app/g/[slug]/PlusFlow.tsx`); the
+PIN-152 "Add makes" buy sheet and the Plus plan cards are gone.
 
 The board page renders the PIN-151 `credits: { availableMakes }`
 field (`src/app/g/[slug]/MakesFlow.tsx`, pure rules in
-`src/domain/makes-ui.ts`). It mounts under the board header and
-renders **nothing** while the view carries no `credits`
-(`Policy.credits.enabled` off, the shipped default), so the
-disabled board is pixel-for-pixel the pre-credits board and
-`AUTH_MODE=link-only` behaviour is unchanged. The count rides
-the existing board poll, so spends and grants appear without a
-reload, and changes are announced (`aria-live="polite"`).
+`src/domain/makes-ui.ts` and `src/domain/plus-ui.ts`). The
+indicator mounts under the board header and renders **nothing**
+while the view carries no `credits` (`Policy.credits.enabled`
+off, the shipped default), so the disabled board is
+pixel-for-pixel the pre-credits board and `AUTH_MODE=link-only`
+behaviour is unchanged. The count rides the existing board poll,
+so spends and grants appear without a reload, and changes are
+announced (`aria-live="polite"`).
 
-- **Indicator.** "N makes left" for the whole board — activity
-  language only, never money words (`wallet`, `gift card`,
-  `cash`, `transfer`, money-`balance`), no dollars, no
-  per-person anything (a test scans the EN + FR `makes.*`
-  strings). At or under `Policy.credits.lowMakesWarning`
-  (default 2 since PIN-181, deep-overridable like every credits key; 0
-  disables it) the indicator shows its low state; at zero it
-  says new scenes will be collages until someone adds more —
-  the free collage lane, still labelled `Collage` on the print.
-- **Buy sheet.** The Policy packs (`Policy.credits.packs`,
-  handed to the client through the board page's existing
-  Policy prop) as a keyboard-operable radio group on the Plus
-  sheet's plan pattern: EUR tax-included price, a per-make
-  line in plain words, "You may be charged in your local
-  currency" (Adaptive Pricing, PIN-149) and "Appears as
-  PINNEDS on your statement". Anyone on the board can add
-  makes for the board: someone who has not joined is asked
-  for a name first (the route requires a participant or the
-  host), then the sheet opens. Buying is offered **only**
-  while `plus.mode` is `stripe` — off/mock keep today's
-  behaviour (no buy button; an opened sheet says adding makes
-  is not open and sells nothing). Buy posts the chosen pack's
-  `lookupKey` to the PIN-149 route and follows the returned
-  hosted-checkout URL; the pending-cap, rate-limit, join-first
-  and generic failures each get their own inline line, and an
-  `unavailable` answer turns the sheet to the not-open state.
+- **Indicator.** "N creations left" for the whole board —
+  activity language only, never money words (`wallet`, `gift
+  card`, `cash`, `transfer`, money-`balance`), no dollars, no
+  per-person anything (a test scans the EN + FR `makes.*` and
+  `ui.plus*` strings, and that EN never says "make"). At or under
+  `Policy.credits.lowMakesWarning` (default 2 since PIN-181,
+  deep-overridable like every credits key; 0 disables it) the
+  indicator shows its low state; at zero it says new scenes will
+  be collages until someone adds more — the free collage lane,
+  still labelled `Collage` on the print. Its button, the Add
+  sheet's out-of-creations button and the pool-empty line's
+  button all say "Get Plus" and open the Plus sheet (thresholds
+  and hiding the indicator above the threshold are PIN-183).
+- **Plus sheet.** Title, lead ("Anyone on the board can get Plus.
+  Everyone here gets it."), a perks list and one button. Perks in
+  order: "+N creations" (N = `Policy.credits.packs[0].credits`; "For
+  everyone on this board. Photos and scenes."), "Every skin",
+  "Foil stickers", "Deeper scenes" and "Full-size downloads" (both
+  tagged Soon: planned, not built). The button reads "Get Plus ·
+  €2.99" with a quiet "Once, for this board."; the price is
+  `formatEur(pack.eurCents, locale)`, never a label. With Plus
+  already on, the list collapses to the creations line plus "Plus is
+  on", the lead becomes the add-creations lead, and the button reads
+  "Add N creations · €2.99". With nothing to buy (billing off, or the
+  checkout answered `unavailable`) the button is disabled "Coming
+  soon" under "Payments open after the hackathon. Nothing is
+  charged." EN and FR both render (`locale`, default `en`).
+- **Who and how it buys**, from `plus.mode` in the board view
+  (`plusPurchasePath`): `stripe` posts the pack's `lookupKey` to the
+  PIN-149 credits route (`useMakesFlow.buy`) and follows the hosted
+  Checkout URL, for any joined member or the host (someone who has
+  not joined is asked for a name first, the `buyMakes` join intent;
+  the route requires a participant or the host). The pending-cap,
+  rate-limit, join-first and generic failures each get their own
+  inline line on the sheet. `mock` posts the host-only demo grant
+  (`POST plus`, the demo note stays): a joined guest sees the sheet
+  with the button disabled and "Only the board's host can do that."
+  `off` sells nothing. Webhook granting stays the only way creations
+  and Plus land (PIN-150, PIN-181).
+- **Who can open it.** Anyone on the board. `PlusFlow` is mounted for
+  every viewer; the try-on bar, "Keep it" and the Change look sheet
+  stay host-only because the look flow only gives the host a
+  try-on (members' Change look is PIN-183). The host's Keep it on
+  a Plus try-on, and a 402 from the skin route, open the same sheet.
 - **Return landing.** `?billing=processing|cancelled` from
   `GET /billing/return` becomes a transient `aria-live`
   banner, and the flag is stripped from the URL at once.
-  Processing means "adding your makes…": the banner refetches
+  Processing means "adding your creations…": the banner refetches
   the board a few times, and only a real rise in
   `availableMakes` (over the count kept from buy time) may
-  say the makes are in — granting stays webhook-only
-  (PIN-150) and the redirect alone never claims success. No
-  rise after the refetches lands on a neutral "still waiting"
-  line; cancelled/failed returns get one neutral line each.
+  say "Your creations are in — N creations left." (plus "Plus is
+  on." once the refetched view has `plus.active`) — granting stays
+  webhook-only (PIN-150) and the redirect alone never claims
+  success. No rise after the refetches lands on a neutral "still
+  waiting" line; cancelled/failed returns get one neutral line
+  each.
+- **Look after the return.** A host who leaves for Checkout from a
+  Plus try-on stores that skin in `sessionStorage` next to the
+  makes baseline (`return-skin.ts`; replaced or cleared by every
+  new buy). On `?billing=processing`, once the first poll says
+  host and the refetched view has `plus.active`, the look flow
+  saves the skin once (`returnSkinStep`: wait, apply or clear)
+  and forgets it. A cancelled or failed return only forgets it.
 - **Pool-empty outcomes.** The photo 429
   (`credits_pool_empty`, PIN-151) and a photo job failing with
   that `errorCode` replace the Add sheet's generic failure
-  with out-of-makes copy plus a button into the buy sheet
+  with out-of-creations copy plus a "Get Plus" button
   (while buying works). A scene job failing with that code
-  (the last-make race loser) gets the same make-aware line on
+  (the last-creation race loser) gets the same line on
   its problem card. Every other error keeps its old copy.
-- **Copy.** All strings live under `makes.*` in
+- **Copy.** Strings live under `makes.*` and `ui.plus*` in
   `src/i18n/messages/{en,fr}.json` in key parity (a test pins
   it); the components take a locale and the board passes
   English like every other board surface today. Prices format
-  from `eurCents` per locale (`€4.99` / `4,99 €`), never from
-  the pack's English display label.
+  from `eurCents` per locale (`€2.99` / `2,99 €`), never from
+  the pack's English display label. The PIN-152 "per make" line
+  and the local-currency and statement-name notes left with the
+  buy sheet; Stripe Checkout shows the local price and the
+  merchant name itself.
 
-Tests: `src/domain/makes-ui.test.ts` (states, stripe-only
-buying, flag parsing + URL strip, banner never claims success
-without a rise, checkout answers, prices) and
+Tests: `src/domain/makes-ui.test.ts` (states, flag parsing + URL
+strip, banner never claims success without a rise, checkout
+answers, prices), `src/domain/plus-ui.test.ts`
+(`plusPurchasePath`, `returnSkinStep`, the look flow reducer),
+`src/app/g/[slug]/plus-render.test.ts` (the sheet in every mode
+and for a guest, order of the perks, Plus on, Coming soon, FR) and
 `src/app/g/[slug]/makes-render.test.ts` (hidden while credits
-absent, indicator states, packs from Policy data, off-mode
-sells nothing, in-flight/error lines, banner states,
-pool-empty copy, EN/FR rendering + copy guardrails), plus the
+absent, indicator states, banner states, pool-empty copy, EN/FR
+parity and copy guardrails), plus `src/ui/kit.test.ts` and the
 `lowMakesWarning` cases in `src/policy/policy.test.ts`. No
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
@@ -980,10 +1018,11 @@ a genuinely unknown charge still dead-letters.
 - PIN-181: revoke (or keep, by decision) Plus when a purchase is
   fully refunded or a dispute is lost. v1 claws back the makes
   only; the board keeps its `stripe` grant.
-- PIN-181 UI slice: the one-purchase sheet, "creations" copy,
-  Change look for members (`viewer.canChangeLook`; today
-  `you-menu.ts` ties Change look to Delete board for the host),
-  and removing `plus.priceLabels`.
+- PIN-181 UI slice, remaining: Change look for members
+  (`viewer.canChangeLook`; today `you-menu.ts` ties Change look to
+  Delete board for the host) and the indicator's thresholds (PIN-183).
+  The one-purchase sheet, "creations" copy and the removal of
+  `plus.priceLabels` landed in PIN-182.
 
 ## Tests
 
