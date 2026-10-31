@@ -845,11 +845,15 @@ function BoardBody({
 
   function handlePickFiles(files: File[]) {
     const firstKey = uploadQueue.enqueue(files);
-    if (firstKey) {
+    // Topping up an in-flight batch steps to its earliest
+    // unfinished photo, never past it to the newly picked ones.
+    // Even when the whole top-up was over the batch cap (enqueue
+    // created nothing), open that step: the batch sheet shows the
+    // dropped-files note instead of the pick vanishing silently.
+    const stepKey = nextStepItem(uploadQueue.items)?.key ?? firstKey;
+    if (stepKey) {
       setResumeJobId(null);
-      // Topping up an in-flight batch steps to its earliest
-      // unfinished photo, never past it to the newly picked ones.
-      setBatchStepKey(nextStepItem(uploadQueue.items)?.key ?? firstKey);
+      setBatchStepKey(stepKey);
     }
   }
 
