@@ -167,7 +167,7 @@ describe("board scenes strip (PIN-98)", () => {
         ],
       }),
     );
-    expect(out).toContain("AI is busy right now, so this one is a collage. Nothing was spent.");
+    expect(out).toContain("AI was busy, so this one is a collage. No make was used.");
     expect(out).toContain(`class="${styles.collageNote}"`);
     expect(out.indexOf("pn-print-actions")).toBeLessThan(out.indexOf(styles.collageNote));
   });

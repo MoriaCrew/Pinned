@@ -45,8 +45,8 @@ scene and job payloads):
 
 - `budget`: the daily AI budget, call limit or AI switch
   closed the composer (job errors `budget`, `call_limit`,
-  `budget_off`). The board shows one line on the print: AI is
-  busy, so this one is a collage, and nothing was spent. No
+  `budget_off`). The board shows one line on the print: AI was
+  busy, so this one is a collage, and no make was used. No
   make is debited for a collage.
 - `pool_empty`: the board has no makes left (PIN-151). Its
   copy is the makes copy (PIN-152).
