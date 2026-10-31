@@ -22,6 +22,7 @@ import { getSceneJobStore } from "../../../server/scene-job-store";
 import { getChipsCacheStore } from "../../../server/chips-cache-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { getCreditLedgerStore } from "../../../server/credit-ledger-store";
+import { getStarterAllowanceStore } from "../../../server/starter-allowance-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
 import { logServerError } from "../../../server/safe-log";
 
@@ -75,6 +76,8 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     plusMode: getConfig().plusMode,
     // PIN-151: the makes ledger; inert until Policy.credits.enabled.
     credits: getCreditLedgerStore(),
+    // PIN-205: free creations per maker; read only at board creation while credits are on.
+    starterAllowance: getStarterAllowanceStore(),
     policy,
   };
 }

@@ -106,6 +106,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.boardDeletePerIp).toEqual({ limit: 60, windowMs: 600_000 });
     expect(resolvePolicy({ boardDeletePerIp: { limit: 5 } }).boardDeletePerIp).toEqual({ limit: 5, windowMs: 600_000 });
     expect(() => resolvePolicy({ boardDeletePerIp: { windowMs: 0 } })).toThrow();
+    // PIN-205: the board-create brake moved here from RATE_LIMITS, same values.
+    expect(DEFAULT_POLICY.boardCreatePerIp).toEqual({ limit: 10, windowMs: 3_600_000 });
+    expect(resolvePolicy({ boardCreatePerIp: { limit: 50 } }).boardCreatePerIp).toEqual({ limit: 50, windowMs: 3_600_000 });
+    expect(() => resolvePolicy({ boardCreatePerIp: { limit: 0 } })).toThrow();
     // PIN-212 HSTS life: a year by default, the env layer can change it, 0 fails closed.
     expect(DEFAULT_POLICY.hstsMaxAgeDays).toBe(365);
     expect(resolvePolicy({ hstsMaxAgeDays: 30 }).hstsMaxAgeDays).toBe(30);

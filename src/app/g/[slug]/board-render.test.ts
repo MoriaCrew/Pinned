@@ -417,6 +417,17 @@ describe("scene viewer (PIN-131)", () => {
     expect(viewer({ slot: { ...remix, remixOf: { deleted: true } } })).toContain("Remix of a deleted scene");
   });
 
+  it("credits Muse Image on AI scenes and remixes only, never on a collage (PIN-222)", () => {
+    const caption = `<p class="${styles.viewerComposed}">Composed by Muse Image</p>`;
+    expect(viewer({ slot: { ...remix, kind: "scene", remixOf: null } })).toContain(caption);
+    expect(viewer()).toContain(caption);
+    expect(viewer({ slot: { ...remix, kind: "collage" } })).not.toContain("Composed by Muse Image");
+    // It sits between the credits and the actions, and stays through the delete confirm.
+    const out = viewer();
+    expect(out.indexOf(styles.viewerComposed ?? "")).toBeGreaterThan(out.indexOf(styles.viewerCredits ?? ""));
+    expect(out.indexOf(styles.viewerComposed ?? "")).toBeLessThan(out.indexOf("pn-print-actions"));
+  });
+
   it("lets the Scenes heading take focus when a delete leaves no print to return to (PIN-143)", () => {
     expect(html(h(BoardScenes, { count: 0, slots: [] }))).toContain('<h2 class="pn-section-title" id="board-scenes" tabindex="-1">');
   });

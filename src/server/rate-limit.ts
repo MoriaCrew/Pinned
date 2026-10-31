@@ -50,9 +50,6 @@ export const RATE_LIMITS = {
   playersPerIpGame: { limit: 20, windowMs: 10 * 60_000 },
   submissionsPerIpGame: { limit: 30, windowMs: 10 * 60_000 },
   labPerIp: { limit: 20, windowMs: 10 * 60_000 },
-  // PIN-61: board creation has no route yet (PIN-53/65 wire it);
-  // the limit lives here so the entry point cannot ship without one.
-  boardCreatePerIp: { limit: 10, windowMs: 60 * 60_000 },
   // Global per-IP upload brake across boards (the per-game gate
   // above alone lets one IP rotate slugs), wired on the upload
   // entry points that exist today.

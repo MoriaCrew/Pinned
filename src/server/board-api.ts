@@ -55,6 +55,8 @@ import {
 import { InMemoryChipsCacheStore, type ChipsCacheStore } from "./chips-cache";
 import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
+import type { StarterAllowanceStore } from "../domain/starter-allowance";
+import { logServerError } from "./safe-log";
 import {
   CREDITS_POOL_EMPTY,
   creditsEnabled,
@@ -81,6 +83,8 @@ export interface BoardApiDeps {
   collageMode?: boolean;
   /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
   credits?: CreditLedgerStore;
+  /** Free creations per maker (PIN-205); only touched at board creation while Policy.credits.enabled. */
+  starterAllowance?: StarterAllowanceStore;
   policy: Policy;
   /** PLUS_MODE (PIN-103): Plus offer in the view + which grants count. Default "off". */
   plusMode?: PlusMode;
@@ -267,6 +271,41 @@ export interface CreatedBoard {
   hostToken: string;
 }
 
+/** Per-request facts board creation needs (PIN-205). */
+export interface CreateBoardContext {
+  /** Opaque maker key (src/domain/maker-key.ts); absent = no per-maker rule (internal callers). */
+  makerKey?: string;
+}
+
+/**
+ * Free creations per maker (PIN-205, docs/15): the starter pool
+ * this new board gets. Undefined = no per-maker rule applies
+ * (credits off, or no maker context), so creation stays exactly
+ * as before. Otherwise one maker slot is claimed: the pool on a
+ * win, 0 once the maker used up their free boards for the window.
+ * A missing store or a store failure also gives 0 — fail closed,
+ * never gift a pool. Creation itself is never blocked.
+ */
+async function decideStarterMakes(
+  deps: BoardApiDeps,
+  context: CreateBoardContext | undefined,
+  now: number,
+): Promise<number | undefined> {
+  if (!creditsEnabled(deps.policy) || context?.makerKey === undefined) return undefined;
+  if (!deps.starterAllowance) return 0;
+  const { starterMakes, starterBoardsPerMaker, starterMakerWindowMs } = deps.policy.credits;
+  try {
+    const won = await deps.starterAllowance.tryClaim(context.makerKey, now, {
+      maxBoards: starterBoardsPerMaker,
+      windowMs: starterMakerWindowMs,
+    });
+    return won ? starterMakes : 0;
+  } catch (error) {
+    logServerError("starter allowance claim failed", error);
+    return 0;
+  }
+}
+
 /**
  * Create a board with its host credential (PIN-103) in the same
  * initial write: the Board stores the token hash + issue time,
@@ -275,10 +314,14 @@ export interface CreatedBoard {
 export async function createBoardWithHost(
   rawInput: unknown,
   deps: BoardApiDeps,
+  context?: CreateBoardContext,
 ): Promise<CreatedBoard> {
   const input = parseCreateBoardInput(rawInput, deps.policy);
   const now = deps.now?.() ?? Date.now();
   const theme = getBoardTheme(input.themeId);
+  // One claim per request, before the slug loop: a slug retry
+  // must not use up a second maker slot.
+  const starterMakes = await decideStarterMakes(deps, context, now);
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const credential = issueHostCredential(now, deps.newHostToken);
     const board: Board = {
@@ -287,6 +330,7 @@ export async function createBoardWithHost(
       ...(input.themeId ? { themeId: input.themeId } : {}),
       ...(theme ? { theme: theme.tokens } : {}),
       host: credential.record,
+      ...(starterMakes !== undefined ? { starterMakes } : {}),
       counters: emptyBoardCounters(),
       createdAt: now,
       version: 1,
@@ -295,8 +339,13 @@ export async function createBoardWithHost(
       await deps.boards.createBoard(board);
       // PIN-151: with credits on, a new board's starter pool
       // lands with it. Never blocks creation — the same
-      // once-only grant retries lazily on the first credit touch.
-      await ensureStarterMakes(board.slug, deps).catch(() => undefined);
+      // once-only grant retries lazily on the first credit touch,
+      // with the amount stored on the board (PIN-205).
+      await ensureStarterMakes(
+        board.slug,
+        deps,
+        starterMakes ?? deps.policy.credits.starterMakes,
+      ).catch(() => undefined);
       return { board, hostToken: credential.token };
     } catch (error) {
       if (error instanceof RangeError && attempt < MAX_SLUG_ATTEMPTS - 1) continue;
