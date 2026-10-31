@@ -161,6 +161,32 @@ describe("credit ledger (PIN-147)", () => {
     expect((await store.restore(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", at: at() })).applied).toBe(false);
   });
 
+  it("a final clawback consumes only its own dispute's hold, never another open dispute's (PIN-233 F4)", async () => {
+    const store = new InMemoryCreditLedgerStore();
+    const grant = async (purchaseId: string) => {
+      await store.recordPurchase(BOARD, { purchaseId, credits: 25 });
+      await store.grantPurchase(BOARD, { eventId: ev(), purchaseId, at: at() });
+    };
+    await grant("p1");
+    await grant("p2");
+    await store.debit(BOARD, { eventId: ev(), amount: 35, at: at() });
+    await store.freeze(BOARD, { eventId: ev(), purchaseId: "p2", disputeId: "dp-2", amount: 10, at: at() });
+    // dp-1's freeze was capped at the 5 makes still available then.
+    await store.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", amount: 5, at: at() });
+    await grant("p3");
+    expect(await store.getBalance(BOARD)).toMatchObject({ balance: 40, frozen: 15, available: 25 });
+    // dp-1 is lost for 10 makes, more than its own 5-make hold.
+    const claw = await store.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 10, disputeId: "dp-1", at: at() });
+    expect(claw.entry).toMatchObject({ balanceDelta: -10, frozenDelta: -5, balanceAfter: 30, frozenAfter: 10, availableAfter: 20 });
+    const account = await store.getAccount(BOARD);
+    expect(account?.frozenByDispute).toEqual({ "dp-2": 10 });
+    expect(account?.purchases.p1.resolvedDisputeIds).toEqual(["dp-1"]);
+    // dp-2 still holds all 10: only the 20 truly available makes spend.
+    await expect(store.debit(BOARD, { eventId: ev(), amount: 21, at: at() })).rejects.toThrow(/exceeds available 20/);
+    const restore = await store.restore(BOARD, { eventId: ev(), purchaseId: "p2", disputeId: "dp-2", at: at() });
+    expect(restore.entry).toMatchObject({ amount: 10, frozenDelta: -10, frozenAfter: 0, availableAfter: 30 });
+  });
+
   it("freeze before grant is deferred and lands with the grant; restoring it pre-grant cancels it", async () => {
     const store = new InMemoryCreditLedgerStore();
     await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });

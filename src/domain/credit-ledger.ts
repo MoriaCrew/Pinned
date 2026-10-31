@@ -588,7 +588,12 @@ export function clawbackCredits(
   let pendingClawbackDelta = 0;
   if (target.grantedCredits > 0) {
     if (input.disputeId) {
-      frozenDelta += reduceFrozen(next, input.amount, input.disputeId);
+      // Only this dispute's own hold (PIN-233 F4): another open
+      // dispute's makes stay frozen. Any shortfall comes from the
+      // pool below, and the clamp after it trims holds only when
+      // the shrunken pool can no longer back them.
+      const ownHold = next.frozenByDispute[input.disputeId] ?? 0;
+      frozenDelta += reduceFrozen(next, Math.min(input.amount, ownHold), input.disputeId);
     }
     const taken = Math.min(input.amount, next.balance);
     next.balance -= taken;
