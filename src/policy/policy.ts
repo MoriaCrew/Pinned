@@ -49,6 +49,8 @@ export const PolicySchema = z
     maxConcurrentDecomposeJobs: z.number().int().min(1).default(2),
     /** Stale-job margin past the summed Policy timeouts (AI-only) bound: the runner fails itself at bound + margin before debiting (the margin covers its non-AI render/store/persist tail); only jobs still pending/running past bound + 2 x margin are swept to failed. */
     staleJobMarginMs: z.number().int().min(0).default(60_000),
+    /** Minimum SAM confidence for a usable mask when the provider returns one (0 = keep today's behaviour: confidence only orders candidates). */
+    samMinConfidence: z.number().min(0).max(1).default(0),
     conceptMaxWords: z.number().int().min(1).default(3),
     pinsPerScene: Range.default({ min: 1, max: 4 }),
     photosPerParticipantPerDay: z.number().int().min(0).default(20),
@@ -358,7 +360,7 @@ export const PolicyOverridesSchema = z.object({
   uploadRetryBackoffMs: z.number().int().min(0).optional(),
   maxConcurrentDecomposeJobs: z.number().int().min(1).optional(),
   staleJobMarginMs: z.number().int().min(0).optional(),
-
+  samMinConfidence: z.number().min(0).max(1).optional(),
   conceptMaxWords: z.number().int().min(1).optional(),
   pinsPerScene: RangeOverride.optional(),
   photosPerParticipantPerDay: z.number().int().min(0).optional(),
