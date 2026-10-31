@@ -215,7 +215,10 @@ No pins yet: three dashed ghost outlines.
   other scripts) are left off the card so the renderer never fetches
   fonts or emoji from a CDN; an empty title falls back to the brand line.
 - A bad slug, a missing board or any render error answers 200 with the
-  generic Paper card, then `public/og-card.png` as a last resort.
+  generic Paper card, then `public/og-card.png` as a last resort. That
+  PNG (and its copy in `src/server/og-assets/`) is the generic card
+  itself: regenerate both with `npm run og:card` after changing the
+  card design or the `card.fallback*` copy (PIN-203).
 
 ## Decisions log
 
