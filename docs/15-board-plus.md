@@ -267,6 +267,8 @@ list.
 | `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
 | `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
 | `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation from PIN-205) |
+| `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
 | `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
 | `plusOnPurchase` | `true` | a webhook grant also gives the board Plus (PIN-181) |
 | `pendingIntentCapPerBoard` | 3 | open checkout intents per board |

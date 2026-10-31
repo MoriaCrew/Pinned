@@ -187,6 +187,10 @@ export const PolicySchema = z
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(5),
+        /** Free creations per maker (PIN-204): only a maker's first `starterBoardsPerMaker` new boards per `starterMakerWindowMs` get the starter pool; later boards start at 0. 0 = no new board gets a pool. A maker is a signed-in user, else the client address (docs/15, "Free creations rule"). */
+        starterBoardsPerMaker: z.number().int().min(0).default(3),
+        /** Fixed window for starterBoardsPerMaker in ms (default 7 days), anchored at the maker's first counted board. */
+        starterMakerWindowMs: z.number().int().min(1).default(604_800_000),
         /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
         lowMakesWarning: z.number().int().min(0).default(2),
         /** PIN-181: a webhook-granted purchase also grants the board Plus (`source: "stripe"`). Off = makes only. */
@@ -207,6 +211,8 @@ export const PolicySchema = z
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 5,
+        starterBoardsPerMaker: 3,
+        starterMakerWindowMs: 604_800_000,
         lowMakesWarning: 2,
         plusOnPurchase: true,
         pendingIntentCapPerBoard: 3,
@@ -427,6 +433,8 @@ export const PolicyOverridesSchema = z.object({
       enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
+      starterBoardsPerMaker: z.number().int().min(0).optional(),
+      starterMakerWindowMs: z.number().int().min(1).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),
       plusOnPurchase: z.boolean().optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),

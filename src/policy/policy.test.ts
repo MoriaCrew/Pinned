@@ -188,6 +188,8 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
         { lookupKey: "pinneds_plus_20", credits: 20, eurCents: 299, label: "20 creations · €2.99" },
       ],
       starterMakes: 5,
+      starterBoardsPerMaker: 3,
+      starterMakerWindowMs: 604_800_000,
       lowMakesWarning: 2,
       plusOnPurchase: true,
       pendingIntentCapPerBoard: 3,
@@ -227,6 +229,15 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([8, 900, 1]);
     expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
     expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
+    // PIN-204 free creations per maker: deep-overridable, 0 boards allowed, window at least 1 ms.
+    expect(
+      resolvePolicy({ credits: { starterBoardsPerMaker: 10 } }, { credits: { starterMakerWindowMs: 60_000 } })
+        .credits,
+    ).toMatchObject({ starterBoardsPerMaker: 10, starterMakerWindowMs: 60_000 });
+    expect(resolvePolicy({ credits: { starterBoardsPerMaker: 0 } }).credits.starterBoardsPerMaker).toBe(0);
+    expect(parsePolicyOverridesJson('{"credits":{"starterBoardsPerMaker":5}}')).toEqual({
+      credits: { starterBoardsPerMaker: 5 },
+    });
     // PIN-152 low-makes threshold: deep-overridable like the rest, 0 disables it.
     expect(resolvePolicy({ credits: { lowMakesWarning: 4 } }).credits.lowMakesWarning).toBe(4);
     expect(resolvePolicy(null, { credits: { lowMakesWarning: 0 } }).credits.lowMakesWarning).toBe(0);
@@ -249,6 +260,9 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     for (const bad of [
       { credits: { starterMakes: -1 } },
       { credits: { lowMakesWarning: -1 } },
+      { credits: { starterBoardsPerMaker: -1 } },
+      { credits: { starterBoardsPerMaker: 1.5 } },
+      { credits: { starterMakerWindowMs: 0 } },
       { credits: { pendingIntentCapPerBoard: 0 } },
       { credits: { intentTtlSeconds: 0 } },
       { credits: { packs: [] } },
