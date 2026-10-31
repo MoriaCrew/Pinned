@@ -121,10 +121,12 @@ export function useLookFlow({
 
   // Back from Stripe (PIN-182): the host's try-on goes onto the board
   // once the refetched view says Plus counts (the webhook lands after
-  // the redirect), then the stored look is forgotten. Once only.
+  // the redirect; the flag may already be gone). The stored look is
+  // forgotten only once the save has answered; a failed save hands the
+  // look back to the try-on bar so Keep it can retry. Once only.
   const returnHandled = useRef(false);
   useEffect(() => {
-    if (returnHandled.current || billingFlag === null) return;
+    if (returnHandled.current) return;
     const step = returnSkinStep({
       flag: billingFlag,
       stored: readReturnSkin(slug),
@@ -134,8 +136,14 @@ export function useLookFlow({
     });
     if (step.kind === "wait") return;
     returnHandled.current = true;
-    writeReturnSkin(slug, null);
-    if (step.kind === "apply") void applySkin(step.skin);
+    if (step.kind === "clear") {
+      writeReturnSkin(slug, null);
+      return;
+    }
+    void applySkin(step.skin).then((outcome) => {
+      writeReturnSkin(slug, null);
+      if (outcome !== "applied") dispatch({ type: "tryOn", skin: step.skin });
+    });
     // applySkin only closes over the query client, the slug and dispatch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billingFlag, slug, isHost, plus?.active, boardSkin]);
@@ -161,7 +169,7 @@ export function useLookFlow({
     }
   }
 
-  async function applySkin(skin: SkinId) {
+  async function applySkin(skin: SkinId): Promise<SkinResult["kind"]> {
     dispatch({ type: "applyStart", skin });
     const result = await patchSkin(skin);
     if (result.kind === "applied") {
@@ -179,6 +187,7 @@ export function useLookFlow({
       dispatch({ type: "applyFailed" });
     }
     void queryClient.invalidateQueries({ queryKey: key });
+    return result.kind;
   }
 
   // The demo checkout: the host-only POST plus (PIN-103). A real

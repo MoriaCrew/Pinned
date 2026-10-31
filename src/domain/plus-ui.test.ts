@@ -234,9 +234,14 @@ describe("look after a Stripe return (PIN-182)", () => {
     expect(returnSkinStep({ ...back, isHost: false })).toEqual({ kind: "wait" });
   });
 
-  it("does nothing without a return flag or a stored look", () => {
-    expect(returnSkinStep({ ...back, flag: null })).toEqual({ kind: "wait" });
+  it("still applies after a reload that lost the return flag, once Plus counts", () => {
+    expect(returnSkinStep({ ...back, flag: null })).toEqual({ kind: "apply", skin: "darkroom" });
+    expect(returnSkinStep({ ...back, flag: null, plusActive: false })).toEqual({ kind: "wait" });
+  });
+
+  it("does nothing without a stored look", () => {
     expect(returnSkinStep({ ...back, stored: null })).toEqual({ kind: "wait" });
+    expect(returnSkinStep({ ...back, stored: null, flag: null })).toEqual({ kind: "wait" });
   });
 
   it("forgets the look on a cancelled or failed return, and when the board already wears it", () => {
