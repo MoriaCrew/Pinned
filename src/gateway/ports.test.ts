@@ -16,6 +16,7 @@ import {
   classifyPortError,
   elementsSystemPrompt,
   chipsSystemPrompt,
+  generatedImageCount,
   normalizeChips,
   normalizeElements,
   normalizeTapName,
@@ -393,5 +394,20 @@ describe("sceneImageOutcome refusal mapping (PIN-61 fixtures)", () => {
     expect(
       sceneImageOutcome([{ type: "image_generation_call", result: "" }]),
     ).toMatchObject({ status: "refused", errorCode: "no_image" });
+  });
+
+  it("counts only populated image_generation_call items (PIN-180)", () => {
+    expect(
+      generatedImageCount([
+        { type: "reasoning", summary: [] },
+        { type: "image_generation_call", result: "aGVsbG8=" },
+        { type: "image_generation_call", result: "" },
+        { type: "message", result: "aGVsbG8=" },
+        null,
+      ]),
+    ).toBe(1);
+    expect(generatedImageCount([])).toBe(0);
+    expect(generatedImageCount(undefined)).toBe(0);
+    expect(generatedImageCount({ type: "image_generation_call", result: "x" })).toBe(0);
   });
 });

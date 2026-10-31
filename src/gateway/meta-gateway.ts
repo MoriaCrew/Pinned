@@ -19,6 +19,7 @@ import {
   buildSceneResponsesBody,
   elementsSystemPrompt,
   chipsSystemPrompt,
+  generatedImageCount,
   normalizeElements,
   normalizeTapName,
   normalizeTranscript,
@@ -173,7 +174,14 @@ export class MetaGateway implements ModelGateway {
       outcome: "ok",
       inputTokens: tokenCount("prompt_tokens", "input_tokens"),
       outputTokens: tokenCount("completion_tokens", "output_tokens"),
-      images: operation === "segmentObject" ? 1 : undefined,
+      // Billing unit for the image models: SAM bills one image per call,
+      // Muse Image one per generated image (PIN-180; 0 on a refusal).
+      images:
+        operation === "segmentObject"
+          ? 1
+          : operation === "composeScene"
+            ? generatedImageCount(json.output)
+            : undefined,
     });
     return json;
   }

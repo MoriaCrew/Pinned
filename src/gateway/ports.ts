@@ -359,6 +359,25 @@ export function classifyPortError(cause: unknown): {
   };
 }
 
+/** The base64 result of a populated image_generation_call item, else null. */
+function populatedImageResult(item: unknown): string | null {
+  if (typeof item !== "object" || item === null) return null;
+  const it = item as { type?: unknown; result?: unknown };
+  return it.type === "image_generation_call" &&
+    typeof it.result === "string" &&
+    it.result.length > 0
+    ? it.result
+    : null;
+}
+
+/**
+ * Images a Responses `output` really holds (PIN-180): the billing
+ * unit for Muse Image, which is priced per generated image.
+ */
+export function generatedImageCount(output: unknown): number {
+  return (Array.isArray(output) ? output : []).filter((item) => populatedImageResult(item) !== null).length;
+}
+
 /**
  * Scene refusal mapping (PIN-61, docs/11 section 3): a compose call
  * that returns HTTP 200 with no populated image_generation_call
@@ -370,15 +389,8 @@ export function sceneImageOutcome(
 ): PortOutcome<{ imageBase64: string }> {
   const items = Array.isArray(output) ? output : [];
   for (const item of items) {
-    if (typeof item !== "object" || item === null) continue;
-    const it = item as { type?: unknown; result?: unknown };
-    if (
-      it.type === "image_generation_call" &&
-      typeof it.result === "string" &&
-      it.result.length > 0
-    ) {
-      return { status: "ready", value: { imageBase64: it.result } };
-    }
+    const result = populatedImageResult(item);
+    if (result) return { status: "ready", value: { imageBase64: result } };
   }
   return {
     status: "refused",
