@@ -21,6 +21,7 @@ import {
   normalizeElements,
   normalizeTapName,
   sceneElementLabel,
+  type SegmentPrompt,
   type SuggestChipsInput,
   sceneImageOutcome,
   type NameElementsInput,
@@ -259,6 +260,44 @@ describe("meta adapters (fake fetch)", () => {
     expect(texts[1].length).toBeGreaterThan(0);
     expect(texts[2].length).toBeGreaterThan(0);
     expect(texts[1]).not.toBe(texts[2]);
+  });
+
+  it("segment omits `store` by default and sends store:false for concept and point calls (PIN-213)", async () => {
+    const { calls, gateway } = metaGateway(() => ({ output_text: SAM_LINE }));
+    const segmenter = metaSegmenter(gateway);
+    const base = { imageRef: "https://x.test/a.jpg", timeoutMs: DEFAULT_POLICY.timeoutsMs.sam };
+    const concept: SegmentPrompt = { kind: "concept", concept: "teal mug" };
+    const point: SegmentPrompt = {
+      kind: "point",
+      points: [{ x: 0.5, y: 0.25 }],
+      frame: { width: 100, height: 200 },
+    };
+
+    await segmenter.segment({ ...base, prompt: concept });
+    await segmenter.segment({ ...base, prompt: point });
+    expect(calls.map((c) => "store" in c.body)).toEqual([false, false]);
+
+    await segmenter.segment({ ...base, prompt: concept, store: false });
+    await segmenter.segment({ ...base, prompt: point, store: false });
+    expect(calls.slice(2).map((c) => c.body.store)).toEqual([false, false]);
+    // Same SAM model, endpoint and prompt text as the default calls.
+    expect(calls[2].body.model).toBe(calls[0].body.model);
+    expect(calls[3].body.input).toEqual(calls[1].body.input);
+  });
+
+  it("mock and fixture segmenters ignore `store` (PIN-213)", async () => {
+    const base = { imageRef: "https://x.test/a.jpg", timeoutMs: DEFAULT_POLICY.timeoutsMs.sam };
+    const prompt: SegmentPrompt = { kind: "concept", concept: "teal mug" };
+    const mockPlain = await mockSegmenter.segment({ ...base, prompt });
+    const mockStore = await mockSegmenter.segment({ ...base, prompt, store: false });
+    expect(mockStore).toEqual(mockPlain);
+
+    const fixture = fixtureSegmenter(fixtures);
+    const fixturePlain = await fixture.segment({ ...base, prompt });
+    const fixtureStore = await fixture.segment({ ...base, prompt, store: false });
+    expect(fixtureStore).toEqual(fixturePlain);
+    expect(mockPlain.status).toBe("ready");
+    expect(fixturePlain.status).toBe("ready");
   });
 
   it("passes the provider HTTP status through for retry decisions (PIN-61)", () => {

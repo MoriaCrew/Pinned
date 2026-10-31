@@ -275,6 +275,11 @@ export class MetaGateway implements ModelGateway {
     promptText?: string;
     maskEncoding?: "lossless" | "one_bit";
     includeConfidence?: boolean;
+    /**
+     * Policy samStore (PIN-213). Undefined sends no `store` key at
+     * all (the pre-PIN-213 wire format); a boolean is sent as given.
+     */
+    store?: boolean;
     timeoutMs?: number;
   }): Promise<{ segments: SamSegment[] }> {
     const metadata: Record<string, string> = {};
@@ -282,6 +287,7 @@ export class MetaGateway implements ModelGateway {
     if (input.includeConfidence) metadata.include_confidence = "true";
     const json = await this.request("segmentObject", this.options.samModel, "/responses", {
       model: this.options.samModel,
+      ...(input.store === undefined ? {} : { store: input.store }),
       ...(Object.keys(metadata).length ? { metadata } : {}),
       input: [
         {

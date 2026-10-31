@@ -166,7 +166,8 @@ JSON-only reply.
 
 Every runtime call runs in Standard mode: not used for training, which is not the same as
 not stored (`docs/11` §4). Only the Muse Image compose call sends `store: false`; we make
-no "zero data retention" claim.
+no "zero data retention" claim. SAM cuts can send `store: false` too through `Policy.samStore`
+(unset today), once a live probe shows SAM accepts it (`docs/16`).
 
 ## Not made with Meta models
 

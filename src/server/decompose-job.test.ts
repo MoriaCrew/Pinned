@@ -7,6 +7,7 @@ import type {
   ElementNamer,
   NamedElement,
   PortOutcome,
+  SegmentInput,
   Segmenter,
 } from "../gateway/ports";
 import { resolvePolicy, type Policy, type PolicyOverrides } from "../policy/policy";
@@ -80,6 +81,8 @@ interface Harness {
   jobs: InMemoryDecomposeJobStore;
   store: InMemoryDerivativeStore;
   calls: { namer: number; segmenter: string[] };
+  /** Every SegmentInput the Segmenter received (PIN-213 wire checks). */
+  segmentInputs: SegmentInput[];
 }
 
 async function makeHarness(opts: {
@@ -106,6 +109,7 @@ async function makeHarness(opts: {
   const jobs = new InMemoryDecomposeJobStore();
   const store = new InMemoryDerivativeStore();
   const calls = { namer: 0, segmenter: [] as string[] };
+  const segmentInputs: SegmentInput[] = [];
   const policy: Policy = resolvePolicy(opts.policyOverrides ?? null);
 
   const namer: ElementNamer = {
@@ -126,6 +130,7 @@ async function makeHarness(opts: {
       const concept =
         input.prompt.kind === "concept" ? input.prompt.concept : "(non-concept)";
       calls.segmenter.push(concept);
+      segmentInputs.push(input);
       const behavior = opts.segmentByConcept?.[concept] ?? { kind: "ready" as const };
       if (behavior.kind === "gated") await behavior.gate;
       if (behavior.kind === "failed") {
@@ -148,6 +153,7 @@ async function makeHarness(opts: {
     jobs,
     store,
     calls,
+    segmentInputs,
     deps: {
       boards,
       jobs,
@@ -262,6 +268,30 @@ describe("startDecomposeJob happy path", () => {
     ).rejects.toThrow(RangeError);
     expect(await h.store.get(buildBoardWorkingRef("nope", "job-1"))).toBeNull();
     expect(h.calls.namer).toBe(0);
+  });
+});
+
+describe("SAM store flag from Policy samStore (PIN-213)", () => {
+  async function run(policyOverrides?: PolicyOverrides) {
+    const h = await makeHarness(policyOverrides ? { policyOverrides } : {});
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      h.deps,
+    );
+    expect(job.status).toBe("ready");
+    return h.segmentInputs;
+  }
+
+  it("default Policy sends no store key on any concept call", async () => {
+    const inputs = await run();
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(Object.keys(input)).not.toContain("store");
+  });
+
+  it("a per-board samStore:false reaches every concept call", async () => {
+    const inputs = await run({ samStore: false });
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) expect(input.store).toBe(false);
   });
 });
 
