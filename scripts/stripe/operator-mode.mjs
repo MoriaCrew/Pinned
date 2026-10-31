@@ -71,6 +71,19 @@ export function projectModeError(mode, project) {
 }
 
 /**
+ * The Firestore project a reconciliation run reads (PIN-233): live
+ * only the prod project, named explicitly; sandbox defaults to the
+ * dev project (like webhookTarget) and never reads prod. Never left
+ * to ADC's or gcloud's default project, which can be prod after the
+ * go-live logins.
+ */
+export function reconciliationProject(mode, project) {
+  const target = project || (mode === "live" ? undefined : DEV_PROJECT_ID);
+  const error = projectModeError(mode, target);
+  return error ? refuse(error) : { ok: true, project: target };
+}
+
+/**
  * Webhook endpoint + Secret Manager target for a mode. Defaults:
  * sandbox = dev URL + dev project (unchanged since PIN-153), live =
  * prod URL + prod project, never the dev project. Overrides are

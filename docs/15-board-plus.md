@@ -1179,6 +1179,11 @@ means anomalies exist; exit 2 is a usage/config error.
 node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
 ```
 
+The Firestore project is never left to ADC's or gcloud's default
+(PIN-233): a sandbox run reads `moriacrew-pinned-dev` unless
+`--project` names another non-prod project and exits 2 for the prod
+one; a live run needs `--project moriacrew-pinned-prod`.
+
 **Runbook.** Run it daily while dev stripe mode is live and
 after any billing change or deploy, and drain dead letters to
 zero before calling a billing change done. In Stripe

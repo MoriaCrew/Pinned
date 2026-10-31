@@ -12,6 +12,7 @@ import {
   LIVE_WEBHOOK_URL,
   PROD_PROJECT_ID,
   projectModeError,
+  reconciliationProject,
   resolveStripeMode,
   stripeKeyKind,
   webhookTarget,
@@ -80,6 +81,15 @@ describe("stripe operator mode gate (PIN-210)", () => {
     expect(PROD_PROJECT_ID).toBe("moriacrew-pinned-prod");
     const other = "https://example.test/hook";
     expect(webhookTarget("sandbox", { url: other })).toMatchObject({ ok: true, url: other });
+  });
+
+  it("reconciliation reads dev by default in sandbox and prod only when named in live (PIN-233)", () => {
+    expect(reconciliationProject("sandbox", undefined)).toEqual({ ok: true, project: DEV_PROJECT_ID });
+    expect(reconciliationProject("sandbox", DEV_PROJECT_ID)).toEqual({ ok: true, project: DEV_PROJECT_ID });
+    expect(reconciliationProject("sandbox", PROD_PROJECT_ID).ok).toBe(false);
+    expect(reconciliationProject("live", PROD_PROJECT_ID)).toEqual({ ok: true, project: PROD_PROJECT_ID });
+    expect(reconciliationProject("live", undefined).ok).toBe(false);
+    expect(reconciliationProject("live", DEV_PROJECT_ID).ok).toBe(false);
   });
 
   it("webhook overrides cannot cross modes", () => {
@@ -383,6 +393,79 @@ describe("catalog seed sees archived prices (PIN-233 F3)", () => {
     expect(run.stdout).toContain("plus_20 price=unarchive id=price_plus");
     // The post-apply self-check planned pure reuse.
     expect(run.stdout).toContain('CATALOG_IDS_JSON={"plus_20":{"product":"prod_plus","price":"price_plus"}');
+  });
+});
+
+// --- Reconciliation project (PIN-233 F15). ---
+
+/**
+ * The default fake Stripe plus a resolve hook that swaps
+ * `@google-cloud/firestore` for a recording fake: it logs the options
+ * each Firestore is built with and holds no documents, so a full
+ * reconciliation run makes no network or ADC call.
+ */
+const FAKE_FIRESTORE = path.join(WORK, "fake-firestore.mjs");
+writeFileSync(
+  FAKE_FIRESTORE,
+  `import { appendFileSync } from "node:fs";
+export class Firestore {
+  constructor(options) {
+    appendFileSync(process.env.FAKE_FIRESTORE_LOG, JSON.stringify(options ?? null) + "\\n");
+  }
+  collection() {
+    return { get: async () => ({ docs: [] }) };
+  }
+  async terminate() {}
+}
+`,
+);
+const FIRESTORE_HOOKS = path.join(WORK, "firestore-hooks.mjs");
+writeFileSync(
+  FIRESTORE_HOOKS,
+  `export async function resolve(specifier, context, next) {
+  if (specifier === "@google-cloud/firestore") {
+    return { url: ${JSON.stringify(pathToFileURL(FAKE_FIRESTORE).href)}, shortCircuit: true };
+  }
+  return next(specifier, context);
+}
+`,
+);
+const RECON_PRELOAD = path.join(WORK, "fake-stripe-firestore.mjs");
+writeFileSync(
+  RECON_PRELOAD,
+  `import { register } from "node:module";
+import ${JSON.stringify(pathToFileURL(PRELOAD).href)};
+register(${JSON.stringify(pathToFileURL(FIRESTORE_HOOKS).href)});
+`,
+);
+
+function runReconciliation(args: string[]) {
+  const firestoreLog = path.join(WORK, `firestore-${runs + 1}.log`);
+  const run = runScript("billing-reconciliation.mjs", TEST_KEY, args, {
+    preload: RECON_PRELOAD,
+    env: { FAKE_FIRESTORE_LOG: firestoreLog },
+  });
+  const firestores = existsSync(firestoreLog)
+    ? readFileSync(firestoreLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as unknown)
+    : [];
+  return { ...run, firestores };
+}
+
+describe("billing reconciliation project (PIN-233 F15)", () => {
+  it("a sandbox run without --project reads the dev project, never ADC's default", () => {
+    const run = runReconciliation([]);
+    expect(run.code).toBe(0);
+    expect(run.firestores).toEqual([{ projectId: DEV_PROJECT_ID }]);
+    expect(run.stdout).toContain(`stripe=sandbox project=${DEV_PROJECT_ID} keyEnv=OPERATOR_KEY`);
+    expect(run.stripeCalls.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it("a sandbox run naming the prod project exits 2 before any Stripe or Firestore call", () => {
+    const run = runReconciliation(["--project", PROD_PROJECT_ID]);
+    expect(run.code).toBe(2);
+    expect(run.output).toMatch(/Sandbox mode never targets moriacrew-pinned-prod/);
+    expect(run.stripeCalls).toEqual([]);
+    expect(run.firestores).toEqual([]);
   });
 });
 
