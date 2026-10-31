@@ -241,6 +241,16 @@ export const PolicySchema = z
       .default("flattened"),
     sceneSize: SceneSize.default("1024x1536"),
     sceneStore: z.boolean().default(false),
+    /**
+     * SAM `/v1/responses` `store` flag (PIN-213). docs/11 decided
+     * `store: false` everywhere, but the SAM call has never sent
+     * the field. Undefined (the default) omits it: the wire body is
+     * byte-identical to before. `false` sends `store: false`; `true`
+     * sends `store: true`. Flip per board (policyOverrides) after one
+     * live probe proves SAM accepts the field, then globally via
+     * POLICY_OVERRIDES_JSON.
+     */
+    samStore: z.boolean().optional(),
     timeoutsMs: z
       .object({
         spark: z.number().int().positive().default(30_000),
@@ -450,6 +460,7 @@ export const PolicyOverridesSchema = z.object({
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
   sceneSize: SceneSize.optional(),
   sceneStore: z.boolean().optional(),
+  samStore: z.boolean().optional(),
   timeoutsMs: z
     .object({
       spark: z.number().int().positive().optional(),

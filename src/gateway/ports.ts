@@ -97,6 +97,11 @@ export interface SegmentInput {
   /** PIN-92 per-photo cap key: the DecomposeJob id (= Element.sourcePhotoId). */
   photoId?: string;
   includeConfidence?: boolean;
+  /**
+   * Policy samStore (PIN-213). Undefined omits the `store` field from
+   * the SAM body (today's wire format); a boolean sends it as given.
+   */
+  store?: boolean;
   /** Budget attribution for the PIN-61 decorator caps (optional). */
   boardId?: string;
   participantId?: string;

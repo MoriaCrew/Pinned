@@ -133,6 +133,29 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     ).toThrow();
   });
 
+  it("samStore (PIN-213): default omits the field; env and board layers flip it; bad types fail closed", () => {
+    // Default = today's wire format: the key is absent, not false.
+    expect(DEFAULT_POLICY.samStore).toBeUndefined();
+    expect(resolvePolicy(null).samStore).toBeUndefined();
+    expect(resolvePolicy(null, {}).samStore).toBeUndefined();
+    // Env layer (POLICY_OVERRIDES_JSON) sets it globally.
+    const env = parsePolicyOverridesJson('{"samStore": false}');
+    expect(resolvePolicy(env).samStore).toBe(false);
+    // Per-board override works with no env layer (the dev probe path)...
+    expect(resolvePolicy(null, { samStore: false }).samStore).toBe(false);
+    // ...and beats the env layer in both directions.
+    expect(resolvePolicy({ samStore: false }, { samStore: true }).samStore).toBe(true);
+    expect(resolvePolicy({ samStore: true }, { samStore: false }).samStore).toBe(false);
+    // A board override that omits the key leaves the env value alone.
+    expect(resolvePolicy({ samStore: false }, { faces: "allow" }).samStore).toBe(false);
+    // It is independent of the scene flag.
+    expect(resolvePolicy(null, { samStore: false }).sceneStore).toBe(false);
+    for (const bad of ["false", 0, null]) {
+      expect(() => resolvePolicy({ samStore: bad as never })).toThrow();
+      expect(() => resolvePolicy(null, { samStore: bad as never })).toThrow();
+    }
+  });
+
   it("merge order is defaults < env < board, deep for nested", () => {
     const p = resolvePolicy(
       { elementsPerPhoto: { max: 4 }, timeoutsMs: { sam: 9_000 } },

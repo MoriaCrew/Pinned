@@ -181,6 +181,15 @@ export function isUsableMask(coverageFrame: number, policy: Policy): boolean {
   );
 }
 
+/**
+ * Policy samStore (PIN-213) as Segmenter input: no `store` key at all
+ * while the Policy value is undefined (the default), so the SAM wire
+ * body stays byte-identical until an operator flips it.
+ */
+export function samStoreInput(policy: Policy): { store?: boolean } {
+  return policy.samStore === undefined ? {} : { store: policy.samStore };
+}
+
 /** SAM wire pixel box (inclusive) -> normalized 0..1 MaskBox. */
 export function toMaskBox(
   box: DecodedSegment["box"],
@@ -533,6 +542,7 @@ export async function runDecomposeJob(
         imageRef,
         prompt: { kind: "concept", concept: element.concept },
         includeConfidence: true,
+        ...samStoreInput(policy),
         photoId: job.id,
         timeoutMs: policy.timeoutsMs.sam,
         boardId: job.boardId,
@@ -833,6 +843,7 @@ export async function addTapElement(
   const outcome = await deps.segmenter.segment({
     imageRef,
     includeConfidence: true,
+    ...samStoreInput(policy),
     photoId: job.id,
     prompt: {
       kind: "point",
