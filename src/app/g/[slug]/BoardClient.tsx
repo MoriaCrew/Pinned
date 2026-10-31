@@ -308,6 +308,8 @@ function BoardBody({
   const [remixOfId, setRemixOfId] = useState<string | null>(null);
   // PIN-75: generated chips, keyed by the selection they were made for.
   const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
+  // PIN-216: the selection whose chips request has answered (the sheet's loading chip goes).
+  const [chipsDoneKey, setChipsDoneKey] = useState<string | null>(null);
   const [confirmDeleteElementId, setConfirmDeleteElementId] = useState<string | null>(null);
   const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
   // PIN-157: the thing whose rename sheet is open (mounted here, not in its More menu).
@@ -706,6 +708,8 @@ function BoardBody({
         if (chips.length > 0) setGeneratedChips({ key, chips });
       } catch {
         // Fixed chips stay; generation is best-effort.
+      } finally {
+        if (!cancelled) setChipsDoneKey(key);
       }
     })();
     return () => {
@@ -1457,6 +1461,10 @@ function BoardBody({
           <MakeSheet
             cards={picked}
             chips={sheetChips}
+            fixedChips={policy.sceneChips}
+            chipsLoading={
+              pickedElementIds.length > 0 && generatedChips?.key !== selectionKey && chipsDoneKey !== selectionKey
+            }
             pinsPerScene={policy.pinsPerScene}
             promptMaxChars={policy.scenePromptMaxChars}
             dictate={
@@ -1476,7 +1484,16 @@ function BoardBody({
                 : null
             }
             onMake={submitScene}
-            onClose={() => setMakeOpen(false)}
+            onRemovePick={togglePin}
+            // "+" and close both go back to the tray and keep the idea (PIN-216).
+            onAddPicks={(prompt) => {
+              setSheetPrompt(prompt);
+              setMakeOpen(false);
+            }}
+            onClose={(prompt) => {
+              setSheetPrompt(prompt);
+              setMakeOpen(false);
+            }}
           />
         ) : null}
 

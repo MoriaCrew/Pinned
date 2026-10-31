@@ -45,6 +45,7 @@ export {
   type BoardCounts,
   type FilterChipItem,
 } from "./board";
+export { Composer, isSubmitKey } from "./composer";
 export {
   PlusSheet,
   SkinPicker,

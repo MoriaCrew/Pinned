@@ -690,25 +690,62 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .pn-menu-note { margin: 0 0 var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
 
-/* ---------- Make sheet (PIN-100) ---------- */
-/* Long on a small phone (base scene + picks + field + chips): the body scrolls, title and "Make it" stay put. */
+/* ---------- Make sheet (PIN-100; chat-style composer PIN-216) ---------- */
+/* Long on a small phone: the body scrolls, the title and the composer (the foot) stay put. */
 .pn-sheet.pn-make-sheet { display: flex; flex-direction: column; max-height: 92vh; max-height: 92dvh; }
 .pn-make-sheet > .pn-sheet-grab, .pn-make-sheet > .pn-sheet-head, .pn-make-sheet > .pn-sheet-foot { flex: none; }
 .pn-make-sheet > .pn-sheet-grab { align-self: center; }
 /* The sheet itself takes focus when it opens (so a screen reader starts at the title); it is not a control, so no ring around it. */
 .pn-make-sheet:focus { outline: none; }
-.pn-make-sheet > .pn-sheet-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: -8px; padding: 4px 8px; }
-.pn-make-base { display: flex; align-items: center; gap: var(--space-4); }
-.pn-make-base-print { flex: none; width: 104px; }
-.pn-make-base-text { display: grid; gap: var(--space-2); justify-items: start; min-width: 0; }
-.pn-make-base-text p { margin: 0; color: var(--ink); font: 650 16px/22px var(--font-ui); overflow-wrap: anywhere; }
-.pn-make-picks { --sticker: 72px; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3) var(--space-2); list-style: none; margin: 0; padding: var(--space-2) 0 0; }
-.pn-make-picks > .pn-pin { flex: 1 1 72px; max-width: 96px; }
-.pn-make-sheet .pn-hint { padding: 10px var(--space-4); }
-/* An idea can be a whole sentence: let it wrap inside the chip instead of running off the sheet. */
-.pn-make-chips .pn-chip { max-width: 100%; padding-block: 6px; white-space: normal; text-align: left; }
+.pn-make-sheet > .pn-sheet-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--space-5)); padding: 4px var(--space-5); }
+.pn-make-base { display: flex; align-items: center; gap: var(--space-3); min-width: 0; margin: 0; font: 650 15px/20px var(--font-ui); }
+.pn-make-base-thumb { flex: none; width: auto; height: 40px; border-radius: var(--radius-xs); object-fit: cover; box-shadow: 0 1px 3px var(--shade); }
+.pn-make-base-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-make-picks { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.pn-make-picks > .pn-board-meta { min-width: 0; margin: 0; }
+.pn-make-pick-list { display: flex; flex: none; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.pn-make-pick { position: relative; display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); cursor: pointer; }
+.pn-make-pick .pn-sticker { --pushpin: none; }
+.pn-make-pick-x { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--surface-raised); box-shadow: 0 0 0 2px var(--surface-raised); }
+.pn-make-pick-add { border: 1.5px dashed var(--line-strong); background: var(--surface-sunk); }
+.pn-make-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pn-make-ideas { display: grid; gap: var(--space-2); min-width: 0; }
+.pn-make-ideas-title { margin: 0; font: 650 15px/20px var(--font-ui); }
+/* One row that scrolls sideways edge to edge; a chip never wraps onto a new row or moves under the thumb. */
+.pn-make-chips { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: var(--space-5); scrollbar-width: none; margin-inline: calc(-1 * var(--space-5)); padding: 2px var(--space-5); }
+.pn-make-chips::-webkit-scrollbar { display: none; }
+.pn-make-chips > .pn-chip { flex: none; scroll-snap-align: start; }
 .pn-make-chips .pn-chip-thumb { flex: none; }
-.pn-make-dictate { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+.pn-chip[disabled] { cursor: not-allowed; opacity: .5; }
+.pn-chip-loading { border-style: dashed; color: var(--ink-muted); cursor: default; animation: pn-blink 1.4s steps(2, jump-none) infinite; }
+
+/* ---------- Composer (PIN-216): field grows 1 to 4 lines, tool inside, send beside ---------- */
+/* minmax(0, 1fr) + min-width 0: a textarea's default cols would otherwise set the width and push the send button off the sheet. */
+.pn-composer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.pn-composer-row { display: flex; align-items: flex-end; gap: var(--space-2); }
+.pn-composer-field { position: relative; display: flex; flex: 1; align-items: flex-end; min-width: 0; border: 1.5px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface-raised); }
+.pn-composer-field:focus-within { border-color: var(--ink); }
+.pn-composer-field:has(.pn-composer-input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pn-composer-input { position: relative; z-index: 1; display: block; flex: 1; min-width: 0; max-height: calc(3 * 22px + var(--tap-main) - 3px); margin: 0; padding: calc((var(--tap-main) - 25px) / 2) var(--space-2) calc((var(--tap-main) - 25px) / 2) var(--space-4); border: 0; border-radius: inherit; background: transparent; color: var(--ink); font: 400 16px/22px var(--font-ui); resize: none; overflow-y: auto; }
+.pn-composer-input:focus { outline: none; }
+.pn-composer-input::placeholder { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A textarea placeholder will not ellipsize everywhere: a long one fades out before the mic instead of being cut mid-letter. */
+.pn-composer-input:placeholder-shown { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent calc(100% - 8px)); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent calc(100% - 8px)); }
+.pn-composer-tool { position: relative; z-index: 2; display: flex; flex: none; align-items: center; height: calc(var(--tap-main) - 3px); padding-right: 4px; }
+.pn-composer-overlay { position: absolute; z-index: 1; inset: 0; display: flex; align-items: center; min-width: 0; padding-left: var(--space-4); border-radius: inherit; background: var(--surface-raised); }
+.pn-composer-flash { position: absolute; inset: 0; border-radius: inherit; background: var(--mark); opacity: 0; pointer-events: none; animation: pn-composer-flash 1.4s ease-out; }
+@keyframes pn-composer-flash { from { opacity: .55; } to { opacity: 0; } }
+.pn-composer-send { flex: none; padding-inline: var(--space-4); }
+.pn-composer-foot { display: flex; justify-content: space-between; gap: var(--space-3); margin: 0; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); }
+.pn-dictate-bar { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding-right: calc(var(--tap) + var(--space-1)); color: var(--ink); font: 650 15px/20px var(--font-ui); }
+.pn-dictate-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: pn-blink 1.4s steps(2, jump-none) infinite; }
+.pn-dictate-bar[data-state="working"] .pn-dictate-dot { background: var(--ink-muted); }
+.pn-dictate-clock { flex: none; font-variant-numeric: tabular-nums; }
+.pn-dictate-text { min-width: 0; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .pn-composer-flash { animation-timing-function: steps(1, end); }
+  .pn-dictate-dot, .pn-chip-loading { animation: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .pn-sticker, .pn-sticker *, .pn-sticker::after, .pn-develop-frame::after, .pn-develop-cut, .pn-tray-slot, .pn-develop-status .pn-tag, .pn-foil { animation: none !important; transition: none !important; }
