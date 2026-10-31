@@ -25,7 +25,7 @@ const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToSt
 
 describe("UI kit helpers (PIN-97)", () => {
   it("writes the board meta line with singular and plural counts", () => {
-    expect(boardMetaLine({ people: 6, things: 14, scenes: 1 })).toBe("6 people · 14 things · 1 scene");
+    expect(boardMetaLine({ people: 6, things: 14, scenes: 1 })).toBe("6 people · 14 pins · 1 scene");
     expect(boardMetaLine({ people: 1 })).toBe("1 person");
     expect(boardMetaLine({})).toBe("");
   });
@@ -85,7 +85,7 @@ describe("UI kit components (PIN-97)", () => {
   it("puts the board name in an h1 with the meta line", () => {
     const markup = html(h(BoardHeader, { title: "Mia's 7th birthday", counts: { people: 2, things: 3 } }));
     expect(markup).toContain("<h1");
-    expect(markup).toContain("2 people · 3 things");
+    expect(markup).toContain("2 people · 3 pins");
   });
 
   it("tags collages and remixes, and numbers prints", () => {
@@ -338,13 +338,13 @@ describe("BoardHeader with the you button (PIN-120)", () => {
     expect(meta).toMatch(/^<p[^>]*><span class="pn-avatars pn-avatars-sm" role="img" aria-label="Also here: Sam, Ana Ruiz">/);
     expect(meta.match(/pn-avatar pn-avatar-sm/g)).toHaveLength(2);
     expect(meta).toContain(">AR<");
-    expect(meta).toContain("<span>3 people · 5 things · 2 scenes</span>");
+    expect(meta).toContain("<span>3 people · 5 pins · 2 scenes</span>");
   });
 
   it("drops the stack when nobody else is here", () => {
     const markup = html(h(BoardHeader, { title: "Sunday pancakes", people: [], counts: { people: 1, things: 0 } }));
     expect(markup).not.toContain("pn-avatars");
-    expect(markup).toContain("1 person · 0 things");
+    expect(markup).toContain("1 person · 0 pins");
   });
 
   it("caps the small stack at three with a +n", () => {

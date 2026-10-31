@@ -14,9 +14,9 @@ describe("My boards / My pins formatting (PIN-104)", () => {
 
   it("writes a board card's two mono lines with singular and plural counts", () => {
     const at = Date.UTC(2026, 9, 29, 12);
-    expect(boardCardMeta("en", 1, at)).toEqual({ mine: "1 thing of yours", last: "Oct 29" });
-    expect(boardCardMeta("en", 4, at)).toEqual({ mine: "4 things of yours", last: "Oct 29" });
-    expect(boardCardMeta("en", 0, at).mine).toBe("0 things of yours");
+    expect(boardCardMeta("en", 1, at)).toEqual({ mine: "1 pin of yours", last: "Oct 29" });
+    expect(boardCardMeta("en", 4, at)).toEqual({ mine: "4 pins of yours", last: "Oct 29" });
+    expect(boardCardMeta("en", 0, at).mine).toBe("0 pins of yours");
   });
 
   it("maps every pin button state to words, an icon and whether it can be pressed", () => {

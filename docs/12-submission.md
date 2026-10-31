@@ -16,7 +16,7 @@ wins — re-run §4 and the test command before submitting.
 
 ## 1. One-page pitch
 
-**Pinneds Studio — a shared pinboard of real things.**
+**Pinneds Studio — your stuff, pinned together.**
 
 Anyone with the board link uploads a photo. Muse Spark names
 the things in it, SAM 3.1 cuts each one out, and the cut-outs
