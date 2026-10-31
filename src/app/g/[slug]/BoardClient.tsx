@@ -1519,6 +1519,7 @@ function BoardBody({
 
         {renamingElement ? (
           <RenameSheet
+            key={renamingOpenId}
             label={renamingElement.label}
             maxChars={policy.elementLabelMaxChars}
             busy={renameIsForOpenSheet && renameElement.isPending}

@@ -294,9 +294,9 @@ export function useLookFlow({
 function noticeLine(locale: Locale, notice: LookNotice): string {
   switch (notice.kind) {
     case "applied":
-      return tf(locale, "look.applied", { skin: skinName(notice.skin) });
+      return tf(locale, "look.applied", { skin: skinName(notice.skin, locale) });
     case "granted":
-      return tf(locale, "plus.granted", { skin: skinName(notice.skin) });
+      return tf(locale, "plus.granted", { skin: skinName(notice.skin, locale) });
     case "lookFailed":
       return t(locale, "look.failed");
     case "grantedLookFailed":

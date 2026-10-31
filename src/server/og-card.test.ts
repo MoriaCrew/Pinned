@@ -16,10 +16,15 @@ const FILES = [
 ];
 
 describe("static og-card.png (PIN-203)", () => {
-  it.skipIf(!process.env.WRITE_OG_CARD)("writes the generic card to both copies", async () => {
-    const png = await renderCardPng(genericCardView());
-    for (const file of FILES) writeFileSync(file, png);
-  });
+  // Skipped in CI. The first render loads fonts and can pass vitest's default 5 s.
+  it.skipIf(!process.env.WRITE_OG_CARD)(
+    "writes the generic card to both copies",
+    async () => {
+      const png = await renderCardPng(genericCardView());
+      for (const file of FILES) writeFileSync(file, png);
+    },
+    30_000,
+  );
 
   it("ships one card-sized image, identical in both places", async () => {
     const [publicCopy, serverCopy] = FILES.map((file) => readFileSync(file));

@@ -4,16 +4,14 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { createBoardPayload } from "../../domain/board-view";
 import { newBoardHref, startChoice, suggestSkin, type SkinSuggestion } from "../../domain/skin-suggest";
-import { DEFAULT_SKIN, SKINS, type SkinId } from "../../domain/skins";
-import { t, tf, type MessageKey } from "../../i18n";
+import { DEFAULT_SKIN, type SkinId } from "../../domain/skins";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/client";
-import { Button, Icon, Sheet, SkinPicker, TextField, Wordmark, skinName } from "../../ui";
+import { Button, TextField, Wordmark } from "../../ui";
+import { StartLookSheet } from "./StartLookSheet";
 import "./start-flow.css";
 
 const NAME_FIELD_ID = "start-name";
-
-/** Synthetic cut-outs the mini boards in the look picker wear (public/start/README.md). */
-const SAMPLE = ["/start/cutout-rubber-duck.webp", "/start/cutout-red-sneakers.webp", "/start/cutout-straw-hat.webp"];
 
 type Step = "name" | "look";
 
@@ -122,10 +120,6 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
     }
   }
 
-  const choice = startChoice(skin, suggestion.skin);
-  const reason = suggestion.reason;
-  const [fitsBefore, fitsAfter] = t(locale, reason ? "create.fits" : "create.noSuggestion").split("{skin}");
-
   return (
     <>
       <div className="pn-start-pad" inert={step === "look"}>
@@ -158,62 +152,20 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
       </div>
 
       {step === "look" ? (
-        <Sheet
-          className="pn-start-sheet"
-          title={t(locale, "create.lookTitle")}
-          closeLabel={t(locale, "create.back")}
+        <StartLookSheet
+          suggestion={suggestion}
+          skin={skin}
+          busy={busy}
+          error={error}
+          onPick={(next) => {
+            // A new pick is a fresh attempt: drop the old error so the
+            // button names the new look and the Plus note can show.
+            setSkin(next);
+            setError("");
+          }}
+          onCreate={create}
           onClose={backToName}
-          footer={
-            <>
-              {error ? (
-                <p className="pn-start-error" role="alert">
-                  <Icon name="info" size={16} />
-                  {error}
-                </p>
-              ) : choice.tryOn ? (
-                <p className="pn-start-note">{t(locale, "create.plusNote")}</p>
-              ) : null}
-              <Button variant="primary" size="lg" block disabled={busy} onClick={create}>
-                {busy
-                  ? t(locale, "create.creating")
-                  : error
-                    ? t(locale, "create.retry")
-                    : tf(locale, "create.use", { skin: skinName(skin) })}
-              </Button>
-              <span className="pn-sr" role="status">
-                {busy ? t(locale, "create.creating") : ""}
-              </span>
-            </>
-          }
-        >
-          <p className="pn-start-spark">
-            <Icon name="skin" size={20} />
-            <span>
-              {reason ? `${t(locale, `create.reason.${reason}` as MessageKey)} ` : null}
-              {fitsBefore}
-              <b>{skinName(suggestion.skin)}</b>
-              {fitsAfter}
-            </span>
-          </p>
-          <div className="pn-start-picker">
-            <SkinPicker
-              skins={SKINS.map((option) => ({
-                id: option.id,
-                suggested: reason !== null && option.id === suggestion.skin,
-                locked: option.plus,
-              }))}
-              value={skin}
-              onChange={(next) => {
-                // A new pick is a fresh attempt: drop the old error so the
-                // button names the new look and the Plus note can show.
-                setSkin(next);
-                setError("");
-              }}
-              sample={SAMPLE}
-              legend={t(locale, "ui.look")}
-            />
-          </div>
-        </Sheet>
+        />
       ) : null}
     </>
   );
