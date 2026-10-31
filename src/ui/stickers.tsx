@@ -107,9 +107,9 @@ export function Pin({
     </span>
   );
   const who = owner ? (
-    <span className="pn-pin-owner">
+    <span className="pn-pin-owner" title={owner.name}>
       <Avatar id={owner.id} name={owner.name} size="dot" />
-      {owner.name}
+      <span className="pn-pin-owner-name">{owner.name}</span>
     </span>
   ) : null;
   if (onToggle) {

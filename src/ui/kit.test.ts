@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -125,6 +127,42 @@ describe("UI kit components (PIN-97)", () => {
     expect(on).toContain("Get Plus · €2.99");
     // Perks that aren't built yet say so.
     expect((on.match(/pn-perk-soon/g) ?? []).length).toBe(2);
+  });
+});
+
+describe("Language polish (PIN-225)", () => {
+  const css = readFileSync(path.join(process.cwd(), "src/ui/pinneds.css"), "utf8");
+  /** The declarations of the rule that starts a line with exactly this selector. */
+  const rule = (selector: string) => new RegExp(`^${selector.replace(/\./g, "\\.")} \\{([^}]*)\\}`, "m").exec(css)?.[1] ?? "";
+
+  it("never auto-hyphenates a name tag: the page language would break English or renamed names wrongly", () => {
+    expect(rule(".pn-pin-tag-text")).toMatch(/hyphens: manual;/);
+    expect(css).not.toMatch(/hyphens: auto/);
+    // A long word still wraps instead of widening the tag.
+    expect(rule(".pn-pin-tag-text")).toMatch(/overflow-wrap: break-word;/);
+  });
+
+  it("ends a pin's owner name with an ellipsis and keeps the full name in title and text", () => {
+    const owner = { id: "p1", name: "Maximiliane-Josephine Habsburg" };
+    for (const markup of [
+      html(h(Pin, { src: "/a.webp", label: "Teal mug", owner })),
+      html(h(Pin, { src: "/a.webp", label: "Teal mug", owner, onToggle: () => {} })),
+    ]) {
+      expect(markup).toContain('<span class="pn-pin-owner" title="Maximiliane-Josephine Habsburg">');
+      expect(markup).toContain('<span class="pn-pin-owner-name">Maximiliane-Josephine Habsburg</span>');
+    }
+    // text-overflow does nothing on a flex container's own text, so the name is its own box.
+    expect(rule(".pn-pin-owner-name")).toMatch(/text-overflow: ellipsis;/);
+    expect(rule(".pn-pin-owner-name")).toMatch(/overflow: hidden;/);
+    // The row must not size the grid cell to the whole name.
+    expect(rule(".pn-pin-owner")).toMatch(/overflow: hidden;/);
+  });
+
+  it("lets the picking tray slots shrink so a long Next label stays inside the dock", () => {
+    expect(rule(".pn-tray")).toMatch(/min-width: 0;/);
+    expect(rule(".pn-tray-slot")).toMatch(/flex: 0 1 44px;/);
+    expect(rule(".pn-tray-slot")).toMatch(/min-width: 0;/);
+    expect(rule(".pn-tray-slot")).toMatch(/aspect-ratio: 1;/);
   });
 });
 
