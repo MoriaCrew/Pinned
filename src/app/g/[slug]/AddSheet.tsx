@@ -37,6 +37,7 @@ import type { UploadItemStatus } from "../../../domain/upload-queue";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
+import { boardQueryKey } from "./board-query";
 import { LibraryList, LibraryStrip, useLibraryPins } from "./LibraryPins";
 import { PhotoPick } from "./PhotoPick";
 import {
@@ -69,8 +70,6 @@ interface JobView {
   pins: (BoardViewPin & { boardId: string })[];
   elements: (CandidateElement & { flattenedUrl: string; createdAt: number })[];
 }
-
-export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
 /** The review's help line (PIN-126). */
 export function reviewHelpLine(help: ReviewHelp, locale: Locale): string {

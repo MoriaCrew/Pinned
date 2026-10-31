@@ -63,7 +63,8 @@ import {
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
-import { AddSheet, boardQueryKey, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { AddSheet, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import { useUploadQueue } from "./useUploadQueue";
 import { nextStepItem, stepPosition } from "../../../domain/upload-queue";
 import { createPhotoMemory } from "./photo-memory";

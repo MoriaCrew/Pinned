@@ -19,7 +19,7 @@ import { plusPurchasePath } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
 import { Button, IconButton, cx } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import styles from "./board.module.css";
 import { writeReturnSkin } from "./return-skin";
 

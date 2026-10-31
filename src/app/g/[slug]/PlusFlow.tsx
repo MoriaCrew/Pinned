@@ -30,7 +30,7 @@ import type { SkinId } from "../../../domain/skins";
 import { t, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { IconButton, PlusSheet, TryOnBar, cx, skinName, type PlusPack } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import type { BoardClientView } from "./BoardClient";
 import { ChangeLookSheet } from "./ChangeLookSheet";
 import { checkoutErrorLine, type MakesFlow } from "./MakesFlow";
