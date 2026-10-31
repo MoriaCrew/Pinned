@@ -38,8 +38,8 @@ import "server-only";
  * final clawbacks use `makesFloor` on the disputed settled
  * amount; dispute freezes use `makesFreeze` (round up, so the
  * held pool is protected while the dispute is open - any
- * excess over the final floor amount is restored when the
- * dispute closes lost after an earlier final clawback).
+ * excess over the final floor amount is restored by the same
+ * terminal event that claws).
  * Foreign-presentment amounts are never FX-guessed: the
  * settled EUR amount comes from the BalanceTransaction Stripe
  * reports (its amount/currency are the account settlement
@@ -60,9 +60,13 @@ import "server-only";
  * - Disputes debit on creation, `funds_withdrawn` when funds
  *   leave the account, `funds_reinstated` when they return
  *   after a win, and `closed` carries `won`/`lost`/
- *   `warning_closed`. A reinstate arriving after a final
- *   clawback cannot be un-clawed by the ledger, so it
- *   dead-letters as an operator flag rather than pretending.
+ *   `warning_closed`. Card disputes withdraw funds within
+ *   about a second of creation, so `funds_withdrawn` only
+ *   keeps (or establishes) the freeze (PIN-178); the one final
+ *   clawback is `closed` with `lost`. A reinstate arriving
+ *   after a final clawback cannot be un-clawed by the ledger,
+ *   so it dead-letters as an operator flag rather than
+ *   pretending.
  */
 import type { StripeWebhookClientLike } from "../billing/stripe-webhook";
 import type { BoardRepository } from "../domain/board-repository";
@@ -749,6 +753,17 @@ async function freezeDispute(
   ids: DeadLetterExtra,
 ): Promise<string> {
   const { intent, account, purchase, pack } = resolved;
+  // `created` and `funds_withdrawn` both land here (PIN-178): the
+  // second one finds the hold (live or deferred) or the dispute
+  // already resolved, and must not dead-letter for lack of
+  // available makes the first freeze just took.
+  if (
+    account.frozenByDispute[disputeId] !== undefined ||
+    purchase.deferredFreezes[disputeId] !== undefined ||
+    purchase.resolvedDisputeIds.includes(disputeId)
+  ) {
+    return "duplicate_freeze";
+  }
   const cents = await disputeSettledEurCents(deps, ctx.event.object);
   if (cents === null || cents < 0) {
     return deadLetter(deps, ctx, "fx_unverifiable", {
@@ -876,14 +891,13 @@ async function finalClawbackDispute(
 ): Promise<string> {
   const { intent, pack } = resolved;
   // Claim the final clawback atomically BEFORE touching the
-  // ledger: whichever terminal event (`funds_withdrawn` or
-  // `closed lost`, in any order, even concurrently) records
-  // the claim owns the one claw; the loser of that race does
-  // not claw at all. A handler that finds a pre-existing
-  // claim still ensures the ledger claw landed (a crash
-  // between claim and claw retries into the entry check
-  // below), then releases the freeze's ceil excess - from
-  // either terminal event, not only `closed`.
+  // ledger: only `closed lost` makes a new claim (PIN-178), and
+  // whichever delivery records it owns the one claw; a
+  // concurrent loser does not claw at all. A handler that finds
+  // a pre-existing claim (a re-delivered `lost`, or a
+  // `funds_withdrawn` landing after it) still ensures the ledger
+  // claw landed (a crash between claim and claw retries into the
+  // entry check below), then releases the freeze's ceil excess.
   const preExistingMakes = intent.finalDisputeClawbacks?.[disputeId];
   let makes: number;
   let claimedNow = false;
@@ -971,7 +985,13 @@ async function handleDispute(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     case "charge.dispute.funds_reinstated":
       return restoreDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.funds_withdrawn":
-      return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
+      // Freeze only (PIN-178): card disputes withdraw within a
+      // second of `created`, long before the outcome is known.
+      // After a `lost` claim it just completes that one claw.
+      if (resolved.intent.finalDisputeClawbacks?.[disputeId] !== undefined) {
+        return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
+      }
+      return freezeDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.closed": {
       const status = str(dispute.status);
       if (status === "won" || status === "warning_closed") {

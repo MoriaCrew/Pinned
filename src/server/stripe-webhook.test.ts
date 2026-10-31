@@ -645,20 +645,68 @@ describe("disputes (PIN-150)", () => {
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
   });
 
-  it("funds_withdrawn final-claws the floor amount and releases the ceil excess at once", async () => {
+  it("a won card dispute (created -> funds_withdrawn -> funds_reinstated -> closed won) restores every make (PIN-178)", async () => {
     const { h, intent } = await granted();
-    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute()))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 25, available: 0 });
+    // Card disputes withdraw about a second later: freeze only, no claw,
+    // and no freeze_no_available although nothing is available now.
+    expect(
+      (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute()))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 25, available: 0 });
+    expect(
+      (await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute()))).outcome,
+    ).toBe("restored");
+    expect(
+      (await h.deliver(evt("evt_du_won", "charge.dispute.closed", dispute({ status: "won" })))).outcome,
+    ).toBe("duplicate_restore");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+    expect((await h.intents.get(intent.id))?.finalDisputeClawbacks).toBeUndefined();
+    expect((await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback")).toEqual([]);
+  });
+
+  it("closed won alone restores a freeze that funds_withdrawn established (created missed)", async () => {
+    const { h } = await granted();
     expect(
       (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 13, available: 12 });
+    expect(
+      (await h.deliver(evt("evt_du_late", "charge.dispute.created", dispute({ amount: 250 })))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(
+      (await h.deliver(evt("evt_du_won", "charge.dispute.closed", dispute({ amount: 250, status: "won" })))).outcome,
+    ).toBe("restored");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 0, available: 25 });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("created -> funds_withdrawn (twice) -> closed lost claws the floor exactly once and releases the ceil excess (PIN-178)", async () => {
+    const { h, intent } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
+    const withdrawn = evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 }));
+    expect((await h.deliver(withdrawn)).outcome).toBe("duplicate_freeze");
+    // A Stripe re-delivery of the same event, and a second event id.
+    expect(await h.deliver(withdrawn)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    expect(
+      (await h.deliver(evt("evt_du_wd2", "charge.dispute.funds_withdrawn", dispute({ amount: 250 })))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 13, available: 12 });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" })))).outcome,
     ).toBe("dispute_final_clawed");
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
     expect(await h.intents.get(intent.id)).toMatchObject({
       finalDisputeClawbacks: { du_test_fake_1: 12 },
     });
-    expect(
-      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" })))).outcome,
-    ).toBe("duplicate_final_clawback");
-    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
+    const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
+    expect(clawbacks).toHaveLength(1);
+    expect(clawbacks[0]).toMatchObject({ amount: 12, disputeId: "du_test_fake_1" });
+    expect(await h.records.listDeadLetters()).toEqual([]);
   });
 
   it("closed lost landing first also releases the ceil excess; a later funds_withdrawn claws nothing more", async () => {
@@ -679,17 +727,15 @@ describe("disputes (PIN-150)", () => {
     expect(clawbacks[0]).toMatchObject({ amount: 12, disputeId: "du_test_fake_1" });
   });
 
-  it("concurrent terminal dispute events claw exactly once", async () => {
+  it("concurrent funds_withdrawn and closed lost claw exactly once", async () => {
     const { h } = await granted();
     await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 250 })));
     const outcomes = await Promise.all([
       h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 250 }))),
       h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 250, status: "lost" }))),
     ]);
-    expect(outcomes.map((o) => o.outcome).sort()).toEqual([
-      "dispute_final_clawed",
-      "duplicate_final_clawback",
-    ]);
+    expect(outcomes[1].outcome).toBe("dispute_final_clawed");
+    expect(["duplicate_freeze", "duplicate_final_clawback"]).toContain(outcomes[0].outcome);
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 0, available: 13 });
     const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
     expect(clawbacks).toHaveLength(1);
@@ -719,7 +765,7 @@ describe("disputes (PIN-150)", () => {
 
   it("a reinstate after a final clawback dead-letters for an operator instead of un-clawing", async () => {
     const { h } = await granted();
-    await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute()));
+    await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ status: "lost" })));
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
     expect(
       (await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute()))).outcome,
