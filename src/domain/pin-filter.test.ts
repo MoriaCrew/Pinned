@@ -111,6 +111,21 @@ describe("applying and resolving a filter (PIN-218)", () => {
     }
   });
 
+  it("keeps a person chip chosen before joining as that person: it becomes Mine", () => {
+    // Before joining, the viewer (later "me") sees their own pins under a person chip.
+    const asGuest = pinFilterOptions(cards, null, null);
+    const meAsPerson: PinFilter = { kind: "person", participantId: "me" };
+    expect(resolvePinFilter(meAsPerson, asGuest, null)).toEqual(meAsPerson);
+    // After join or reclaim the same pins sit under Mine; the choice follows them.
+    const joined = pinFilterOptions(cards, "me", null);
+    expect(resolvePinFilter(meAsPerson, joined, "me")).toEqual({ kind: "mine" });
+    // Another person's chip is unaffected by who you are.
+    expect(resolvePinFilter({ kind: "person", participantId: "aye" }, joined, "me")).toEqual({
+      kind: "person",
+      participantId: "aye",
+    });
+  });
+
   it("keeps a choice while its chip exists and falls back to All once it is gone", () => {
     const options = pinFilterOptions(cards, "me", 15);
     const aye: PinFilter = { kind: "person", participantId: "aye" };

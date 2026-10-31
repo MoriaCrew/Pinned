@@ -125,10 +125,17 @@ export function sameFilter(a: PinFilter, b: PinFilter): boolean {
  * What a remembered choice shows now: the matching chip's filter, or
  * All once that chip is gone (the person's pins were deleted, you
  * deleted your last pin, nothing is new any more, or the board no
- * longer offers a row at all).
+ * longer offers a row at all). A person chip chosen before you joined
+ * or reclaimed as that person is your Mine chip now, so it stays.
  */
-export function resolvePinFilter(filter: PinFilter, options: readonly PinFilterOption[]): PinFilter {
-  const match = options.find((option) => sameFilter(optionFilter(option), filter));
+export function resolvePinFilter(
+  filter: PinFilter,
+  options: readonly PinFilterOption[],
+  meId: string | null = null,
+): PinFilter {
+  const wanted: PinFilter =
+    filter.kind === "person" && meId !== null && filter.participantId === meId ? { kind: "mine" } : filter;
+  const match = options.find((option) => sameFilter(optionFilter(option), wanted));
   return match ? optionFilter(match) : ALL;
 }
 

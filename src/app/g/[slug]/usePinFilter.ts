@@ -103,7 +103,7 @@ export function usePinFilter(slug: string, cards: readonly PinCard[], meId: stri
   const options = pinFilterOptions(cards, meId, lastSeenAt);
   return {
     options,
-    active: resolvePinFilter(chosen, options),
+    active: resolvePinFilter(chosen, options, meId),
     onChange: (filter) => {
       setChosen(filter);
       writeChoice(slug, filter);
