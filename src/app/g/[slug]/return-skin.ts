@@ -30,7 +30,7 @@ export function readReturnSkin(slug: string): ReturnSkin | null {
   }
 }
 
-/** Store the try-on as "left for Checkout" (not returned yet), or clear it with null. */
+/** Store the try-on as "left for Checkout" (not returned yet), or clear it with null. Callers pass null only on a cancelled or failed return, never on a buy. */
 export function writeReturnSkin(slug: string, skin: SkinId | null) {
   try {
     if (skin === null) window.sessionStorage.removeItem(returnSkinKey(slug));
