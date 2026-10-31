@@ -1,37 +1,78 @@
 ---
 name: pinned-dev
-description: Work safely and consistently on the Pinned Next.js, Firebase, and AI Gateway codebase.
+description: Work safely and consistently on the Pinneds Studio Next.js, Firebase, and AI Gateway codebase.
 ---
 
-# Pinned Development
+# Pinneds Studio Development
 
-Use this skill for implementation, debugging, testing, prompt, or Firebase
-work in the Pinned repository.
+Use this skill for implementation, debugging, testing, prompt, or
+Firebase work in the Pinned repository. Studio pivot (PIN-49): the
+game is dropped. Spec: `docs/11-studio.md`; decisions:
+`docs/adr/003-studio-architecture.md`; doc index: `docs/README.md`.
+Game docs are archived in `docs/archive/` — do not apply them.
 
 ## Start every task
 
 1. Read the assigned `PIN-*` issue, then `AGENTS.md`.
-2. Read only the relevant sections of `docs/01-requirements.md`,
-   `docs/02-architecture.md`, and `docs/05-research-synthesis.md`.
+2. Read the relevant sections of `docs/11-studio.md` (spec),
+   `docs/adr/003-studio-architecture.md`, `docs/06` (photo intake),
+   `docs/07` (SAM lab), `docs/13` (sign-in), `docs/14` (design
+   system), `docs/15` (Board Plus, makes), `docs/16` (AI usage and
+   budget), `docs/17` (landing showcase sets), `docs/18` (languages),
+   `docs/19` (Meta models) and `docs/DEPLOY.md` (environments) as
+   the issue needs.
 3. Check `git status` and preserve changes you did not make.
-4. Work on a `PIN-{n}/short-slug` branch from current `main`.
+4. Work on a `PIN-{n}/short-slug` branch from current `dev`. PRs go
+   to `dev`, titled `PIN-{n}: …`. Never merge to `main` without
+   Robin.
 
 ## Architecture rules
 
 - Keep `src/domain` pure, deterministic, and unit-tested.
-- Route every AI call through `src/gateway`; never import provider SDKs in
-  UI or domain code.
-- Read environment only through `src/config.ts`.
-- Default to `AUTH_MODE=link-only` and `AI_MOCK=1`. Players never
-  authenticate. Do not add Firebase Auth, Stripe, or live AI calls unless
-  the assigned issue explicitly requires them and its gate has passed.
-- Firestore and Storage are server-only. Keep client rules deny-all.
-- Never persist original player photos. Persist only derived cut-outs and
-  posters approved by the issue.
-- Put all UI copy in `src/i18n/messages/en.json`; keep French as an empty
-  fallback stub unless the issue explicitly requests translation.
-- Prompt behavior changes update a versioned file under `prompts/` and
-  require matching fixture or eval evidence.
+- **No hard-coded limits.** Every count, size, cap, timeout and TTL
+  comes from the one typed `Policy` object (`docs/11` §5.1:
+  defaults → env → per-board overrides). Prompts, validators and UI
+  read the same object.
+- Route every AI call through the six gateway capability ports in
+  `src/gateway/index.ts` (`ElementNamer`, `Segmenter`,
+  `SceneComposer`, `ChipSuggester`, `TapNamer`, `SpeechTranscriber`)
+  with the decorator chain: timeout → retry → reserve budget (fail
+  closed) → call → log cost → fall back. Never import provider SDKs
+  in UI or domain code. Provider refusals are the typed outcome
+  `refused`, never a 500.
+- Read environment only through `src/config.ts`. Server modules
+  carry `server-only`.
+- Default to `AUTH_MODE=link-only`, `AI_MOCK=1` and `PLUS_MODE=off`.
+  Google sign-in (`AUTH_MODE=optional`, PIN-57, `docs/13`) and
+  billing (`PLUS_MODE`, `docs/15`) ship behind flags; link-only
+  play never needs an account, and flag-off behaviour stays
+  byte-identical (flag-off tests). No live AI or Stripe calls
+  unless the assigned issue explicitly requires them and its gate
+  has passed. Never commit keys.
+- Firestore and Storage are server-only; assets are served through
+  a route that checks the board link. Keep client rules deny-all.
+- Never persist original photos. Persist only the stripped working
+  copy under `tmp/` (deleted at "Pin selected" or past
+  `workingCopyTtlHours`, `docs/11` A6) and derived cut-outs
+  (`elements/`) and scenes (`scenes/`). People are allowed in pins:
+  a face flag shows the one-line consent note (`faces: note`),
+  never blocks.
+- Jobs: `DecomposeJob`/`SceneJob` move `pending → running → ready /
+  failed / refused`, idempotent, claim-before-call; request does
+  the work, client polls. No queue in slices 1–2.
+- Put all UI copy in `src/i18n/messages/en.json`, inside its prefix
+  group. There are 7 locales (en, fr, es, pt-BR, de, it, id) with
+  catalog parity checks (`npm run i18n:check`): never hand-edit the
+  other locale files or `*.lock.json`; missing keys fall back to
+  English and `npm run i18n:translate` (dev-time, `docs/18`) fills
+  them. Follow `docs/14`: no emoji, short verb-first labels, 44 px
+  targets.
+- Prompt behavior changes update a versioned file under `prompts/`
+  (`elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v1`) and require
+  matching fixture or spike evidence. Store the prompt version with
+  every output.
+- Validate board slugs as `^[A-Za-z0-9_-]{22}$` before any
+  Firestore path is built.
 
 ## Verify
 
@@ -43,16 +84,29 @@ npm test
 npm run build
 ```
 
-For UI work, run `npm run dev`, open the affected route and
-`http://localhost:3000/api/health`, and record a phone-viewport check in
-the PR. Never use paid model calls in CI or ordinary tests; use the mock
-gateway and fixtures. A live smoke belongs only to an issue that asks for
-it, with secrets supplied outside git and spend recorded.
+with `AI_MOCK=1`. For UI work, run `npm run dev`, open the affected
+route and `http://localhost:3000/api/health`, and record a
+phone-viewport check in the PR. Never use paid model calls in CI or
+ordinary tests; use the mock gateway and recorded fixtures. A live
+smoke belongs only to an issue that asks for it, with secrets
+supplied outside git and spend recorded.
 
 ## Ship
 
-Fill the PR template with the short `PIN-n` ID, requirement IDs, exact
-test commands and outcomes, AI/cost impact, screenshots for UI work, and
-rollback. Do not merge until CI, secret scan, and Cursor Bugbot finish;
-triage every Bugbot finding in the PR. Never commit `.env*` values, keys,
-service-account JSON, or real player photos.
+Fill the PR template with the short `PIN-n` ID, the `docs/11`
+sections implemented, exact test commands and outcomes, AI/cost
+impact, screenshots for UI work, and rollback. Squash-merge to
+`dev` only when CI, gitleaks and Cursor Bugbot have **all finished
+green** (pending ≠ pass); triage every Bugbot finding in-thread.
+Never commit `.env*` values, keys, service-account JSON, or real
+personal photos.
+
+## Autonomy / stop rules
+
+Don't wait for Robin: run tests yourself, decide from the numbers
+and `docs/11` §2, record why in the PR. Split any issue over ~1 day
+or ~400 changed lines into child issues first. **Stop and report**
+on the Linear issue, then continue with other unblocked work, only
+if: Muse Image cannot compose reference images at all; spend would
+exceed 3× budget; a change would store originals or leak a secret;
+an operator-only step is needed (secrets, console, DNS).

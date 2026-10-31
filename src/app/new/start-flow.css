@@ -1,0 +1,33 @@
+/* Start flow (PIN-101): screen-local layout only. Colours, type and sizes come from the tokens. */
+
+.pn-start { min-height: 100dvh; }
+
+.pn-start-pad,
+.pn-start-form { display: grid; gap: 20px; align-content: start; }
+.pn-start-pad { width: min(100%, 480px); margin: 0 auto; padding: var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom)); }
+.pn-start-pad > .pn-wordmark { justify-self: start; padding: 9px 0; margin: -9px 0; }
+.pn-start-title { overflow-wrap: anywhere; }
+
+/* The one-line suggestion above the picker. */
+.pn-start-spark { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-sunk); color: var(--ink); font: 500 15px/21px var(--font-ui); }
+.pn-start-spark b { font-weight: 700; }
+.pn-start-spark .pn-icon { margin-top: 1px; }
+
+/* Seven skins make three rows: the title, the suggestion and the action stay in view while the picker
+   scrolls, and the board's name stays visible above the sheet. */
+.pn-start-sheet { max-height: 86dvh; grid-template-rows: auto auto minmax(0, 1fr) auto; animation: pn-start-rise .24s ease-out both; }
+.pn-start-sheet .pn-sheet-body { grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+/* Padding and negative margin give the focus ring and the check room inside the scroller. */
+.pn-start-picker { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; margin: -8px; }
+.pn-start-picker .pn-skins { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pn-start-picker .pn-skin { align-content: start; }
+
+.pn-start-note,
+.pn-start-error { margin: 0; text-align: center; font: 500 14px/20px var(--font-ui); }
+.pn-start-note { color: var(--ink-muted); }
+.pn-start-error { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--danger); font-weight: 650; }
+
+@keyframes pn-start-rise { from { translate: 0 24px; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pn-start-sheet { animation: none; }
+}

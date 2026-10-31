@@ -21,15 +21,30 @@ as the code it unblocks — allowlist changes need their own reviewed PR.
 ## Never commit (any branch, any file, any commit message)
 
 - API keys, tokens, passwords, session secrets (Meta, Baseten, Modal,
-  Fireworks, DB, storage) — values live only in local `.env`, host env,
-  GitHub Actions secrets. `.env.example` holds names with empty values.
+  Fireworks, Stripe secret keys and the webhook signing secret,
+  Firebase, DB, storage) — values live only in local `.env`, host
+  env, Secret Manager, GitHub Actions secrets. `.env.example` holds
+  names with empty values.
 - Private keys/certs (`*.pem`, `*.key`, `*.p12`), credential JSON,
   `.env*` files other than `.env.example`.
-- Personal data: real player photos (originals *or* cut-outs), names +
+- Personal data: real personal photos (originals *or* cut-outs), names +
   photos together, emails, chat screenshots with identities. Test assets
   in `eval/` must be consented samples, clearly synthetic where possible.
 - Full request/response dumps from live AI calls containing user content.
   Log shapes, counts, latency and cost — redact payloads (`--redact`).
+
+## Rate-limit client address (PIN-112)
+
+Per-IP limits key on one address from `X-Forwarded-For`. Entries a
+client sends come first; the hosting platform appends its own after
+them, so only the platform-appended client entry can be trusted.
+`CLIENT_IP_TRUSTED_HOPS=n` makes the key the entry `n` positions from
+the right end; unset keeps the first entry (local default). A hosted
+backend sets `n` only after measuring its layout with the lab probe
+`GET /api/lab/client-ip` (dev only; it answers header counts and
+positions, never an address — usage in the route comment).
+`CLIENT_IP_HEADER` (a platform header read first) stays unset unless
+the probe shows the platform overwrites a client-sent copy.
 
 ## If something leaks anyway — rotate first
 

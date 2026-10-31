@@ -1,0 +1,1987 @@
+{
+ "generated": "PIN-50 scripts/studio-spike.mjs (synthetic images only; no real people, no payloads, no keys)",
+ "photos": [
+  {
+   "id": "desk-mug-duck",
+   "kind": "home",
+   "owner": "Robin",
+   "prompt": "Photorealistic photograph of a home office desk in daylight: a chipped teal ceramic mug, a yellow rubber duck wearing tiny sunglasses, and a small potted succulent, shallow depth of field, natural light",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 10051,
+   "namedCount": 3,
+   "usableCount": 3
+  },
+  {
+   "id": "shelf-clock-books",
+   "kind": "home",
+   "owner": "Sam",
+   "prompt": "Photorealistic photograph of a living room wooden shelf: a red retro twin-bell alarm clock, a stack of three hardcover books, and a small white ceramic vase with dried flowers",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 11302,
+   "namedCount": 4,
+   "usableCount": 4
+  },
+  {
+   "id": "sofa-blanket-plant",
+   "kind": "home",
+   "owner": "Jo",
+   "prompt": "Photorealistic photograph of a living room: a grey sofa with a mustard yellow knitted blanket draped over it, and a tall green houseplant in a terracotta pot beside the sofa",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "namedCount": 5,
+   "decomposeMs": 17224,
+   "usableCount": 5
+  },
+  {
+   "id": "kitchen-cat-lamp",
+   "kind": "home",
+   "owner": "Aye",
+   "prompt": "Photorealistic photograph of a kitchen counter: an orange tabby cat sitting next to a brass table lamp and a green plant in a red-and-white striped ceramic pot, warm daylight",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 17022,
+   "namedCount": 3,
+   "usableCount": 3
+  },
+  {
+   "id": "desk-lamp-keyboard",
+   "kind": "home",
+   "owner": "Mia",
+   "prompt": "Photorealistic photograph of a desk at dusk: a brass desk lamp switched on, a blue mechanical keyboard, and black over-ear headphones resting beside it",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 7015,
+   "namedCount": 3,
+   "usableCount": 3
+  },
+  {
+   "id": "table-fruit-bottle",
+   "kind": "home",
+   "owner": "Leo",
+   "prompt": "Photorealistic photograph of a dining table: a wooden bowl full of oranges, a clear glass bottle of water, and a folded beige linen napkin, soft window light",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 8598,
+   "namedCount": 3,
+   "usableCount": 3
+  },
+  {
+   "id": "hallway-shoes-hat",
+   "kind": "home",
+   "owner": "Robin",
+   "prompt": "Photorealistic photograph of a bright hallway: a pair of red sneakers on the floor, a straw sun hat hanging on a wall hook, and a woven seagrass basket",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 6784,
+   "namedCount": 3,
+   "usableCount": 3
+  },
+  {
+   "id": "bedside-mirror-book",
+   "kind": "home",
+   "owner": "Aye",
+   "prompt": "Photorealistic photograph of a bedside table: a small round brass mirror, a paperback book with a plain cover, and a ceramic table lamp with a cream shade",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "namedCount": 3,
+   "decomposeMs": 9617,
+   "usableCount": 3
+  },
+  {
+   "id": "workbench-tools",
+   "kind": "home",
+   "owner": "Sam",
+   "prompt": "Photorealistic photograph of a wooden workbench: an orange cordless drill, a wooden-handled claw hammer, and a yellow metal tape measure",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 8168,
+   "namedCount": 3,
+   "usableCount": 2
+  },
+  {
+   "id": "cat-chair-blanket",
+   "kind": "home",
+   "owner": "Jo",
+   "prompt": "Photorealistic photograph: a black cat curled up asleep on a rattan chair with a folded red plaid blanket beside it, window light",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 16573,
+   "namedCount": 2,
+   "usableCount": 2
+  },
+  {
+   "id": "hard-glass-table",
+   "kind": "hard",
+   "owner": "Mia",
+   "prompt": "Photorealistic photograph of a glass coffee table in bright window light: a clear glass vase, two empty drinking glasses, strong reflections and refractions",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 9434,
+   "namedCount": 2,
+   "usableCount": 2
+  },
+  {
+   "id": "hard-cable-mess",
+   "kind": "hard",
+   "owner": "Leo",
+   "prompt": "Photorealistic photograph under a desk: a messy tangle of black and white charging cables plugged into a white power strip on the floor",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 8153,
+   "namedCount": 2,
+   "usableCount": 1
+  },
+  {
+   "id": "person-herb-kitchen",
+   "kind": "person",
+   "owner": "Robin",
+   "prompt": "Photorealistic photograph of a smiling fictional adult woman with dark hair holding a small potted basil plant in a bright kitchen, synthetic person, not a real human",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "namedCount": 3,
+   "decomposeMs": 9400,
+   "usableCount": 3
+  },
+  {
+   "id": "person-desk-mug",
+   "kind": "person",
+   "owner": "Aye",
+   "prompt": "Photorealistic photograph of a fictional adult man with curly brown hair sitting at a desk holding a red mug, laptop in front of him, synthetic person, not a real human",
+   "source": "Higgsfield recraft-v4.1-utility text-to-image (synthetic, no real people)",
+   "width": 1216,
+   "height": 896,
+   "workWidth": 1024,
+   "workHeight": 755,
+   "decomposeMs": 9672,
+   "namedCount": 4,
+   "usableCount": 3
+  }
+ ],
+ "elements": [
+  {
+   "id": "desk-mug-duck--teal-mug",
+   "photoId": "desk-mug-duck",
+   "owner": "Robin",
+   "label": "Rustic Teal Mug",
+   "concept": "teal mug",
+   "description": "distressed turquoise glaze with worn white base",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 30694,
+   "coverageFrame": 0.0397,
+   "box": {
+    "x1": 527,
+    "y1": 429,
+    "x2": 742,
+    "y2": 618
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "desk-mug-duck--rubber-duck",
+   "photoId": "desk-mug-duck",
+   "owner": "Robin",
+   "label": "Cool Rubber Duck",
+   "concept": "rubber duck",
+   "description": "small yellow duck wearing black sunglasses",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 6935,
+   "coverageFrame": 0.009,
+   "box": {
+    "x1": 733,
+    "y1": 520,
+    "x2": 825,
+    "y2": 619
+   },
+   "confidence": 0.9259259104728699
+  },
+  {
+   "id": "desk-mug-duck--potted-succulent",
+   "photoId": "desk-mug-duck",
+   "owner": "Robin",
+   "label": "Potted Succulent",
+   "concept": "potted succulent",
+   "description": "green rosette succulent in speckled white pot",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 28171,
+   "coverageFrame": 0.0364,
+   "box": {
+    "x1": 848,
+    "y1": 396,
+    "x2": 1012,
+    "y2": 618
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "shelf-clock-books--red-alarm-clock",
+   "photoId": "shelf-clock-books",
+   "owner": "Sam",
+   "label": "Red Alarm Clock",
+   "concept": "red alarm clock",
+   "description": "glossy red twin-bell with cream face",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 48187,
+   "coverageFrame": 0.0623,
+   "box": {
+    "x1": 150,
+    "y1": 347,
+    "x2": 386,
+    "y2": 656
+   },
+   "confidence": 0.9298245906829834
+  },
+  {
+   "id": "shelf-clock-books--stacked-books",
+   "photoId": "shelf-clock-books",
+   "owner": "Sam",
+   "label": "Stack of Books",
+   "concept": "stacked books",
+   "description": "three hardcovers in white, red and dark green",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 50831,
+   "coverageFrame": 0.0657,
+   "box": {
+    "x1": 410,
+    "y1": 446,
+    "x2": 795,
+    "y2": 629
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "shelf-clock-books--white-vase",
+   "photoId": "shelf-clock-books",
+   "owner": "Sam",
+   "label": "White Vase",
+   "concept": "white vase",
+   "description": "small matte white bud vase",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 10210,
+   "coverageFrame": 0.0132,
+   "box": {
+    "x1": 782,
+    "y1": 417,
+    "x2": 886,
+    "y2": 558
+   },
+   "confidence": 0.941605806350708
+  },
+  {
+   "id": "shelf-clock-books--dried-flowers",
+   "photoId": "shelf-clock-books",
+   "owner": "Sam",
+   "label": "Dried Flowers",
+   "concept": "dried flowers",
+   "description": "beige pampas with dried brown blooms",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 33506,
+   "coverageFrame": 0.0433,
+   "box": {
+    "x1": 682,
+    "y1": 176,
+    "x2": 996,
+    "y2": 420
+   },
+   "confidence": 0.8518518805503845
+  },
+  {
+   "id": "kitchen-cat-lamp--brass-dome-lamp",
+   "photoId": "kitchen-cat-lamp",
+   "owner": "Aye",
+   "label": "Brass Dome Lamp",
+   "concept": "brass dome lamp",
+   "description": "brushed brass lamp with rounded dome shade",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 40443,
+   "coverageFrame": 0.0523,
+   "box": {
+    "x1": 122,
+    "y1": 194,
+    "x2": 357,
+    "y2": 680
+   },
+   "confidence": 0.9024390578269958
+  },
+  {
+   "id": "kitchen-cat-lamp--orange-tabby-cat",
+   "photoId": "kitchen-cat-lamp",
+   "owner": "Aye",
+   "label": "Orange Tabby Cat",
+   "concept": "orange tabby cat",
+   "description": "ginger tabby with white chest sitting upright",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 89195,
+   "coverageFrame": 0.1154,
+   "box": {
+    "x1": 268,
+    "y1": 174,
+    "x2": 570,
+    "y2": 680
+   },
+   "confidence": 0.9609756469726562
+  },
+  {
+   "id": "kitchen-cat-lamp--potted-plant",
+   "photoId": "kitchen-cat-lamp",
+   "owner": "Aye",
+   "label": "Striped Potted Plant",
+   "concept": "potted plant",
+   "description": "leafy green plant in red-and-white striped pot",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 88310,
+   "coverageFrame": 0.1142,
+   "box": {
+    "x1": 548,
+    "y1": 211,
+    "x2": 953,
+    "y2": 654
+   },
+   "confidence": 0.9532163739204407
+  },
+  {
+   "id": "desk-lamp-keyboard--brass-lamp",
+   "photoId": "desk-lamp-keyboard",
+   "owner": "Mia",
+   "label": "Brass Desk Lamp",
+   "concept": "brass lamp",
+   "description": "articulated brass lamp with glowing dome shade",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 43925,
+   "coverageFrame": 0.0568,
+   "box": {
+    "x1": 111,
+    "y1": 38,
+    "x2": 561,
+    "y2": 643
+   },
+   "confidence": 0.8012422323226929
+  },
+  {
+   "id": "desk-lamp-keyboard--blue-keyboard",
+   "photoId": "desk-lamp-keyboard",
+   "owner": "Mia",
+   "label": "Blue Keyboard",
+   "concept": "blue keyboard",
+   "description": "translucent blue keyboard with clear casing",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 25305,
+   "coverageFrame": 0.0327,
+   "box": {
+    "x1": 414,
+    "y1": 558,
+    "x2": 812,
+    "y2": 661
+   },
+   "confidence": 0.96875
+  },
+  {
+   "id": "desk-lamp-keyboard--black-headphones",
+   "photoId": "desk-lamp-keyboard",
+   "owner": "Mia",
+   "label": "Black Headphones",
+   "concept": "black headphones",
+   "description": "matte black over-ear headphones with thick cushions",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 16027,
+   "coverageFrame": 0.0207,
+   "box": {
+    "x1": 811,
+    "y1": 511,
+    "x2": 1023,
+    "y2": 622
+   },
+   "confidence": 0.9726027250289917
+  },
+  {
+   "id": "table-fruit-bottle--fruit-bowl",
+   "photoId": "table-fruit-bottle",
+   "owner": "Leo",
+   "label": "Orange Bowl",
+   "concept": "fruit bowl",
+   "description": "dark wood-grained bowl heaped with bright oranges",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 34524,
+   "coverageFrame": 0.0447,
+   "box": {
+    "x1": 154,
+    "y1": 425,
+    "x2": 532,
+    "y2": 558
+   },
+   "confidence": 0.9532163739204407
+  },
+  {
+   "id": "table-fruit-bottle--glass-water-bottle",
+   "photoId": "table-fruit-bottle",
+   "owner": "Leo",
+   "label": "Glass Water Bottle",
+   "concept": "glass water bottle",
+   "description": "tall clear glass bottle half-filled with water",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 32327,
+   "coverageFrame": 0.0418,
+   "box": {
+    "x1": 556,
+    "y1": 206,
+    "x2": 670,
+    "y2": 552
+   },
+   "confidence": 0.9298245906829834
+  },
+  {
+   "id": "table-fruit-bottle--linen-napkin",
+   "photoId": "table-fruit-bottle",
+   "owner": "Leo",
+   "label": "Linen Napkin",
+   "concept": "linen napkin",
+   "description": "folded beige napkin with natural textured fabric",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 17822,
+   "coverageFrame": 0.0231,
+   "box": {
+    "x1": 681,
+    "y1": 481,
+    "x2": 975,
+    "y2": 560
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "hallway-shoes-hat--straw-hat",
+   "photoId": "hallway-shoes-hat",
+   "owner": "Robin",
+   "label": "Straw Sun Hat",
+   "concept": "straw hat",
+   "description": "natural tan woven straw with wide brim",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 29427,
+   "coverageFrame": 0.0381,
+   "box": {
+    "x1": 68,
+    "y1": 92,
+    "x2": 240,
+    "y2": 340
+   },
+   "confidence": 0.9649122953414917
+  },
+  {
+   "id": "hallway-shoes-hat--woven-basket",
+   "photoId": "hallway-shoes-hat",
+   "owner": "Robin",
+   "label": "Woven Storage Basket",
+   "concept": "woven basket",
+   "description": "light seagrass weave with two loop handles",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 15744,
+   "coverageFrame": 0.0204,
+   "box": {
+    "x1": 339,
+    "y1": 413,
+    "x2": 484,
+    "y2": 570
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "hallway-shoes-hat--red-sneakers",
+   "photoId": "hallway-shoes-hat",
+   "owner": "Robin",
+   "label": "Red Sneakers",
+   "concept": "red sneakers",
+   "description": "bright red canvas with white laces and soles",
+   "faceFlag": false,
+   "samSegments": 2,
+   "usable": true,
+   "maskPixels": 16113,
+   "coverageFrame": 0.0208,
+   "box": {
+    "x1": 818,
+    "y1": 600,
+    "x2": 1023,
+    "y2": 719
+   },
+   "confidence": 0.827957034111023
+  },
+  {
+   "id": "workbench-tools--orange-drill",
+   "photoId": "workbench-tools",
+   "owner": "Sam",
+   "label": "Orange Drill",
+   "concept": "orange drill",
+   "description": "orange and black cordless drill with silver chuck",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 27757,
+   "coverageFrame": 0.0359,
+   "box": {
+    "x1": 113,
+    "y1": 190,
+    "x2": 509,
+    "y2": 326
+   },
+   "confidence": 0.9024390578269958
+  },
+  {
+   "id": "workbench-tools--claw-hammer",
+   "photoId": "workbench-tools",
+   "owner": "Sam",
+   "label": "Claw Hammer",
+   "concept": "claw hammer",
+   "description": "claw hammer with worn wooden handle and dark metal head",
+   "faceFlag": false,
+   "samSegments": 0,
+   "usable": false
+  },
+  {
+   "id": "workbench-tools--yellow-tape-measure",
+   "photoId": "workbench-tools",
+   "owner": "Sam",
+   "label": "Tape Measure",
+   "concept": "yellow tape measure",
+   "description": "coiled yellow tape with black markings",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 8655,
+   "coverageFrame": 0.0112,
+   "box": {
+    "x1": 698,
+    "y1": 355,
+    "x2": 869,
+    "y2": 437
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "cat-chair-blanket--black-cat",
+   "photoId": "cat-chair-blanket",
+   "owner": "Jo",
+   "label": "Sleeping Black Cat",
+   "concept": "black cat",
+   "description": "sleek black fur curled with paws tucked",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 104362,
+   "coverageFrame": 0.135,
+   "box": {
+    "x1": 250,
+    "y1": 275,
+    "x2": 785,
+    "y2": 558
+   },
+   "confidence": 0.9336099624633789
+  },
+  {
+   "id": "cat-chair-blanket--plaid-blanket",
+   "photoId": "cat-chair-blanket",
+   "owner": "Jo",
+   "label": "Red Plaid Blanket",
+   "concept": "plaid blanket",
+   "description": "folded red wool with green and yellow plaid",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 93669,
+   "coverageFrame": 0.1212,
+   "box": {
+    "x1": 623,
+    "y1": 261,
+    "x2": 1023,
+    "y2": 620
+   },
+   "confidence": 0.8324607610702515
+  },
+  {
+   "id": "hard-glass-table--tall-glass-carafe",
+   "photoId": "hard-glass-table",
+   "owner": "Mia",
+   "label": "Tall Glass Carafe",
+   "concept": "tall glass carafe",
+   "description": "tall clear glass with vertical texture and flared rim",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 45287,
+   "coverageFrame": 0.0586,
+   "box": {
+    "x1": 225,
+    "y1": 57,
+    "x2": 382,
+    "y2": 425
+   },
+   "confidence": 0.8865247964859009
+  },
+  {
+   "id": "hard-glass-table--clear-tumbler",
+   "photoId": "hard-glass-table",
+   "owner": "Mia",
+   "label": "Left Tumbler Glass",
+   "concept": "clear tumbler",
+   "description": "short empty clear glass with thick heavy base",
+   "faceFlag": false,
+   "samSegments": 2,
+   "usable": true,
+   "maskPixels": 28207,
+   "coverageFrame": 0.0365,
+   "box": {
+    "x1": 430,
+    "y1": 251,
+    "x2": 582,
+    "y2": 449
+   },
+   "confidence": 0.6213017702102661
+  },
+  {
+   "id": "hard-cable-mess--white-power-strip",
+   "photoId": "hard-cable-mess",
+   "owner": "Leo",
+   "label": "White Power Strip",
+   "concept": "white power strip",
+   "description": "white rectangular strip with multiple black plugs connected",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 46956,
+   "coverageFrame": 0.0607,
+   "box": {
+    "x1": 656,
+    "y1": 406,
+    "x2": 1023,
+    "y2": 726
+   },
+   "confidence": 0.9452055096626282
+  },
+  {
+   "id": "hard-cable-mess--black-cables",
+   "photoId": "hard-cable-mess",
+   "owner": "Leo",
+   "label": "Tangled Black Cables",
+   "concept": "black cables",
+   "description": "tangled black cords with silver and black USB ends",
+   "faceFlag": false,
+   "samSegments": 0,
+   "usable": false
+  },
+  {
+   "id": "person-desk-mug--curly-haired-man",
+   "photoId": "person-desk-mug",
+   "owner": "Aye",
+   "label": "Curly-Haired Man",
+   "concept": "curly-haired man",
+   "description": "with voluminous curly brown hair wearing green plaid shirt",
+   "faceFlag": true,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 266585,
+   "coverageFrame": 0.3448,
+   "box": {
+    "x1": 307,
+    "y1": 32,
+    "x2": 925,
+    "y2": 702
+   },
+   "confidence": 0.8632478713989258
+  },
+  {
+   "id": "person-desk-mug--red-mug",
+   "photoId": "person-desk-mug",
+   "owner": "Aye",
+   "label": "Red Mug",
+   "concept": "red mug",
+   "description": "glossy bright red ceramic mug",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 12579,
+   "coverageFrame": 0.0163,
+   "box": {
+    "x1": 451,
+    "y1": 302,
+    "x2": 583,
+    "y2": 426
+   },
+   "confidence": 0.9259259104728699
+  },
+  {
+   "id": "person-desk-mug--silver-laptop",
+   "photoId": "person-desk-mug",
+   "owner": "Aye",
+   "label": "Silver Laptop",
+   "concept": "silver laptop",
+   "description": "thin matte silver aluminum body with open lid",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 90008,
+   "coverageFrame": 0.1164,
+   "box": {
+    "x1": 39,
+    "y1": 457,
+    "x2": 596,
+    "y2": 728
+   },
+   "confidence": 0.976608157157898
+  },
+  {
+   "id": "person-desk-mug--black-smartphone",
+   "photoId": "person-desk-mug",
+   "owner": "Aye",
+   "label": "Black Smartphone",
+   "concept": "black smartphone",
+   "description": "slim flat black rectangular phone",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": false,
+   "maskPixels": 1925,
+   "coverageFrame": 0.0025,
+   "box": {
+    "x1": 6,
+    "y1": 667,
+    "x2": 99,
+    "y2": 694
+   },
+   "confidence": 0.9298245906829834
+  },
+  {
+   "id": "sofa-blanket-plant--mustard-blanket",
+   "photoId": "sofa-blanket-plant",
+   "owner": "Jo",
+   "label": "Mustard Knit Throw",
+   "concept": "mustard blanket",
+   "description": "mustard yellow cable-knit blanket with long fringe",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 136981,
+   "coverageFrame": 0.1772,
+   "box": {
+    "x1": 397,
+    "y1": 214,
+    "x2": 973,
+    "y2": 737
+   },
+   "confidence": 0.8865247964859009
+  },
+  {
+   "id": "sofa-blanket-plant--potted-plant",
+   "photoId": "sofa-blanket-plant",
+   "owner": "Jo",
+   "label": "Potted Leafy Plant",
+   "concept": "potted plant",
+   "description": "tall green leafy plant in terracotta pot",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 46164,
+   "coverageFrame": 0.0597,
+   "box": {
+    "x1": 44,
+    "y1": 27,
+    "x2": 419,
+    "y2": 571
+   },
+   "confidence": 0.9452055096626282
+  },
+  {
+   "id": "sofa-blanket-plant--white-pillow",
+   "photoId": "sofa-blanket-plant",
+   "owner": "Jo",
+   "label": "White Throw Pillow",
+   "concept": "white pillow",
+   "description": "plain off-white square fabric cushion",
+   "faceFlag": false,
+   "samSegments": 2,
+   "usable": true,
+   "maskPixels": 15424,
+   "coverageFrame": 0.02,
+   "box": {
+    "x1": 753,
+    "y1": 240,
+    "x2": 910,
+    "y2": 421
+   },
+   "confidence": 0.9179486632347107
+  },
+  {
+   "id": "sofa-blanket-plant--gray-pillow",
+   "photoId": "sofa-blanket-plant",
+   "owner": "Jo",
+   "label": "Gray Throw Pillow",
+   "concept": "gray pillow",
+   "description": "light heather gray square fabric cushion",
+   "faceFlag": false,
+   "samSegments": 2,
+   "usable": true,
+   "maskPixels": 15407,
+   "coverageFrame": 0.0199,
+   "box": {
+    "x1": 753,
+    "y1": 241,
+    "x2": 910,
+    "y2": 421
+   },
+   "confidence": 0.8672199249267578
+  },
+  {
+   "id": "sofa-blanket-plant--gray-loveseat",
+   "photoId": "sofa-blanket-plant",
+   "owner": "Jo",
+   "label": "Gray Loveseat",
+   "concept": "gray loveseat",
+   "description": "small gray fabric sofa with tapered wooden legs",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 72258,
+   "coverageFrame": 0.0935,
+   "box": {
+    "x1": 306,
+    "y1": 244,
+    "x2": 927,
+    "y2": 690
+   },
+   "confidence": 0.8865247964859009
+  },
+  {
+   "id": "bedside-mirror-book--brass-mirror",
+   "photoId": "bedside-mirror-book",
+   "owner": "Aye",
+   "label": "Brass Vanity Mirror",
+   "concept": "brass mirror",
+   "description": "small round mirror on brushed brass pedestal base",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 21435,
+   "coverageFrame": 0.0277,
+   "box": {
+    "x1": 233,
+    "y1": 314,
+    "x2": 370,
+    "y2": 584
+   },
+   "confidence": 0.941605806350708
+  },
+  {
+   "id": "bedside-mirror-book--pleated-lamp",
+   "photoId": "bedside-mirror-book",
+   "owner": "Aye",
+   "label": "Pleated Bedside Lamp",
+   "concept": "pleated lamp",
+   "description": "white ribbed ceramic base with beige pleated shade",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 46736,
+   "coverageFrame": 0.0605,
+   "box": {
+    "x1": 538,
+    "y1": 194,
+    "x2": 766,
+    "y2": 546
+   },
+   "confidence": 0.9139785170555115
+  },
+  {
+   "id": "bedside-mirror-book--cream-book",
+   "photoId": "bedside-mirror-book",
+   "owner": "Aye",
+   "label": "Cream Hardcover Book",
+   "concept": "cream book",
+   "description": "thick hardcover book with plain cream cover",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 17340,
+   "coverageFrame": 0.0224,
+   "box": {
+    "x1": 383,
+    "y1": 507,
+    "x2": 671,
+    "y2": 598
+   },
+   "confidence": 0.96875
+  },
+  {
+   "id": "person-herb-kitchen--young-woman",
+   "photoId": "person-herb-kitchen",
+   "owner": "Robin",
+   "label": "Young Woman",
+   "concept": "young woman",
+   "description": "long dark wavy hair wearing cream knit cardigan",
+   "faceFlag": true,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 239773,
+   "coverageFrame": 0.3101,
+   "box": {
+    "x1": 123,
+    "y1": 31,
+    "x2": 662,
+    "y2": 754
+   },
+   "confidence": 0.9569892287254333
+  },
+  {
+   "id": "person-herb-kitchen--potted-basil",
+   "photoId": "person-herb-kitchen",
+   "owner": "Robin",
+   "label": "Potted Basil",
+   "concept": "potted basil",
+   "description": "lush green leaves in small terracotta pot",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 38828,
+   "coverageFrame": 0.0502,
+   "box": {
+    "x1": 439,
+    "y1": 309,
+    "x2": 693,
+    "y2": 604
+   },
+   "confidence": 0.7064220309257507
+  },
+  {
+   "id": "person-herb-kitchen--juice-pitcher",
+   "photoId": "person-herb-kitchen",
+   "owner": "Robin",
+   "label": "Juice Pitcher",
+   "concept": "juice pitcher",
+   "description": "clear glass pitcher filled with orange juice",
+   "faceFlag": false,
+   "samSegments": 1,
+   "usable": true,
+   "maskPixels": 9968,
+   "coverageFrame": 0.0129,
+   "box": {
+    "x1": 778,
+    "y1": 408,
+    "x2": 876,
+    "y2": 542
+   },
+   "confidence": 0.949367105960846
+  }
+ ],
+ "scenes": [
+  {
+   "id": "C1-flattened",
+   "test": "T1/T2",
+   "comp": "C1",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 11949,
+   "usage": {
+    "input_tokens": 10373,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 821,
+    "output_tokens_details": {
+     "reasoning_tokens": 146
+    },
+    "total_tokens": 11194
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "desk-mug-duck--teal-mug",
+     "score": 5,
+     "reason": "same distressed turquoise mug preserved"
+    },
+    {
+     "elementId": "desk-mug-duck--rubber-duck",
+     "score": 5,
+     "reason": "same yellow duck with sunglasses preserved"
+    }
+   ]
+  },
+  {
+   "id": "C1-whole",
+   "test": "T1/T2",
+   "comp": "C1",
+   "mode": "whole",
+   "size": "1536x1024",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 14231,
+   "usage": {
+    "input_tokens": 14402,
+    "input_tokens_details": {
+     "cached_tokens": 10112
+    },
+    "output_tokens": 972,
+    "output_tokens_details": {
+     "reasoning_tokens": 214
+    },
+    "total_tokens": 15374
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "desk-mug-duck--teal-mug",
+     "score": 5,
+     "reason": "same turquoise distressed mug"
+    },
+    {
+     "elementId": "desk-mug-duck--rubber-duck",
+     "score": 5,
+     "reason": "same yellow duck with sunglasses"
+    }
+   ]
+  },
+  {
+   "id": "C1-transparent",
+   "test": "T1/T2",
+   "comp": "C1",
+   "mode": "transparent",
+   "size": "1536x1024",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 14533,
+   "usage": {
+    "input_tokens": 10461,
+    "input_tokens_details": {
+     "cached_tokens": 8128
+    },
+    "output_tokens": 977,
+    "output_tokens_details": {
+     "reasoning_tokens": 243
+    },
+    "total_tokens": 11438
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "desk-mug-duck--teal-mug",
+     "score": 5,
+     "reason": "same turquoise distressed glaze with worn base"
+    },
+    {
+     "elementId": "desk-mug-duck--rubber-duck",
+     "score": 5,
+     "reason": "identical yellow duck with black sunglasses"
+    }
+   ]
+  },
+  {
+   "id": "C2-whole",
+   "test": "T1/T2",
+   "comp": "C2",
+   "mode": "whole",
+   "size": "1536x1024",
+   "prompt": "a cozy windowsill at golden hour with these things arranged on it",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "kitchen-cat-lamp--brass-dome-lamp",
+    "kitchen-cat-lamp--potted-plant"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 15607,
+   "usage": {
+    "input_tokens": 16716,
+    "input_tokens_details": {
+     "cached_tokens": 11200
+    },
+    "output_tokens": 1133,
+    "output_tokens_details": {
+     "reasoning_tokens": 275
+    },
+    "total_tokens": 17849
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "kitchen-cat-lamp--orange-tabby-cat",
+     "score": 5,
+     "reason": "identical ginger tabby with white chest"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--brass-dome-lamp",
+     "score": 5,
+     "reason": "identical brass dome lamp shape"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--potted-plant",
+     "score": 5,
+     "reason": "identical striped pot and leafy plant"
+    }
+   ]
+  },
+  {
+   "id": "C2-flattened",
+   "test": "T1/T2",
+   "comp": "C2",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a cozy windowsill at golden hour with these things arranged on it",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "kitchen-cat-lamp--brass-dome-lamp",
+    "kitchen-cat-lamp--potted-plant"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 14584,
+   "usage": {
+    "input_tokens": 12343,
+    "input_tokens_details": {
+     "cached_tokens": 9024
+    },
+    "output_tokens": 1149,
+    "output_tokens_details": {
+     "reasoning_tokens": 321
+    },
+    "total_tokens": 13492
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "kitchen-cat-lamp--orange-tabby-cat",
+     "score": 5,
+     "reason": "identical ginger tabby pose and markings"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--brass-dome-lamp",
+     "score": 5,
+     "reason": "identical dome shade stem and base"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--potted-plant",
+     "score": 5,
+     "reason": "identical leaves and striped pot"
+    }
+   ]
+  },
+  {
+   "id": "C2-transparent",
+   "test": "T1/T2",
+   "comp": "C2",
+   "mode": "transparent",
+   "size": "1536x1024",
+   "prompt": "a cozy windowsill at golden hour with these things arranged on it",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "kitchen-cat-lamp--brass-dome-lamp",
+    "kitchen-cat-lamp--potted-plant"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 14210,
+   "usage": {
+    "input_tokens": 11474,
+    "input_tokens_details": {
+     "cached_tokens": 8704
+    },
+    "output_tokens": 936,
+    "output_tokens_details": {
+     "reasoning_tokens": 209
+    },
+    "total_tokens": 12410
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "kitchen-cat-lamp--orange-tabby-cat",
+     "score": 5,
+     "reason": "same tabby markings and pose"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--brass-dome-lamp",
+     "score": 4,
+     "reason": "same shape but brighter finish"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--potted-plant",
+     "score": 5,
+     "reason": "same striped pot and foliage"
+    }
+   ]
+  },
+  {
+   "id": "C3-flattened",
+   "test": "T1/T2",
+   "comp": "C3",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a tidy study desk with these things on it, evening light",
+   "elementIds": [
+    "shelf-clock-books--red-alarm-clock",
+    "shelf-clock-books--stacked-books",
+    "shelf-clock-books--white-vase",
+    "desk-lamp-keyboard--black-headphones"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 16092,
+   "usage": {
+    "input_tokens": 11505,
+    "input_tokens_details": {
+     "cached_tokens": 8576
+    },
+    "output_tokens": 1201,
+    "output_tokens_details": {
+     "reasoning_tokens": 272
+    },
+    "total_tokens": 12706
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "shelf-clock-books--red-alarm-clock",
+     "score": 5,
+     "reason": "identical glossy red twin-bell clock"
+    },
+    {
+     "elementId": "shelf-clock-books--stacked-books",
+     "score": 5,
+     "reason": "same white-red-green book stack"
+    },
+    {
+     "elementId": "shelf-clock-books--white-vase",
+     "score": 5,
+     "reason": "same small white bud vase"
+    },
+    {
+     "elementId": "desk-lamp-keyboard--black-headphones",
+     "score": 5,
+     "reason": "same black cushioned headphones"
+    }
+   ]
+  },
+  {
+   "id": "C3-transparent",
+   "test": "T1/T2",
+   "comp": "C3",
+   "mode": "transparent",
+   "size": "1536x1024",
+   "prompt": "a tidy study desk with these things on it, evening light",
+   "elementIds": [
+    "shelf-clock-books--red-alarm-clock",
+    "shelf-clock-books--stacked-books",
+    "shelf-clock-books--white-vase",
+    "desk-lamp-keyboard--black-headphones"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 15804,
+   "usage": {
+    "input_tokens": 11239,
+    "input_tokens_details": {
+     "cached_tokens": 8448
+    },
+    "output_tokens": 1197,
+    "output_tokens_details": {
+     "reasoning_tokens": 271
+    },
+    "total_tokens": 12436
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "shelf-clock-books--red-alarm-clock",
+     "score": 5,
+     "reason": "identical glossy red twin-bell clock"
+    },
+    {
+     "elementId": "shelf-clock-books--stacked-books",
+     "score": 5,
+     "reason": "same white-red-green stack with gilt"
+    },
+    {
+     "elementId": "shelf-clock-books--white-vase",
+     "score": 5,
+     "reason": "same small matte white bud vase"
+    },
+    {
+     "elementId": "desk-lamp-keyboard--black-headphones",
+     "score": 5,
+     "reason": "same matte black cushioned headphones"
+    }
+   ]
+  },
+  {
+   "id": "C3-whole",
+   "test": "T1/T2",
+   "comp": "C3",
+   "mode": "whole",
+   "size": "1536x1024",
+   "prompt": "a tidy study desk with these things on it, evening light",
+   "elementIds": [
+    "shelf-clock-books--red-alarm-clock",
+    "shelf-clock-books--stacked-books",
+    "shelf-clock-books--white-vase",
+    "desk-lamp-keyboard--black-headphones"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 20733,
+   "usage": {
+    "input_tokens": 31104,
+    "input_tokens_details": {
+     "cached_tokens": 16256
+    },
+    "output_tokens": 1835,
+    "output_tokens_details": {
+     "reasoning_tokens": 285
+    },
+    "total_tokens": 32939
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "shelf-clock-books--red-alarm-clock",
+     "score": 5,
+     "reason": "identical red twin-bell clock"
+    },
+    {
+     "elementId": "shelf-clock-books--stacked-books",
+     "score": 5,
+     "reason": "same white-red-green stack"
+    },
+    {
+     "elementId": "shelf-clock-books--white-vase",
+     "score": 4,
+     "reason": "white vase slightly taller"
+    },
+    {
+     "elementId": "desk-lamp-keyboard--black-headphones",
+     "score": 5,
+     "reason": "identical black cushioned headphones"
+    }
+   ]
+  },
+  {
+   "id": "C4-flattened",
+   "test": "T1",
+   "comp": "C4",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a garage workbench with these things laid out ready for a DIY project",
+   "elementIds": [
+    "workbench-tools--orange-drill",
+    "desk-mug-duck--teal-mug",
+    "hallway-shoes-hat--red-sneakers"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 10563,
+   "usage": {
+    "input_tokens": 10969,
+    "input_tokens_details": {
+     "cached_tokens": 8384
+    },
+    "output_tokens": 1010,
+    "output_tokens_details": {
+     "reasoning_tokens": 274
+    },
+    "total_tokens": 11979
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "workbench-tools--orange-drill",
+     "score": 5,
+     "reason": "exact orange drill with silver chuck"
+    },
+    {
+     "elementId": "desk-mug-duck--teal-mug",
+     "score": 5,
+     "reason": "identical distressed turquoise glaze"
+    },
+    {
+     "elementId": "hallway-shoes-hat--red-sneakers",
+     "score": 5,
+     "reason": "matching red canvas white laces"
+    }
+   ]
+  },
+  {
+   "id": "C1-size-1024x1536",
+   "test": "size",
+   "comp": "C1",
+   "mode": "flattened",
+   "size": "1024x1536",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": false,
+   "outcome": "ok",
+   "ms": 10267,
+   "usage": {
+    "input_tokens": 10461,
+    "input_tokens_details": {
+     "cached_tokens": 8448
+    },
+    "output_tokens": 921,
+    "output_tokens_details": {
+     "reasoning_tokens": 195
+    },
+    "total_tokens": 11382
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1280,
+   "sceneHeight": 1920
+  },
+  {
+   "id": "C5-flattened",
+   "test": "T1",
+   "comp": "C5",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a bright breakfast table with these things on it",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "table-fruit-bottle--glass-water-bottle"
+   ],
+   "judge": true,
+   "outcome": "ok",
+   "ms": 17812,
+   "usage": {
+    "input_tokens": 19318,
+    "input_tokens_details": {
+     "cached_tokens": 15616
+    },
+    "output_tokens": 1614,
+    "output_tokens_details": {
+     "reasoning_tokens": 203
+    },
+    "total_tokens": 20932
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "kitchen-cat-lamp--orange-tabby-cat",
+     "score": 5,
+     "reason": "same tabby markings white chest pose"
+    },
+    {
+     "elementId": "table-fruit-bottle--glass-water-bottle",
+     "score": 3,
+     "reason": "taller narrower shape altered proportions"
+    }
+   ]
+  },
+  {
+   "id": "C2-labelswap",
+   "test": "T2b",
+   "comp": "C2",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a cozy windowsill at golden hour with these things arranged on it",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "kitchen-cat-lamp--brass-dome-lamp",
+    "kitchen-cat-lamp--potted-plant"
+   ],
+   "judge": true,
+   "swapLabels": true,
+   "outcome": "ok",
+   "ms": 11158,
+   "usage": {
+    "input_tokens": 12218,
+    "input_tokens_details": {
+     "cached_tokens": 8000
+    },
+    "output_tokens": 1056,
+    "output_tokens_details": {
+     "reasoning_tokens": 328
+    },
+    "total_tokens": 13274
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280,
+   "scores": [
+    {
+     "elementId": "kitchen-cat-lamp--orange-tabby-cat",
+     "score": 5,
+     "reason": "identical tabby posture and markings"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--brass-dome-lamp",
+     "score": 4,
+     "reason": "same shape but shinier lighter finish"
+    },
+    {
+     "elementId": "kitchen-cat-lamp--potted-plant",
+     "score": 5,
+     "reason": "same plant and striped pot"
+    }
+   ]
+  },
+  {
+   "id": "C1-size-1024x1024",
+   "test": "size",
+   "comp": "C1",
+   "mode": "flattened",
+   "size": "1024x1024",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": false,
+   "outcome": "ok",
+   "ms": 10847,
+   "usage": {
+    "input_tokens": 10499,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 948,
+    "output_tokens_details": {
+     "reasoning_tokens": 205
+    },
+    "total_tokens": 11447
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1600,
+   "sceneHeight": 1600
+  },
+  {
+   "id": "C1-probe-toolkeys",
+   "test": "probe",
+   "comp": "C1",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a sunny picnic blanket on grass with these things on it",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": false,
+   "extraToolKeys": {
+    "output_format": "png",
+    "reasoning_strength": "low"
+   },
+   "outcome": "ok",
+   "ms": 10723,
+   "usage": {
+    "input_tokens": 4240,
+    "input_tokens_details": {
+     "cached_tokens": 3968
+    },
+    "output_tokens": 813,
+    "output_tokens_details": {
+     "reasoning_tokens": 150
+    },
+    "total_tokens": 5053
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-1",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a tiny beach diorama on a kitchen counter with these things",
+   "elementIds": [
+    "desk-mug-duck--teal-mug",
+    "desk-mug-duck--rubber-duck"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 15226,
+   "usage": {
+    "input_tokens": 10613,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 1063,
+    "output_tokens_details": {
+     "reasoning_tokens": 319
+    },
+    "total_tokens": 11676
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-2",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a cozy reading corner at night with these things",
+   "elementIds": [
+    "kitchen-cat-lamp--orange-tabby-cat",
+    "kitchen-cat-lamp--brass-dome-lamp"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 11430,
+   "usage": {
+    "input_tokens": 11425,
+    "input_tokens_details": {
+     "cached_tokens": 7936
+    },
+    "output_tokens": 1013,
+    "output_tokens_details": {
+     "reasoning_tokens": 218
+    },
+    "total_tokens": 12438
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-3",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a sunny greenhouse shelf with these things",
+   "elementIds": [
+    "kitchen-cat-lamp--potted-plant",
+    "shelf-clock-books--stacked-books"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 11852,
+   "usage": {
+    "input_tokens": 11197,
+    "input_tokens_details": {
+     "cached_tokens": 8576
+    },
+    "output_tokens": 870,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 12067
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-6",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a calm hotel bedside table with these things on it",
+   "elementIds": [
+    "bedside-mirror-book--brass-mirror",
+    "kitchen-cat-lamp--brass-dome-lamp"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 12004,
+   "usage": {
+    "input_tokens": 10896,
+    "input_tokens_details": {
+     "cached_tokens": 8384
+    },
+    "output_tokens": 969,
+    "output_tokens_details": {
+     "reasoning_tokens": 224
+    },
+    "total_tokens": 11865
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-5",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a summer picnic in a park with these things on the blanket",
+   "elementIds": [
+    "hallway-shoes-hat--red-sneakers",
+    "hallway-shoes-hat--straw-hat"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 24329,
+   "usage": {
+    "input_tokens": 27946,
+    "input_tokens_details": {
+     "cached_tokens": 23296
+    },
+    "output_tokens": 2030,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 29976
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-7",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a home music studio desk with these things on it",
+   "elementIds": [
+    "desk-lamp-keyboard--blue-keyboard",
+    "desk-lamp-keyboard--black-headphones"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 11363,
+   "usage": {
+    "input_tokens": 10492,
+    "input_tokens_details": {
+     "cached_tokens": 8256
+    },
+    "output_tokens": 840,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 11332
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-4",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "a tidy workshop pegboard wall with these tools hanging on it",
+   "elementIds": [
+    "workbench-tools--orange-drill",
+    "desk-mug-duck--teal-mug"
+   ],
+   "judge": false,
+   "hasPerson": false,
+   "outcome": "ok",
+   "ms": 27171,
+   "usage": {
+    "input_tokens": 10583,
+    "input_tokens_details": {
+     "cached_tokens": 8256
+    },
+    "output_tokens": 824,
+    "output_tokens_details": {
+     "reasoning_tokens": 165
+    },
+    "total_tokens": 11407
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-10",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "the woman sitting on a sofa with the cat beside her",
+   "elementIds": [
+    "person-herb-kitchen--young-woman",
+    "kitchen-cat-lamp--orange-tabby-cat"
+   ],
+   "judge": false,
+   "hasPerson": true,
+   "outcome": "ok",
+   "ms": 10937,
+   "usage": {
+    "input_tokens": 12195,
+    "input_tokens_details": {
+     "cached_tokens": 9088
+    },
+    "output_tokens": 887,
+    "output_tokens_details": {
+     "reasoning_tokens": 200
+    },
+    "total_tokens": 13082
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-8",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "the woman holding her plant in a sunny garden, smiling",
+   "elementIds": [
+    "person-herb-kitchen--young-woman",
+    "kitchen-cat-lamp--potted-plant"
+   ],
+   "judge": false,
+   "hasPerson": true,
+   "outcome": "ok",
+   "ms": 13307,
+   "usage": {
+    "input_tokens": 12253,
+    "input_tokens_details": {
+     "cached_tokens": 9088
+    },
+    "output_tokens": 889,
+    "output_tokens_details": {
+     "reasoning_tokens": 262
+    },
+    "total_tokens": 13142
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  },
+  {
+   "id": "T6-9",
+   "test": "T6",
+   "mode": "flattened",
+   "size": "1536x1024",
+   "prompt": "the man working at a cafe table with his mug",
+   "elementIds": [
+    "person-desk-mug--curly-haired-man",
+    "desk-mug-duck--teal-mug"
+   ],
+   "judge": false,
+   "hasPerson": true,
+   "outcome": "ok",
+   "ms": 12974,
+   "usage": {
+    "input_tokens": 12059,
+    "input_tokens_details": {
+     "cached_tokens": 8896
+    },
+    "output_tokens": 1073,
+    "output_tokens_details": {
+     "reasoning_tokens": 351
+    },
+    "total_tokens": 13132
+   },
+   "storeAccepted": true,
+   "sceneWidth": 1920,
+   "sceneHeight": 1280
+  }
+ ]
+}

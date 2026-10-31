@@ -1,37 +1,15 @@
 /**
- * ModelGateway — the ONLY door to AI providers (docs/02 §3).
- * UI/domain code never imports a provider SDK. Live Meta implementation
- * lands with PIN-3; until then the mock is the default everywhere.
+ * ModelGateway — the ONLY door to AI providers. UI/domain code
+ * never imports a provider SDK. The Studio capability ports
+ * (docs/11 §5.2) reshape this in PIN-60; until then it carries
+ * the two surviving calls: name the main object, segment it.
  */
 
-export interface HostPersona {
-  name: string;
-  language: string; // BCP 47, from the creator brief (FR9.3)
-  voiceRules: string[];
-  catchphrases: string[];
-  judgingStyle: string;
-}
-
-export interface RubricScores {
-  fit: number; // 0-5
-  effort: number; // 0-5
-  chaos: number; // 0-5
-}
-
-export interface Judgement {
-  objectLabel: string; // plain nouns, feeds SAM concept prompt
-  altLabel: string; // accessibility alt text (PIN-21 a11y verdict)
-  scores: RubricScores;
-  reason: string;
-  privateJudgement: string; // prose only; numeric scores stay hidden pre-close
-  teaser: string; // anonymous; must not leak name/object
+/** Main-object label for one photo (prompts/label.v1.md). */
+export interface ObjectLabel {
+  objectLabel: string; // plain noun phrase, feeds the SAM concept prompt
+  altLabel: string; // accessibility alt text
   safetyFlags: { screens?: boolean; documents?: boolean; faces?: boolean };
-}
-
-export interface DiaryEntry {
-  winner: string;
-  superlatives: string[];
-  runningJokes: string[];
 }
 
 /** One SAM 3.1 match: box in frame pixels + encoded mask raster.
@@ -44,9 +22,20 @@ export interface SamSegment {
 }
 
 export interface ModelGateway {
-  generatePersona(brief: string): Promise<{ persona: HostPersona; challenge: string }>;
-  judgePhoto(input: { imageRef: string; challenge: string }): Promise<Judgement>;
-  segmentObject(input: { imageRef: string; concept: string }): Promise<{ segments: SamSegment[] }>;
-  posterBackground(input: { challenge: string }): Promise<{ imageRef: string }>;
-  writeDiary(input: { winner: string }): Promise<DiaryEntry>;
+  nameObject(input: {
+    imageRef: string;
+    /** Policy conceptMaxWords; callers pass the resolved Policy value. */
+    maxConceptWords: number;
+  }): Promise<ObjectLabel>;
+  segmentObject(input: {
+    imageRef: string;
+    /** Short noun phrase, one concept (ignored when promptText is set). */
+    concept: string;
+    /** Raw object-prompt text (box/point tokens) for tap reselect. */
+    promptText?: string;
+    maskEncoding?: "lossless" | "one_bit";
+    includeConfidence?: boolean;
+    /** Policy samStore (PIN-213): omitted from the body when undefined. */
+    store?: boolean;
+  }): Promise<{ segments: SamSegment[] }>;
 }

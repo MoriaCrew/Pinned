@@ -1,0 +1,2123 @@
+{
+ "note": "Every live call: op, model, ms, usage, est $ (Spark $1.25/1M in, $4.25/1M out; SAM $2.50/1000 calls; Muse Image /responses tokens priced with Spark rates as a proxy). Higgsfield rows are credit-based, $0.",
+ "higgsImages": 14,
+ "calls": [
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17725,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17763,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 22788,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17201,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17310,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 27604,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17075,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17195,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17267,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17094,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 17145,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 22381,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "higgsfield",
+   "model": "recraft-v4.1-utility",
+   "ms": 22314,
+   "ok": true,
+   "usage": null,
+   "estUsd": 0,
+   "note": "fixture"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 7053,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1189,
+    "prompt_tokens": 1277,
+    "total_tokens": 2466,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1088
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00665,
+   "note": "desk-mug-duck"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2165,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "teal mug"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2218,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "rubber duck"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2697,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "potted succulent"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6682,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "shelf-clock-books"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 8116,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1483,
+    "prompt_tokens": 1277,
+    "total_tokens": 2760,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1358
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.0079,
+   "note": "shelf-clock-books"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2697,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "white vase"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2784,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "red alarm clock"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2830,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "stacked books"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2876,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "dried flowers"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 9173,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "sofa-blanket-plant"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 8263,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1284,
+    "total_tokens": 2784,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00798,
+   "note": "sofa-blanket-plant retry"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 7617,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1415
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "kitchen-cat-lamp"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6528,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1456,
+    "prompt_tokens": 1284,
+    "total_tokens": 2740,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1351
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00779,
+   "note": "kitchen-cat-lamp retry"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2383,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "brass dome lamp"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2415,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "potted plant"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2569,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "orange tabby cat"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 4552,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 862,
+    "prompt_tokens": 1277,
+    "total_tokens": 2139,
+    "completion_tokens_details": {
+     "reasoning_tokens": 767
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00526,
+   "note": "desk-lamp-keyboard"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1293,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "brass lamp"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1820,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "black headphones"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2186,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "blue keyboard"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 5777,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1407,
+    "prompt_tokens": 1277,
+    "total_tokens": 2684,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1309
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00758,
+   "note": "table-fruit-bottle"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1666,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "glass water bottle"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1993,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "linen napkin"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2544,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "fruit bowl"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 4863,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1054,
+    "prompt_tokens": 1277,
+    "total_tokens": 2331,
+    "completion_tokens_details": {
+     "reasoning_tokens": 955
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00608,
+   "note": "hallway-shoes-hat"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 930,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "straw hat"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1582,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "red sneakers"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1671,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "woven basket"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 7059,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "bedside-mirror-book"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 8133,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1284,
+    "total_tokens": 2784,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00798,
+   "note": "bedside-mirror-book retry"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 5123,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 828,
+    "prompt_tokens": 1277,
+    "total_tokens": 2105,
+    "completion_tokens_details": {
+     "reasoning_tokens": 733
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00512,
+   "note": "workbench-tools"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1774,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "claw hammer"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2115,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "yellow tape measure"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2785,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "orange drill"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6648,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1498
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "cat-chair-blanket"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 5948,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1201,
+    "prompt_tokens": 1284,
+    "total_tokens": 2485,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1127
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00671,
+   "note": "cat-chair-blanket retry"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2247,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "plaid blanket"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 3674,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "black cat"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6883,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1451,
+    "prompt_tokens": 1277,
+    "total_tokens": 2728,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1347
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00776,
+   "note": "hard-glass-table"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1910,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "tall glass carafe"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2303,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "clear tumbler"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6230,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1346,
+    "prompt_tokens": 1277,
+    "total_tokens": 2623,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1275
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00732,
+   "note": "hard-cable-mess"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1185,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "white power strip"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1727,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "black cables"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6588,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1277,
+    "total_tokens": 2777,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1448
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00797,
+   "note": "person-herb-kitchen"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 7396,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1500,
+    "prompt_tokens": 1284,
+    "total_tokens": 2784,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1409
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00798,
+   "note": "person-herb-kitchen retry"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6304,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1310,
+    "prompt_tokens": 1277,
+    "total_tokens": 2587,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1188
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00716,
+   "note": "person-desk-mug"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1878,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "red mug"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1997,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "silver laptop"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2223,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "black smartphone"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 3032,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "curly-haired man"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 11424,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 2744,
+    "prompt_tokens": 1277,
+    "total_tokens": 4021,
+    "completion_tokens_details": {
+     "reasoning_tokens": 2584
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 1265
+    }
+   },
+   "estUsd": 0.01326,
+   "note": "sofa-blanket-plant"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2059,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "gray pillow"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2355,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "white pillow"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2756,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "mustard blanket"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 3562,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "potted plant"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 3347,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "gray loveseat"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6820,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1435,
+    "prompt_tokens": 1277,
+    "total_tokens": 2712,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1331
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.0077,
+   "note": "bedside-mirror-book"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1143,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "brass mirror"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1639,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "cream book"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2538,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "pleated lamp"
+  },
+  {
+   "op": "elements",
+   "model": "muse-spark-1.3",
+   "ms": 6061,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1606,
+    "prompt_tokens": 1277,
+    "total_tokens": 2883,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1509
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 241
+    }
+   },
+   "estUsd": 0.00842,
+   "note": "person-herb-kitchen"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 1928,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "juice pitcher"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 2762,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "potted basil"
+  },
+  {
+   "op": "sam",
+   "model": "sam-3.1",
+   "ms": 3019,
+   "ok": true,
+   "usage": {
+    "input_tokens": 0,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    },
+    "total_tokens": 0,
+    "images_processed": 1
+   },
+   "estUsd": 0.0025,
+   "note": "young woman"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 11949,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10373,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 821,
+    "output_tokens_details": {
+     "reasoning_tokens": 146
+    },
+    "total_tokens": 11194
+   },
+   "estUsd": 0.01646,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 14231,
+   "ok": true,
+   "usage": {
+    "input_tokens": 14402,
+    "input_tokens_details": {
+     "cached_tokens": 10112
+    },
+    "output_tokens": 972,
+    "output_tokens_details": {
+     "reasoning_tokens": 214
+    },
+    "total_tokens": 15374
+   },
+   "estUsd": 0.02213,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 14533,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10461,
+    "input_tokens_details": {
+     "cached_tokens": 8128
+    },
+    "output_tokens": 977,
+    "output_tokens_details": {
+     "reasoning_tokens": 243
+    },
+    "total_tokens": 11438
+   },
+   "estUsd": 0.01723,
+   "note": "image"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 5799,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 931,
+    "prompt_tokens": 1109,
+    "total_tokens": 2040,
+    "completion_tokens_details": {
+     "reasoning_tokens": 883
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00534,
+   "note": "C1-flattened.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 4356,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 692,
+    "prompt_tokens": 1109,
+    "total_tokens": 1801,
+    "completion_tokens_details": {
+     "reasoning_tokens": 646
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00433,
+   "note": "C1-whole.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 4335,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 434,
+    "prompt_tokens": 1109,
+    "total_tokens": 1543,
+    "completion_tokens_details": {
+     "reasoning_tokens": 384
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00323,
+   "note": "C1-transparent.jpg"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 14584,
+   "ok": true,
+   "usage": {
+    "input_tokens": 12343,
+    "input_tokens_details": {
+     "cached_tokens": 9024
+    },
+    "output_tokens": 1149,
+    "output_tokens_details": {
+     "reasoning_tokens": 321
+    },
+    "total_tokens": 13492
+   },
+   "estUsd": 0.02031,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 14210,
+   "ok": true,
+   "usage": {
+    "input_tokens": 11474,
+    "input_tokens_details": {
+     "cached_tokens": 8704
+    },
+    "output_tokens": 936,
+    "output_tokens_details": {
+     "reasoning_tokens": 209
+    },
+    "total_tokens": 12410
+   },
+   "estUsd": 0.01832,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 15607,
+   "ok": true,
+   "usage": {
+    "input_tokens": 16716,
+    "input_tokens_details": {
+     "cached_tokens": 11200
+    },
+    "output_tokens": 1133,
+    "output_tokens_details": {
+     "reasoning_tokens": 275
+    },
+    "total_tokens": 17849
+   },
+   "estUsd": 0.02571,
+   "note": "image"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 4191,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 596,
+    "prompt_tokens": 1857,
+    "total_tokens": 2453,
+    "completion_tokens_details": {
+     "reasoning_tokens": 531
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00485,
+   "note": "C2-whole.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 7054,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1127,
+    "prompt_tokens": 1857,
+    "total_tokens": 2984,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1063
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00711,
+   "note": "C2-flattened.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 11096,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1922,
+    "prompt_tokens": 1857,
+    "total_tokens": 3779,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1860
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.01049,
+   "note": "C2-transparent.jpg"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 16092,
+   "ok": true,
+   "usage": {
+    "input_tokens": 11505,
+    "input_tokens_details": {
+     "cached_tokens": 8576
+    },
+    "output_tokens": 1201,
+    "output_tokens_details": {
+     "reasoning_tokens": 272
+    },
+    "total_tokens": 12706
+   },
+   "estUsd": 0.01949,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 15804,
+   "ok": true,
+   "usage": {
+    "input_tokens": 11239,
+    "input_tokens_details": {
+     "cached_tokens": 8448
+    },
+    "output_tokens": 1197,
+    "output_tokens_details": {
+     "reasoning_tokens": 271
+    },
+    "total_tokens": 12436
+   },
+   "estUsd": 0.01914,
+   "note": "image"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 4022,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 662,
+    "prompt_tokens": 1384,
+    "total_tokens": 2046,
+    "completion_tokens_details": {
+     "reasoning_tokens": 582
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00454,
+   "note": "C3-flattened.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 3646,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 682,
+    "prompt_tokens": 1384,
+    "total_tokens": 2066,
+    "completion_tokens_details": {
+     "reasoning_tokens": 599
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00463,
+   "note": "C3-transparent.jpg"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 20733,
+   "ok": true,
+   "usage": {
+    "input_tokens": 31104,
+    "input_tokens_details": {
+     "cached_tokens": 16256
+    },
+    "output_tokens": 1835,
+    "output_tokens_details": {
+     "reasoning_tokens": 285
+    },
+    "total_tokens": 32939
+   },
+   "estUsd": 0.04668,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 10563,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10969,
+    "input_tokens_details": {
+     "cached_tokens": 8384
+    },
+    "output_tokens": 1010,
+    "output_tokens_details": {
+     "reasoning_tokens": 274
+    },
+    "total_tokens": 11979
+   },
+   "estUsd": 0.018,
+   "note": "image"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 5364,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1193,
+    "prompt_tokens": 1384,
+    "total_tokens": 2577,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1116
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.0068,
+   "note": "C3-whole.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 3180,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 663,
+    "prompt_tokens": 1263,
+    "total_tokens": 1926,
+    "completion_tokens_details": {
+     "reasoning_tokens": 599
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.0044,
+   "note": "C4-flattened.jpg"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 17812,
+   "ok": true,
+   "usage": {
+    "input_tokens": 19318,
+    "input_tokens_details": {
+     "cached_tokens": 15616
+    },
+    "output_tokens": 1614,
+    "output_tokens_details": {
+     "reasoning_tokens": 203
+    },
+    "total_tokens": 20932
+   },
+   "estUsd": 0.03101,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 11158,
+   "ok": true,
+   "usage": {
+    "input_tokens": 12218,
+    "input_tokens_details": {
+     "cached_tokens": 8000
+    },
+    "output_tokens": 1056,
+    "output_tokens_details": {
+     "reasoning_tokens": 328
+    },
+    "total_tokens": 13274
+   },
+   "estUsd": 0.01976,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 10267,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10461,
+    "input_tokens_details": {
+     "cached_tokens": 8448
+    },
+    "output_tokens": 921,
+    "output_tokens_details": {
+     "reasoning_tokens": 195
+    },
+    "total_tokens": 11382
+   },
+   "estUsd": 0.01699,
+   "note": "image"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 7963,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1203,
+    "prompt_tokens": 1400,
+    "total_tokens": 2603,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1155
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00686,
+   "note": "C5-flattened.jpg"
+  },
+  {
+   "op": "judge",
+   "model": "muse-spark-1.3",
+   "ms": 7330,
+   "ok": true,
+   "usage": {
+    "completion_tokens": 1421,
+    "prompt_tokens": 1857,
+    "total_tokens": 3278,
+    "completion_tokens_details": {
+     "reasoning_tokens": 1357
+    },
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "estUsd": 0.00836,
+   "note": "C2-labelswap.jpg"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 10847,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10499,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 948,
+    "output_tokens_details": {
+     "reasoning_tokens": 205
+    },
+    "total_tokens": 11447
+   },
+   "estUsd": 0.01715,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 10723,
+   "ok": true,
+   "usage": {
+    "input_tokens": 4240,
+    "input_tokens_details": {
+     "cached_tokens": 3968
+    },
+    "output_tokens": 813,
+    "output_tokens_details": {
+     "reasoning_tokens": 150
+    },
+    "total_tokens": 5053
+   },
+   "estUsd": 0.00876,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 15226,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10613,
+    "input_tokens_details": {
+     "cached_tokens": 8192
+    },
+    "output_tokens": 1063,
+    "output_tokens_details": {
+     "reasoning_tokens": 319
+    },
+    "total_tokens": 11676
+   },
+   "estUsd": 0.01778,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 11430,
+   "ok": true,
+   "usage": {
+    "input_tokens": 11425,
+    "input_tokens_details": {
+     "cached_tokens": 7936
+    },
+    "output_tokens": 1013,
+    "output_tokens_details": {
+     "reasoning_tokens": 218
+    },
+    "total_tokens": 12438
+   },
+   "estUsd": 0.01859,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 11852,
+   "ok": true,
+   "usage": {
+    "input_tokens": 11197,
+    "input_tokens_details": {
+     "cached_tokens": 8576
+    },
+    "output_tokens": 870,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 12067
+   },
+   "estUsd": 0.01769,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 12004,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10896,
+    "input_tokens_details": {
+     "cached_tokens": 8384
+    },
+    "output_tokens": 969,
+    "output_tokens_details": {
+     "reasoning_tokens": 224
+    },
+    "total_tokens": 11865
+   },
+   "estUsd": 0.01774,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 24329,
+   "ok": true,
+   "usage": {
+    "input_tokens": 27946,
+    "input_tokens_details": {
+     "cached_tokens": 23296
+    },
+    "output_tokens": 2030,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 29976
+   },
+   "estUsd": 0.04356,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 11363,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10492,
+    "input_tokens_details": {
+     "cached_tokens": 8256
+    },
+    "output_tokens": 840,
+    "output_tokens_details": {
+     "reasoning_tokens": 187
+    },
+    "total_tokens": 11332
+   },
+   "estUsd": 0.01669,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 27171,
+   "ok": true,
+   "usage": {
+    "input_tokens": 10583,
+    "input_tokens_details": {
+     "cached_tokens": 8256
+    },
+    "output_tokens": 824,
+    "output_tokens_details": {
+     "reasoning_tokens": 165
+    },
+    "total_tokens": 11407
+   },
+   "estUsd": 0.01673,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 10937,
+   "ok": true,
+   "usage": {
+    "input_tokens": 12195,
+    "input_tokens_details": {
+     "cached_tokens": 9088
+    },
+    "output_tokens": 887,
+    "output_tokens_details": {
+     "reasoning_tokens": 200
+    },
+    "total_tokens": 13082
+   },
+   "estUsd": 0.01901,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 13307,
+   "ok": true,
+   "usage": {
+    "input_tokens": 12253,
+    "input_tokens_details": {
+     "cached_tokens": 9088
+    },
+    "output_tokens": 889,
+    "output_tokens_details": {
+     "reasoning_tokens": 262
+    },
+    "total_tokens": 13142
+   },
+   "estUsd": 0.01909,
+   "note": "image"
+  },
+  {
+   "op": "compose",
+   "model": "muse-image-1.0",
+   "ms": 12974,
+   "ok": true,
+   "usage": {
+    "input_tokens": 12059,
+    "input_tokens_details": {
+     "cached_tokens": 8896
+    },
+    "output_tokens": 1073,
+    "output_tokens_details": {
+     "reasoning_tokens": 351
+    },
+    "total_tokens": 13132
+   },
+   "estUsd": 0.01963,
+   "note": "image"
+  }
+ ]
+}

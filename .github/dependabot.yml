@@ -1,8 +1,19 @@
-# Keep GitHub Actions pinned and patched. Add the app's package ecosystem
-# here in the same PR that scaffolds it (PIN-2).
+# Dependabot (PIN-2): every update PR targets dev, never main -
+# main only receives the gated promotion (see AGENTS.md).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch

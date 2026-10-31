@@ -1,0 +1,367 @@
+/* Pinneds design tokens: generated from src/ui/tokens.json by scripts/build-tokens.mjs. Do not edit by hand. */
+
+:root,
+[data-theme="paper"] {
+  --surface: #f3efe6;
+  --surface-raised: #fffdf8;
+  --surface-sunk: #e7e1d4;
+  --ink: #1a1611;
+  --ink-muted: #5f574a;
+  --line: #ddd5c6;
+  --line-strong: #8a8172;
+  --accent: #d93a17;
+  --on-accent: #ffffff;
+  --accent-text: #b8300f;
+  --mark: #ffd23f;
+  --on-mark: #1a1611;
+  --keyline: #ffffff;
+  --shade: rgba(40, 28, 12, 0.32);
+  --scrim: rgba(26, 22, 17, 0.48);
+  --focus: #1a1611;
+  --danger: #a8240e;
+  --person-1: #c2361b;
+  --person-2: #2f55c4;
+  --person-3: #3b7337;
+  --person-4: #7a3d8c;
+  --person-5: #0f6f69;
+  --person-6: #9a5c00;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 1px 1px rgba(40, 28, 12, 0.10), 0 12px 24px -12px rgba(40, 28, 12, 0.45);
+  --shadow-dock: 0 1px 2px rgba(26, 22, 17, 0.08), 0 14px 32px -10px rgba(26, 22, 17, 0.34);
+  --shadow-sheet: 0 -10px 40px rgba(26, 22, 17, 0.22);
+  --shadow-press: none;
+}
+
+[data-theme="cork"] {
+  --surface: #cfa878;
+  --surface-raised: #fff8ea;
+  --surface-sunk: #bb9363;
+  --ink: #24180d;
+  --ink-muted: #45301b;
+  --line: #e6d6bb;
+  --line-strong: #6a4c2c;
+  --accent: #9e1f18;
+  --on-accent: #ffffff;
+  --accent-text: #7f1711;
+  --mark: #f6c437;
+  --on-mark: #24180d;
+  --keyline: #ffffff;
+  --shade: rgba(48, 26, 6, 0.45);
+  --scrim: rgba(36, 24, 13, 0.52);
+  --focus: #24180d;
+  --danger: #76140e;
+  --person-1: #a8331f;
+  --person-2: #2f4fa8;
+  --person-3: #3a6b2d;
+  --person-4: #743b80;
+  --person-5: #0e6762;
+  --person-6: #8a5300;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 1px 1px rgba(48, 26, 6, 0.18), 0 14px 22px -10px rgba(48, 26, 6, 0.55);
+  --shadow-dock: 0 1px 2px rgba(36, 24, 13, 0.16), 0 14px 32px -10px rgba(36, 24, 13, 0.5);
+  --shadow-sheet: 0 -10px 40px rgba(36, 24, 13, 0.32);
+  --shadow-press: 0 2px 0 #6a4c2c;
+}
+
+[data-theme="fridge"] {
+  --surface: #e6f0ec;
+  --surface-raised: #ffffff;
+  --surface-sunk: #d3e2dc;
+  --ink: #13253a;
+  --ink-muted: #46596d;
+  --line: #c9dad3;
+  --line-strong: #6f8496;
+  --accent: #1f56d6;
+  --on-accent: #ffffff;
+  --accent-text: #1a4cc2;
+  --mark: #ffc83a;
+  --on-mark: #13253a;
+  --keyline: #ffffff;
+  --shade: rgba(19, 37, 58, 0.26);
+  --scrim: rgba(19, 37, 58, 0.48);
+  --focus: #13253a;
+  --danger: #b0261a;
+  --person-1: #d0371f;
+  --person-2: #1f56d6;
+  --person-3: #2c7a3a;
+  --person-4: #8a3fa0;
+  --person-5: #0b7470;
+  --person-6: #a55c00;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 1px 1px rgba(19, 37, 58, 0.10), 0 12px 24px -12px rgba(19, 37, 58, 0.38);
+  --shadow-dock: 0 1px 2px rgba(19, 37, 58, 0.08), 0 14px 32px -10px rgba(19, 37, 58, 0.3);
+  --shadow-sheet: 0 -10px 40px rgba(19, 37, 58, 0.2);
+  --shadow-press: none;
+}
+
+[data-theme="zine"] {
+  --surface: #ecece6;
+  --surface-raised: #ffffff;
+  --surface-sunk: #dcdcd4;
+  --ink: #0b0b0b;
+  --ink-muted: #454545;
+  --line: #c9c9c2;
+  --line-strong: #5b5b5b;
+  --accent: #f2208f;
+  --on-accent: #0b0b0b;
+  --accent-text: #c4006e;
+  --mark: #e4ff3a;
+  --on-mark: #0b0b0b;
+  --keyline: #ffffff;
+  --shade: #0b0b0b;
+  --scrim: rgba(11, 11, 11, 0.6);
+  --focus: #0b0b0b;
+  --danger: #b3001b;
+  --person-1: #0b0b0b;
+  --person-2: #c4006e;
+  --person-3: #2847d6;
+  --person-4: #127a3c;
+  --person-5: #6a2fb0;
+  --person-6: #a14a00;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 5px 5px 0 #0b0b0b;
+  --shadow-dock: 4px 4px 0 #0b0b0b;
+  --shadow-sheet: 0 -4px 0 #0b0b0b;
+  --shadow-press: 3px 3px 0 #0b0b0b;
+}
+
+[data-theme="darkroom"] {
+  --surface: #141110;
+  --surface-raised: #1f1b19;
+  --surface-sunk: #0b0908;
+  --ink: #f2ebe3;
+  --ink-muted: #b2a698;
+  --line: #2f2926;
+  --line-strong: #7a6f64;
+  --accent: #ff5b3a;
+  --on-accent: #1a0a05;
+  --accent-text: #ff7a5e;
+  --mark: #ffb547;
+  --on-mark: #1a0f02;
+  --keyline: #f2ebe3;
+  --shade: rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.62);
+  --focus: #f2ebe3;
+  --danger: #ff8a73;
+  --person-1: #ff8a6b;
+  --person-2: #8fb0ff;
+  --person-3: #8fd18a;
+  --person-4: #d9a2f0;
+  --person-5: #6fd6cc;
+  --person-6: #f0c060;
+  --on-person: #141110;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 0 0 1px #2f2926, 0 18px 30px -12px rgba(0, 0, 0, 0.8);
+  --shadow-dock: 0 0 0 1px #2f2926, 0 16px 36px -8px rgba(0, 0, 0, 0.9);
+  --shadow-sheet: 0 -1px 0 #2f2926, 0 -12px 40px rgba(0, 0, 0, 0.7);
+  --shadow-press: none;
+}
+
+[data-theme="postcard"] {
+  --surface: #f1ead9;
+  --surface-raised: #fffcf3;
+  --surface-sunk: #e4dbc6;
+  --ink: #1b2a4a;
+  --ink-muted: #4d5a72;
+  --line: #dcd2bc;
+  --line-strong: #7d8496;
+  --accent: #c62f2a;
+  --on-accent: #ffffff;
+  --accent-text: #ad2723;
+  --mark: #9fcbec;
+  --on-mark: #1b2a4a;
+  --keyline: #fffcf3;
+  --shade: rgba(27, 42, 74, 0.3);
+  --scrim: rgba(27, 42, 74, 0.5);
+  --focus: #1b2a4a;
+  --danger: #a3221d;
+  --person-1: #c62f2a;
+  --person-2: #2c5aa0;
+  --person-3: #3d7040;
+  --person-4: #7b4a8f;
+  --person-5: #16706b;
+  --person-6: #9a5a12;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 1px 1px rgba(27, 42, 74, 0.10), 0 12px 24px -12px rgba(27, 42, 74, 0.4);
+  --shadow-dock: 0 1px 2px rgba(27, 42, 74, 0.08), 0 14px 32px -10px rgba(27, 42, 74, 0.32);
+  --shadow-sheet: 0 -10px 40px rgba(27, 42, 74, 0.22);
+  --shadow-press: none;
+}
+
+[data-theme="marigold"] {
+  --surface: #fbefd7;
+  --surface-raised: #fffaf0;
+  --surface-sunk: #f3dfb8;
+  --ink: #2a1230;
+  --ink-muted: #674160;
+  --line: #ecd7b0;
+  --line-strong: #8a6a7e;
+  --accent: #c81d63;
+  --on-accent: #ffffff;
+  --accent-text: #ad1a5a;
+  --mark: #f59b1c;
+  --on-mark: #2a1230;
+  --keyline: #fffaf0;
+  --shade: rgba(74, 24, 52, 0.3);
+  --scrim: rgba(42, 18, 48, 0.52);
+  --focus: #2a1230;
+  --danger: #9b1530;
+  --person-1: #c2410c;
+  --person-2: #b0185e;
+  --person-3: #5b2a86;
+  --person-4: #0e7c7b;
+  --person-5: #2f6b2f;
+  --person-6: #8a4b00;
+  --on-person: #ffffff;
+  --foil-a: #ff5fd2;
+  --foil-b: #3fe3ff;
+  --foil-c: #fff36a;
+  --shadow-print: 0 1px 1px rgba(74, 24, 52, 0.12), 0 12px 24px -12px rgba(74, 24, 52, 0.42);
+  --shadow-dock: 0 1px 2px rgba(74, 24, 52, 0.1), 0 14px 32px -10px rgba(74, 24, 52, 0.36);
+  --shadow-sheet: 0 -10px 40px rgba(74, 24, 52, 0.24);
+  --shadow-press: none;
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --tap: 44px;
+  --tap-main: 56px;
+  --avatar: 28px;
+  --avatar-sm: 22px;
+  --avatar-lg: 40px;
+  --keyline-2: 2px;
+  --keyline-3: 3px;
+  --keyline-4: 4px;
+  --sticker: 112px;
+  --print-frame-max: 40svh;
+  --tilt-0: 0deg;
+  --tilt-1: 1.5deg;
+  --tilt-2: 3deg;
+  --tilt-3: 5deg;
+  --font-ui: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+  --font-display-paper: "Bricolage Grotesque", "Atkinson Hyperlegible Next", sans-serif;
+  --font-display-cork: Fraunces, Georgia, serif;
+  --font-display-fridge: Fredoka, "Atkinson Hyperlegible Next", sans-serif;
+  --font-display-zine: Anton, Impact, sans-serif;
+  --font-display-darkroom: "Instrument Serif", Georgia, serif;
+  --font-display-postcard: "Young Serif", Georgia, serif;
+  --font-display-marigold: "Abril Fatface", Georgia, serif;
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("/fonts/AtkinsonHyperlegibleNext-200-800.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("/fonts/AtkinsonHyperlegibleNext-200-800-italic.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Mono";
+  src: url("/fonts/AtkinsonHyperlegibleMono-200-800.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/BricolageGrotesque-200-800.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-100-900.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fredoka";
+  src: url("/fonts/Fredoka-300-700.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Anton";
+  src: url("/fonts/Anton-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/InstrumentSerif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/InstrumentSerif-400-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Young Serif";
+  src: url("/fonts/YoungSerif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Abril Fatface";
+  src: url("/fonts/AbrilFatface-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

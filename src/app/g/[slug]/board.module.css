@@ -1,0 +1,491 @@
+/* Board page layout (PIN-98). Token-based only: colours, type, spacing and
+   sizes come from src/ui/tokens.css through the board's skin root. */
+
+/* One column, centred; room at the bottom for the fixed dock. */
+.board {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding-bottom: calc(var(--tap-main) + var(--space-2) * 2 + var(--space-3) + var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.boardRest {
+  padding-bottom: var(--space-6);
+}
+
+/* Lines right under the header: latest activity, share notice, nudge. */
+.under {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+}
+
+.under:empty {
+  display: none;
+}
+
+.latest {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice {
+  margin: 0;
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* One quiet line under a collage print (PIN-180). */
+.collageNote {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 500 14px/20px var(--font-ui);
+}
+
+.errorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* Sign-in nudge: one compact card, two actions. */
+.nudge {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.nudge p {
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}
+
+.nudgeActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hintRow {
+  padding: var(--space-1) var(--space-4) var(--space-3);
+}
+
+.quietLine {
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--ink-muted);
+  font: 500 15px/22px var(--font-ui);
+}
+
+/* A filter that lost its last pin mid-look (PIN-218): one line + Show all. */
+.filterEmpty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+}
+
+/* Scenes strip: the kit's .pn-prints bleeds to the gutter itself. */
+.strip {
+  padding: 0 var(--space-4);
+}
+
+.problem {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--surface-sunk);
+  text-align: center;
+}
+
+.problemLine {
+  margin: 0;
+  max-width: 28ch;
+  color: var(--ink);
+  font: 650 16px/22px var(--font-ui);
+}
+
+.problemActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Things grid. */
+.pins {
+  padding: 0 var(--space-3);
+}
+
+.pinCell {
+  position: relative;
+}
+
+.pinMore {
+  position: absolute;
+  top: calc(-1 * var(--space-3));
+  right: calc(-1 * var(--space-2));
+  z-index: 2;
+  color: var(--ink-muted);
+}
+
+.pinMore > button {
+  color: inherit;
+}
+
+.pinMenu {
+  top: calc(var(--tap) - var(--space-1));
+  right: 0;
+}
+
+.pinMenuStart {
+  top: calc(var(--tap) - var(--space-1));
+  left: 0;
+}
+
+.menuText {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.menuError {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--danger);
+  font: 650 14px/18px var(--font-ui);
+}
+
+/* Fade under the floating dock so the last row reads as scrolling under it. */
+.fade {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+  height: calc(var(--space-8) * 2 + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--surface));
+  pointer-events: none;
+}
+
+/* ---------- Board Plus (PIN-111) ---------- */
+
+/* The TryOnBar sits over the last row: give the page room for it. */
+.boardTryOn {
+  padding-bottom: calc(var(--tap-main) + var(--space-2) * 2 + var(--space-3) + var(--space-6) + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+.boardRest.boardTryOn {
+  padding-bottom: calc(var(--space-6) + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+/* The dock's fade reaches up behind the TryOnBar or a line above the dock. */
+.fadeTall {
+  height: calc(var(--space-8) * 2 + var(--tap) + var(--space-5) + env(safe-area-inset-bottom));
+}
+
+/* Change look: seven mini boards are taller than a small phone, so the
+   picker scrolls while the title and the one button stay put. */
+.lookSheet:global(.pn-sheet) {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  max-height: 92dvh;
+}
+
+.lookSheet:focus {
+  outline: none;
+}
+
+.lookSheet > :global(.pn-sheet-grab) {
+  flex: none;
+  align-self: center;
+}
+
+.lookSheet > :global(.pn-sheet-head),
+.lookSheet > :global(.pn-sheet-foot) {
+  flex: none;
+}
+
+.lookSheet > :global(.pn-sheet-body) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+}
+
+/* One line and the TryOnBar, stacked over the dock (or the page foot). */
+.lookStack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  z-index: 21;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.lookStackLifted {
+  bottom: calc(var(--space-3) + var(--tap-main) + var(--space-2) * 3 + var(--edge-w) * 2 + env(safe-area-inset-bottom));
+}
+
+.lookStack > * {
+  width: min(100% - 2 * var(--space-4), 440px);
+  pointer-events: auto;
+}
+
+.lookNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: var(--edge-w) solid var(--edge);
+  border-radius: var(--dock-radius);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-dock);
+}
+
+.lookNotice p {
+  flex: 1;
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}
+
+.lookNotice small {
+  display: block;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-ui);
+}
+
+.lookNoticeError p {
+  color: var(--danger);
+}
+
+/* Mock checkout: says it is a demo, above the Plus sheet's scrim. */
+.demoNote {
+  position: fixed;
+  top: calc(var(--space-4) + env(safe-area-inset-top));
+  left: var(--space-4);
+  right: var(--space-4);
+  z-index: 41;
+  width: fit-content;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: 650 14px/20px var(--font-ui);
+  text-align: center;
+  box-shadow: var(--shadow-dock);
+  pointer-events: none;
+}
+
+/* Join sheet. */
+.joinLead {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 16px/24px var(--font-ui);
+}
+
+.disclosure {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  min-height: var(--tap);
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.joinError {
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* Rename sheet (PIN-157): the error line keeps its height, so it never moves the sheet. */
+.renameForm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.renameError {
+  min-height: 20px;
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* Delete board confirm (PIN-168): the name, one plain line, then the answers. */
+.deleteText {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.deleteName {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: 700 18px/24px var(--font-ui);
+}
+
+.deleteBody {
+  margin: 0;
+  font: 500 16px/24px var(--font-ui);
+}
+
+.deleteError {
+  margin: 0;
+  color: var(--danger);
+  font: 650 15px/20px var(--font-ui);
+}
+
+/* The destructive answer: the danger ink on a secondary button, not a red slab. */
+.deleteYes:global(.pn-btn) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Scene viewer (PIN-131): the whole picture on the skin's dark ground, the paper panel under it. */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--viewer-bg);
+}
+
+.viewer:focus {
+  outline: none;
+}
+
+/* The picture takes what the panel leaves: contained, never cropped. Pinch-zoom stays native. */
+.viewerStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  touch-action: pinch-zoom;
+}
+
+.viewerStage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.viewerPanel {
+  flex: none;
+  /* min-height: 0 so the cap wins over the flex item's content-based minimum in every engine. */
+  min-height: 0;
+  max-height: 55%;
+}
+
+/* When the panel is full, only the credits scroll: the idea, Close and the actions stay in view. */
+.viewer > .viewerPanel {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewerCredits {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* "Composed by Muse Image" (PIN-222): a quiet credit under the credits, never scrolled away with them. */
+.viewerComposed {
+  flex: none;
+  margin: 0;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-ui);
+}
+
+.viewerMore {
+  position: relative;
+}
+
+.viewerMenu {
+  right: 0;
+  bottom: 100%;
+}
+
+/* The delete confirm (PIN-143) takes the actions row's place in the panel's flow: the idea and Close stay in view. */
+.viewerConfirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* ---------- Makes (PIN-152) ---------- */
+
+/* Creations left (PIN-183): one quiet line under the title, shown only at or
+   under Policy.credits.lowMakesWarning. The text is the kit's board-meta and
+   the quiet button sits inline after it. It keeps its 44px tap target, but the
+   negative margin keeps it from stretching the 18px line it sits on. */
+.makes > :global(.pn-btn-quiet) {
+  vertical-align: middle;
+  margin-block: calc((var(--tap) - 18px) / -2);
+  padding-inline: var(--space-1) var(--space-2);
+}
+
+/* Billing-return banner: one transient line, same card shape. */
+.billingBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.billingBanner p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font: 650 15px/20px var(--font-ui);
+}
+
+.viewerConfirm > p {
+  margin: 0;
+  font: 650 15px/20px var(--font-ui);
+}

@@ -1,7 +1,5 @@
 import type { Firestore } from "@google-cloud/firestore";
 import { describe, expect, it } from "vitest";
-import { VersionConflictError } from "../domain/repository";
-import type { Game } from "../domain/types";
 import { FirestoreGameRepository } from "./firestore-repository";
 
 type Data = Record<string, unknown>;
@@ -28,19 +26,8 @@ class FakeDocRef {
     return new FakeSnapshot(this.db.store.get(this.path));
   }
 
-  async create(data: Data): Promise<void> {
-    if (this.db.store.has(this.path)) {
-      throw Object.assign(new Error("already exists"), { code: 6 });
-    }
-    this.db.store.set(this.path, data);
-  }
-
   async set(data: Data): Promise<void> {
     this.db.store.set(this.path, data);
-  }
-
-  collection(name: string): FakeCollection {
-    return new FakeCollection(this.db, `${this.path}/${name}`);
   }
 }
 
@@ -57,10 +44,6 @@ class FakeCollection {
   where(field: string, op: string, value: unknown): FakeQuery {
     if (op !== "==") throw new Error("fake only supports ==");
     return new FakeQuery(this.db, this.path, field, value);
-  }
-
-  async get(): Promise<{ docs: FakeSnapshot[] }> {
-    return { docs: this.directDocs().map((data) => new FakeSnapshot(data)) };
   }
 
   directDocs(): Data[] {
@@ -90,16 +73,6 @@ class FakeQuery {
   }
 }
 
-class FakeTransaction {
-  async get(ref: FakeDocRef): Promise<FakeSnapshot> {
-    return ref.get();
-  }
-
-  set(ref: FakeDocRef, data: Data): void {
-    void ref.set(data);
-  }
-}
-
 class FakeFirestore {
   readonly store = new Map<string, Data>();
 
@@ -107,100 +80,15 @@ class FakeFirestore {
     return new FakeCollection(this, name);
   }
 
-  async runTransaction<T>(
-    updateFunction: (transaction: FakeTransaction) => Promise<T>,
-  ): Promise<T> {
-    return updateFunction(new FakeTransaction());
-  }
-
   async terminate(): Promise<void> {}
 }
 
-function makeGame(overrides: Partial<Game> = {}): Game {
-  return {
-    id: "slug-1",
-    chainId: "chain-1",
-    state: "OPEN",
-    brief: "brief",
-    challenge: "challenge",
-    persona: { name: "H", language: "en", voiceRules: [], catchphrases: [], judgingStyle: "dry" },
-    adminTokenHash: "hash",
-    deadlineAt: 1_000,
-    entryCount: 0,
-    createdAt: 0,
-    version: 0,
-    ...overrides,
-  };
-}
-
-describe("FirestoreGameRepository (fake Firestore)", () => {
-  it("creates chains and games, stripping undefined fields", async () => {
+describe("FirestoreGameRepository (fake Firestore, PIN-93)", () => {
+  it("appends AI logs under aiCallLogs and filters by day bucket", async () => {
     const fake = new FakeFirestore();
     const repo = new FirestoreGameRepository(fake as unknown as Firestore);
-    await repo.createChain({ id: "chain-1", gameCount: 1, createdAt: 0 });
-    await repo.createGame(makeGame());
-
-    expect((await repo.getChain("chain-1"))?.gameCount).toBe(1);
-    expect((await repo.getGame("slug-1"))?.state).toBe("OPEN");
-    expect(fake.store.get("games/slug-1")).not.toHaveProperty("creatorUid");
-    await expect(repo.createChain({ id: "chain-1", gameCount: 1, createdAt: 0 }))
-      .rejects.toThrow(RangeError);
-    await expect(repo.createGame(makeGame())).rejects.toThrow(RangeError);
-  });
-
-  it("CAS: race loser no-ops, stale version to another state conflicts", async () => {
-    const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
-    await repo.createGame(makeGame());
-    const first = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 10);
-    const second = await repo.compareAndSetGameState("slug-1", 0, "REVEAL", 11);
-    expect(first.changed).toBe(true);
-    expect(second).toMatchObject({ changed: false, game: { version: 1 } });
-    await expect(repo.compareAndSetGameState("slug-1", 0, "CLOSED", 12))
-      .rejects.toThrow(VersionConflictError);
-    await expect(repo.compareAndSetGameState("missing", 0, "REVEAL", 12))
-      .rejects.toThrow(RangeError);
-  });
-
-  it("stores players and submissions as game subcollections", async () => {
-    const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
-    await repo.createGame(makeGame());
-    await repo.putPlayer({
-      id: "player-1",
-      gameId: "slug-1",
-      displayName: "Robin",
-      cookieSecretHash: "hash",
-      roastLevel: "spicy",
-      posterOptIn: true,
-      createdAt: 1,
-    });
-    await repo.putSubmission({
-      id: "submission-1",
-      gameId: "slug-1",
-      playerId: "player-1",
-      cutoutRef: "cutouts/slug-1/submission-1.png",
-      objectLabel: "red stapler",
-      altLabel: "A red stapler",
-      scores: null,
-      reason: "",
-      privateJudgement: "",
-      teaser: "",
-      safetyFlags: {},
-      status: "active",
-      judgeCount: 0,
-      segmentCount: 0,
-      submittedAt: 2,
-      version: 0,
-    });
-
-    expect((await repo.getPlayer("slug-1", "player-1"))?.displayName).toBe("Robin");
-    expect(await repo.listSubmissions("slug-1")).toHaveLength(1);
-    expect(await repo.listSubmissions("other-game")).toHaveLength(0);
-  });
-
-  it("filters AI logs by day bucket", async () => {
-    const repo = new FirestoreGameRepository(new FakeFirestore() as unknown as Firestore);
     const base = {
-      operation: "generatePersona",
+      operation: "nameObject",
       model: "muse-spark-1.3",
       latencyMs: 12,
       outcome: "ok" as const,
@@ -208,6 +96,35 @@ describe("FirestoreGameRepository (fake Firestore)", () => {
     };
     await repo.appendAiCallLog({ ...base, id: "today", dayBucket: "2026-10-27" });
     await repo.appendAiCallLog({ ...base, id: "tomorrow", dayBucket: "2026-10-28" });
+    expect(fake.store.get("aiCallLogs/today")).toMatchObject({ dayBucket: "2026-10-27" });
+    // Optional fields left undefined are stripped before the write.
+    expect(fake.store.get("aiCallLogs/today")).not.toHaveProperty("gameId");
     expect((await repo.listAiCallLogs("2026-10-27")).map((log) => log.id)).toEqual(["today"]);
+    expect(await repo.listAiCallLogs("2026-10-29")).toEqual([]);
+  });
+
+  it("PIN-137: writes expireAtTs Timestamp mirror, strips it on read, normalizes old rows", async () => {
+    const fake = new FakeFirestore();
+    const repo = new FirestoreGameRepository(fake as unknown as Firestore);
+    await repo.appendAiCallLog({
+      id: "v2", operation: "segment", model: "sam-3.1", latencyMs: 1,
+      outcome: "ok", dayBucket: "2026-10-27", createdAt: 1_000,
+      boardId: "synthetic-board-fs", expireAt: 1_000 + 90 * 86_400_000,
+    });
+    const stored = fake.store.get("aiCallLogs/v2")!;
+    expect(stored.expireAtTs).toMatchObject({ toMillis: expect.any(Function) });
+    expect((stored.expireAtTs as { toMillis(): number }).toMillis()).toBe(1_000 + 90 * 86_400_000);
+    // Seed an old-shape doc directly (pre-v2 write).
+    fake.store.set("aiCallLogs/old", {
+      id: "old", operation: "nameObject", model: "m", latencyMs: 1,
+      outcome: "ok", dayBucket: "2026-10-27", createdAt: 5,
+      gameId: "synthetic-board-fs", costEstimateUsd: 0.0025,
+    });
+    const rows = await repo.listAiCallLogs("2026-10-27");
+    const v2 = rows.find((r) => r.id === "v2")!;
+    expect(v2).not.toHaveProperty("expireAtTs");
+    const old = rows.find((r) => r.id === "old")!;
+    expect(old.boardId).toBe("synthetic-board-fs");
+    expect(old.costMicroUsdEst).toBe(2500);
   });
 });

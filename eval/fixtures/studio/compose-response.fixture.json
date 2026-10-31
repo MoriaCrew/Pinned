@@ -1,0 +1,27 @@
+{
+  "note": "CRAFTED redacted synthetic /v1/responses compose body (PIN-68). PIN-50 recorded scene metadata + JPEGs in fixtures.json but no raw response payload, so this wire-level replay fixture was hand-built from the documented shape: output items reasoning + message + image_generation_call, with a 1x1 PNG standing in for the real scene base64. Usage mirrors the recorded C1-flattened call. No secrets, no real photos.",
+  "sceneId": "C1-flattened",
+  "response": {
+    "id": "resp_fixture_crafted",
+    "model": "muse-image-1.0",
+    "output": [
+      { "type": "reasoning", "summary": [] },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": "Here is your scene." }]
+      },
+      {
+        "type": "image_generation_call",
+        "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII="
+      }
+    ],
+    "usage": {
+      "input_tokens": 10373,
+      "input_tokens_details": { "cached_tokens": 8192 },
+      "output_tokens": 821,
+      "output_tokens_details": { "reasoning_tokens": 146 },
+      "total_tokens": 11194
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import "server-only";
 /**
  * Server repository selection (PIN-29). Persistence is explicit:
  * DATA_BACKEND=firestore in hosted environments; memory remains the

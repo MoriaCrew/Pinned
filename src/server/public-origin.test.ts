@@ -7,7 +7,7 @@ function request(url: string, headers: Record<string, string> = {}): Request {
 
 describe("getPublicOrigin", () => {
   it("prefers forwarded proto and host behind App Hosting", () => {
-    const req = request("http://0.0.0.0:8080/api/games", {
+    const req = request("http://0.0.0.0:8080/api/boards", {
       "x-forwarded-proto": "https",
       "x-forwarded-host": "pinned.example.com",
       host: "0.0.0.0:8080",
@@ -16,7 +16,7 @@ describe("getPublicOrigin", () => {
   });
 
   it("uses the first forwarded value and ignores unsafe protocols", () => {
-    const req = request("http://internal/api/games", {
+    const req = request("http://internal/api/boards", {
       "x-forwarded-proto": "javascript, https",
       "x-forwarded-host": "first.example.com, second.example.com",
     });
@@ -24,26 +24,37 @@ describe("getPublicOrigin", () => {
   });
 
   it("pairs a public Host header with the forwarded protocol", () => {
-    const req = request("http://0.0.0.0:8080/api/games", {
+    const req = request("http://0.0.0.0:8080/api/boards", {
       "x-forwarded-proto": "https",
       host: "pinned.example.com",
     });
-    expect(getPublicOrigin(req, "https://fallback.example.com")).toBe("https://pinned.example.com");
+    expect(getPublicOrigin(req)).toBe("https://pinned.example.com");
+  });
+
+  it("configured deployment origin beats hostile request headers", () => {
+    const req = request("http://0.0.0.0:8080/api/boards", {
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "evil.example.com",
+      host: "evil.example.com",
+    });
+    expect(getPublicOrigin(req, "https://pinned.example.com")).toBe(
+      "https://pinned.example.com",
+    );
   });
 
   it("uses a normal Host header locally", () => {
-    const req = request("http://localhost:3106/api/games", { host: "localhost:3106" });
+    const req = request("http://localhost:3106/api/boards", { host: "localhost:3106" });
     expect(getPublicOrigin(req, "http://localhost:3000")).toBe("http://localhost:3106");
   });
 
   it("falls back to APP_BASE_URL for an internal-only origin", () => {
-    const req = request("http://0.0.0.0:8080/api/games", { host: "0.0.0.0:8080" });
+    const req = request("http://0.0.0.0:8080/api/boards", { host: "0.0.0.0:8080" });
     expect(getPublicOrigin(req, "https://dev.example.com/ignored-path"))
       .toBe("https://dev.example.com");
   });
 
   it("rejects malformed forwarded hosts", () => {
-    const req = request("https://safe.example.com/api/games", {
+    const req = request("https://safe.example.com/api/boards", {
       "x-forwarded-host": "evil.example/path",
       host: "safe.example.com",
     });

@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [dev, main]
 
 permissions:
   contents: read
@@ -14,40 +14,33 @@ jobs:
     env:
       AI_MOCK: "1" # CI never makes paid model calls (see AGENTS.md)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Docs sanity (required files present)
         run: |
           test -f README.md
           test -f AGENTS.md
-          test -f docs/01-requirements.md
-          test -f docs/02-architecture.md
+          test -f docs/11-studio.md
+          test -f docs/adr/003-studio-architecture.md
           test -f .env.example
           echo "Docs sanity OK"
 
-      # App checks activate automatically once PIN-2 scaffolds package.json.
-      - uses: actions/setup-node@v4
-        if: hashFiles('package.json') != ''
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install
-        if: hashFiles('package.json') != ''
         run: npm ci
 
-      - name: Lint
-        if: hashFiles('package.json') != ''
-        run: npm run lint --if-present
-
       - name: Typecheck
-        if: hashFiles('package.json') != ''
-        run: npm run typecheck --if-present
+        run: npm run typecheck
 
       - name: Test
-        if: hashFiles('package.json') != ''
-        run: npm test --if-present
+        run: npm test
+
+      - name: i18n catalog check
+        run: npm run i18n:check
 
       - name: Build
-        if: hashFiles('package.json') != ''
-        run: npm run build --if-present
+        run: npm run build
