@@ -7,6 +7,7 @@ const state = (over: Partial<YouState> = {}): YouState => ({
   isHost: false,
   authEnabled: false,
   authStatus: "signedOut",
+  languageCount: 1,
   ...over,
 });
 
@@ -106,5 +107,33 @@ describe("you face (PIN-120)", () => {
     expect(youName({ onBoard: true, me: null, user })).toBe("Robin Elm");
     expect(youName({ onBoard: true, me: null, user: { ...user, displayName: " " } })).toBeNull();
     expect(youName({ onBoard: true, me: null, user: null })).toBeNull();
+  });
+});
+
+describe("language entry (PIN-191)", () => {
+  it("is hidden with one language, so the menu is exactly as before", () => {
+    expect(youMenuEntries(state({ languageCount: 1 }))).toEqual(["join"]);
+    expect(youMenuEntries(state({ languageCount: 1, authEnabled: true }))).toEqual(["join", "signIn"]);
+  });
+
+  it("is shown with two languages, before the account line", () => {
+    expect(youMenuEntries(state({ languageCount: 2 }))).toEqual(["join", "language"]);
+    expect(youMenuEntries(state({ joined: true, isHost: true, authEnabled: true, languageCount: 7 }))).toEqual([
+      "joinedAs",
+      "editName",
+      "changeLook",
+      "deleteBoard",
+      "language",
+      "signIn",
+    ]);
+  });
+
+  it("gives the button off a board when there are several languages, even in link-only", () => {
+    expect(youControl(state({ onBoard: false, languageCount: 1 }))).toBe("none");
+    expect(youControl(state({ onBoard: false, languageCount: 2 }))).toBe("button");
+    expect(youControl(state({ onBoard: false, authEnabled: true, languageCount: 2 }))).toBe("button");
+    expect(youControl(state({ onBoard: false, authEnabled: true, authStatus: "loading", languageCount: 2 }))).toBe(
+      "loading",
+    );
   });
 });

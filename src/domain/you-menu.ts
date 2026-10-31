@@ -17,6 +17,8 @@ export interface YouState {
   /** Sign-in UI is on (AUTH_MODE=optional with the web config). */
   authEnabled: boolean;
   authStatus: AuthStatus;
+  /** How many UI languages this deploy offers (PIN-191); the Language entry needs two or more. */
+  languageCount: number;
 }
 
 /** One menu line, in display order. `joinedAs` is the quiet header line, not an item. */
@@ -28,13 +30,15 @@ export type YouEntry =
   | "myPins"
   | "changeLook"
   | "deleteBoard"
+  | "language"
   | "signIn"
   | "signOut";
 
 /**
  * What the menu offers, in order, each only when it applies: your
  * name here (or Join), your library when signed in, Change look and
- * Delete board for the host (PIN-168), then Sign in / Sign out.
+ * Delete board for the host (PIN-168), Language when more than one
+ * is on (PIN-191), then Sign in / Sign out.
  * Link-only (auth off) never gets an account entry; nothing
  * account-shaped shows while auth loads.
  */
@@ -47,6 +51,7 @@ export function youMenuEntries(state: YouState): YouEntry[] {
   const signedIn = state.authEnabled && state.authStatus === "signedIn";
   if (signedIn) entries.push("myBoards", "myPins");
   if (state.onBoard && state.isHost) entries.push("changeLook", "deleteBoard");
+  if (state.languageCount > 1) entries.push("language");
   if (state.authEnabled && state.authStatus !== "loading") {
     entries.push(signedIn ? "signOut" : "signIn");
   }
@@ -58,15 +63,19 @@ export function youMenuEntries(state: YouState): YouEntry[] {
  * button (your name here works without sign-in). Elsewhere it is
  * account-only: nothing when sign-in is off, a placeholder while it
  * loads, a quiet "Sign in" (unless the page itself is the sign-in
- * prompt), and the button once signed in.
+ * prompt), and the button once signed in. Several languages on: the
+ * button everywhere, since Language lives in its menu.
  */
 export function youControl(
-  state: Pick<YouState, "onBoard" | "authEnabled" | "authStatus">,
+  state: Pick<YouState, "onBoard" | "authEnabled" | "authStatus" | "languageCount">,
   options: { offerSignIn?: boolean } = {},
 ): "none" | "loading" | "signIn" | "button" {
   if (state.onBoard) return "button";
-  if (!state.authEnabled) return "none";
+  // With several languages on, the menu is how anyone reaches Language.
+  const languages = state.languageCount > 1;
+  if (!state.authEnabled) return languages ? "button" : "none";
   if (state.authStatus === "loading") return "loading";
+  if (languages) return "button";
   if (state.authStatus === "signedOut") return options.offerSignIn === false ? "none" : "signIn";
   return "button";
 }
