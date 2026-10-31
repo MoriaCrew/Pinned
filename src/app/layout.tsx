@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Mobile-first (docs/08): without this, phones lay out at 980px.
+// Mobile-first (docs/14): without this, phones lay out at 980px.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
