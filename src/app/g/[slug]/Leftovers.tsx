@@ -3,16 +3,17 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { withoutLeftovers, type LeftoverGroup, type Leftovers } from "../../../domain/leftovers";
-import { t, tCount, tf } from "../../../i18n";
+import { t, tCount, tf, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Icon, Sticker } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
 
 /** "{n} things from your last photo aren't pinned"; "photos" when there are several. */
-export function leftoversLine(leftovers: Leftovers): string {
+export function leftoversLine(leftovers: Leftovers, locale: Locale): string {
   return leftovers.groups.length > 1
-    ? tf("en", "leftovers.linePhotos", { n: leftovers.count })
-    : tCount("en", "leftovers.line", leftovers.count);
+    ? tf(locale, "leftovers.linePhotos", { n: leftovers.count })
+    : tCount(locale, "leftovers.line", leftovers.count);
 }
 
 /**
@@ -49,6 +50,7 @@ export function LeftoversLine({
   onClear: () => void;
   onKeep: () => void;
 }) {
+  const locale = useLocale();
   const n = leftovers.count;
   return (
     <div className="pn-leftovers" data-confirming={confirming ? "" : undefined}>
@@ -60,25 +62,25 @@ export function LeftoversLine({
         </span>
       ) : null}
       <p className="pn-leftovers-text" role="status">
-        {confirming ? tCount("en", "leftovers.clearConfirm", n) : leftoversLine(leftovers)}
+        {confirming ? tCount(locale, "leftovers.clearConfirm", n) : leftoversLine(leftovers, locale)}
       </p>
       <div className="pn-leftovers-actions">
         {confirming ? (
           <>
             <Button size="sm" variant="secondary" disabled={clearing} onClick={onClear}>
-              {clearing ? t("en", "leftovers.clearing") : t("en", "leftovers.clearYes")}
+              {clearing ? t(locale, "leftovers.clearing") : t(locale, "leftovers.clearYes")}
             </Button>
             <Button size="sm" variant="quiet" disabled={clearing} autoFocus onClick={onKeep}>
-              {t("en", "leftovers.keep")}
+              {t(locale, "leftovers.keep")}
             </Button>
           </>
         ) : (
           <>
             <Button size="sm" variant="secondary" icon="pin" onClick={onPin}>
-              {tCount("en", "leftovers.pin", n)}
+              {tCount(locale, "leftovers.pin", n)}
             </Button>
             <Button size="sm" variant="quiet" autoFocus={focusClear} onClick={onAskClear}>
-              {t("en", "leftovers.clear")}
+              {t(locale, "leftovers.clear")}
             </Button>
           </>
         )}
@@ -105,6 +107,7 @@ export function BoardLeftovers({
   elements: readonly { id: string; imageUrl: string }[];
   onPin: (group: LeftoverGroup) => void;
 }) {
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [keptOnce, setKeptOnce] = useState(false);
@@ -119,8 +122,8 @@ export function BoardLeftovers({
             body: JSON.stringify({ jobId: group.jobId, pinIds: [] }),
           });
           // 409: that photo is still being cut, so it cannot be cleared yet.
-          if (response.status === 409) throw new Error(t("en", "leftovers.clearBusy"));
-          if (!response.ok) throw new Error(t("en", "leftovers.clearFailed"));
+          if (response.status === 409) throw new Error(t(locale, "leftovers.clearBusy"));
+          if (!response.ok) throw new Error(t(locale, "leftovers.clearFailed"));
         }),
       );
     },
@@ -150,7 +153,7 @@ export function BoardLeftovers({
       stickers={stickers}
       confirming={confirming}
       clearing={clear.isPending}
-      error={clear.isError ? clear.error.message || t("en", "leftovers.clearFailed") : null}
+      error={clear.isError ? clear.error.message || t(locale, "leftovers.clearFailed") : null}
       focusClear={keptOnce}
       onPin={() => onPin(newest)}
       onAskClear={() => {
