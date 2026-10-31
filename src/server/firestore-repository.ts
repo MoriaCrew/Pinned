@@ -9,15 +9,12 @@ import "server-only";
  * field values. (The `GameRepository` name predates the Studio
  * pivot and is kept to avoid a repo-wide rename.)
  */
-import { Firestore, Timestamp, type DocumentData } from "@google-cloud/firestore";
+import { Firestore, Timestamp } from "@google-cloud/firestore";
 import type { GameRepository } from "../domain/repository";
 import { normalizeAiCallLog, type AiCallLog } from "../domain/types";
+import { toFirestoreData } from "./firestore-util";
 
 const AI_CALL_LOGS = "aiCallLogs";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 export class FirestoreGameRepository implements GameRepository {
   constructor(private readonly db: Firestore) {}

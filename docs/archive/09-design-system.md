@@ -1,8 +1,8 @@
 # 09 — Per-game design system
 
-> The look, words and components are now defined in
-> [`docs/14-design-system.md`](14-design-system.md), which wins where
-> the two disagree.
+> Archived Oct 31 (PIN-219). The look, words and components are now
+> defined in [`docs/14-design-system.md`](../14-design-system.md),
+> which wins where the two disagree.
 
 Status: **Accepted** — all five decisions settled by the owner
 (decisions 1–3 on Oct 27, decisions 4–5 accepted Oct 28).

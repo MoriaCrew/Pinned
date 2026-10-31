@@ -17,13 +17,10 @@ import {
 } from "@google-cloud/firestore";
 import type { SceneJob } from "../domain/board";
 import type { SceneJobStore } from "./scene-job";
+import { toFirestoreData } from "./firestore-util";
 
 const BOARDS = "boards";
 const SCENE_JOBS = "sceneJobs";
-
-function toFirestoreData(job: SceneJob): DocumentData {
-  return JSON.parse(JSON.stringify(job)) as DocumentData;
-}
 
 function fromSnapshot(snapshot: DocumentSnapshot): SceneJob | null {
   if (!snapshot.exists) return null;

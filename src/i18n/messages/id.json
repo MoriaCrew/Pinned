@@ -335,7 +335,6 @@
   "add.photoStep": "Foto {i} dari {n}",
   "add.skipPhoto": "Lewati foto ini",
   "add.retryPhoto": "Coba foto ini lagi",
-  "add.nextPhoto": "Foto berikutnya",
   "add.droppedPhotos.one": "Hanya foto-foto pertama yang muat. 1 terlewat.",
   "add.droppedPhotos.other": "Hanya foto-foto pertama yang muat. {n} terlewat.",
   "add.batchWaitingCount.one": "1 menunggu",

@@ -125,7 +125,6 @@ function CardMarkup({ view, background }: { view: CardView; background: string }
   const { width: W, height: H } = CARD_SIZE;
   return (
     <div style={{ width: W, height: H, display: "flex", position: "relative", backgroundColor: c.surface }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- rendered by next/og, not the browser */}
       <img src={background} width={W} height={H} alt="" style={{ position: "absolute", left: 0, top: 0 }} />
       <div
         style={{

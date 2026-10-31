@@ -157,7 +157,6 @@ function PinMore({
       document.removeEventListener("keydown", onKey);
     };
     // close/deletion are stable enough per render; re-bind on state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, step, deleting]);
 
   const thing = card.element.label;

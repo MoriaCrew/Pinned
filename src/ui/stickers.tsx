@@ -51,7 +51,6 @@ export function Sticker({
       data-foil={foil ? "" : undefined}
       style={{ ...(vars as CSSProperties), ...style }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out */}
       <img src={src} alt={alt} draggable={false} loading={loading} />
       {foil ? <span className="pn-foil" aria-hidden="true" /> : null}
       {state === "picked" && pickIndex ? (
@@ -259,7 +258,6 @@ export function CreditLine({
         <span className="pn-credit-stack">
           {shown.map((item, index) =>
             item.src ? (
-              // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
               <img key={`${item.thing}-${index}`} className="pn-credit-dot" src={item.src} alt="" />
             ) : (
               <Avatar key={`${item.thing}-${index}`} id={item.owner?.id ?? item.thing} name={item.owner?.name ?? item.thing} size="lg" />
@@ -292,7 +290,6 @@ export function CreditLine({
           const body = (
             <>
               {item.src ? (
-                // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
                 <img src={item.src} alt="" />
               ) : item.owner ? (
                 <Avatar id={item.owner.id} name={item.owner.name} />

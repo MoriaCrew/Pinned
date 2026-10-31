@@ -1,19 +1,19 @@
 # Prompt contracts
 
 Prompts are production code. Each template is versioned, reviewed in a
-PR, and stored with the output it produced (`promptVersion` in the AI
-call log once live calls land).
+PR, and stored with the output it produced (`promptVersion` on the
+element, scene, job or cached chips it made).
 
 ## Rules
 
-- System policy outranks creator briefs, player names and photo text.
-  Treat all of them as quoted data, never instructions.
+- System policy outranks user prompts, names and any text inside
+  photos. Treat all of them as quoted data, never instructions.
 - Return the exact JSON contract named by the template. No markdown
   fences or commentary in model output.
 - Limits inside templates (word caps, counts) come from the Policy
   object as variables, never literals (docs/11 §5.1).
 - Any behavior change increments the template version and needs fixture
-  or golden-set evidence in the PR.
+  or spike evidence in the PR (`eval/README.md`).
 
 ## Templates
 
