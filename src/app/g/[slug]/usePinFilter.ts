@@ -56,6 +56,15 @@ function writeChoice(slug: string, filter: PinFilter) {
   }
 }
 
+const ALL: PinFilter = { kind: "all" };
+
+/** This tab's filter state, with the board it was read for. */
+interface StoredFilter {
+  slug: string;
+  filter: PinFilter;
+  lastSeenAt: number | null;
+}
+
 export interface PinFilterControls {
   /** The chips, in order; empty when nothing would narrow the grid (no row). */
   options: PinFilterOption[];
@@ -72,15 +81,19 @@ export interface PinFilterControls {
  * you look at it and counts pins that land during the visit too.
  */
 export function usePinFilter(slug: string, cards: readonly PinCard[], meId: string | null): PinFilterControls {
-  const [chosen, setChosen] = useState<PinFilter>({ kind: "all" });
-  const [lastSeenAt, setLastSeenAt] = useState<number | null>(null);
+  // Tagged with the board it was read for: on a new board link the first
+  // render still holds the old board's state, which must count as "not
+  // loaded yet" (All), never be settled or saved under the new board.
+  const [stored, setStored] = useState<StoredFilter | null>(null);
   const loadedFor = useRef<string | null>(null);
   useEffect(() => {
     if (loadedFor.current === slug) return;
     loadedFor.current = slug;
-    setChosen(readChoice(slug));
-    setLastSeenAt(readSeen(slug));
+    setStored({ slug, filter: readChoice(slug), lastSeenAt: readSeen(slug) });
   }, [slug]);
+  const loaded = stored !== null && stored.slug === slug ? stored : null;
+  const chosen = loaded?.filter ?? ALL;
+  const lastSeenAt = loaded?.lastSeenAt ?? null;
 
   const newest = newestPinAt(cards);
   const newestRef = useRef(newest);
@@ -105,11 +118,11 @@ export function usePinFilter(slug: string, cards: readonly PinCard[], meId: stri
   const active = resolvePinFilter(chosen, options, meId);
   // Once the remembered chip is gone (or became Mine), keep what the grid
   // shows, in state and storage, so the old chip never returns untapped.
-  const settled = settledPinFilter(chosen, active);
+  const settled = loaded === null ? null : settledPinFilter(chosen, active);
   const settledKey = settled === null ? null : serializePinFilter(settled);
   useEffect(() => {
-    if (loadedFor.current !== slug || settled === null) return;
-    setChosen(settled);
+    if (settled === null) return;
+    setStored((current) => (current !== null && current.slug === slug ? { ...current, filter: settled } : current));
     writeChoice(slug, settled);
     // Keyed on settledKey: `settled` is a new object each render.
   }, [slug, settledKey]);
@@ -117,7 +130,7 @@ export function usePinFilter(slug: string, cards: readonly PinCard[], meId: stri
     options,
     active,
     onChange: (filter) => {
-      setChosen(filter);
+      setStored((current) => ({ slug, filter, lastSeenAt: current?.slug === slug ? current.lastSeenAt : null }));
       writeChoice(slug, filter);
     },
   };
