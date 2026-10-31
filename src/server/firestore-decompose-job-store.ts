@@ -19,13 +19,10 @@ import {
 } from "@google-cloud/firestore";
 import type { DecomposeJob } from "../domain/board";
 import type { DecomposeJobStore } from "./decompose-job";
+import { toFirestoreData } from "./firestore-util";
 
 const BOARDS = "boards";
 const JOBS = "jobs";
-
-function toFirestoreData(job: DecomposeJob): DocumentData {
-  return JSON.parse(JSON.stringify(job)) as DocumentData;
-}
 
 function fromSnapshot(snapshot: DocumentSnapshot): DecomposeJob | null {
   if (!snapshot.exists) return null;

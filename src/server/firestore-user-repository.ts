@@ -24,13 +24,10 @@ import {
 } from "@google-cloud/firestore";
 import type { UserBoardEntry, UserProfile } from "../domain/user";
 import type { UserRepository } from "../domain/user-repository";
+import { toFirestoreData } from "./firestore-util";
 
 const USERS = "users";
 const BOARDS = "boards";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 interface StoredRow<T> {
   value: T;
