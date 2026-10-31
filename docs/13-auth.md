@@ -242,7 +242,10 @@ gates (404 in link-only mode, 401 signed out):
    by signed-in OWNERSHIP (the element's owner participant
    must be claimed by the caller), not by board link — the
    cross-board counterpart of the board-link image route.
-   Every miss is the uniform 404.
+   Every miss is the uniform 404. It stays `private, no-store`:
+   the session, not the URL, authorizes it, so a cached copy
+   would outlive sign-out. The board-link cut-out route sends
+   `private, max-age=Policy.elementImageCacheSeconds` (PIN-217).
 3. Pin-to-this-board: `POST /api/boards/{slug}/pins/
    from-library` needs both cookies (user + a participant on
    the current board) and pins with `pinnedBy` = that
@@ -372,3 +375,6 @@ its whitespace collapsed (`src/domain/element-label.ts`). No AI call
 and no BoardEvent. Scenes store only `elementIds`, so a scene made
 before the rename credits the new name; library copies keep their
 own label.
+A rename never touches the cut-out bytes (written once, at
+creation), which is why the board-link image route can cache
+them privately in the browser (PIN-217).
