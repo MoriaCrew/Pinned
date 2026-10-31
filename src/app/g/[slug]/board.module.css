@@ -440,17 +440,13 @@
 /* ---------- Makes (PIN-152) ---------- */
 
 /* Creations left (PIN-183): one quiet line under the title, shown only at or
-   under Policy.credits.lowMakesWarning. The text is the kit's board-meta; the
-   quiet button keeps its 44px target and the row lets it breathe. */
-.makes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: var(--space-1);
-}
-
-.makes > .pn-btn-quiet {
-  padding-inline: var(--space-2);
+   under Policy.credits.lowMakesWarning. The text is the kit's board-meta and
+   the quiet button sits inline after it. It keeps its 44px tap target, but the
+   negative margin keeps it from stretching the 18px line it sits on. */
+.makes > :global(.pn-btn-quiet) {
+  vertical-align: middle;
+  margin-block: calc((var(--tap) - 18px) / -2);
+  padding-inline: var(--space-1) var(--space-2);
 }
 
 /* Billing-return banner: one transient line, same card shape. */

@@ -19,7 +19,7 @@ import { plusPurchasePath } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
-import { Button, IconButton } from "../../../ui";
+import { Button, IconButton, cx } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
 import { writeReturnSkin } from "./return-skin";
@@ -88,21 +88,18 @@ export function MakesIndicator({
   const state = makesState(credits.availableMakes, lowMakesWarning);
   if (state === "ok") return null;
   return (
-    <div className={styles.makes} data-state={state} role="status" aria-live="polite">
-      <p className="pn-board-meta">
-        {state === "low" ? tCount(locale, "makes.left", credits.availableMakes) : t(locale, "makes.emptyLine")}
-      </p>
+    <p className={cx("pn-board-meta", styles.makes)} data-state={state} role="status" aria-live="polite">
+      {state === "low" ? tCount(locale, "makes.left", credits.availableMakes) : t(locale, "makes.emptyLine")}
       {canBuy ? (
         <>
-          <span className="pn-board-meta" aria-hidden="true">
-            ·
-          </span>
+          {/* The dot stays with the sentence's last word when the line wraps. */}
+          <span aria-hidden="true">&nbsp;·</span>{" "}
           <Button variant="quiet" size="sm" onClick={onAddMakes}>
             {t(locale, plusActionKey(plusActive))}
           </Button>
         </>
       ) : null}
-    </div>
+    </p>
   );
 }
 
