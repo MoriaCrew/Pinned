@@ -187,6 +187,35 @@ describe("credit ledger (PIN-147)", () => {
     expect(restore.entry).toMatchObject({ amount: 10, frozenDelta: -10, frozenAfter: 0, availableAfter: 30 });
   });
 
+  it("a freeze holds at most what is still clawable from its purchase, never the starter or other packs (PIN-233 F5)", async () => {
+    // Partial refund first, then a dispute for the whole charge.
+    const store = new InMemoryCreditLedgerStore();
+    await store.grantStarter(BOARD, { eventId: ev(), amount: 5, at: at() });
+    await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });
+    await store.grantPurchase(BOARD, { eventId: ev(), purchaseId: "p1", at: at() });
+    await store.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 15, refundId: "re-1", at: at() });
+    const freeze = await store.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", amount: 25, at: at() });
+    expect(freeze.entry).toMatchObject({ amount: 10, frozenDelta: 10, balanceAfter: 15, frozenAfter: 10, availableAfter: 5 });
+    // Lost after the partial refund: the last 10 leave from the hold; the starter's 5 were never locked.
+    const claw = await store.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 10, disputeId: "dp-1", at: at() });
+    expect(claw.entry).toMatchObject({ balanceDelta: -10, frozenDelta: -10, balanceAfter: 5, frozenAfter: 0, availableAfter: 5 });
+    expect((await store.getAccount(BOARD))?.purchases.p1.state).toBe("clawed_back");
+
+    // Before the grant the deferred freeze is capped the same way, and
+    // a purchase refunded in full has nothing left to freeze.
+    const pending = new InMemoryCreditLedgerStore();
+    await pending.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });
+    await pending.clawback(BOARD, { eventId: ev(), purchaseId: "p1", amount: 15, refundId: "re-1", at: at() });
+    const deferred = await pending.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", amount: 25, at: at() });
+    expect(deferred.entry).toMatchObject({ amount: 10, frozenDelta: 0 });
+    expect((await pending.getAccount(BOARD))?.purchases.p1.deferredFreezes).toEqual({ "dp-1": 10 });
+    await pending.recordPurchase(BOARD, { purchaseId: "p2", credits: 25 });
+    await pending.clawback(BOARD, { eventId: ev(), purchaseId: "p2", amount: 25, refundId: "re-2", at: at() });
+    await expect(
+      pending.freeze(BOARD, { eventId: ev(), purchaseId: "p2", disputeId: "dp-2", amount: 25, at: at() }),
+    ).rejects.toThrow(/no clawable makes left/);
+  });
+
   it("freeze before grant is deferred and lands with the grant; restoring it pre-grant cancels it", async () => {
     const store = new InMemoryCreditLedgerStore();
     await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 25 });

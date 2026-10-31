@@ -634,11 +634,15 @@ export function clawbackCredits(
 
 /**
  * Freeze disputed makes so they cannot be spent until a restore or
- * the dispute's final clawback. On a granted purchase the amount
- * must fit inside `available` (spent/frozen makes cannot freeze
- * again — the caller freezes what remains). Before the grant the
- * freeze is recorded as deferred and takes effect at grant time.
- * The same dispute freezing twice is a no-op.
+ * the dispute's final clawback. The amount is capped at what is still
+ * clawable from the disputed purchase (`credits - clawedCredits`), so
+ * a dispute after a partial refund never holds other makes; a fully
+ * clawed purchase has nothing to freeze and throws. On a granted
+ * purchase the capped amount must fit inside `available`
+ * (spent/frozen makes cannot freeze again — the caller freezes what
+ * remains). Before the grant the freeze is recorded as deferred and
+ * takes effect at grant time. The same dispute freezing twice is a
+ * no-op.
  */
 export function freezeCredits(
   account: BoardCreditAccount,
@@ -660,27 +664,36 @@ export function freezeCredits(
     return noOp(account);
   }
 
+  // A dispute can only take back what is still clawable from its own
+  // purchase (PIN-233 F5): after a partial refund, a hold above that
+  // remainder would lock the starter's or other packs' makes.
+  const clawable = purchase.credits - purchase.clawedCredits;
+  if (clawable <= 0) {
+    throw new RangeError(`Purchase ${input.purchaseId} has no clawable makes left to freeze`);
+  }
+  const amount = Math.min(input.amount, clawable);
+
   const next = structuredClone(account);
   const target = next.purchases[input.purchaseId];
   let frozenDelta = 0;
   if (target.grantedCredits > 0) {
     const available = availableCredits(next);
-    if (input.amount > available) {
+    if (amount > available) {
       throw new RangeError(
-        `Freeze of ${input.amount} exceeds available ${available} on board ${account.boardId}`,
+        `Freeze of ${amount} exceeds available ${available} on board ${account.boardId}`,
       );
     }
-    next.frozen += input.amount;
-    next.frozenByDispute[input.disputeId] = input.amount;
-    frozenDelta = input.amount;
+    next.frozen += amount;
+    next.frozenByDispute[input.disputeId] = amount;
+    frozenDelta = amount;
   } else {
-    target.deferredFreezes[input.disputeId] = input.amount;
+    target.deferredFreezes[input.disputeId] = amount;
   }
 
   return finishWithEntry(next, {
     id: input.eventId,
     type: "freeze",
-    amount: input.amount,
+    amount,
     balanceDelta: 0,
     frozenDelta,
     pendingClawbackDelta: 0,

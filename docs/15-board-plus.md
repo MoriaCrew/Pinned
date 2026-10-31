@@ -478,8 +478,12 @@ against the pending purchase so grant + clawback net to zero;
 partial refunds apply as per-refund deltas indexed by refund id
 (repeat id = no-op, totals never exceed the pack); disputed makes
 freeze until a restore or the dispute's final clawback (a freeze
-arriving before the grant is deferred and lands with it); debits
-spend only `available`. Persistence sits behind the
+arriving before the grant is deferred and lands with it); a freeze
+holds at most what is still clawable from its own purchase
+(`credits - clawedCredits`, so a dispute after a partial refund
+never locks the starter's or other packs' makes), and a final
+clawback consumes only its own dispute's hold, never another open
+dispute's (PIN-233); debits spend only `available`. Persistence sits behind the
 `CreditLedgerStore` port (in-memory implementation included): each
 operation is one atomic per-board read-modify-write and a refusal
 writes nothing.
@@ -728,7 +732,7 @@ and dispute lifecycle pages):
 
   | Event | Effect |
   | --- | --- |
-  | `created` | freeze (ceil) |
+  | `created` | freeze (ceil, capped at what the purchase still has to claw back after refunds; nothing left dead-letters `freeze_no_available`) |
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
