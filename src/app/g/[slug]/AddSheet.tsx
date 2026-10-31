@@ -783,7 +783,14 @@ export function AddSheet({
           </Button>
         ) : null}
         {batch ? (
-          <Button variant="quiet" className="pn-add-another" onClick={batch.onSkip}>
+          // Disabled while a pin is in flight: the confirm POST
+          // cannot be un-sent, so a skip here would still pin.
+          <Button
+            variant="quiet"
+            className="pn-add-another"
+            disabled={confirm.isPending}
+            onClick={batch.onSkip}
+          >
             {t(locale, "add.skipPhoto")}
           </Button>
         ) : (

@@ -33,6 +33,23 @@ export interface UploadQueueItem {
 }
 
 /** Queue at most `cap` of the picked ids; the rest are reported as dropped. */
+/**
+ * How many more photos the current batch may take under
+ * Policy.photosPerBatch: unfinished items (not done/skipped) of an
+ * in-flight batch count against the cap, so topping up mid-batch
+ * (e.g. "Add another" from a leftover resume while uploads run)
+ * can never grow the batch past the Policy size (Bugbot #148).
+ */
+export function batchRoom(
+  items: readonly UploadQueueItem[],
+  photosPerBatch: number,
+): number {
+  const active = items.filter(
+    (item) => item.status !== "done" && item.status !== "skipped",
+  ).length;
+  return Math.max(0, photosPerBatch - active);
+}
+
 export function createQueueItems(
   ids: readonly { key: string; uploadId: string }[],
   cap: number,

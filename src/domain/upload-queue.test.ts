@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyItemPatch,
+  batchRoom,
   classifyUploadFailure,
   createQueueItems,
   isQueueSettled,
@@ -89,6 +90,19 @@ describe("stepper order", () => {
     expect(itemStatusForJob("ready")).toBe("ready");
     expect(itemStatusForJob("failed")).toBe("failed");
     expect(itemStatusForJob("refused")).toBe("refused");
+  });
+
+  it("batchRoom counts unfinished items against the batch cap (Bugbot #148)", () => {
+    const item = (status: UploadQueueItem["status"]): UploadQueueItem => ({
+      key: status,
+      uploadId: status,
+      status,
+      attempts: 0,
+    });
+    expect(batchRoom([], 6)).toBe(6);
+    expect(batchRoom([item("uploading"), item("ready"), item("done")], 6)).toBe(4);
+    expect(batchRoom([item("queued"), item("skipped"), item("failed")], 2)).toBe(0);
+    expect(batchRoom([item("uploading")], 0)).toBe(0);
   });
 
   it("user retry adopts a live/ready job, fresh job only for none/terminal (Bugbot #148)", () => {

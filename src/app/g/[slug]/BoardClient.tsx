@@ -847,7 +847,9 @@ function BoardBody({
     const firstKey = uploadQueue.enqueue(files);
     if (firstKey) {
       setResumeJobId(null);
-      setBatchStepKey(firstKey);
+      // Topping up an in-flight batch steps to its earliest
+      // unfinished photo, never past it to the newly picked ones.
+      setBatchStepKey(nextStepItem(uploadQueue.items)?.key ?? firstKey);
     }
   }
 

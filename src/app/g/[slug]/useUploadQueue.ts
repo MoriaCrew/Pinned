@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { downscaleTarget } from "../../../domain/add-sheet";
 import {
   applyItemPatch,
+  batchRoom,
   classifyUploadFailure,
   createQueueItems,
   isQueueSettled,
@@ -297,9 +298,11 @@ export function useUploadQueue(options: UploadQueueOptions) {
       const id = mintUploadId();
       return { key: id, uploadId: id };
     });
+    // Mid-batch top-ups share the same Policy cap: unfinished
+    // items of the in-flight batch count against photosPerBatch.
     const { items: created, dropped: droppedCount } = createQueueItems(
       ids,
-      optionsRef.current.photosPerBatch,
+      batchRoom(itemsRef.current, optionsRef.current.photosPerBatch),
     );
     setDropped(droppedCount);
     const batch: BatchItem[] = created.map((item, index) => ({ ...item, file: files[index] }));
