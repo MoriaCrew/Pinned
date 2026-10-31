@@ -9,6 +9,7 @@ import {
   pinFilterOptions,
   resolvePinFilter,
   serializePinFilter,
+  settledPinFilter,
   showsOnePerson,
   type PinFilter,
 } from "./pin-filter";
@@ -182,5 +183,22 @@ describe("advanceSeenAt (last-seen watermark)", () => {
     expect(advanceSeenAt(null, null)).toBeNull();
     expect(advanceSeenAt(2_000, null)).toBeNull();
     expect(advanceSeenAt(null, 0)).toBeNull();
+  });
+});
+
+describe("settledPinFilter (a fallback sticks)", () => {
+  it("keeps the remembered choice while the grid shows it", () => {
+    expect(settledPinFilter({ kind: "mine" }, { kind: "mine" })).toBeNull();
+    expect(settledPinFilter({ kind: "person", participantId: "aye" }, { kind: "person", participantId: "aye" })).toBeNull();
+    // New's `since` is per visit and not part of the choice.
+    expect(settledPinFilter({ kind: "new", since: 0 }, { kind: "new", since: 15 })).toBeNull();
+  });
+  it("replaces a chip that is gone with All, so it cannot come back untapped", () => {
+    expect(settledPinFilter({ kind: "mine" }, { kind: "all" })).toEqual({ kind: "all" });
+    expect(settledPinFilter({ kind: "person", participantId: "aye" }, { kind: "all" })).toEqual({ kind: "all" });
+    expect(settledPinFilter({ kind: "new", since: 0 }, { kind: "all" })).toEqual({ kind: "all" });
+  });
+  it("stores your own person chip as Mine after you join", () => {
+    expect(settledPinFilter({ kind: "person", participantId: "me" }, { kind: "mine" })).toEqual({ kind: "mine" });
   });
 });

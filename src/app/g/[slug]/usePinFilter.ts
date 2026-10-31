@@ -9,6 +9,7 @@ import {
   pinFilterOptions,
   resolvePinFilter,
   serializePinFilter,
+  settledPinFilter,
   type PinFilter,
   type PinFilterOption,
 } from "../../../domain/pin-filter";
@@ -101,9 +102,20 @@ export function usePinFilter(slug: string, cards: readonly PinCard[], meId: stri
   }, [slug]);
 
   const options = pinFilterOptions(cards, meId, lastSeenAt);
+  const active = resolvePinFilter(chosen, options, meId);
+  // Once the remembered chip is gone (or became Mine), keep what the grid
+  // shows, in state and storage, so the old chip never returns untapped.
+  const settled = settledPinFilter(chosen, active);
+  const settledKey = settled === null ? null : serializePinFilter(settled);
+  useEffect(() => {
+    if (loadedFor.current !== slug || settled === null) return;
+    setChosen(settled);
+    writeChoice(slug, settled);
+    // Keyed on settledKey: `settled` is a new object each render.
+  }, [slug, settledKey]);
   return {
     options,
-    active: resolvePinFilter(chosen, options, meId),
+    active,
     onChange: (filter) => {
       setChosen(filter);
       writeChoice(slug, filter);

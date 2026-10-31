@@ -160,6 +160,16 @@ export function showsOnePerson(filter: PinFilter): boolean {
 }
 
 /** sessionStorage form of a choice (New is stored without its time). */
+/**
+ * A fallback sticks: when the grid no longer shows the remembered
+ * chip (it went away, or became Mine), the choice to keep is what the
+ * grid shows, so the old chip can never come back later without a
+ * tap. Null when the remembered choice still stands.
+ */
+export function settledPinFilter(chosen: PinFilter, active: PinFilter): PinFilter | null {
+  return serializePinFilter(chosen) === serializePinFilter(active) ? null : active;
+}
+
 export function serializePinFilter(filter: PinFilter): string {
   if (filter.kind === "person") return `person:${filter.participantId}`;
   return filter.kind;
