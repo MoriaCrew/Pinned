@@ -20,7 +20,7 @@ import {
  */
 const SLUG_SENTINEL = "board-slug-00000000001";
 const INTENT_ID = "12345678-1234-4234-8234-1234567890ab";
-const PACK = "pinneds_credits_25";
+const PACK = "pinneds_plus_20";
 
 class FakeStripeClient implements StripeClientLike {
   readonly priceLists: StripePriceListParams[] = [];
@@ -29,7 +29,7 @@ class FakeStripeClient implements StripeClientLike {
     options?: { idempotencyKey?: string };
   }> = [];
   pricesByLookupKey: Record<string, string> = {
-    [PACK]: "price_25",
+    [PACK]: "price_20",
     pinneds_credits_60: "price_60",
   };
 
@@ -63,8 +63,8 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     const client = new FakeStripeClient();
     let now = 1_000;
     const checkout = adapter(client, () => now);
-    expect(await checkout.resolvePriceId(PACK)).toBe("price_25");
-    expect(await checkout.resolvePriceId(PACK)).toBe("price_25");
+    expect(await checkout.resolvePriceId(PACK)).toBe("price_20");
+    expect(await checkout.resolvePriceId(PACK)).toBe("price_20");
     expect(client.priceLists).toEqual([
       { lookup_keys: [PACK], active: true, limit: 1 },
     ]);
@@ -76,7 +76,7 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     expect(client.priceLists).toHaveLength(2);
   });
 
-  it("unknown, draft and mis-sized packs never reach Stripe", async () => {
+  it("unknown, draft, retired and mis-sized packs never reach Stripe", async () => {
     const client = new FakeStripeClient();
     const checkout = adapter(client);
     await expect(checkout.resolvePriceId("pinneds_credits_999")).rejects.toBeInstanceOf(
@@ -86,11 +86,15 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     await expect(checkout.resolvePriceId("pinneds_host_monthly")).rejects.toBeInstanceOf(
       UnknownCreditPackError,
     );
+    // Retired (PIN-181): refused even while Stripe still has its price.
+    await expect(checkout.resolvePriceId("pinneds_credits_60")).rejects.toBeInstanceOf(
+      UnknownCreditPackError,
+    );
     await expect(
       checkout.createCreditCheckoutSession({
         intentId: INTENT_ID,
         packLookupKey: PACK,
-        credits: 26,
+        credits: 21,
         intentExpiresAt: 1_700_001_800_000,
         returnBaseUrl: "https://app.example",
       }),
@@ -118,7 +122,7 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     const session = await checkout.createCreditCheckoutSession({
       intentId: INTENT_ID,
       packLookupKey: PACK,
-      credits: 25,
+      credits: 20,
       intentExpiresAt: 1_700_000_000_000 + 1_800_000,
       returnBaseUrl: "https://app.example/",
     });
@@ -130,13 +134,13 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     const { params, options } = client.sessions[0];
     expect(params).toEqual({
       mode: "payment",
-      line_items: [{ price: "price_25", quantity: 1 }],
+      line_items: [{ price: "price_20", quantity: 1 }],
       adaptive_pricing: { enabled: true },
       client_reference_id: INTENT_ID,
       metadata: {
         checkout_intent_id: INTENT_ID,
         pack_lookup_key: PACK,
-        credits: "25",
+        credits: "20",
       },
       success_url: `https://app.example/billing/return?intent=${INTENT_ID}&result=success`,
       cancel_url: `https://app.example/billing/return?intent=${INTENT_ID}&result=cancel`,
@@ -162,7 +166,7 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     await checkout.createCreditCheckoutSession({
       intentId: INTENT_ID,
       packLookupKey: PACK,
-      credits: 25,
+      credits: 20,
       intentExpiresAt: now + 2 * 3_600_000,
       returnBaseUrl: "https://app.example",
     });
@@ -170,7 +174,7 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     await checkout.createCreditCheckoutSession({
       intentId: INTENT_ID,
       packLookupKey: PACK,
-      credits: 25,
+      credits: 20,
       intentExpiresAt: now + 48 * 3_600_000,
       returnBaseUrl: "https://app.example",
     });

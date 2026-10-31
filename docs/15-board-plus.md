@@ -245,10 +245,23 @@ object ids from config.
 
 | Item (lookup key) | Grants | Price | Status |
 | --- | --- | --- | --- |
-| `pinneds_credits_25` | 25 makes | €4.99 one-time | live |
-| `pinneds_credits_60` | 60 makes | €9.99 one-time | live |
-| `pinneds_credits_150` | 150 makes | €19.99 one-time | live |
-| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not yet offered |
+| `pinneds_plus_20` | Board Plus for the board + 20 creations | €2.99 one-time | live (PIN-181) |
+| `pinneds_credits_25` | 25 makes | €4.99 one-time | retired (PIN-181) |
+| `pinneds_credits_60` | 60 makes | €9.99 one-time | retired (PIN-181) |
+| `pinneds_credits_150` | 150 makes | €19.99 one-time | retired (PIN-181) |
+| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not offered |
+
+"Creations" is the customer-facing word for makes; code keeps
+`credits`/`makes`. The Checkout page shows the item's name
+"Board Plus · 20 creations" and its description. The lookup key
+(`pinneds_plus_20`, item `plus_20`) names the product; the pack's
+`credits` say what it holds.
+
+`retired` (PIN-181) means no longer sold: `assertLiveCreditPack`
+refuses it like a draft, and the seed archives it. The entry
+stays in the manifest so the seed can find what to archive, and
+purchases made before retirement keep their own terms (PIN-150
+section).
 
 Every catalog product and price carries metadata
 `catalog=pinneds`, `item_key`, `credits` (packs only) and
@@ -273,8 +286,12 @@ in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
 recurrence all match — those fields are immutable, so drift
 mints a new price with `transfer_lookup_key=true` and archives
-the old one. POSTs carry idempotency keys, and re-running a
-converged sandbox creates nothing. The pure decision functions
+the old one. A retired item is archived instead: its product
+and every active price under its lookup key get
+`active=false`, nothing is created for it, and an
+already-archived item plans `retired` (a no-op). POSTs carry
+idempotency keys, and re-running a converged sandbox creates
+nothing. The pure decision functions
 (`catalogValidationErrors`, `planProduct`, `planPrice`,
 `buildCatalogPlan`) are unit-tested in
 `src/billing/catalog.test.ts`. This slice changes no runtime

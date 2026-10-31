@@ -17,41 +17,42 @@ import {
   type ExistingProduct,
 } from "./catalog";
 
-const pack25 = findCatalogItem("pinneds_credits_25")!;
+const pack = findCatalogItem("pinneds_plus_20")!;
+const retired25 = findCatalogItem("pinneds_credits_25")!;
 const hostMonthly = findCatalogItem("pinneds_host_monthly")!;
 
 function item(overrides: Partial<CatalogItem> = {}): CatalogItem {
-  return { ...pack25, ...overrides };
+  return { ...pack, ...overrides };
 }
 
 function product(overrides: Partial<ExistingProduct> = {}): ExistingProduct {
   return {
-    id: "prod_25",
-    name: pack25.name,
-    description: pack25.description,
+    id: "prod_20",
+    name: pack.name,
+    description: pack.description,
     active: true,
-    metadata: catalogMetadata(pack25),
+    metadata: catalogMetadata(pack),
     ...overrides,
   };
 }
 
 function price(overrides: Partial<ExistingPrice> = {}): ExistingPrice {
   return {
-    id: "price_25",
-    lookup_key: pack25.lookupKey,
-    product: "prod_25",
-    unit_amount: pack25.unitAmount,
-    currency: pack25.currency,
-    tax_behavior: pack25.taxBehavior,
+    id: "price_20",
+    lookup_key: pack.lookupKey,
+    product: "prod_20",
+    unit_amount: pack.unitAmount,
+    currency: pack.currency,
+    tax_behavior: pack.taxBehavior,
     recurring: null,
     active: true,
-    metadata: catalogMetadata(pack25),
+    metadata: catalogMetadata(pack),
     ...overrides,
   };
 }
 
-describe("catalog manifest (PIN-146)", () => {
-  it("pins the four items with EUR TTC amounts and makes copy", () => {
+describe("catalog manifest (PIN-146, PIN-181)", () => {
+  it("pins one live pack, the retired makes packs and the draft plan, EUR TTC", () => {
     expect(
       CATALOG_ITEMS.map((i) => [
         i.itemKey,
@@ -63,25 +64,28 @@ describe("catalog manifest (PIN-146)", () => {
         i.status,
       ]),
     ).toEqual([
-      ["credits_25", "pinneds_credits_25", 25, 499, "eur", null, "live"],
-      ["credits_60", "pinneds_credits_60", 60, 999, "eur", null, "live"],
-      ["credits_150", "pinneds_credits_150", 150, 1999, "eur", null, "live"],
+      ["plus_20", "pinneds_plus_20", 20, 299, "eur", null, "live"],
+      ["credits_25", "pinneds_credits_25", 25, 499, "eur", null, "retired"],
+      ["credits_60", "pinneds_credits_60", 60, 999, "eur", null, "retired"],
+      ["credits_150", "pinneds_credits_150", 150, 1999, "eur", null, "retired"],
       ["host_monthly", "pinneds_host_monthly", null, 499, "eur", "month", "draft"],
     ]);
     for (const i of CATALOG_ITEMS) {
       expect(i.taxBehavior).toBe("inclusive");
-      if (i.credits !== undefined) {
-        expect(i.name).toContain("makes");
-        expect(i.description).toContain("makes");
+      if (i.status === "live" && i.credits !== undefined) {
+        // Customer copy on the Stripe Checkout page says "creations".
+        expect(i.name).toContain(`${i.credits} creations`);
+        expect(i.description).toContain(`${i.credits} creations`);
+        expect(i.description).toContain("Board Plus");
       }
     }
   });
 
   it("stamps catalog metadata, with credits only on credit packs", () => {
-    expect(catalogMetadata(pack25)).toEqual({
+    expect(catalogMetadata(pack)).toEqual({
       catalog: CATALOG_ID,
-      item_key: "credits_25",
-      credits: "25",
+      item_key: "plus_20",
+      credits: "20",
       catalog_version: CATALOG_VERSION,
     });
     expect(catalogMetadata(hostMonthly)).toEqual({
@@ -113,7 +117,7 @@ describe("catalog manifest (PIN-146)", () => {
   });
 
   it("rejects non-positive and non-integer amounts and credits", () => {
-    for (const unitAmount of [0, -499, 4.99, Number.NaN]) {
+    for (const unitAmount of [0, -299, 2.99, Number.NaN]) {
       expect(
         catalogValidationErrors([item({ unitAmount })]).join("\n"),
       ).toContain("unitAmount must be a positive integer");
@@ -129,37 +133,37 @@ describe("catalog manifest (PIN-146)", () => {
 
 describe("catalog convergence plan (PIN-146)", () => {
   it("product: create when no metadata match, reuse when converged, update on drift", () => {
-    expect(planProduct(pack25, [])).toEqual({ kind: "create" });
+    expect(planProduct(pack, [])).toEqual({ kind: "create" });
     // Same name but no catalog metadata: not ours, still create.
-    expect(planProduct(pack25, [product({ metadata: {} })])).toEqual({
+    expect(planProduct(pack, [product({ metadata: {} })])).toEqual({
       kind: "create",
     });
-    expect(planProduct(pack25, [product()])).toEqual({
+    expect(planProduct(pack, [product()])).toEqual({
       kind: "reuse",
-      productId: "prod_25",
+      productId: "prod_20",
     });
-    expect(planProduct(pack25, [product({ name: "Old copy" })])).toEqual({
+    expect(planProduct(pack, [product({ name: "Old copy" })])).toEqual({
       kind: "update",
-      productId: "prod_25",
+      productId: "prod_20",
     });
     expect(
-      planProduct(pack25, [
+      planProduct(pack, [
         product({
-          metadata: { ...catalogMetadata(pack25), catalog_version: "old" },
+          metadata: { ...catalogMetadata(pack), catalog_version: "old" },
         }),
       ]),
-    ).toEqual({ kind: "update", productId: "prod_25" });
-    expect(planProduct(pack25, [product({ active: false })])).toEqual({
+    ).toEqual({ kind: "update", productId: "prod_20" });
+    expect(planProduct(pack, [product({ active: false })])).toEqual({
       kind: "update",
-      productId: "prod_25",
+      productId: "prod_20",
     });
   });
 
   it("price: create when the lookup key is unused, reuse on an exact match", () => {
-    expect(planPrice(pack25, "prod_25", [])).toEqual({ kind: "create" });
-    expect(planPrice(pack25, "prod_25", [price()])).toEqual({
+    expect(planPrice(pack, "prod_20", [])).toEqual({ kind: "create" });
+    expect(planPrice(pack, "prod_20", [price()])).toEqual({
       kind: "reuse",
-      priceId: "price_25",
+      priceId: "price_20",
     });
   });
 
@@ -174,9 +178,9 @@ describe("catalog convergence plan (PIN-146)", () => {
       { active: false }, // archived prices cannot be reused
     ];
     for (const drift of drifts) {
-      expect(planPrice(pack25, "prod_25", [price(drift)])).toEqual({
+      expect(planPrice(pack, "prod_20", [price(drift)])).toEqual({
         kind: "transfer",
-        oldPriceId: "price_25",
+        oldPriceId: "price_20",
       });
     }
   });
@@ -186,6 +190,7 @@ describe("catalog convergence plan (PIN-146)", () => {
       id: "price_host",
       lookup_key: hostMonthly.lookupKey,
       product: "prod_host",
+      unit_amount: hostMonthly.unitAmount,
       recurring: { interval: "month" },
     });
     expect(planPrice(hostMonthly, "prod_host", [monthly])).toEqual({
@@ -197,18 +202,52 @@ describe("catalog convergence plan (PIN-146)", () => {
     ).toEqual({ kind: "transfer", oldPriceId: "price_host" });
   });
 
+  it("retired (PIN-181): archives the product and every active price, then no-ops", () => {
+    const retiredProduct = product({
+      id: "prod_25",
+      name: retired25.name,
+      description: retired25.description,
+      metadata: catalogMetadata(retired25),
+    });
+    const livePrice = price({
+      id: "price_25",
+      lookup_key: retired25.lookupKey,
+      product: "prod_25",
+      unit_amount: retired25.unitAmount,
+    });
+    expect(planProduct(retired25, [retiredProduct, product()])).toEqual({
+      kind: "archive",
+      productId: "prod_25",
+    });
+    expect(
+      planPrice(retired25, "prod_25", [
+        livePrice,
+        { ...livePrice, id: "price_25_b", product: "prod_other" },
+        { ...livePrice, id: "price_25_old", active: false },
+        price(),
+      ]),
+    ).toEqual({ kind: "archive", priceIds: ["price_25", "price_25_b"] });
+    // Already archived, or never created: nothing to do, never a create.
+    expect(planProduct(retired25, [{ ...retiredProduct, active: false }])).toEqual({
+      kind: "retired",
+    });
+    expect(planProduct(retired25, [])).toEqual({ kind: "retired" });
+    expect(planPrice(retired25, "prod_25", [{ ...livePrice, active: false }])).toEqual({
+      kind: "retired",
+    });
+    expect(planPrice(retired25, "", [])).toEqual({ kind: "retired" });
+  });
+
   it("buildCatalogPlan combines both decisions per item", () => {
     const plan = buildCatalogPlan(CATALOG_ITEMS, [product()], [price()]);
-    expect(plan).toHaveLength(4);
-    expect(plan[0]).toMatchObject({
-      product: { kind: "reuse" },
-      price: { kind: "reuse" },
-    });
-    // Everything else is missing from the sandbox: create both.
-    for (const entry of plan.slice(1)) {
-      expect(entry.product.kind).toBe("create");
-      expect(entry.price.kind).toBe("create");
-    }
+    expect(plan.map((entry) => [entry.item.itemKey, entry.product.kind, entry.price.kind])).toEqual([
+      ["plus_20", "reuse", "reuse"],
+      // Retired items missing from the sandbox: nothing to create.
+      ["credits_25", "retired", "retired"],
+      ["credits_60", "retired", "retired"],
+      ["credits_150", "retired", "retired"],
+      ["host_monthly", "create", "create"],
+    ]);
   });
 
   it("buildCatalogPlan refuses an invalid manifest", () => {
@@ -224,12 +263,13 @@ describe("seed script mirror (PIN-146)", () => {
       path.resolve(__dirname, "../../scripts/seed-stripe-catalog.mjs"),
       "utf8",
     );
-    expect(script).toContain(`"${CATALOG_VERSION}"`);
-    for (const i of CATALOG_ITEMS) {
-      expect(script).toContain(`itemKey: "${i.itemKey}"`);
-      expect(script).toContain(`"${i.lookupKey}"`);
-      expect(script).toContain(`unitAmount: ${i.unitAmount}`);
-      expect(script).toContain(`name: "${i.name}"`);
-    }
+    expect(script).toContain(`const CATALOG_VERSION = "${CATALOG_VERSION}";`);
+    // Evaluate the mirror's array literal and compare every field
+    // (credits and status included), in both directions.
+    const literal = /const CATALOG_ITEMS = (\[[\s\S]*?\n\]);/.exec(script)?.[1];
+    expect(literal).toBeDefined();
+    const mirror: unknown = new Function(`return ${literal};`)();
+    expect(mirror).toEqual(CATALOG_ITEMS);
+    expect(script).toContain('item.status === "retired"');
   });
 });
