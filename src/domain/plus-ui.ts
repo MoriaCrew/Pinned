@@ -129,12 +129,13 @@ export type ReturnSkinStep =
   | { kind: "apply"; skin: SkinId };
 
 /**
- * After `?billing=` lands the host back on the board (PIN-182): the
- * look they were trying on goes onto the board once the refetched view
- * says Plus counts. The webhook grants Plus after the redirect, so it
- * waits; a cancelled or failed return only forgets the look. Never
- * applies a look the board already wears, or when the viewer is not
- * the host (the first poll says who is).
+ * After a Stripe checkout lands the host back on the board (PIN-182):
+ * the look they were trying on goes onto the board once the refetched
+ * view says Plus counts, whether or not the `?billing=` flag is still
+ * on the URL (it is stripped on arrival, and a reload loses it). A
+ * cancelled or failed return only forgets the look. Never applies a
+ * look the board already wears, or when the viewer is not the host
+ * (the first poll says who is).
  */
 export function returnSkinStep({
   flag,
@@ -149,8 +150,12 @@ export function returnSkinStep({
   plusActive: boolean;
   boardSkin: SkinId;
 }): ReturnSkinStep {
-  if (flag === null || stored === null) return { kind: "wait" };
-  if (flag !== "processing") return { kind: "clear" };
+  if (stored === null) return { kind: "wait" };
+  if (flag === "cancelled" || flag === "failed") return { kind: "clear" };
+  // The return flag is stripped from the URL on arrival and the webhook
+  // lands after the redirect, so the signal is Plus counting on the
+  // refetched view plus the stored look: a reload in between still
+  // applies it, and nothing is forgotten until the save has answered.
   if (!isHost || !plusActive) return { kind: "wait" };
   return stored === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored };
 }
