@@ -41,7 +41,7 @@ Manager references by name.
 | `POLICY_OVERRIDES_JSON` | — | credits on | — until PIN-210 |
 | `PINNED_LAB` | off | 1 | — (lab routes 404) |
 | `DEMO_BOARD_SLUG` | — | — | secret ref after seeding (§6) |
-| `LEGAL_CONTACT_EMAIL` | — (legal pages link to public GitHub issues) | — | **set before Stripe live and the Google consent screen** (plain value: the address is shown on `/privacy` and `/terms`) |
+| `LEGAL_CONTACT_EMAIL` | — (legal pages link to public GitHub issues) | `contact@moriacrew.com` | `contact@moriacrew.com` (a plain value: it is shown on `/privacy` and `/terms`) |
 | `runConfig` | — | base: min 0, max 2, 512 MiB | min **1**, max **4**, **1024 MiB**, concurrency 10 |
 | Secrets | — | `META_API_KEY`, `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `META_API_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` (+ Stripe and `DEMO_BOARD_SLUG` later) |
 
