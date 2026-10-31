@@ -541,6 +541,34 @@ describe("photo debit (PIN-151)", () => {
     expect((await h.boards.getPin("pin-half"))?.status).not.toBe("pinned");
   });
 
+  it("a refunded stale job's leftover candidates are unpaid again and get cleaned (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const paid = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(paid.status).toBe("ready");
+    expect(paid.pinIds.length).toBeGreaterThan(0);
+    // The lost finish refunded the make, but its discard died
+    // half-done: rewind to stale-failed with candidates attached.
+    await h.ledger.refundDebit(slug, {
+      eventId: photoRefundEventId(paid.id),
+      debitEventId: photoDebitEventId(paid.id),
+      at: T0,
+    });
+    await h.jobs.update({
+      ...paid,
+      status: "failed",
+      errorCode: "stale_running",
+      updatedAt: T0,
+    });
+    await expect(
+      confirmPins(slug, owner, { jobId: paid.id, pinIds: [paid.pinIds[0]] }, h.api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    expect(await h.boards.listElements(slug)).toHaveLength(0);
+    expect((await h.jobs.get(paid.id))?.pinIds).toEqual([]);
+    // Pool stays whole: the refund stands, nothing re-debited.
+    expect((await h.ledger.getBalance(slug)).available).toBe(3);
+  });
+
   it("never debits a failed photo", async () => {
     const h = makeHarness(ENABLED(3));
     h.setNamer({

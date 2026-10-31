@@ -435,26 +435,34 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
  * the user gets exactly what they paid for, via leftovers).
  */
 /**
- * Did this job's photo make actually land? Only consulted when a
- * stale transition was just written (rare), so a ledger scan is
- * fine. No store while credits are on means no debit could have
- * landed (tryDebitMake pool-empties); a read error also answers
+ * Is this job's photo make currently paid for — a debit landed
+ * and was not refunded? Only consulted when a stale transition
+ * was just written (rare), so a ledger scan is fine. No store
+ * while credits are on means no debit could have landed
+ * (tryDebitMake pool-empties); a read error also answers
  * "paid" — preserving possibly-paid candidates beats discarding
- * them on a transient failure.
+ * them on a transient failure. A refunded debit answers unpaid:
+ * after a lost finish refunds the make, leftover candidates must
+ * not stay confirmable for free (Bugbot #147).
  */
-async function jobWasDebited(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean> {
+async function jobIsPaid(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean> {
   if (!deps.credits) return false;
   const entries = await deps.credits.listEntries(job.boardId).catch(() => null);
   if (entries === null) return true;
-  return entries.some(
-    (entry) => entry.type === "debit" && entry.id === photoDebitEventId(job.id),
+  const debitEventId = photoDebitEventId(job.id);
+  const debited = entries.some(
+    (entry) => entry.type === "debit" && entry.id === debitEventId,
+  );
+  if (!debited) return false;
+  return !entries.some(
+    (entry) => entry.type === "debit_refund" && entry.debitEventId === debitEventId,
   );
 }
 
 /**
  * Discard a stale-failed job's candidates while credits are on and
  * no debit landed for it, persisting the emptied id lists. Paid
- * jobs keep their candidates (jobWasDebited). Idempotent, so it
+ * jobs keep their candidates (jobIsPaid). Idempotent, so it
  * doubles as the retry for a cleanup a dead request left
  * half-done between the fail write and the discard: without the
  * retry an unpaid `stale_running` job would stay confirmable
@@ -466,7 +474,7 @@ async function discardUnpaidStaleCandidates(
   now: number,
 ): Promise<DecomposeJob> {
   if (!creditsEnabled(deps.policy) || failed.pinIds.length === 0) return failed;
-  if (await jobWasDebited(failed, deps)) return failed;
+  if (await jobIsPaid(failed, deps)) return failed;
   const snapshot: DecomposeJob = {
     ...failed,
     elementIds: [...failed.elementIds],
