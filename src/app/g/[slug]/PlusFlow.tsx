@@ -158,7 +158,6 @@ export function useLookFlow({
       if (outcome === "failed") dispatch({ type: "retryTryOn", skin: step.skin });
     });
     // applySkin only closes over the query client, the slug and dispatch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billingFlag, slug, isHost, plus?.active, boardSkin]);
 
   // A confirmation fades; an error stays until dismissed or replaced.

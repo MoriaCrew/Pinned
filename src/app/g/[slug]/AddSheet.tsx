@@ -211,7 +211,6 @@ function CutPhoto({
   return (
     <div className="pn-cut-photo" data-stage={stage} data-working={tap?.working ? "" : undefined} style={style}>
       <div className="pn-cut-frame">
-        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
         <img
           src={src}
           alt={t(locale, "add.photoAlt")}
@@ -437,7 +436,6 @@ export function AddSheet({
       };
     },
     // Unmount only; photoMemory is the board page's stable ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -449,7 +447,6 @@ export function AddSheet({
       setPreviewUrl(rememberedLive);
     }
     // Only when the remembered photo changes, not on later resets.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rememberedLive]);
 
   // A batch step's preview lands once the driver downscales the file.
@@ -568,7 +565,6 @@ export function AddSheet({
   useEffect(() => {
     setSelected((current) => selectionWithCandidates(current, dropped, candidateIds));
     // candidateIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateIds.join(","), dropped]);
 
   const confirm = useMutation({

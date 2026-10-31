@@ -453,7 +453,6 @@ function BoardBody({
       return pruned.size === current.size ? current : pruned;
     });
     // selectableIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectableIds.join(",")]);
 
   const makeScene = useMutation({
@@ -706,7 +705,6 @@ function BoardBody({
       cancelled = true;
     };
     // pickedElementIds' content is keyed by selectionKey.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [makeOpen, selectionKey, slug, view.me?.id]);
   const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
   // The remix parent from the live view (a deleted/hidden parent
@@ -1164,7 +1162,6 @@ function BoardBody({
     setSceneMissing(true);
     closeViewer();
     // viewerIds' content is keyed by its join; closeViewer reads refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerId, viewerIds.join(",")]);
   useEffect(() => {
     const id = viewerReturnId.current;
