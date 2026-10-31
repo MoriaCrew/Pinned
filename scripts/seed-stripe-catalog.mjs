@@ -45,7 +45,7 @@ const CATALOG_ITEMS = [
     lookupKey: "pinneds_plus_20",
     name: "Board Plus · 20 creations",
     description:
-      "Board Plus for one board: every look, foil stickers and 20 creations (photos and scenes). Nothing expires.",
+      "Board Plus for one board: every look, foil stickers, unlimited photos and 20 creations (AI scenes). Nothing expires.",
     unitAmount: 299,
     currency: "eur",
     taxBehavior: "inclusive",

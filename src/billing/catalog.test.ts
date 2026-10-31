@@ -78,6 +78,11 @@ describe("catalog manifest (PIN-146, PIN-181)", () => {
         expect(i.name).toContain(`${i.credits} creations`);
         expect(i.description).toContain(`${i.credits} creations`);
         expect(i.description).toContain("Board Plus");
+        // PIN-229/230: a creation is an AI scene and Plus lifts the
+        // photo limit, so Checkout must not say photos use creations.
+        expect(i.description).toContain("unlimited photos");
+        expect(i.description).toContain("(AI scenes)");
+        expect(i.description).not.toMatch(/photos and scenes/);
       }
     }
   });
