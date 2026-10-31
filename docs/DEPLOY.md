@@ -202,25 +202,22 @@ element; delete the throwaway board.
 4. **Demo-board overrides** (no deploy; Firestore console →
    `boards/<slug>` → field `policyOverrides`, a map). Try it on a
    throwaway board first: an invalid value makes that board answer
-   500.
+   500. Robin (Oct 31): the demo board is a **normal board**. It
+   gets the free tier like any other board; only the caps that would
+   lock judges out of joining are raised:
    ```json
-   { "dailyBudgetUsd": 80, "dailyCallLimit": 16000,
-     "participantsPerBoard": 500, "joinMaxNewPerIp": 200,
-     "scenesPerBoardPerDay": 300, "scenesPerParticipantPerDay": 30,
-     "photosPerParticipantPerDay": 40,
-     "credits": { "starterMakes": 1000 } }
+   { "participantsPerBoard": 500, "joinMaxNewPerIp": 200 }
    ```
-   The board's own budget is checked against the same daily counter,
-   so the demo board keeps working after the global cap is hit.
-   `credits.starterMakes` matters from promotion #2, when live billing
-   turns the creations pool on with 5 free creations per board
-   (PIN-210). Every judge shares the demo board's pool, so it must be
-   in the override **before** promotion #2: the pool is granted once,
-   on the board's first touch after credits turn on, from the board's
-   own Policy. 1,000 creations is at most about $20 of AI at today's
-   prices (`eval/studio-findings.md`) and the daily caps above still
-   apply. Check after promotion #2: the demo board shows 1,000
-   creations, a new board shows 5.
+   Once live billing is on (§7), Robin buys Board Plus on the demo
+   board with a real card and keeps it. That purchase is the live
+   go-live check (`docs/15-board-plus.md`, "Going live on prod"), and
+   it makes the demo board a paying customer's board: every skin,
+   foil stickers, no photo limit and 5 + 20 AI scenes. Each judge's
+   own new board shows the free tier (5 AI scenes) and the Plus
+   offer. Spend stays bounded by the global daily budget. If the
+   demo board needs headroom during judging, raise its daily caps
+   here (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`); do
+   not give it a free pool.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
    `apphosting.prod.yaml` (it ships with promotion #2).
