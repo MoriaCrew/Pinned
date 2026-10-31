@@ -2,18 +2,20 @@
 
 import { useId, type CSSProperties } from "react";
 import { getSkin, type SkinId } from "../domain/skins";
-import { t, type MessageKey } from "../i18n";
+import { t, tf, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/client";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
 import { Icon } from "./icons";
 import { Button, Tag, cx } from "./primitives";
 import { Sticker } from "./stickers";
 import { Sheet } from "./board";
 
-export function skinName(id: SkinId): string {
-  return t("en", `skin.${id}` as MessageKey);
+export function skinName(id: SkinId, locale: Locale = DEFAULT_LOCALE): string {
+  return t(locale, `skin.${id}` as MessageKey);
 }
 
-export function skinMood(id: SkinId): string {
-  return t("en", `skin.${id}.mood` as MessageKey);
+export function skinMood(id: SkinId, locale: Locale = DEFAULT_LOCALE): string {
+  return t(locale, `skin.${id}.mood` as MessageKey);
 }
 
 export interface SkinOption {
@@ -40,7 +42,7 @@ export function SkinPicker({
   onChange,
   sample = [],
   name = "skin",
-  legend = t("en", "ui.look"),
+  legend,
   className,
 }: {
   skins: SkinOption[];
@@ -52,9 +54,10 @@ export function SkinPicker({
   legend?: string;
   className?: string;
 }) {
+  const locale = useLocale();
   return (
     <fieldset className={cx("pn-skins", className)}>
-      <legend className="pn-sr">{legend}</legend>
+      <legend className="pn-sr">{legend ?? t(locale, "ui.look")}</legend>
       {skins.map((option) => {
         const plus = getSkin(option.id).plus;
         return (
@@ -85,15 +88,15 @@ export function SkinPicker({
               </span>
             </span>
             <span className="pn-skin-name">
-              {skinName(option.id)}
+              {skinName(option.id, locale)}
               {plus ? (
                 <Tag tone="outline" icon={option.locked ? "lock" : undefined}>
-                  {t("en", "ui.plus")}
+                  {t(locale, "ui.plus")}
                 </Tag>
               ) : null}
-              {option.suggested ? <Tag tone="mark">{t("en", "ui.forYou")}</Tag> : null}
+              {option.suggested ? <Tag tone="mark">{t(locale, "ui.forYou")}</Tag> : null}
             </span>
-            <span className="pn-skin-mood">{skinMood(option.id)}</span>
+            <span className="pn-skin-mood">{skinMood(option.id, locale)}</span>
           </label>
         );
       })}
@@ -113,19 +116,20 @@ export function TryOnBar({
   onKeep?: () => void;
   className?: string;
 }) {
+  const locale = useLocale();
   return (
     <div className={cx("pn-tryon", className)} role="status">
       <Tag tone="outline" icon="lock">
-        {t("en", "ui.plus")}
+        {t(locale, "ui.plus")}
       </Tag>
       <p>
-        {t("en", "ui.tryingOn")} <b>{skinName(skin)}</b>
+        {t(locale, "ui.tryingOn")} <b>{skinName(skin, locale)}</b>
       </p>
       <Button variant="quiet" onClick={onUndo}>
-        {t("en", "ui.undo")}
+        {t(locale, "ui.undo")}
       </Button>
       <Button variant="primary" size="sm" onClick={onKeep}>
-        {t("en", "ui.keepIt")}
+        {t(locale, "ui.keepIt")}
       </Button>
     </div>
   );
@@ -175,12 +179,13 @@ export function PlusSheet({
     { icon: "scene", soon: true, title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
     { icon: "download", soon: true, title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
   ];
+  const locale = useLocale();
   const price = plan === "board" ? prices.board : prices.host;
   // One radio group per sheet: two open sheets never share a name.
   const planGroup = `plus-plan-${useId()}`;
   return (
     <Sheet
-      title={t("en", "ui.plusTitle")}
+      title={t(locale, "ui.plusTitle")}
       onClose={onClose}
       layer={layer}
       footer={
@@ -192,16 +197,16 @@ export function PlusSheet({
             disabled={!available || busy}
             onClick={() => onGet?.(plan)}
           >
-            {available ? `${t("en", "ui.plusGet")} · ${price}` : t("en", "ui.plusSoon")}
+            {available ? tf(locale, "ui.plusGetPrice", { price }) : t(locale, "ui.plusSoon")}
           </Button>
-          {!available ? <p className="pn-plus-soon">{t("en", "ui.plusSoonLine")}</p> : null}
+          {!available ? <p className="pn-plus-soon">{t(locale, "ui.plusSoonLine")}</p> : null}
           <Button variant="quiet" block onClick={onClose}>
-            {t("en", "ui.notNow")}
+            {t(locale, "ui.notNow")}
           </Button>
         </>
       }
     >
-      <p className="pn-plus-lead">{t("en", "ui.plusLead")}</p>
+      <p className="pn-plus-lead">{t(locale, "ui.plusLead")}</p>
       <ul className="pn-perks">
         {perks.map((perk) => (
           <li key={perk.title}>
@@ -214,22 +219,22 @@ export function PlusSheet({
             )}
             <span>
               <b>
-                {t("en", perk.title)}
-                {perk.soon ? <Tag className="pn-perk-soon">{t("en", "ui.perkSoon")}</Tag> : null}
+                {t(locale, perk.title)}
+                {perk.soon ? <Tag className="pn-perk-soon">{t(locale, "ui.perkSoon")}</Tag> : null}
               </b>
-              <small>{t("en", perk.body)}</small>
+              <small>{t(locale, perk.body)}</small>
             </span>
           </li>
         ))}
       </ul>
       <fieldset className="pn-plans">
-        <legend className="pn-sr">{t("en", "ui.plusPlans")}</legend>
+        <legend className="pn-sr">{t(locale, "ui.plusPlans")}</legend>
         {(["board", "host"] as const).map((id) => (
           <label key={id} className="pn-plan">
             <input type="radio" name={planGroup} value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
-            <span className="pn-plan-name">{t("en", id === "board" ? "ui.plusPlanBoard" : "ui.plusPlanHost")}</span>
+            <span className="pn-plan-name">{t(locale, id === "board" ? "ui.plusPlanBoard" : "ui.plusPlanHost")}</span>
             <span className="pn-plan-price">{id === "board" ? prices.board : prices.host}</span>
-            <span className="pn-plan-note">{t("en", id === "board" ? "ui.plusPlanBoardNote" : "ui.plusPlanHostNote")}</span>
+            <span className="pn-plan-note">{t(locale, id === "board" ? "ui.plusPlanBoardNote" : "ui.plusPlanHostNote")}</span>
             <span className="pn-plan-check" aria-hidden="true">
               <Icon name="check" size={14} strokeWidth={2.5} />
             </span>
