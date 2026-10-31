@@ -60,7 +60,7 @@ describe("UI kit follows the language (PIN-194)", () => {
       "Remix de <b>Bureau</b> par Robin",
     );
     expect(inFrench(h(Pin, { src: "/a.webp", label: "Canard", state: "dropped", onToggle: () => {} }))).toContain("left out : Canard");
-    expect(inFrench(h(PlusSheet, { pack: { credits: 20, eurCents: 300 }, plusActive: false, available: true }))).toContain(
+    expect(inFrench(h(PlusSheet, { pack: { credits: 20, eurCents: 300 }, plusActive: false, available: true })).replace(/[  ]/g, " ")).toContain(
       "Obtenir Plus · 3,00 €",
     );
   });

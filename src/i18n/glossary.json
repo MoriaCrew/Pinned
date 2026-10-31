@@ -1,15 +1,102 @@
 {
-  "doNotTranslate": ["Pinneds", "PINNEDS", "Google", "Stripe", "AGPL-3.0"],
-  "concepts": ["board", "pin", "thing", "sticker", "scene", "make/makes", "remix", "cut-out", "look/skin", "Plus", "TTC"],
+  "doNotTranslate": [
+    "Pinneds",
+    "PINNEDS",
+    "Google",
+    "Stripe",
+    "AGPL-3.0"
+  ],
+  "concepts": [
+    "board",
+    "pin",
+    "thing",
+    "sticker",
+    "scene",
+    "make/makes",
+    "remix",
+    "cut-out",
+    "look/skin",
+    "Plus",
+    "TTC"
+  ],
   "terms": {
     "fr": {
       "board": "tableau",
-      "make/makes": "création/créations"
+      "pin": "épingle (verbe : épingler)",
+      "thing": "chose",
+      "sticker": "sticker",
+      "scene": "scène",
+      "make/makes": "création/créations",
+      "remix": "remix (verbe : remixer)",
+      "cut-out": "détourage (détourer)",
+      "look/skin": "look",
+      "Plus": "Plus",
+      "TTC": "TTC"
     },
-    "es": {},
-    "pt-BR": {},
-    "de": {},
-    "it": {},
-    "id": {}
+    "es": {
+      "board": "tablero",
+      "pin": "pin (verbo: pinear)",
+      "thing": "cosa",
+      "sticker": "sticker",
+      "scene": "escena",
+      "make/makes": "creación/creaciones",
+      "remix": "remix (verbo: remezclar)",
+      "cut-out": "recorte (recortar)",
+      "look/skin": "estilo",
+      "Plus": "Plus",
+      "TTC": "IVA incluido"
+    },
+    "pt-BR": {
+      "board": "quadro",
+      "pin": "pin (verbo: fixar)",
+      "thing": "coisa",
+      "sticker": "figurinha",
+      "scene": "cena",
+      "make/makes": "criação/criações",
+      "remix": "remix (verbo: remixar)",
+      "cut-out": "recorte (recortar)",
+      "look/skin": "visual",
+      "Plus": "Plus",
+      "TTC": "impostos inclusos"
+    },
+    "de": {
+      "board": "Pinnwand",
+      "pin": "Pin (Verb: anpinnen)",
+      "thing": "Ding",
+      "sticker": "Sticker",
+      "scene": "Szene",
+      "make/makes": "Kreation/Kreationen",
+      "remix": "Remix (Verb: remixen)",
+      "cut-out": "Freisteller (freistellen)",
+      "look/skin": "Look",
+      "Plus": "Plus",
+      "TTC": "inkl. MwSt."
+    },
+    "it": {
+      "board": "bacheca",
+      "pin": "pin (verbo: fissare)",
+      "thing": "cosa",
+      "sticker": "sticker",
+      "scene": "scena",
+      "make/makes": "creazione/creazioni",
+      "remix": "remix (verbo: remixare)",
+      "cut-out": "ritaglio (ritagliare)",
+      "look/skin": "look",
+      "Plus": "Plus",
+      "TTC": "IVA inclusa"
+    },
+    "id": {
+      "board": "papan",
+      "pin": "pin (kata kerja: menyematkan)",
+      "thing": "benda",
+      "sticker": "stiker",
+      "scene": "adegan",
+      "make/makes": "kreasi",
+      "remix": "remix (kata kerja: me-remix)",
+      "cut-out": "potongan (memotong)",
+      "look/skin": "tampilan",
+      "Plus": "Plus",
+      "TTC": "termasuk pajak"
+    }
   }
 }

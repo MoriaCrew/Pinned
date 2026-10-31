@@ -12,11 +12,11 @@ const noop = () => {};
 
 describe("creations indicator (PIN-152, PIN-182)", () => {
   it("renders nothing at all while the board view carries no credits", () => {
-    expect(html(h(MakesIndicator, { credits: undefined, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }))).toBe("");
+    expect(html(h(MakesIndicator, { credits: undefined, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }))).toBe("");
   });
 
   it("shows the count left, announced politely, with no low line while healthy", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 12 }, lowMakesWarning: 5, canBuy: false, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 12 }, lowMakesWarning: 5, canBuy: false, onAddMakes: noop, locale: "en" }));
     expect(out).toContain("12 creations left");
     expect(out).toContain('aria-live="polite"');
     expect(out).toContain('data-state="ok"');
@@ -26,16 +26,16 @@ describe("creations indicator (PIN-152, PIN-182)", () => {
   });
 
   it("goes low at the Policy threshold and opens the Plus sheet from a Get Plus button", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 5 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 5 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(out).toContain('data-state="low"');
     expect(out).toContain("Running low");
     expect(out).toContain("Get Plus");
-    const one = html(h(MakesIndicator, { credits: { availableMakes: 1 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const one = html(h(MakesIndicator, { credits: { availableMakes: 1 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(one).toContain("1 creation left");
   });
 
   it("at empty, says new scenes will be collages until someone adds more", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 0 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 0 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(out).toContain('data-state="empty"');
     expect(out).toContain("0 creations left");
     expect(out).toContain("New scenes will be collages");
@@ -85,11 +85,11 @@ describe("billing return banner (PIN-152, PIN-182)", () => {
 
 describe("pool-empty outcomes (PIN-152, PIN-182)", () => {
   it("give creation-aware copy and a way into the Plus sheet when buying works", () => {
-    const photo = html(h(MakesPoolEmpty, { kind: "photo", canBuy: true, onAddMakes: noop }));
+    const photo = html(h(MakesPoolEmpty, { kind: "photo", canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(photo).toContain("out of creations, so photos can&#x27;t be cut out");
     expect(photo).toContain('role="alert"');
     expect(photo).toContain("Get Plus");
-    const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop }));
+    const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop, locale: "en" }));
     expect(scene).toContain("ran out of creations, so that scene couldn&#x27;t be made");
     expect(scene).not.toContain("Get Plus");
   });

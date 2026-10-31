@@ -87,9 +87,10 @@ describe("credits checkout answers (PIN-152)", () => {
 describe("pack prices (PIN-152, PIN-182)", () => {
   it("formats EUR prices from cents in EN and FR", () => {
     expect(formatEur(299, "en")).toBe("€2.99");
-    expect(formatEur(299, "fr")).toBe("2,99 €");
+    expect(formatEur(299, "fr").replace(/[  ]/g, " ")).toBe("2,99 €");
     expect(formatEur(1999, "en")).toBe("€19.99");
-    expect(formatEur(500, "fr")).toBe("5,00 €");
+    expect(formatEur(500, "fr").replace(/[  ]/g, " ")).toBe("5,00 €");
     expect(formatEur(5, "en")).toBe("€0.05");
+    expect(formatEur(499, "fr")).toBe("4,99 €");
   });
 });

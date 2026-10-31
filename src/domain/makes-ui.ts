@@ -8,7 +8,7 @@
  * an activity count for the whole board, never money held or
  * spent by a person.
  */
-import type { Locale } from "../i18n";
+import { formatMoney, type Locale } from "../i18n";
 import { safeRedirectUrl } from "./plus-ui";
 
 /** The PIN-151 typed pool-empty code (photo 429 + both jobs' errorCode), mirrored client-side. */
@@ -117,9 +117,7 @@ export function readCreditCheckoutResponse(status: number, body: unknown): Credi
   return { kind: "error", error: "generic" };
 }
 
-/** EUR price from cents: "€4.99" (en) / "4,99 €" (fr). Deterministic, no ICU variance. */
+/** EUR price from cents in the language's own format (Intl via formatMoney). */
 export function formatEur(cents: number, locale: Locale): string {
-  const euros = Math.floor(cents / 100);
-  const rest = String(Math.abs(cents % 100)).padStart(2, "0");
-  return locale === "fr" ? `${euros},${rest} €` : `€${euros}.${rest}`;
+  return formatMoney(locale, cents, "EUR");
 }

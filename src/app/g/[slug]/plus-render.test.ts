@@ -267,13 +267,13 @@ describe("the one Plus sheet (PIN-182)", () => {
   });
 
   it("renders in French with French prices", () => {
-    const out = sheetFr();
+    const out = sheetFr().replace(/[  ]/g, " ");
     expect(out).toContain("Board Plus");
     expect(out).toContain("Obtenir Plus · 2,99 €");
     expect(out).toContain("+20 créations");
     expect(out).toContain("Une seule fois, pour ce tableau.");
     expect(out).toContain("Bientôt");
-    expect(sheetFr({ plusActive: true })).toContain("Ajouter 20 créations · 2,99 €");
+    expect(sheetFr({ plusActive: true }).replace(/[  ]/g, " ")).toContain("Ajouter 20 créations · 2,99 €");
     expect(sheetFr({ available: false })).toContain("Bientôt disponible");
   });
 });

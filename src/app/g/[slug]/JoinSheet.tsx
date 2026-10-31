@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { defaultJoinName } from "../../../domain/auth-ui";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Icon, Sheet, TextField } from "../../../ui";
 import styles from "./board.module.css";
 
@@ -32,6 +33,7 @@ export function JoinSheet({
   onJoined: (participant: JoinedParticipant) => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const formId = useId();
   const nameId = `${formId}-name`;
   const [displayName, setDisplayName] = useState(me?.displayName ?? "");
@@ -64,11 +66,11 @@ export function JoinSheet({
         participant?: JoinedParticipant;
         error?: string;
       };
-      if (!response.ok || !data.participant) throw new Error(data.error || t("en", "join.error"));
+      if (!response.ok || !data.participant) throw new Error(data.error || t(locale, "join.error"));
       setReclaimPin("");
       onJoined(data.participant);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("en", "join.error"));
+      setError(cause instanceof Error ? cause.message : t(locale, "join.error"));
     } finally {
       setBusy(false);
     }
@@ -76,15 +78,15 @@ export function JoinSheet({
 
   const submitLabel = busy
     ? me
-      ? t("en", "join.savingName")
-      : t("en", "join.saving")
+      ? t(locale, "join.savingName")
+      : t(locale, "join.saving")
     : me
-      ? t("en", "join.update")
-      : t("en", "join.submit");
+      ? t(locale, "join.update")
+      : t(locale, "join.submit");
 
   return (
     <Sheet
-      title={me ? t("en", "join.editTitle") : t("en", "join.title")}
+      title={me ? t(locale, "join.editTitle") : t(locale, "join.title")}
       onClose={onClose}
       // The name is the one thing this sheet asks for: the caret goes there.
       initialFocusId={nameId}
@@ -102,12 +104,12 @@ export function JoinSheet({
       }
     >
       <form id={formId} className="pn-sheet-body" onSubmit={onSubmit}>
-        {!me ? <p className={styles.joinLead}>{t("en", "board.joinFirst")}</p> : null}
+        {!me ? <p className={styles.joinLead}>{t(locale, "board.joinFirst")}</p> : null}
         <TextField
           id={nameId}
-          label={t("en", "join.name")}
+          label={t(locale, "join.name")}
           value={displayName}
-          placeholder={t("en", "join.namePlaceholder")}
+          placeholder={t(locale, "join.namePlaceholder")}
           autoComplete="nickname"
           enterKeyHint="go"
           required
@@ -119,16 +121,16 @@ export function JoinSheet({
         <details className={styles.disclosure}>
           <summary>
             <Icon name="lock" size={18} />
-            {t("en", "join.pinSummary")}
+            {t(locale, "join.pinSummary")}
           </summary>
           <TextField
-            label={t("en", "join.pin")}
+            label={t(locale, "join.pin")}
             value={reclaimPin}
             placeholder="1234"
             inputMode="numeric"
             autoComplete="one-time-code"
             enterKeyHint="go"
-            help={t("en", "join.pinHelp")}
+            help={t(locale, "join.pinHelp")}
             onChange={(value) => setReclaimPin(value.replace(/\D/g, "").slice(0, 4))}
           />
         </details>

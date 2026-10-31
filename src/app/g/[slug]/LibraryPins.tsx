@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { familyOf, libraryLoadStatus, type LibraryPinState, type LibraryStripView } from "../../../domain/library-strip";
 import type { MyPinCard } from "../../../domain/my-pins";
-import { t, tf } from "../../../i18n";
+import { t, tf, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Icon, Sticker } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 
@@ -15,18 +16,18 @@ export interface MyPinsResponse {
 }
 
 /** What a library thing's pin action says in each state. */
-export function libraryPinLabel(state: LibraryPinState): string {
+export function libraryPinLabel(state: LibraryPinState, locale: Locale): string {
   switch (state) {
     case "pinning":
-      return t("en", "add.libraryPinning");
+      return t(locale, "add.libraryPinning");
     case "pinned":
-      return t("en", "add.libraryPinned");
+      return t(locale, "add.libraryPinned");
     case "already":
-      return t("en", "add.libraryAlready");
+      return t(locale, "add.libraryAlready");
     case "failed":
-      return t("en", "add.libraryRetry");
+      return t(locale, "add.libraryRetry");
     default:
-      return t("en", "add.libraryPin");
+      return t(locale, "add.libraryPin");
   }
 }
 
@@ -62,6 +63,7 @@ const isInert = (state: LibraryPinState) => state === "pinning" || state === "pi
  * Disabled (signed out or sign-in off) it never fetches.
  */
 export function useLibraryPins(slug: string, enabled: boolean, boardTitle: string) {
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [states, setStates] = useState<ReadonlyMap<string, LibraryPinState>>(new Map());
 
@@ -70,7 +72,7 @@ export function useLibraryPins(slug: string, enabled: boolean, boardTitle: strin
     queryFn: async (): Promise<MyPinsResponse> => {
       const response = await fetch("/api/me/elements", { cache: "no-store" });
       const data = (await response.json()) as MyPinsResponse & { error?: string };
-      if (!response.ok) throw new Error(data.error || t("en", "add.libraryFailed"));
+      if (!response.ok) throw new Error(data.error || t(locale, "add.libraryFailed"));
       return data;
     },
     enabled,
@@ -87,7 +89,7 @@ export function useLibraryPins(slug: string, enabled: boolean, boardTitle: strin
         body: JSON.stringify({ elementId: card.elementId }),
       });
       const data = (await response.json()) as { alreadyPinned?: boolean; elementId?: string; error?: string };
-      if (!response.ok) throw new Error(data.error || t("en", "add.pinFailed"));
+      if (!response.ok) throw new Error(data.error || t(locale, "add.pinFailed"));
       return data;
     },
     // Options-level callbacks run for every tap, so several stickers
@@ -120,14 +122,15 @@ export function useLibraryPins(slug: string, enabled: boolean, boardTitle: strin
 
 /** A load error: one line and its one way out. */
 function LibraryProblem({ onRetry }: { onRetry: () => void }) {
+  const locale = useLocale();
   return (
     <div className="pn-add-lib-state">
       <p className="pn-add-line pn-add-line-error" role="alert">
         <Icon name="info" size={18} />
-        <span>{t("en", "add.libraryFailed")}</span>
+        <span>{t(locale, "add.libraryFailed")}</span>
       </p>
       <Button size="sm" icon="undo" onClick={onRetry}>
-        {t("en", "add.libraryRetry")}
+        {t(locale, "add.libraryRetry")}
       </Button>
     </div>
   );
@@ -157,15 +160,16 @@ export function LibraryStrip({
   onSeeAll: () => void;
   onRetry: () => void;
 }) {
+  const locale = useLocale();
   return (
     <section className="pn-add-strip" aria-labelledby={headingId}>
       <div className="pn-add-strip-head">
         <h3 className="pn-add-strip-title" id={headingId}>
-          {t("en", "add.stripTitle")}
+          {t(locale, "add.stripTitle")}
         </h3>
         {view.kind === "items" ? (
           <Button variant="quiet" size="sm" className="pn-add-strip-all" id={seeAllId} onClick={onSeeAll}>
-            {t("en", "add.seeAll")}
+            {t(locale, "add.seeAll")}
           </Button>
         ) : null}
       </div>
@@ -180,7 +184,7 @@ export function LibraryStrip({
             ))}
           </ul>
           <p className="pn-sr" role="status">
-            {t("en", "add.libraryLoading")}
+            {t(locale, "add.libraryLoading")}
           </p>
         </>
       ) : null}
@@ -188,7 +192,7 @@ export function LibraryStrip({
       {view.kind === "items" ? (
         <ul className="pn-add-strip-list">
           {view.items.map(({ card, state }) => {
-            const spoken = `${libraryPinLabel(state)}: ${card.label}`;
+            const spoken = `${libraryPinLabel(state, locale)}: ${card.label}`;
             return (
               <li key={card.elementId}>
                 <button
@@ -221,7 +225,7 @@ export function LibraryStrip({
                   ) : (
                     <span className="pn-add-strip-status">
                       {state === "failed" ? <Icon name="undo" size={14} /> : null}
-                      {libraryPinLabel(state)}
+                      {libraryPinLabel(state, locale)}
                     </span>
                   )}
                 </button>
@@ -255,11 +259,12 @@ export function LibraryList({
   onPin: (card: MyPinCard) => void;
   onRetry: () => void;
 }) {
+  const locale = useLocale();
   if (status === "pending") {
     return (
       <p className="pn-add-line" role="status">
         <Icon name="pin" size={18} />
-        <span>{t("en", "add.libraryLoading")}</span>
+        <span>{t(locale, "add.libraryLoading")}</span>
       </p>
     );
   }
@@ -268,7 +273,7 @@ export function LibraryList({
     return (
       <p className="pn-add-line" role="status">
         <Icon name="info" size={18} />
-        <span>{t("en", "add.libraryEmpty")}</span>
+        <span>{t(locale, "add.libraryEmpty")}</span>
       </p>
     );
   }
@@ -283,22 +288,22 @@ export function LibraryList({
             <Sticker src={card.imageUrl} alt="" seed={card.elementId} size={64} />
             <span className="pn-add-lib-text">
               <b>{card.label}</b>
-              <span>{tf("en", "add.libraryFrom", { board: card.sourceBoardTitle })}</span>
+              <span>{tf(locale, "add.libraryFrom", { board: card.sourceBoardTitle })}</span>
             </span>
             {done ? (
               <span className="pn-add-lib-done" role="status">
                 <Icon name="check" size={18} />
-                {libraryPinLabel(state)}
+                {libraryPinLabel(state, locale)}
               </span>
             ) : (
               <Button
                 size="sm"
                 icon={state === "failed" ? "undo" : "pin"}
                 disabled={state === "pinning"}
-                aria-label={`${libraryPinLabel(state)}: ${card.label}`}
+                aria-label={`${libraryPinLabel(state, locale)}: ${card.label}`}
                 onClick={() => onPin(card)}
               >
-                {libraryPinLabel(state)}
+                {libraryPinLabel(state, locale)}
               </Button>
             )}
           </li>

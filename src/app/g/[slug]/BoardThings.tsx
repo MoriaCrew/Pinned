@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { canDeleteCard, type PinCard } from "../../../domain/board-view";
-import { t, tf } from "../../../i18n";
+import { t, tf, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { IconButton, Menu, Pin, SectionHead, cx } from "../../../ui";
 import styles from "./board.module.css";
 
@@ -52,18 +53,19 @@ export function BoardThings({
   foilPinId?: string | null;
   showHead?: boolean;
 }) {
+  const locale = useLocale();
   return (
     <section aria-labelledby="board-things">
       {showHead ? (
-        <SectionHead title={t("en", "board.pins")} count={count} id="board-things" />
+        <SectionHead title={t(locale, "board.pins")} count={count} id="board-things" />
       ) : (
         <h2 className="pn-sr" id="board-things">
-          {t("en", "board.pins")}
+          {t(locale, "board.pins")}
         </h2>
       )}
       <ul className={cx("pn-pins", styles.pins)}>
         {cards.filter((card) => card.status === "pinned").map((card) => {
-          const owner = { id: card.ownerId, name: card.ownerName ?? t("en", "board.someone") };
+          const owner = { id: card.ownerId, name: card.ownerName ?? t(locale, "board.someone") };
           const pickIndex = pickNumbers.get(card.pinId);
           const mine = canDeleteCard(card, meId);
           return (
@@ -88,10 +90,10 @@ export function BoardThings({
 }
 
 /** The More menu's items, in order: Rename (when the board can rename), then Delete. */
-export function pinMenuItems(actions: { onRename?: () => void; onDelete: () => void }) {
+export function pinMenuItems(locale: Locale, actions: { onRename?: () => void; onDelete: () => void }) {
   return [
-    ...(actions.onRename ? [{ label: t("en", "board.rename"), onSelect: actions.onRename }] : []),
-    { label: t("en", "board.delete"), danger: true, onSelect: actions.onDelete },
+    ...(actions.onRename ? [{ label: t(locale, "board.rename"), onSelect: actions.onRename }] : []),
+    { label: t(locale, "board.delete"), danger: true, onSelect: actions.onDelete },
   ];
 }
 
@@ -104,6 +106,7 @@ function PinMore({
   deletion: DeleteControls;
   onRename?: (elementId: string) => void;
 }) {
+  const locale = useLocale();
   const elementId = card.element.id;
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"menu" | "confirm">("menu");
@@ -165,7 +168,7 @@ function PinMore({
           icon="more"
           variant="ghost"
           size={20}
-          label={tf("en", "board.thingActions", { thing })}
+          label={tf(locale, "board.thingActions", { thing })}
           aria-expanded={open}
           aria-haspopup="menu"
           onClick={() => {
@@ -185,7 +188,7 @@ function PinMore({
           {confirming ? (
             <div className={cx("pn-menu", alignStart ? styles.pinMenuStart : styles.pinMenu)} role="group" aria-label={thing}>
               <p className={styles.menuText} role="status">
-                {t("en", "board.deleteConfirm")}
+                {t(locale, "board.deleteConfirm")}
               </p>
               <button
                 type="button"
@@ -194,7 +197,7 @@ function PinMore({
                 disabled={deleting}
                 onClick={() => deletion.onConfirm(elementId)}
               >
-                {deleting ? t("en", "board.deleting") : t("en", "board.deleteYes")}
+                {deleting ? t(locale, "board.deleting") : t(locale, "board.deleteYes")}
               </button>
               <button
                 type="button"
@@ -205,19 +208,19 @@ function PinMore({
                   close(true);
                 }}
               >
-                {t("en", "board.deleteKeep")}
+                {t(locale, "board.deleteKeep")}
               </button>
               {deletion.errorElementId === elementId ? (
                 <p className={styles.menuError} role="alert">
-                  {t("en", "board.deleteFailed")}
+                  {t(locale, "board.deleteFailed")}
                 </p>
               ) : null}
             </div>
           ) : (
             <Menu
-              label={tf("en", "board.thingActions", { thing })}
+              label={tf(locale, "board.thingActions", { thing })}
               className={alignStart ? styles.pinMenuStart : styles.pinMenu}
-              items={pinMenuItems({
+              items={pinMenuItems(locale, {
                 onRename: onRename
                   ? () => {
                       // Focus goes back to More first: the sheet hands it back there when it closes.

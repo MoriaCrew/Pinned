@@ -3,9 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { PhotoPick } from "./PhotoPick";
 
+// PhotoPick reads the language with a hook; these tests call it as a plain function.
+vi.mock("../../../i18n/client", () => ({ useLocale: () => "en" }));
+
 const noop = () => {};
 
-/** Every <input> in a rendered element tree (PhotoPick is hook-free, so it can be called directly). */
+/** Every <input> in a rendered element tree (PhotoPick is called directly; its language hook is mocked above). */
 function findInputs(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
   if (Array.isArray(node)) {
     for (const child of node) findInputs(child, out);
@@ -61,9 +64,9 @@ describe("add-photo pick actions (PIN-118)", () => {
 describe("review help line words (PIN-126)", () => {
   it("says what a tap does next", async () => {
     const { reviewHelpLine } = await import("./AddSheet");
-    expect(reviewHelpLine({ kind: "allKept" })).toBe("All kept. Tap one to leave it out.");
-    expect(reviewHelpLine({ kind: "someLeftOut", n: 1 })).toBe("1 left out. Tap it to keep it.");
-    expect(reviewHelpLine({ kind: "someLeftOut", n: 2 })).toBe("2 left out. Tap one to keep it.");
-    expect(reviewHelpLine({ kind: "noneKept" })).toBe("None kept. Tap one to keep it.");
+    expect(reviewHelpLine({ kind: "allKept" }, "en")).toBe("All kept. Tap one to leave it out.");
+    expect(reviewHelpLine({ kind: "someLeftOut", n: 1 }, "en")).toBe("1 left out. Tap it to keep it.");
+    expect(reviewHelpLine({ kind: "someLeftOut", n: 2 }, "en")).toBe("2 left out. Tap one to keep it.");
+    expect(reviewHelpLine({ kind: "noneKept" }, "en")).toBe("None kept. Tap one to keep it.");
   });
 });
