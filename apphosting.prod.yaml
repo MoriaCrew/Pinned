@@ -63,29 +63,3 @@ env:
   # (prerendered pages) and RUNTIME: a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
-  # PIN-210: live billing (merge only after the operator confirms both live secrets exist in prod Secret Manager)
-  # Sells the Board Plus pack (EUR 2.99: Plus + 20 creations) through
-  # LIVE Stripe Checkout; grants land by webhook only. A referenced
-  # secret that is missing fails the App Hosting build, so this block
-  # must not reach `main` before STRIPE_SECRET_KEY and
-  # STRIPE_WEBHOOK_SECRET exist in moriacrew-pinned-prod with access
-  # for pinned-web (docs/15-board-plus.md, "Going live on prod").
-  # Rollback: PLUS_MODE=off, then a rollout.
-  - variable: PLUS_MODE
-    value: stripe
-  - variable: STRIPE_SECRET_KEY
-    secret: STRIPE_SECRET_KEY
-    availability:
-      - RUNTIME
-  - variable: STRIPE_WEBHOOK_SECRET
-    secret: STRIPE_WEBHOOK_SECRET
-    availability:
-      - RUNTIME
-  # Creations pool on (code default is off). Robin (Oct 31): a new
-  # board starts with 5 free creations, enough to try the app; Board
-  # Plus adds 20. The demo board gets its own larger pool through its
-  # policyOverrides (docs/DEPLOY.md §6.4). Spend stays bounded by
-  # AI_DAILY_BUDGET_USD and AI_DAILY_CALL_LIMIT whatever this value is.
-  - variable: POLICY_OVERRIDES_JSON
-    value: '{"credits":{"enabled":true,"starterMakes":5}}'
-  # /PIN-210

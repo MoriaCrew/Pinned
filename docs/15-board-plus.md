@@ -282,8 +282,8 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   **Dev runs `stripe` since PIN-153** (sandbox only: the dev
   backend flips together with `Policy.credits.enabled` and
   the registered webhook endpoint - PIN-153 section below).
-  Prod stays `off` until promotion #2 turns on live Stripe
-  (PIN-210, "Going live on prod" below). PIN-149/PIN-150
+  Prod stays `off` until the PIN-210 prod switch turns on live
+  Stripe ("Going live on prod" below). PIN-149/PIN-150
   deliberately shipped reference-only so no backend ever took
   a payment with no fulfilment path.
 
@@ -1125,8 +1125,9 @@ a genuinely unknown charge still dead-letters.
 ## Going live on prod (PIN-210)
 
 Prod (pinneds.com) sells the Board Plus pack with **live** Stripe
-from promotion #2 (Tue Nov 3), never earlier: App Hosting fails
-the build when a referenced secret does not exist. The operator
+only once the prod switch (merge order below) reaches `main`, after
+both live secrets exist: App Hosting fails the build when a
+referenced secret does not exist. The operator
 scripts default to sandbox. A live run needs a live key **and**
 `--live --i-understand-live`, touches only `moriacrew-pinned-prod`
 and `https://pinneds.com/api/billing/stripe/webhook`, and prints
@@ -1175,23 +1176,33 @@ missing permission: add read on that one resource only.
    `gcloud secrets describe STRIPE_SECRET_KEY --project "$P" --format="value(name)"`,
    same for `STRIPE_WEBHOOK_SECRET`. Say so on PIN-210.
 
-**Merge order.** Promotion #1 (Sun Nov 1) ships without PIN-210.
-After step 4, merge the PIN-210 PR to `dev`: its
-`apphosting.prod.yaml` commit adds `PLUS_MODE=stripe`, both secret
-references and
-`POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
-(the dev backend ignores that file). Promotion #2 carries it to
-`main`.
+**Merge order.** Live billing comes in two pieces (Robin, Oct 31):
+
+1. **This runbook and the operator scripts** (PIN-210, #182) merge
+   to `dev` before the Nov 3 freeze. They change nothing on prod or
+   dev: the scripts only run from an operator machine.
+2. **The prod switch** is a separate config-only PR (PIN-210, "turn
+   on live billing on prod"). It adds one block to
+   `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
+   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
+   (the dev backend ignores that file). Merge it only after step 4.
+   If that happens before the freeze, it rides promotion #2. If not,
+   run a config-only promotion as soon as step 4 is done, even during
+   judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
+   then, so that promotion carries only the switch.
 
 **Smoke after the rollout.** `GET https://pinneds.com/api/health`
 shows `plusMode: "stripe"`; a webhook POST with a bad
 `Stripe-Signature` answers 400; a new board shows 5 creations.
-Robin buys the €2.99 pack on a throwaway board with a real card:
-Checkout says "Board Plus · 20 creations", the board shows Plus
-and 25 creations, the endpoint's delivery in Workbench is 200.
-Refund it in the Dashboard (Payments → the payment → Refund,
-full): the refund events claw back the 20 creations (the board
-keeps Plus, see Follow-ups). Then
+Robin buys the €2.99 pack **on the demo board** with a real card
+and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
+board, and this makes it a paying customer's board). Checkout says
+"Board Plus · 20 creations", the demo board shows Plus and 20 more
+creations, and the endpoint's delivery in Workbench is 200. Refund
+check, on a throwaway board: buy the pack again, then refund it in
+the Dashboard (Payments → the payment → Refund, full). The refund
+events claw back the 20 creations; the board keeps Plus (see
+Follow-ups). Then
 `node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
 exits 0 (`clean=true`), and the setup key is deleted.
 
