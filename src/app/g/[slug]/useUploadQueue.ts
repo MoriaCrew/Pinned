@@ -22,6 +22,7 @@ import {
   createQueueItems,
   isQueueSettled,
   itemStatusForJob,
+  uploadRetryMode,
   type UploadItemStatus,
   type UploadQueueItem,
 } from "../../../domain/upload-queue";
@@ -306,18 +307,39 @@ export function useUploadQueue(options: UploadQueueOptions) {
     return batch[0]?.key ?? null;
   }, []);
 
-  /** Retry a terminal/stopped item: fresh upload id (a new job), same blob bytes. */
+  /**
+   * Retry a terminal/stopped item. Look the job up FIRST: a live
+   * or ready job (e.g. a response was lost after the server
+   * finished) is adopted — a fresh upload id would double-debit
+   * the photo. Only no job, or a failed/refused one, starts over
+   * under a fresh id, same blob bytes.
+   */
   const retryItem = useCallback(
     (key: string) => {
-      patchForced(key, {
-        uploadId: mintUploadId(),
-        status: "queued",
-        attempts: 0,
-        errorCode: undefined,
-        error: undefined,
-      });
+      const item = itemsRef.current.find((i) => i.key === key);
+      if (!item) return;
+      void (async () => {
+        const existing = await fetchJob(item.uploadId);
+        if (existing && uploadRetryMode(existing.status) === "adopt") {
+          patchForced(key, {
+            status: "uploading",
+            attempts: 0,
+            errorCode: undefined,
+            error: undefined,
+          });
+          await adoptJob(item, existing);
+          return;
+        }
+        patchForced(key, {
+          uploadId: mintUploadId(),
+          status: "queued",
+          attempts: 0,
+          errorCode: undefined,
+          error: undefined,
+        });
+      })();
     },
-    [patchForced],
+    [fetchJob, adoptJob, patchForced],
   );
 
   const skipItem = useCallback(

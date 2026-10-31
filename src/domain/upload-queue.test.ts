@@ -8,6 +8,7 @@ import {
   nextStepItem,
   pendingCount,
   stepPosition,
+  uploadRetryMode,
   type UploadQueueItem,
 } from "./upload-queue";
 
@@ -88,5 +89,14 @@ describe("stepper order", () => {
     expect(itemStatusForJob("ready")).toBe("ready");
     expect(itemStatusForJob("failed")).toBe("failed");
     expect(itemStatusForJob("refused")).toBe("refused");
+  });
+
+  it("user retry adopts a live/ready job, fresh job only for none/terminal (Bugbot #148)", () => {
+    expect(uploadRetryMode("pending")).toBe("adopt");
+    expect(uploadRetryMode("running")).toBe("adopt");
+    expect(uploadRetryMode("ready")).toBe("adopt");
+    expect(uploadRetryMode("failed")).toBe("fresh-job");
+    expect(uploadRetryMode("refused")).toBe("fresh-job");
+    expect(uploadRetryMode(null)).toBe("fresh-job");
   });
 });

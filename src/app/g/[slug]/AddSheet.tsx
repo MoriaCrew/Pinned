@@ -652,13 +652,19 @@ export function AddSheet({
     batch?.itemStatus === "failed" ||
     batch?.itemStatus === "refused" ||
     batch?.itemStatus === "stopped";
+  // A reopened photo is reviewed at once; its job view corrects
+  // it. That includes a batch leftover: the queue item is already
+  // `ready` (its job finished), so don't park it in the cutting
+  // state until the job query lands (Bugbot #148). Only a batch
+  // step whose job may not exist yet (queued/uploading) reads as
+  // finding — never a phantom ready review.
+  const effectiveJobStatus =
+    job?.status ??
+    ((batch ? batch.itemStatus === "ready" : waitingForResume) ? "ready" : null);
   const stageFromJob = addSheetStage({
     uploadPending: upload.isPending || batchBusy,
     jobId,
-    // A reopened photo is reviewed at once; its job view corrects it.
-    // In a batch step the job may not exist yet (still uploading):
-    // that reads as finding, never as a phantom ready review.
-    jobStatus: job?.status ?? (batch ? null : waitingForResume ? "ready" : null),
+    jobStatus: effectiveJobStatus,
     candidateCount: candidatePins.length,
   });
   // A batch item that stopped/failed before a job existed (pool
@@ -677,7 +683,7 @@ export function AddSheet({
     // tap pin then, and confirm drops unlisted job pins. Scoped
     // to that one pin — background refetches never disable Pin.
     payload !== null &&
-    canConfirmJob(job?.status ?? null, candidatePins.length) &&
+    canConfirmJob(effectiveJobStatus, candidatePins.length) &&
     !confirm.isPending &&
     !tapAdd.isPending &&
     !awaitingTap;

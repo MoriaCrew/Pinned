@@ -76,6 +76,21 @@ export function classifyUploadFailure(input: {
   return "terminal";
 }
 
+/**
+ * How a user-tapped retry proceeds once the item's existing job
+ * has been looked up (Bugbot #148): a live or ready job is ADOPTED
+ * — minting a fresh upload id would create and debit a second job
+ * for the same photo. Only no job, or a terminally failed/refused
+ * one, starts over under a fresh id.
+ */
+export function uploadRetryMode(
+  jobStatus: "pending" | "running" | "ready" | "failed" | "refused" | null,
+): "adopt" | "fresh-job" {
+  return jobStatus !== null && jobStatus !== "failed" && jobStatus !== "refused"
+    ? "adopt"
+    : "fresh-job";
+}
+
 /** Map a terminal server job status onto the item status (non-terminal stays uploading). */
 export function itemStatusForJob(
   jobStatus: "pending" | "running" | "ready" | "failed" | "refused",
