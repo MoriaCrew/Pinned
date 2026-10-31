@@ -27,13 +27,14 @@ import sharp from "sharp";
 import type {
   BoardEvent,
   BoardEventType,
+  CollageReason,
   Element,
   Scene,
   SceneJob,
 } from "../domain/board";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
-import { estimateReserveUsd } from "../gateway/costs";
+import { MUSE_IMAGE_USD_PER_IMAGE } from "../gateway/costs";
 import type { ComposeSceneElement, SceneComposer } from "../gateway/ports";
 import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
@@ -328,6 +329,7 @@ function sceneFromJob(job: SceneJob, hidden?: boolean): Scene {
     ...(job.imageRef ? { imageRef: job.imageRef } : {}),
     ...(validSceneSize(job) ?? {}),
     ...(job.kind ? { kind: job.kind } : {}),
+    ...(job.collageReason ? { collageReason: job.collageReason } : {}),
     ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
     ...(job.costUsd !== undefined ? { costUsd: job.costUsd } : {}),
@@ -645,12 +647,15 @@ function isBudgetFallback(errorCode: string | undefined): boolean {
  * Finish a job with the mock collage (PIN-71): cut-outs on a
  * gradient at Policy.sceneSize, stored under scenes/, recorded
  * kind "collage" at $0 — honestly labelled, never an AI scene.
- * Failures land as typed failed states like every other path.
+ * `reason` (PIN-180) records which lane chose the collage so the
+ * board can say why. Failures land as typed failed states like
+ * every other path.
  */
 async function finishCollage(
   deps: SceneJobDeps,
   job: SceneJob,
   records: Element[],
+  reason: CollageReason,
 ): Promise<SceneJob> {
   const size = parseSceneSize(deps.policy.sceneSize);
   if (!size) {
@@ -698,6 +703,7 @@ async function finishCollage(
   await storeScenePreview(deps, job, png);
   job.status = "ready";
   job.kind = "collage";
+  job.collageReason = reason;
   job.imageRef = imageRef;
   job.costUsd = 0;
   return finish(deps, job);
@@ -742,7 +748,7 @@ export async function runSceneJob(
     }
     // Offline/demo mode (PIN-71): the collage is the composer; the
     // SceneComposer port (and its budget reserve) is never called.
-    if (deps.collageMode) return finishCollage(deps, job, records);
+    if (deps.collageMode) return finishCollage(deps, job, records, "mock");
 
     // PIN-151 pool-empty lane (exact seam): with credits on and
     // no make available, the free collage composes instead and
@@ -753,7 +759,7 @@ export async function runSceneJob(
     // Disabled (null) skips the ledger entirely.
     const availableMakes = await readAvailableMakes(boardId, deps);
     if (availableMakes !== null && availableMakes < 1) {
-      return finishCollage(deps, job, records);
+      return finishCollage(deps, job, records, "pool_empty");
     }
 
     const elements: ComposeSceneElement[] = [];
@@ -815,7 +821,7 @@ export async function runSceneJob(
       // Over budget (PIN-71): the collage appears instead, clearly
       // labelled kind "collage" — never a silent mock swap.
       if (isBudgetFallback(outcome.errorCode)) {
-        return finishCollage(deps, job, records);
+        return finishCollage(deps, job, records, "budget");
       }
       job.status = "failed";
       job.errorCode = outcome.errorCode ?? "scene_failed";
@@ -871,11 +877,9 @@ export async function runSceneJob(
     job.imageRef = imageRef;
     Object.assign(job, await storedImageSize(bytes));
     await storeScenePreview(deps, job, bytes);
-    // Gateway reserve proxy (Spark-token estimate until /responses
-    // prices publish); the provider dashboard is authoritative.
-    job.costUsd = estimateReserveUsd("composeScene", {
-      sparkElementsMaxTokens: policy.maxTokens.sparkElements,
-    });
+    // Muse Image list price: a flat per-image estimate (PIN-180);
+    // the provider dashboard is authoritative.
+    job.costUsd = MUSE_IMAGE_USD_PER_IMAGE;
     // awaited (not bare return) so a terminal-write failure
     // reaches the paid-make retry in the catch below.
     return await finish(deps, job);

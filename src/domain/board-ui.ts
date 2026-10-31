@@ -142,6 +142,16 @@ export function sceneTag(scene: Pick<BoardViewScene, "kind" | "parentSceneId">):
   return "scene";
 }
 
+/**
+ * A collage that exists because the AI budget / call limit / AI
+ * switch closed the composer says so on its print (PIN-180). A
+ * pool-empty collage already has its makes copy (PIN-152) and a
+ * mock collage (AI_MOCK=1) is the demo mode, so neither adds a line.
+ */
+export function explainsBudgetCollage(scene: Pick<BoardViewScene, "kind" | "collageReason">): boolean {
+  return scene.kind === "collage" && scene.collageReason === "budget";
+}
+
 /** A remix's credit line: the parent's idea and maker, or that it was deleted (PIN-143). */
 export type RemixSource = { title: string; owner?: string } | { deleted: true };
 

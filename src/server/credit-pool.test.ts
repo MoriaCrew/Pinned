@@ -462,6 +462,7 @@ describe("scene debit (PIN-151)", () => {
     );
     expect(fallback.scene.status).toBe("ready");
     expect(fallback.scene.kind).toBe("collage");
+    expect(fallback.scene.collageReason).toBe("budget"); // PIN-180: nothing was debited, and it says why
     expect((await budget.ledger.getBalance(a.slug)).available).toBe(2);
 
     const mock = makeHarness(ENABLED(2), { collageMode: true });
@@ -474,6 +475,7 @@ describe("scene debit (PIN-151)", () => {
     );
     expect(collaged.scene.status).toBe("ready");
     expect(collaged.scene.kind).toBe("collage");
+    expect(collaged.scene.collageReason).toBe("mock");
     expect(mock.composerCalls).toBe(0);
     // The mock collage is not a credit touch at all: no starter, no debit.
     expect(await mock.ledger.getAccount(b.slug)).toBeNull();
@@ -491,6 +493,7 @@ describe("scene debit (PIN-151)", () => {
     );
     expect(scene.status).toBe("ready");
     expect(scene.kind).toBe("collage");
+    expect(scene.collageReason).toBe("pool_empty");
     expect(h.composerCalls).toBe(0);
     expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toEqual([]);
 

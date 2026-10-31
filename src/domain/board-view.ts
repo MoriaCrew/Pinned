@@ -4,6 +4,7 @@
  * API (PIN-65 board-api public* mappers) structurally, so the
  * client components and these helpers never import server code.
  */
+import type { CollageReason } from "./board";
 import { isBoardThemeId } from "./board-themes";
 
 export interface BoardViewParticipant {
@@ -39,6 +40,8 @@ export interface BoardViewScene {
   status: "pending" | "running" | "ready" | "failed" | "refused";
   /** PIN-71: "collage" = sharp mock-collage fallback, not AI output. */
   kind?: "ai" | "collage";
+  /** PIN-180: why a collage is a collage; absent on older collages and AI scenes. */
+  collageReason?: CollageReason;
   refusalReason?: string;
   /** Stored image pixel size (PIN-129); absent on older scenes. */
   width?: number;

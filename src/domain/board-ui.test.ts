@@ -3,6 +3,7 @@ import type { ActivityLine } from "./board-activity";
 import { pinCards, type BoardViewLike, type BoardViewScene } from "./board-view";
 import {
   boardCounts,
+  explainsBudgetCollage,
   formatElapsed,
   isVisibleReadyScene,
   latestActivity,
@@ -178,6 +179,17 @@ describe("scene tag and remix source (PIN-98)", () => {
     expect(sceneTag({ kind: "ai", parentSceneId: "p" })).toBe("remix");
     expect(sceneTag({ kind: "ai" })).toBe("scene");
     expect(sceneTag({})).toBe("scene");
+  });
+
+  it("explains only a collage the AI budget closed the composer for (PIN-180)", () => {
+    expect(explainsBudgetCollage({ kind: "collage", collageReason: "budget" })).toBe(true);
+    // Pool-empty already has its makes copy; the offline mock collage is the demo mode.
+    expect(explainsBudgetCollage({ kind: "collage", collageReason: "pool_empty" })).toBe(false);
+    expect(explainsBudgetCollage({ kind: "collage", collageReason: "mock" })).toBe(false);
+    // Older collages carry no reason; an AI scene never explains anything.
+    expect(explainsBudgetCollage({ kind: "collage" })).toBe(false);
+    expect(explainsBudgetCollage({ kind: "ai" })).toBe(false);
+    expect(explainsBudgetCollage({})).toBe(false);
   });
 
   it("names the parent's idea and maker, or nothing when the parent is gone", () => {

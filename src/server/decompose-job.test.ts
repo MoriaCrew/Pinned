@@ -68,6 +68,7 @@ type SegBehavior =
   | { kind: "empty" }
   | { kind: "failed" }
   | { kind: "refused" }
+  | { kind: "denied"; errorCode: string }
   | { kind: "gated"; gate: Promise<void> };
 
 interface Harness {
@@ -129,6 +130,9 @@ async function makeHarness(opts: {
       }
       if (behavior.kind === "refused") {
         return { status: "refused", errorCode: "content_policy" };
+      }
+      if (behavior.kind === "denied") {
+        return { status: "failed", errorCode: behavior.errorCode };
       }
       if (behavior.kind === "empty") return { status: "ready", value: { segments: [] } };
       return { status: "ready", value: { segments: [DOCS_SEGMENT] } };
@@ -399,6 +403,62 @@ describe("partial failures and terminal states", () => {
       h.deps,
     );
     expect(job).toMatchObject({ status: "failed", errorCode: "no_elements" });
+  });
+});
+
+describe("AI budget denials surface as the job's errorCode (PIN-180)", () => {
+  it("a namer the budget, call limit or AI switch denied fails with that code, no SAM calls", async () => {
+    for (const errorCode of ["budget", "call_limit", "budget_off"]) {
+      const h = await makeHarness({ namerOutcome: { status: "failed", errorCode } });
+      const job = await startDecomposeJob(
+        { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+        h.deps,
+      );
+      expect(job).toMatchObject({ status: "failed", errorCode });
+      expect(h.calls.segmenter).toHaveLength(0);
+    }
+  });
+
+  it("a segmenter the budget denied for every concept fails with the budget code, not no_usable_pins", async () => {
+    const h = await makeHarness({
+      segmentByConcept: {
+        "teal mug": { kind: "denied", errorCode: "budget" },
+        "rubber duck": { kind: "denied", errorCode: "budget" },
+      },
+    });
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      h.deps,
+    );
+    expect(job).toMatchObject({ status: "failed", errorCode: "budget", failedConceptCount: 2 });
+    expect(job.pinIds).toHaveLength(0);
+  });
+
+  it("a denial after some pins landed still finishes ready with those pins", async () => {
+    const h = await makeHarness({
+      segmentByConcept: { "rubber duck": { kind: "denied", errorCode: "call_limit" } },
+    });
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      h.deps,
+    );
+    expect(job.status).toBe("ready");
+    expect(job.errorCode).toBeUndefined();
+    expect(job.pinIds).toHaveLength(1);
+  });
+
+  it("a per-photo or per-person cap is not a budget denial", async () => {
+    const h = await makeHarness({
+      segmentByConcept: {
+        "teal mug": { kind: "denied", errorCode: "photo_cap" },
+        "rubber duck": { kind: "denied", errorCode: "participant_cap" },
+      },
+    });
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes() },
+      h.deps,
+    );
+    expect(job).toMatchObject({ status: "failed", errorCode: "no_usable_pins" });
   });
 });
 

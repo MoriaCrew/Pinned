@@ -6,6 +6,7 @@ import {
   type SceneJob,
 } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
+import { MUSE_IMAGE_USD_PER_IMAGE } from "../gateway/costs";
 import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
 import type {
   ComposeSceneInput,
@@ -212,7 +213,9 @@ describe("startSceneJob happy path (PIN-69)", () => {
     expect(job.status).toBe("ready");
     expect(job.prompt).toBe("on a sunny picnic blanket");
     expect(job.promptVersion).toBe("scene.v1");
-    expect(job.costUsd).toBeGreaterThan(0);
+    // PIN-180: the flat Muse Image price, not a Spark-token proxy.
+    expect(job.costUsd).toBe(MUSE_IMAGE_USD_PER_IMAGE);
+    expect(job.costUsd).toBe(0.01);
     expect(job.imageRef).toBe(buildSceneImageRef("board-1", job.id, "png"));
     const bytes = await h.store.get(job.imageRef as string);
     expect(bytes?.equals(Buffer.from(PNG_B64, "base64"))).toBe(true);
@@ -899,7 +902,7 @@ describe("mock collage fallback (PIN-71)", () => {
       { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2", "el3"], prompt: "in a tiny museum" },
       { ...h.deps, collageMode: true },
     );
-    expect(job).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
+    expect(job).toMatchObject({ status: "ready", kind: "collage", collageReason: "mock", costUsd: 0 });
     expect(h.calls).toHaveLength(0); // offline: no port call, no reserve
     expect(job.imageRef).toBe(buildSceneImageRef("board-1", job.id, "png"));
     const bytes = await h.store.get(job.imageRef as string);
@@ -908,8 +911,8 @@ describe("mock collage fallback (PIN-71)", () => {
     const meta = await sharp(bytes as Buffer).metadata();
     expect(meta).toMatchObject({ format: "png", width: 1024, height: 1536 });
     const scene = await h.boards.getScene(job.id);
-    expect(scene).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
-    expect(publicScene("board-1", scene!).kind).toBe("collage");
+    expect(scene).toMatchObject({ status: "ready", kind: "collage", collageReason: "mock", costUsd: 0 });
+    expect(publicScene("board-1", scene!)).toMatchObject({ kind: "collage", collageReason: "mock" });
     const types = (await h.boards.listEvents("board-1"))
       .filter((e) => e.sceneId === job.id)
       .map((e) => e.type);
@@ -925,9 +928,34 @@ describe("mock collage fallback (PIN-71)", () => {
       h.deps,
     );
     expect(h.calls).toHaveLength(1); // the (denied) port attempt happened
-    expect(job).toMatchObject({ status: "ready", kind: "collage", costUsd: 0 });
-    expect((await h.boards.getScene(job.id))?.kind).toBe("collage");
+    expect(job).toMatchObject({ status: "ready", kind: "collage", collageReason: "budget", costUsd: 0 });
+    const scene = await h.boards.getScene(job.id);
+    expect(scene).toMatchObject({ kind: "collage", collageReason: "budget" });
     expect(await h.store.get(job.imageRef as string)).not.toBeNull();
+    // The reason reaches the public scene and job payloads (PIN-180).
+    expect(publicScene("board-1", scene!)).toMatchObject({ kind: "collage", collageReason: "budget" });
+    expect((await getSceneView("board-1", job.id, h.api))?.job).toMatchObject({ collageReason: "budget" });
+  });
+
+  it("each closed-AI code (budget, call limit, AI off) is a budget collage; a cap is not", async () => {
+    for (const errorCode of ["budget", "call_limit", "budget_off"]) {
+      const h = await makeHarness();
+      await seedCutouts(h);
+      h.setBehavior({ kind: "cap", errorCode });
+      const job = await startSceneJob(
+        { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: errorCode },
+        h.deps,
+      );
+      expect(job).toMatchObject({ status: "ready", kind: "collage", collageReason: "budget" });
+    }
+    const capped = await makeHarness();
+    capped.setBehavior({ kind: "cap", errorCode: "participant_cap" });
+    const job = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "capped" },
+      capped.deps,
+    );
+    expect(job).toMatchObject({ status: "failed", errorCode: "participant_cap" });
+    expect(job.collageReason).toBeUndefined();
   });
 
   it("records the collage's pixel size on the job, the Scene and the board payload (PIN-129)", async () => {
@@ -949,9 +977,12 @@ describe("mock collage fallback (PIN-71)", () => {
       { boardId: "board-1", participantId: "p1", elementIds: ["el1"], prompt: "museum" },
       h.deps,
     );
-    expect(job).toMatchObject({ status: "ready", kind: "ai" });
-    expect(job.costUsd).toBeGreaterThan(0);
-    expect((await h.boards.getScene(job.id))?.kind).toBe("ai");
+    expect(job).toMatchObject({ status: "ready", kind: "ai", costUsd: MUSE_IMAGE_USD_PER_IMAGE });
+    expect(job.collageReason).toBeUndefined();
+    const scene = await h.boards.getScene(job.id);
+    expect(scene?.kind).toBe("ai");
+    expect(scene?.collageReason).toBeUndefined();
+    expect(publicScene("board-1", scene!)).not.toHaveProperty("collageReason");
   });
 
   it("collageMode still excludes deleted elements and reports missing cut-outs as failed", async () => {

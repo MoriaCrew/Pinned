@@ -140,6 +140,15 @@ export type SceneStatus = "pending" | "running" | "ready" | "failed" | "refused"
  */
 export type SceneKind = "ai" | "collage";
 
+/**
+ * Why a scene is a collage (PIN-180): the AI lane was closed by the
+ * daily AI budget / call limit / AI switch ("budget"), by an empty
+ * make pool ("pool_empty", PIN-151), or the offline demo mode
+ * ("mock", AI_MOCK=1). Set only with kind "collage"; absent on
+ * older collages.
+ */
+export type CollageReason = "budget" | "pool_empty" | "mock";
+
 export interface Scene {
   id: string;
   boardId: string;
@@ -155,6 +164,8 @@ export interface Scene {
   promptVersion: string; // e.g. "scene.v1", stored with every output
   /** "collage" = sharp mock-collage fallback; absent = AI scene. */
   kind?: SceneKind;
+  /** Why the collage lane ran; only with kind "collage" (PIN-180). */
+  collageReason?: CollageReason;
   costUsd?: number;
   refusalReason?: string;
   /** Set by the delete cascade when a used element is deleted (§5.4). */
@@ -229,7 +240,9 @@ export interface SceneJob {
   height?: number;
   /** "collage" = sharp mock-collage fallback; absent = AI scene. */
   kind?: SceneKind;
-  /** Cost estimate (gateway reserve proxy; dashboard authoritative). */
+  /** Why the collage lane ran; only with kind "collage" (PIN-180). */
+  collageReason?: CollageReason;
+  /** Cost estimate: the flat Muse Image price for an AI scene, 0 for a collage (dashboard authoritative). */
   costUsd?: number;
   refusalReason?: string;
   errorCode?: string;

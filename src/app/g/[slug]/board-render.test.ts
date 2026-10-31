@@ -4,6 +4,7 @@ import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
+import { t } from "../../../i18n";
 import { BoardScenes, type PrintSlot } from "./BoardScenes";
 import { BoardThings, pinMenuItems, type DeleteControls } from "./BoardThings";
 import { SceneViewer } from "./SceneViewer";
@@ -140,6 +141,35 @@ describe("board scenes strip (PIN-98)", () => {
     expect(out).toContain('style="--print-ratio:1280 / 1920"');
     expect(out).toContain("aspect-ratio:1280 / 1920");
     expect(out).not.toContain("4 / 3");
+  });
+
+  it("puts the budget-collage line under a collage print, after the actions (PIN-180)", () => {
+    const out = html(
+      h(BoardScenes, {
+        count: 1,
+        slots: [
+          {
+            type: "print",
+            ratio: "2 / 3",
+            id: "s1",
+            src: "/s1",
+            previewSrc: "/s1?size=preview",
+            alt: "A picnic",
+            idea: "A picnic",
+            credits: [],
+            kind: "collage",
+            remixOf: null,
+            number: 1,
+            onShare: noop,
+            sharing: false,
+            footer: h("p", { className: styles.collageNote }, t("en", "makes.collageBudget")),
+          },
+        ],
+      }),
+    );
+    expect(out).toContain("AI is busy right now, so this one is a collage. Nothing was spent.");
+    expect(out).toContain(`class="${styles.collageNote}"`);
+    expect(out.indexOf("pn-print-actions")).toBeLessThan(out.indexOf(styles.collageNote));
   });
 
   it("shows a remix's nine credits as one compact row, not a pill per thing (PIN-130)", () => {
