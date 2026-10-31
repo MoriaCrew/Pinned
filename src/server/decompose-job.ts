@@ -418,15 +418,14 @@ export async function runDecomposeJob(
   const boundMs = decomposeBoundMs(policy);
   const pastDeadline = (): boolean => now() - claimedAt > boundMs;
   let aborted = false;
+  // The flag clears only AFTER the refund lands, and ledger
+  // failures propagate: a paid make whose refund failed must not
+  // lose its candidates silently — callers refund BEFORE discarding
+  // (Bugbot #147), so a throw keeps the paid candidates stored.
   const refundIfDebited = async (): Promise<void> => {
     if (!makeDebited) return;
+    await tryRefundMake(job.boardId, photoRefundEventId(job.id), photoDebitEventId(job.id), deps);
     makeDebited = false;
-    await tryRefundMake(
-      job.boardId,
-      photoRefundEventId(job.id),
-      photoDebitEventId(job.id),
-      deps,
-    ).catch(() => undefined);
   };
 
   try {
@@ -656,8 +655,11 @@ export async function runDecomposeJob(
       // refund id and discards the unexposed candidates.
       const finishedJob = await finish(deps, job, "ready");
       if (finishedJob.status !== "ready" && makeDebited) {
-        await discardJobCandidates(deps, job);
+        // Refund FIRST; only a landed refund may discard the paid
+        // candidates. A ledger failure throws into the catch below,
+        // which retries finish + refund once before propagating.
         await refundIfDebited();
+        await discardJobCandidates(deps, job);
       }
       return finishedJob;
     }
@@ -675,8 +677,10 @@ export async function runDecomposeJob(
     if (makeDebited) {
       const retried = await finish(deps, job, "ready");
       if (retried.status !== "ready") {
-        await discardJobCandidates(deps, job);
+        // Same order as the lost-finish path: refund first; a
+        // ledger failure propagates with the paid candidates kept.
         await refundIfDebited();
+        await discardJobCandidates(deps, job);
       }
       return retried;
     }

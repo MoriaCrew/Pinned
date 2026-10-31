@@ -795,6 +795,34 @@ describe("paid make survives a failed terminal write (PIN-151)", () => {
     ]);
   });
 
+  it("photo: a failing refund after a lost finish keeps the paid candidates (Bugbot #147)", async () => {
+    class SweptPhotoStore extends InMemoryDecomposeJobStore {
+      private swept = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "ready" && !this.swept) {
+          this.swept = true;
+          await super.update({ ...job, status: "failed", errorCode: "stale_running" });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(2));
+    const { slug, owner } = await boardWithOwner(h);
+    // The refund write itself is unavailable (ledger outage).
+    h.ledger.refundDebit = async () => {
+      throw new Error("ledger unavailable");
+    };
+    const api: BoardApiDeps = { ...h.api, jobs: new SweptPhotoStore() };
+    await expect(uploadPhoto(slug, owner, await photoBytes(), api)).rejects.toThrow(
+      "ledger unavailable",
+    );
+    // The paid make was NOT silently destroyed: candidates and the
+    // debit both survive for recovery, and no refund was recorded.
+    expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit_refund")).toHaveLength(0);
+  });
+
   it("scene: the ready write retries, the paid AI scene stays ready", async () => {
     const h = makeHarness(ENABLED(2));
     const { slug, participant } = await seedSceneBoard(h);
