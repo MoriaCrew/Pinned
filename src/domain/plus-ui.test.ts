@@ -223,7 +223,7 @@ describe("look flow reducer", () => {
 });
 
 describe("look after a Stripe return (PIN-182)", () => {
-  const back = { flag: "processing" as const, stored: "darkroom" as const, isHost: true, plusActive: true, boardSkin: "paper" as const };
+  const back = { flag: "processing" as const, stored: { skin: "darkroom" as const, returned: true }, isHost: true, plusActive: true, boardSkin: "paper" as const };
 
   it("applies the stored try-on once Plus counts on the refetched view", () => {
     expect(returnSkinStep(back)).toEqual({ kind: "apply", skin: "darkroom" });
@@ -237,6 +237,20 @@ describe("look after a Stripe return (PIN-182)", () => {
   it("still applies after a reload that lost the return flag, once Plus counts", () => {
     expect(returnSkinStep({ ...back, flag: null })).toEqual({ kind: "apply", skin: "darkroom" });
     expect(returnSkinStep({ ...back, flag: null, plusActive: false })).toEqual({ kind: "wait" });
+  });
+
+  it("never applies a look left by an abandoned Checkout visit, whoever grants Plus later", () => {
+    const left = { skin: "darkroom" as const, returned: false };
+    expect(returnSkinStep({ ...back, flag: null, stored: left })).toEqual({ kind: "wait" });
+    // Arriving with the processing flag is the return itself.
+    expect(returnSkinStep({ ...back, flag: "processing", stored: left })).toEqual({ kind: "apply", skin: "darkroom" });
+  });
+
+  it("retryTryOn wears the look again without clearing the failure notice", () => {
+    const failed: LookFlowState = { ...initialLookFlow, notice: { kind: "lookFailed" } };
+    const next = lookFlow(failed, { type: "retryTryOn", skin: "darkroom" });
+    expect(next.tryOn).toBe("darkroom");
+    expect(next.notice).toEqual({ kind: "lookFailed" });
   });
 
   it("does nothing without a stored look", () => {

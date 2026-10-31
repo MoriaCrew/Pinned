@@ -131,19 +131,23 @@ export function returnSkinStep({
   boardSkin,
 }: {
   flag: "processing" | "cancelled" | "failed" | null;
-  stored: SkinId | null;
+  /** The look stored before leaving, and whether this tab already came back from Checkout. */
+  stored: { skin: SkinId; returned: boolean } | null;
   isHost: boolean;
   plusActive: boolean;
   boardSkin: SkinId;
 }): ReturnSkinStep {
   if (stored === null) return { kind: "wait" };
   if (flag === "cancelled" || flag === "failed") return { kind: "clear" };
-  // The return flag is stripped from the URL on arrival and the webhook
-  // lands after the redirect, so the signal is Plus counting on the
-  // refetched view plus the stored look: a reload in between still
-  // applies it, and nothing is forgotten until the save has answered.
+  // Only a tab that really came back from Checkout may apply: the
+  // processing flag on arrival, or the marker it left for a reload. An
+  // abandoned visit keeps its key but never that marker, so a later
+  // Plus grant by someone else cannot repaint the board with it.
+  if (!stored.returned && flag !== "processing") return { kind: "wait" };
+  // The webhook lands after the redirect: wait for Plus to count on the
+  // refetched view; nothing is forgotten until the save has answered.
   if (!isHost || !plusActive) return { kind: "wait" };
-  return stored === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored };
+  return stored.skin === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored.skin };
 }
 
 /**
@@ -288,6 +292,8 @@ export type LookFlowEvent =
   | { type: "openLook" }
   | { type: "closeSheet" }
   | { type: "tryOn"; skin: SkinId }
+  /** A failed save after a return: wear the look again for a retry, keeping the failure notice. */
+  | { type: "retryTryOn"; skin: SkinId }
   | { type: "endTryOn" }
   | { type: "offerPlus" }
   | { type: "applyStart"; skin: SkinId }
@@ -310,6 +316,8 @@ export function lookFlow(state: LookFlowState, event: LookFlowEvent): LookFlowSt
       return state.checkingOut ? state : { ...state, sheet: "none" };
     case "tryOn":
       return { ...state, sheet: "none", tryOn: event.skin, notice: null };
+    case "retryTryOn":
+      return { ...state, tryOn: event.skin };
     case "endTryOn":
       return { ...state, tryOn: null, sheet: state.sheet === "plus" ? "none" : state.sheet };
     case "offerPlus":

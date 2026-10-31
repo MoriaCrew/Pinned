@@ -34,7 +34,7 @@ import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
 import { ChangeLookSheet } from "./ChangeLookSheet";
 import { checkoutErrorLine, type MakesFlow } from "./MakesFlow";
-import { readReturnSkin, writeReturnSkin } from "./return-skin";
+import { markReturnSkinReturned, readReturnSkin, writeReturnSkin } from "./return-skin";
 import styles from "./board.module.css";
 
 /** How long a confirmation line stays above the dock (display timing only). */
@@ -125,6 +125,11 @@ export function useLookFlow({
   // forgotten only once the save has answered; a failed save hands the
   // look back to the try-on bar so Keep it can retry. Once only.
   const returnHandled = useRef(false);
+  // Landing with the processing flag marks the stored look as returned
+  // from Checkout, so a reload before the webhook lands still applies it.
+  useEffect(() => {
+    if (billingFlag === "processing") markReturnSkinReturned(slug);
+  }, [billingFlag, slug]);
   useEffect(() => {
     if (returnHandled.current) return;
     const step = returnSkinStep({
@@ -142,7 +147,9 @@ export function useLookFlow({
     }
     void applySkin(step.skin).then((outcome) => {
       writeReturnSkin(slug, null);
-      if (outcome !== "applied") dispatch({ type: "tryOn", skin: step.skin });
+      // A failed save keeps its notice and hands the look back to the
+      // try-on bar; plusRequired already opened the Plus sheet with it.
+      if (outcome === "failed") dispatch({ type: "retryTryOn", skin: step.skin });
     });
     // applySkin only closes over the query client, the slug and dispatch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
