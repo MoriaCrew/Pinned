@@ -12,11 +12,13 @@ import {
   LIVE_WEBHOOK_URL,
   PROD_PROJECT_ID,
   projectModeError,
+  reconciliationProject,
   resolveStripeMode,
   stripeKeyKind,
   webhookTarget,
 } from "../../scripts/stripe/operator-mode.mjs";
 import { STRIPE_WEBHOOK_EVENT_TYPES } from "../server/stripe-webhook";
+import { CATALOG_ITEMS, catalogMetadata, type CatalogItem } from "./catalog";
 
 /**
  * PIN-210: the sandbox/live gate of the Stripe operator scripts.
@@ -81,6 +83,15 @@ describe("stripe operator mode gate (PIN-210)", () => {
     expect(webhookTarget("sandbox", { url: other })).toMatchObject({ ok: true, url: other });
   });
 
+  it("reconciliation reads dev by default in sandbox and prod only when named in live (PIN-233)", () => {
+    expect(reconciliationProject("sandbox", undefined)).toEqual({ ok: true, project: DEV_PROJECT_ID });
+    expect(reconciliationProject("sandbox", DEV_PROJECT_ID)).toEqual({ ok: true, project: DEV_PROJECT_ID });
+    expect(reconciliationProject("sandbox", PROD_PROJECT_ID).ok).toBe(false);
+    expect(reconciliationProject("live", PROD_PROJECT_ID)).toEqual({ ok: true, project: PROD_PROJECT_ID });
+    expect(reconciliationProject("live", undefined).ok).toBe(false);
+    expect(reconciliationProject("live", DEV_PROJECT_ID).ok).toBe(false);
+  });
+
   it("webhook overrides cannot cross modes", () => {
     expect(webhookTarget("live", { project: DEV_PROJECT_ID }).ok).toBe(false);
     expect(webhookTarget("live", { url: DEV_WEBHOOK_URL }).ok).toBe(false);
@@ -137,7 +148,12 @@ exit 3
 chmodSync(GCLOUD, 0o755);
 
 let runs = 0;
-function runScript(script: string, key: string, args: string[]) {
+function runScript(
+  script: string,
+  key: string,
+  args: string[],
+  fake: { preload?: string; env?: Record<string, string> } = {},
+) {
   runs += 1;
   const files = {
     stripeLog: path.join(WORK, `stripe-${runs}.log`),
@@ -146,7 +162,14 @@ function runScript(script: string, key: string, args: string[]) {
   };
   const result = spawnSync(
     process.execPath,
-    ["--import", pathToFileURL(PRELOAD).href, path.join(ROOT, "scripts", script), "--env-var", "OPERATOR_KEY", ...args],
+    [
+      "--import",
+      pathToFileURL(fake.preload ?? PRELOAD).href,
+      path.join(ROOT, "scripts", script),
+      "--env-var",
+      "OPERATOR_KEY",
+      ...args,
+    ],
     {
       cwd: ROOT,
       encoding: "utf8",
@@ -160,6 +183,7 @@ function runScript(script: string, key: string, args: string[]) {
         FAKE_GCLOUD_LOG: files.gcloudLog,
         FAKE_GCLOUD_STDIN: files.gcloudStdin,
         FAKE_SIGNING_SECRET: SIGNING,
+        ...fake.env,
       },
     },
   );
@@ -242,6 +266,206 @@ describe("catalog seed dry-run (PIN-210)", () => {
     expect(run.stdout).toContain("host_monthly product=create");
     expect(run.stdout).not.toContain("LIVE");
     expect(run.stripeCalls.every((call) => call.method === "GET")).toBe(true);
+  });
+});
+
+// --- Catalog seed against archived prices (PIN-233 F3). ---
+
+/**
+ * A stateful fake of the catalog endpoints, Stripe-shaped where it
+ * matters: GET /v1/prices lists ACTIVE prices unless `active=false`,
+ * every list pages by `limit`/`starting_after` (capped by
+ * FAKE_STRIPE_PAGE_SIZE), and creating a price whose lookup key
+ * another price (archived or not) holds is rejected unless
+ * `transfer_lookup_key=true`.
+ */
+const CATALOG_PRELOAD = path.join(WORK, "fake-stripe-catalog.mjs");
+writeFileSync(
+  CATALOG_PRELOAD,
+  `import { appendFileSync, readFileSync } from "node:fs";
+const state = JSON.parse(readFileSync(process.env.FAKE_STRIPE_STATE, "utf8"));
+const pageSize = Number(process.env.FAKE_STRIPE_PAGE_SIZE || 100);
+let created = 0;
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const metadataOf = (body) =>
+  Object.fromEntries(Object.entries(body).filter(([k]) => k.startsWith("metadata[")).map(([k, v]) => [k.slice(9, -1), v]));
+globalThis.fetch = async (input, init = {}) => {
+  const url = new URL(String(input));
+  const method = init.method ?? "GET";
+  const body = Object.fromEntries(new URLSearchParams(init.body ? String(init.body) : ""));
+  appendFileSync(process.env.FAKE_STRIPE_LOG, JSON.stringify({ method, path: url.pathname, query: url.search, body }) + "\\n");
+  const q = url.searchParams;
+  const page = (rows) => {
+    const after = q.get("starting_after");
+    const start = after ? rows.findIndex((row) => row.id === after) + 1 : 0;
+    const size = Math.min(Number(q.get("limit") || 10), pageSize);
+    return json({ object: "list", data: rows.slice(start, start + size), has_more: start + size < rows.length });
+  };
+  if (method === "GET" && url.pathname === "/v1/products") return page(state.products);
+  if (method === "GET" && url.pathname === "/v1/prices") {
+    const keys = [...q.entries()].filter(([k]) => k.startsWith("lookup_keys[")).map(([, v]) => v);
+    const active = q.get("active") ?? "true";
+    return page(state.prices.filter((p) => String(p.active) === active && (!keys.length || keys.includes(p.lookup_key))));
+  }
+  if (method === "POST" && url.pathname === "/v1/prices") {
+    const holder = state.prices.find((p) => p.lookup_key === body.lookup_key);
+    if (holder && body.transfer_lookup_key !== "true") {
+      return json({ error: { code: "lookup_key_in_use", message: "fake: lookup key already in use" } }, 400);
+    }
+    if (holder) holder.lookup_key = null;
+    const price = {
+      id: "price_new_" + ++created, active: true, lookup_key: body.lookup_key, product: body.product,
+      unit_amount: Number(body.unit_amount), currency: body.currency, tax_behavior: body.tax_behavior,
+      recurring: body["recurring[interval]"] ? { interval: body["recurring[interval]"] } : null,
+      metadata: metadataOf(body),
+    };
+    state.prices.push(price);
+    return json(price);
+  }
+  const priceId = /^\\/v1\\/prices\\/([^/]+)$/.exec(url.pathname)?.[1];
+  const price = state.prices.find((p) => p.id === priceId);
+  if (method === "POST" && price) {
+    if (body.active !== undefined) price.active = body.active === "true";
+    price.metadata = { ...price.metadata, ...metadataOf(body) };
+    return json(price);
+  }
+  return json({ error: { message: "fake: write not modelled" } }, 400);
+};
+`,
+);
+
+function catalogState() {
+  const plus = CATALOG_ITEMS.find((item) => item.itemKey === "plus_20")!;
+  const host = CATALOG_ITEMS.find((item) => item.itemKey === "host_monthly")!;
+  const product = (id: string, item: CatalogItem) => ({
+    id, active: true, name: item.name, description: item.description, metadata: catalogMetadata(item),
+  });
+  const price = (id: string, item: CatalogItem, productId: string) => ({
+    id, active: false, lookup_key: item.lookupKey, product: productId, unit_amount: item.unitAmount,
+    currency: item.currency, tax_behavior: item.taxBehavior, recurring: item.recurring ?? null,
+    metadata: catalogMetadata(item),
+  });
+  return {
+    products: [product("prod_plus", plus), product("prod_host", host)],
+    prices: [
+      // Archived but still holding its lookup key, on the manifest's terms.
+      price("price_plus", plus, "prod_plus"),
+      // Archived on old terms: the amount has changed since.
+      { ...price("price_host", host, "prod_host"), unit_amount: host.unitAmount + 100 },
+    ],
+  };
+}
+
+/** Sandbox seed run on the archived-prices fake, one price per page. */
+function runCatalogSeed(args: string[]) {
+  const stateFile = path.join(WORK, `catalog-state-${runs + 1}.json`);
+  writeFileSync(stateFile, JSON.stringify(catalogState()));
+  return runScript("seed-stripe-catalog.mjs", TEST_KEY, args, {
+    preload: CATALOG_PRELOAD,
+    env: { FAKE_STRIPE_STATE: stateFile, FAKE_STRIPE_PAGE_SIZE: "1" },
+  });
+}
+
+describe("catalog seed sees archived prices (PIN-233 F3)", () => {
+  it("dry-run pages through archived prices and plans unarchive or transfer, never a create", () => {
+    const run = runCatalogSeed([]);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("plus_20 product=reuse id=prod_plus price=unarchive id=price_plus");
+    expect(run.stdout).toContain("host_monthly product=reuse id=prod_host price=transfer id=new (archives price_host)");
+    expect(run.stdout).not.toContain("price=create");
+    const archivedPages = run.stripeCalls.filter(
+      (call) => call.path === "/v1/prices" && call.query.includes("active=false"),
+    );
+    expect(archivedPages).toHaveLength(2);
+    expect(archivedPages[1].query).toContain("starting_after=price_plus");
+    expect(run.stripeCalls.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it("apply reactivates the matching price and transfers the drifted key, then converges", () => {
+    const run = runCatalogSeed(["--apply"]);
+    expect(run.output).not.toContain("lookup key already in use");
+    expect(run.code).toBe(0);
+    const writes = run.stripeCalls.filter((call) => call.method === "POST");
+    expect(writes.map((call) => call.path)).toEqual(["/v1/prices/price_plus", "/v1/prices", "/v1/prices/price_host"]);
+    expect(writes[0].body.active).toBe("true");
+    expect(writes[1].body).toMatchObject({ lookup_key: "pinneds_host_monthly", transfer_lookup_key: "true" });
+    expect(run.stdout).toContain("plus_20 price=unarchive id=price_plus");
+    // The post-apply self-check planned pure reuse.
+    expect(run.stdout).toContain('CATALOG_IDS_JSON={"plus_20":{"product":"prod_plus","price":"price_plus"}');
+  });
+});
+
+// --- Reconciliation project (PIN-233 F15). ---
+
+/**
+ * The default fake Stripe plus a resolve hook that swaps
+ * `@google-cloud/firestore` for a recording fake: it logs the options
+ * each Firestore is built with and holds no documents, so a full
+ * reconciliation run makes no network or ADC call.
+ */
+const FAKE_FIRESTORE = path.join(WORK, "fake-firestore.mjs");
+writeFileSync(
+  FAKE_FIRESTORE,
+  `import { appendFileSync } from "node:fs";
+export class Firestore {
+  constructor(options) {
+    appendFileSync(process.env.FAKE_FIRESTORE_LOG, JSON.stringify(options ?? null) + "\\n");
+  }
+  collection() {
+    return { get: async () => ({ docs: [] }) };
+  }
+  async terminate() {}
+}
+`,
+);
+const FIRESTORE_HOOKS = path.join(WORK, "firestore-hooks.mjs");
+writeFileSync(
+  FIRESTORE_HOOKS,
+  `export async function resolve(specifier, context, next) {
+  if (specifier === "@google-cloud/firestore") {
+    return { url: ${JSON.stringify(pathToFileURL(FAKE_FIRESTORE).href)}, shortCircuit: true };
+  }
+  return next(specifier, context);
+}
+`,
+);
+const RECON_PRELOAD = path.join(WORK, "fake-stripe-firestore.mjs");
+writeFileSync(
+  RECON_PRELOAD,
+  `import { register } from "node:module";
+import ${JSON.stringify(pathToFileURL(PRELOAD).href)};
+register(${JSON.stringify(pathToFileURL(FIRESTORE_HOOKS).href)});
+`,
+);
+
+function runReconciliation(args: string[]) {
+  const firestoreLog = path.join(WORK, `firestore-${runs + 1}.log`);
+  const run = runScript("billing-reconciliation.mjs", TEST_KEY, args, {
+    preload: RECON_PRELOAD,
+    env: { FAKE_FIRESTORE_LOG: firestoreLog },
+  });
+  const firestores = existsSync(firestoreLog)
+    ? readFileSync(firestoreLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as unknown)
+    : [];
+  return { ...run, firestores };
+}
+
+describe("billing reconciliation project (PIN-233 F15)", () => {
+  it("a sandbox run without --project reads the dev project, never ADC's default", () => {
+    const run = runReconciliation([]);
+    expect(run.code).toBe(0);
+    expect(run.firestores).toEqual([{ projectId: DEV_PROJECT_ID }]);
+    expect(run.stdout).toContain(`stripe=sandbox project=${DEV_PROJECT_ID} keyEnv=OPERATOR_KEY`);
+    expect(run.stripeCalls.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it("a sandbox run naming the prod project exits 2 before any Stripe or Firestore call", () => {
+    const run = runReconciliation(["--project", PROD_PROJECT_ID]);
+    expect(run.code).toBe(2);
+    expect(run.output).toMatch(/Sandbox mode never targets moriacrew-pinned-prod/);
+    expect(run.stripeCalls).toEqual([]);
+    expect(run.firestores).toEqual([]);
   });
 });
 

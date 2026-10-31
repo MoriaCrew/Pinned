@@ -21,10 +21,13 @@
  * (sandbox-only test objects). Convergence rules:
  * - product matched by metadata catalog + item_key (paginated);
  *   created when missing, updated in place on copy/metadata drift.
- * - price matched by lookup_key; reused on an exact match of
- *   amount/currency/product/tax_behavior/recurrence, otherwise a
- *   new price is minted with transfer_lookup_key=true and the
- *   old price is archived. POSTs carry idempotency keys.
+ * - price matched by lookup_key, over active AND archived prices
+ *   (Stripe lists only active ones unless asked, yet an archived
+ *   price can still hold the key, so a create for it is rejected;
+ *   PIN-233); reused on an exact match of amount/currency/product/
+ *   tax_behavior/recurrence (unarchived first if archived),
+ *   otherwise a new price is minted with transfer_lookup_key=true
+ *   and the old price is archived. POSTs carry idempotency keys.
  * - a "retired" item is archived (PIN-181): its product and every
  *   active price under its lookup key get active=false; nothing
  *   is ever created for it.
@@ -181,18 +184,19 @@ function planPrice(item, productId, prices) {
       .map((p) => p.id);
     return priceIds.length > 0 ? { kind: "archive", priceIds } : { kind: "retired" };
   }
-  const existing = prices.find((p) => p.lookup_key === item.lookupKey);
+  const holders = prices.filter((p) => p.lookup_key === item.lookupKey);
+  const existing = holders.find((p) => p.active !== false) ?? holders[0];
   if (!existing) return { kind: "create" };
   const matches =
     existing.unit_amount === item.unitAmount &&
     existing.currency === item.currency &&
     existing.product === productId &&
     (existing.tax_behavior ?? "unspecified") === item.taxBehavior &&
-    (existing.recurring?.interval ?? null) === (item.recurring?.interval ?? null) &&
-    existing.active !== false;
-  return matches
-    ? { kind: "reuse", priceId: existing.id }
-    : { kind: "transfer", oldPriceId: existing.id };
+    (existing.recurring?.interval ?? null) === (item.recurring?.interval ?? null);
+  if (!matches) return { kind: "transfer", oldPriceId: existing.id };
+  return existing.active === false
+    ? { kind: "unarchive", priceId: existing.id }
+    : { kind: "reuse", priceId: existing.id };
 }
 
 // --- Stripe API over plain fetch (form-encoded, no SDK). ---
@@ -254,9 +258,13 @@ async function listAll(path, params = {}) {
 
 async function fetchState(items) {
   const products = await listAll("/products");
-  const prices = await listAll("/prices", {
-    lookup_keys: items.map((i) => i.lookupKey),
-  });
+  // Stripe lists only active prices unless asked; an archived price
+  // can still hold a lookup key (PIN-233), so read both, each paged.
+  const lookupKeys = items.map((i) => i.lookupKey);
+  const prices = [
+    ...(await listAll("/prices", { lookup_keys: lookupKeys, active: true })),
+    ...(await listAll("/prices", { lookup_keys: lookupKeys, active: false })),
+  ];
   return { products, prices };
 }
 
@@ -345,6 +353,16 @@ async function applyItem(item, state) {
     }
     return { itemKey: item.itemKey, productId, priceId: pricePlan.priceId };
   }
+  if (pricePlan.kind === "unarchive") {
+    await stripe(
+      "POST",
+      `/prices/${pricePlan.priceId}`,
+      { active: true, metadata: catalogMetadata(item) },
+      idem("price-unarchive", item, `-${pricePlan.priceId}`),
+    );
+    console.log(`${item.itemKey} price=unarchive id=${pricePlan.priceId}`);
+    return { itemKey: item.itemKey, productId, priceId: pricePlan.priceId };
+  }
   if (pricePlan.kind === "create") {
     const created = await stripe(
       "POST",
@@ -387,7 +405,7 @@ function describePlan(items, state) {
       continue;
     }
     const priceId =
-      price.kind === "reuse"
+      price.kind === "reuse" || price.kind === "unarchive"
         ? price.priceId
         : price.kind === "transfer"
           ? `new (archives ${price.oldPriceId})`

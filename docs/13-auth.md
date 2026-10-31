@@ -310,9 +310,12 @@ answers exactly as for a slug that never existed, and nothing brings
 it back. Handlers that never read the board see it gone too: no
 participant cookie resolves on it, and nothing on it is anyone's
 (My pins thumbnail, pin-from-library source). Each linked member's
-`users/{uid}/boards/{slug}` row is deleted; the index writer skips a
-deleted board and re-checks after writing, and My boards skips one
-anyway. Jobs in flight are not waited for: their board-record writes
+`users/{uid}/boards/{slug}` row is deleted, best-effort: a failure
+listing the members or deleting a row never fails the 204 or skips
+the storage sweep below, since a retry would only get the 404
+(PIN-233). The index writer skips a deleted board and re-checks
+after writing, and My boards skips one anyway, so a row left behind
+links nothing. Jobs in flight are not waited for: their board-record writes
 (elements, pins, scenes, events) are refused and they end quietly,
 but a job already running can still finish its AI call, update its
 own job doc and debit one make from the board's credit account. The

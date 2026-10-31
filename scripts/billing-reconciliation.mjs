@@ -17,8 +17,10 @@
  * (default STRIPE_SECRET_KEY) and is never printed. A live key
  * needs --live --i-understand-live and --project
  * moriacrew-pinned-prod (PIN-210, scripts/stripe/operator-mode.mjs);
- * a sandbox run never reads prod. Firestore auth is Application Default
- * Credentials. Mirrors buildBillingReconciliationReport in
+ * a sandbox run reads moriacrew-pinned-dev unless --project names
+ * another non-prod project, and never prod (PIN-233). The project is
+ * never left to ADC's or gcloud's default; Firestore auth is
+ * Application Default Credentials. Mirrors buildBillingReconciliationReport in
  * src/domain/billing-reconciliation.ts — keep in sync (a test
  * pins the mirror). Runbook: docs/15 (PIN-153 section).
  */
@@ -27,7 +29,7 @@ import { Firestore } from "@google-cloud/firestore";
 import {
   LIVE_CONFIRM_FLAG,
   LIVE_FLAG,
-  projectModeError,
+  reconciliationProject,
   resolveStripeMode,
 } from "./stripe/operator-mode.mjs";
 
@@ -179,17 +181,15 @@ async function main() {
     console.error(gate.error);
     process.exit(2);
   }
-  // Live: only an explicit --project counts (never ADC/env defaults).
-  const projectId =
-    gate.mode === "live"
-      ? arg("--project")
-      : arg("--project") || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || undefined;
-  const projectError = projectModeError(gate.mode, projectId);
-  if (projectError) {
-    console.error(projectError);
+  // Never ADC's, gcloud's or the env's default project (PIN-233): live
+  // names prod explicitly, sandbox defaults to dev and never reads prod.
+  const target = reconciliationProject(gate.mode, arg("--project"));
+  if (!target.ok) {
+    console.error(target.error);
     process.exit(2);
   }
-  const db = new Firestore(projectId ? { projectId } : {});
+  const projectId = target.project;
+  const db = new Firestore({ projectId });
   try {
     const [paidSessions, intentsSnap, deadLettersSnap, accountsSnap] = await Promise.all([
       listPaidSessions(),
@@ -231,7 +231,7 @@ async function main() {
       boardHash,
     );
     console.log(
-      `billing reconciliation stripe=${gate.mode} project=${projectId ?? "(adc default)"} keyEnv=${envName} ` +
+      `billing reconciliation stripe=${gate.mode} project=${projectId} keyEnv=${envName} ` +
         `paidSessions=${paidSessions.length} purchases=${purchases.length} intents=${intents.length}`,
     );
     for (const row of report.paidNoGrant) {

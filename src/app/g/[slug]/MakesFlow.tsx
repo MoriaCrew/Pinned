@@ -15,13 +15,13 @@ import {
   type CreditCheckoutErrorKind,
 } from "../../../domain/makes-ui";
 import type { PlusMode } from "../../../domain/plus";
-import { plusPurchasePath } from "../../../domain/plus-ui";
+import { buyReturnSkinWrite, plusPurchasePath } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
 import { Button, IconButton, cx } from "../../../ui";
 import { boardQueryKey } from "./board-query";
 import styles from "./board.module.css";
-import { writeReturnSkin } from "./return-skin";
+import { applyBuyReturnSkinWrite } from "./return-skin";
 
 /** Refetches after a billing return before the banner stops waiting (display timing only). */
 const BILLING_REFETCH_ATTEMPTS = 5;
@@ -261,10 +261,11 @@ export function useMakesFlow({
     setBusy(true);
     setError(null);
     writeBaseline(slug, availableMakes);
-    // Only a look actually worn now is stored: a retry tap while the
-    // webhook is still landing (no local try-on after the remount) must
-    // not wipe the look the host already paid to keep.
-    if (tryOn) writeReturnSkin(slug, tryOn);
+    // Only a look actually worn now is stored, and only this tap's own
+    // failure forgets it: a retry tap while the webhook is still landing
+    // (no local try-on after the remount) must not wipe the look the
+    // host already paid to keep (PIN-233).
+    applyBuyReturnSkinWrite(slug, buyReturnSkinWrite(tryOn, "leaving"));
     try {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/credits/checkout`, {
         method: "POST",
@@ -281,13 +282,13 @@ export function useMakesFlow({
       }
       buying.current = false;
       setBusy(false);
-      writeReturnSkin(slug, null);
+      applyBuyReturnSkinWrite(slug, buyReturnSkinWrite(tryOn, "failed"));
       if (result.kind === "unavailable") setUnavailable(true);
       else setError(result.error);
     } catch {
       buying.current = false;
       setBusy(false);
-      writeReturnSkin(slug, null);
+      applyBuyReturnSkinWrite(slug, buyReturnSkinWrite(tryOn, "failed"));
       setError("generic");
     }
   }

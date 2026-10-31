@@ -164,6 +164,29 @@ export function returnSkinStep({
   return stored.skin === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored.skin };
 }
 
+/** What one Stripe buy tap does to the stored return look. */
+export type BuyReturnSkinWrite =
+  /** Leave whatever an earlier tap stored. */
+  | { kind: "keep" }
+  | { kind: "store"; skin: SkinId }
+  | { kind: "clear" };
+
+/**
+ * The return look a Stripe buy tap writes (PIN-182, PIN-233): it
+ * stores only a look worn now, as it leaves for Checkout, and its own
+ * failure (no redirect) forgets only what it stored. A retry tap with
+ * no try-on (after the remount, while the webhook is still landing)
+ * keeps the look an earlier tap stored, so a failed retry never wipes
+ * the look the host already paid to keep.
+ */
+export function buyReturnSkinWrite(
+  tryOn: SkinId | null,
+  phase: "leaving" | "failed",
+): BuyReturnSkinWrite {
+  if (tryOn === null) return { kind: "keep" };
+  return phase === "leaving" ? { kind: "store", skin: tryOn } : { kind: "clear" };
+}
+
 /**
  * The pin that wears foil: the board's first pinned thing, only
  * while Plus counts (docs/14: keep foil rare). Cards come oldest

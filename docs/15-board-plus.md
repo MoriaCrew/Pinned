@@ -428,7 +428,12 @@ in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
 recurrence all match — those fields are immutable, so drift
 mints a new price with `transfer_lookup_key=true` and archives
-the old one. A retired item is archived instead: its product
+the old one. The price lookup reads archived prices too (Stripe
+lists only active ones unless asked, paginated like every list):
+an archived price can still hold its lookup key, and creating
+another price for that key is rejected, so a matching archived
+price is reactivated (`unarchive`) and a drifted one transfers
+(PIN-233). A retired item is archived instead: its product
 and every active price under its lookup key get
 `active=false`, nothing is created for it, and an
 already-archived item plans `retired` (a no-op). POSTs carry
@@ -478,8 +483,12 @@ against the pending purchase so grant + clawback net to zero;
 partial refunds apply as per-refund deltas indexed by refund id
 (repeat id = no-op, totals never exceed the pack); disputed makes
 freeze until a restore or the dispute's final clawback (a freeze
-arriving before the grant is deferred and lands with it); debits
-spend only `available`. Persistence sits behind the
+arriving before the grant is deferred and lands with it); a freeze
+holds at most what is still clawable from its own purchase
+(`credits - clawedCredits`, so a dispute after a partial refund
+never locks the starter's or other packs' makes), and a final
+clawback consumes only its own dispute's hold, never another open
+dispute's (PIN-233); debits spend only `available`. Persistence sits behind the
 `CreditLedgerStore` port (in-memory implementation included): each
 operation is one atomic per-board read-modify-write and a refusal
 writes nothing.
@@ -728,7 +737,7 @@ and dispute lifecycle pages):
 
   | Event | Effect |
   | --- | --- |
-  | `created` | freeze (ceil) |
+  | `created` | freeze (ceil, capped at what the purchase still has to claw back after refunds; nothing left dead-letters `freeze_no_available`) |
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
@@ -1169,6 +1178,11 @@ means anomalies exist; exit 2 is a usage/config error.
 ```
 node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
 ```
+
+The Firestore project is never left to ADC's or gcloud's default
+(PIN-233): a sandbox run reads `moriacrew-pinned-dev` unless
+`--project` names another non-prod project and exits 2 for the prod
+one; a live run needs `--project moriacrew-pinned-prod`.
 
 **Runbook.** Run it daily while dev stripe mode is live and
 after any billing change or deploy, and drain dead letters to

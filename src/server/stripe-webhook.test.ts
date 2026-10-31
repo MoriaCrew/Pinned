@@ -654,6 +654,36 @@ describe("disputes (PIN-150)", () => {
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
   });
 
+  it("a dispute after a partial refund freezes only what is still clawable from the purchase; lost claws just that (PIN-233 F5)", async () => {
+    const { h } = await granted();
+    // Other makes on the board: this purchase's dispute must never lock them.
+    await h.ledger.grantStarter(SLUG, { eventId: "evt_starter", amount: 5, at: NOW });
+    expect((await h.deliver(evt("evt_re", "refund.created", refund({ amount: 300 })))).outcome).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 15, frozen: 0, available: 15 });
+    // The whole charge is disputed: ceil 25 wanted, 10 left to claw on this purchase.
+    expect((await h.deliver(evt("evt_du", "charge.dispute.created", dispute()))).outcome).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 15, frozen: 10, available: 5 });
+    expect(
+      (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute()))).outcome,
+    ).toBe("duplicate_freeze");
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ status: "lost" })))).outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 5, frozen: 0, pendingClawback: 0, available: 5 });
+    const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback" && e.disputeId);
+    expect(clawbacks.map((e) => e.amount)).toEqual([10]);
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("a dispute on a fully refunded purchase freezes nothing and flags an operator (PIN-233 F5)", async () => {
+    const { h } = await granted();
+    await h.ledger.grantStarter(SLUG, { eventId: "evt_starter", amount: 5, at: NOW });
+    await h.deliver(evt("evt_re", "refund.created", refund()));
+    expect((await h.deliver(evt("evt_du", "charge.dispute.created", dispute()))).outcome).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["freeze_no_available"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 5, frozen: 0, available: 5 });
+  });
+
   it("a won card dispute (created -> funds_withdrawn -> funds_reinstated -> closed won) restores every make (PIN-178)", async () => {
     const { h, intent } = await granted();
     expect(
