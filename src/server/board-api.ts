@@ -512,7 +512,16 @@ export async function failStaleJobIfNeeded(
   };
   const written = await deps.jobs.update(failed, job.status);
   if (!written) {
-    return (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
+    const stored = (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
+    // Losing the CAS to another sweeper does not skip the unpaid
+    // cleanup: that sweeper may not have discarded yet (or died
+    // trying), and callers like confirmPins act on what this
+    // returns. The discard is idempotent, so running it here too
+    // is safe. A job that finished instead is returned untouched.
+    if (stored.status === "failed" && stored.errorCode === STALE_JOB_ERROR) {
+      return discardUnpaidStaleCandidates(stored, deps, now);
+    }
+    return stored;
   }
   return discardUnpaidStaleCandidates(failed, deps, now);
 }

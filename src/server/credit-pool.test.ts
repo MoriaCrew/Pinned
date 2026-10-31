@@ -569,6 +569,66 @@ describe("photo debit (PIN-151)", () => {
     expect((await h.ledger.getBalance(slug)).available).toBe(3);
   });
 
+  it("losing the stale CAS to another sweeper still runs the unpaid cleanup (Bugbot #147)", async () => {
+    // Another sweeper writes failed/stale_running first (without
+    // discarding); this confirm's stale transition loses its CAS.
+    class RacingSweeperStore extends InMemoryDecomposeJobStore {
+      private raced = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "failed" && expectedStatus === "running" && !this.raced) {
+          this.raced = true;
+          await super.update({ ...job });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    await h.boards.createElement({
+      id: "el-race",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Raced",
+      description: "never debited",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-race/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-race/flattened.png`,
+      sourcePhotoId: "job-race",
+      faceFlag: false,
+      createdAt: T0,
+    });
+    await h.boards.createPin({
+      id: "pin-race",
+      boardId: slug,
+      elementId: "el-race",
+      pinnedBy: owner.id,
+      status: "candidate",
+      createdAt: T0,
+    });
+    const racing = new RacingSweeperStore();
+    await racing.create({
+      id: "job-race",
+      boardId: slug,
+      participantId: owner.id,
+      status: "running",
+      workingRef: `tmp/boards/${slug}/jobs/job-race/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-race"],
+      pinIds: ["pin-race"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const api: BoardApiDeps = { ...h.api, jobs: racing, now: () => T0 + 300_000 };
+    await expect(
+      confirmPins(slug, owner, { jobId: "job-race", pinIds: ["pin-race"] }, api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    expect(await h.boards.getElement("el-race")).toBeNull();
+    expect((await racing.get("job-race"))?.pinIds).toEqual([]);
+    expect((await h.ledger.getBalance(slug)).available).toBe(3);
+  });
+
   it("never debits a failed photo", async () => {
     const h = makeHarness(ENABLED(3));
     h.setNamer({
