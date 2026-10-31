@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { plusActionKey, poolEmptyCopy } from "../../../domain/makes-ui";
 import { t } from "../../../i18n";
+import { LocaleProvider } from "../../../i18n/client";
 import en from "../../../i18n/messages/en.json";
 import fr from "../../../i18n/messages/fr.json";
 import { BillingBanner, MakesIndicator, checkoutErrorLine } from "./MakesFlow";
@@ -14,15 +15,23 @@ const noop = () => {};
 
 describe("creations indicator (PIN-152, PIN-182, PIN-183)", () => {
   /** The shipped threshold: Policy.credits.lowMakesWarning is 2. */
-  const indicator = (availableMakes: number | null, over: Partial<Parameters<typeof MakesIndicator>[0]> = {}) =>
+  const indicator = (
+    availableMakes: number | null,
+    { locale = "en", ...over }: Partial<Parameters<typeof MakesIndicator>[0]> & { locale?: "en" | "fr" } = {},
+  ) =>
     html(
-      h(MakesIndicator, {
-        credits: availableMakes === null ? undefined : { availableMakes },
-        lowMakesWarning: 2,
-        plusActive: false,
-        canBuy: true,
-        onAddMakes: noop,
-        ...over,
+      h(LocaleProvider, {
+        locale,
+        enabled: ["en", "fr"],
+        cookieMaxAgeSeconds: 1,
+        children: h(MakesIndicator, {
+          credits: availableMakes === null ? undefined : { availableMakes },
+          lowMakesWarning: 2,
+          plusActive: false,
+          canBuy: true,
+          onAddMakes: noop,
+          ...over,
+        }),
       }),
     );
 

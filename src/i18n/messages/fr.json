@@ -1,7 +1,8 @@
 {
   "plus.hostOnly": "Seul l'hôte du tableau peut faire ça.",
   "plus.demoNote": "Paiement de démonstration. Rien n'est facturé.",
-  "you.plusOn": "Plus est activé · {left}",
+  "you.plusOnLeft.one": "Plus est activé · {n} création restante",
+  "you.plusOnLeft.other": "Plus est activé · {n} créations restantes",
   "ui.close": "Fermer",
   "ui.plus": "Plus",
   "ui.plusTitle": "Board Plus",

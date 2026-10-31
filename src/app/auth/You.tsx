@@ -139,11 +139,12 @@ export function YouView({
         return [{ label: t(locale, "you.myPins"), href: "/me/pins", onSelect: close }];
       case "boardPlus": {
         if (!board?.plus) return [];
-        const left = tCount(locale, "makes.left", board.plus.availableMakes);
+        const { active, availableMakes } = board.plus;
         return [
           {
             label: t(locale, "ui.plusTitle"),
-            detail: board.plus.active ? tf(locale, "you.plusOn", { left }) : left,
+            // Whole sentences, so each language orders the words its own way.
+            detail: tCount(locale, active ? "you.plusOnLeft" : "makes.left", availableMakes),
             onSelect: act(board.onBoardPlus),
           },
         ];

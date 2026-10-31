@@ -18,6 +18,7 @@ import type { PlusMode } from "../../../domain/plus";
 import { plusPurchasePath } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, IconButton } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
@@ -75,15 +76,14 @@ export function MakesIndicator({
   plusActive,
   canBuy,
   onAddMakes,
-  locale = "en",
 }: {
   credits: { availableMakes: number } | undefined;
   lowMakesWarning: number;
   plusActive: boolean;
   canBuy: boolean;
   onAddMakes: () => void;
-  locale?: Locale;
 }) {
+  const locale = useLocale();
   if (!credits) return null;
   const state = makesState(credits.availableMakes, lowMakesWarning);
   if (state === "ok") return null;

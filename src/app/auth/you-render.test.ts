@@ -1,6 +1,7 @@
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { LocaleProvider } from "../../i18n/client";
 import { ICON_PATHS } from "../../ui";
 import type { AuthContextValue, AuthUser } from "./AuthProvider";
 import { YouView, type YouBoard } from "./You";
@@ -116,6 +117,32 @@ describe("Board Plus and Change look in the menu (PIN-183)", () => {
   it("reads one left in the singular", () => {
     expect(boardPlus(open({ me: sam, plus: credits({ availableMakes: 1 }) }))).toBe("1 creation left");
     expect(boardPlus(open({ me: sam, plus: credits({ availableMakes: 0 }) }))).toBe("0 creations left");
+    expect(boardPlus(open({ me: sam, plus: credits({ active: true, availableMakes: 1 }) }))).toBe("Plus is on · 1 creation left");
+  });
+
+  it("reads the subline in the language of the page, as whole sentences", () => {
+    const fr = html(
+      h(LocaleProvider, {
+        locale: "fr",
+        enabled: ["en", "fr"],
+        cookieMaxAgeSeconds: 1,
+        children: h(YouView, { auth: linkOnly, board: board({ me: sam, plus: credits({ availableMakes: 4 }) }), initialOpen: true }),
+      }),
+    );
+    expect(boardPlus(fr)).toBe("4 créations restantes");
+    const frPlus = html(
+      h(LocaleProvider, {
+        locale: "fr",
+        enabled: ["en", "fr"],
+        cookieMaxAgeSeconds: 1,
+        children: h(YouView, {
+          auth: linkOnly,
+          board: board({ me: sam, plus: credits({ active: true, availableMakes: 1 }) }),
+          initialOpen: true,
+        }),
+      }),
+    );
+    expect(boardPlus(frPlus)).toBe("Plus est activé · 1 création restante");
   });
 
   it("gives a member Board Plus but no Change look while the board has no Plus", () => {
