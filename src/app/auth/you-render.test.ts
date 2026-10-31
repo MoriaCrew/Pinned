@@ -142,7 +142,7 @@ describe("Board Plus and Change look in the menu (PIN-183)", () => {
         }),
       }),
     );
-    expect(boardPlus(frPlus)).toBe("Plus est activé · 1 création restante");
+    expect(boardPlus(frPlus)).toBe("Plus est actif · 1 création restante");
   });
 
   it("gives a member Board Plus but no Change look while the board has no Plus", () => {

@@ -81,9 +81,9 @@ describe("creations indicator (PIN-152, PIN-182, PIN-183)", () => {
 
   it("renders in French", () => {
     expect(indicator(2, { locale: "fr" })).toContain("2 créations restantes");
-    expect(indicator(2, { locale: "fr" })).toContain("Obtenir Plus");
+    expect(indicator(2, { locale: "fr" })).toContain("Prendre Plus");
     expect(indicator(2, { locale: "fr", plusActive: true })).toContain("Ajouter des créations");
-    expect(indicator(0, { locale: "fr" })).toContain("Plus de créations. Les prochaines scènes seront des collages.");
+    expect(indicator(0, { locale: "fr" })).toContain("Plus de créations. Les nouvelles scènes seront des collages.");
   });
 });
 
@@ -129,14 +129,14 @@ describe("pool-empty outcomes (PIN-152, PIN-182, PIN-183)", () => {
     expect(line("photo", flags)).toBe("This board is out of creations. Get Plus to keep going.");
     expect(line("scene", flags)).toBe(line("photo", flags));
     expect(t("en", plusActionKey(false))).toBe("Get Plus");
-    expect(line("photo", flags, "fr")).toBe("Ce tableau n'a plus de créations. Obtenez Plus pour continuer.");
+    expect(line("photo", flags, "fr")).toBe("Ce tableau n'a plus de créations. Prends Plus pour continuer.");
   });
 
   it("ask for more instead of Plus once the board has it", () => {
     const flags = { canBuy: true, plusActive: true };
     expect(line("photo", flags)).toBe("This board is out of creations. Add more to keep going.");
     expect(t("en", plusActionKey(true))).toBe("Add creations");
-    expect(line("scene", flags, "fr")).toBe("Ce tableau n'a plus de créations. Ajoutez-en pour continuer.");
+    expect(line("scene", flags, "fr")).toBe("Ce tableau n'a plus de créations. Ajoutes-en pour continuer.");
   });
 
   it("keep the plain fact, and no button, when billing is off", () => {
