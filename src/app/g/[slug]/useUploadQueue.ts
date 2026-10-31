@@ -317,9 +317,21 @@ export function useUploadQueue(options: UploadQueueOptions) {
   const retryItem = useCallback(
     (key: string) => {
       const item = itemsRef.current.find((i) => i.key === key);
-      if (!item) return;
+      if (!item || item.status === "skipped" || item.status === "done") return;
       void (async () => {
         const existing = await fetchJob(item.uploadId);
+        // A skip (or pin) may have landed while the lookup was in
+        // flight: patchForced would resurrect the settled item, so
+        // re-check the live item before writing anything.
+        const live = itemsRef.current.find((i) => i.key === key);
+        if (
+          !live ||
+          live.uploadId !== item.uploadId ||
+          live.status === "skipped" ||
+          live.status === "done"
+        ) {
+          return;
+        }
         if (existing && uploadRetryMode(existing.status) === "adopt") {
           patchForced(key, {
             status: "uploading",

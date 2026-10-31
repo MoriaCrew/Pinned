@@ -654,13 +654,17 @@ export function AddSheet({
     batch?.itemStatus === "stopped";
   // A reopened photo is reviewed at once; its job view corrects
   // it. That includes a batch leftover: the queue item is already
-  // `ready` (its job finished), so don't park it in the cutting
-  // state until the job query lands (Bugbot #148). Only a batch
-  // step whose job may not exist yet (queued/uploading) reads as
-  // finding — never a phantom ready review.
-  const effectiveJobStatus =
-    job?.status ??
-    ((batch ? batch.itemStatus === "ready" : waitingForResume) ? "ready" : null);
+  // `ready` (its job finished) — or `skipped` with candidates on
+  // the board (skipped mid-cut, finished since; the leftovers line
+  // only surfaces jobs that have candidates) — so don't park it in
+  // the cutting state until the job query lands (Bugbot #148).
+  // Only a batch step whose job may not exist yet (queued/
+  // uploading) reads as finding — never a phantom ready review.
+  const batchReopenedReady = batch
+    ? batch.itemStatus === "ready" ||
+      (batch.itemStatus === "skipped" && candidatePins.length > 0)
+    : waitingForResume;
+  const effectiveJobStatus = job?.status ?? (batchReopenedReady ? "ready" : null);
   const stageFromJob = addSheetStage({
     uploadPending: upload.isPending || batchBusy,
     jobId,
