@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoardViewScene } from "./board-view";
-import { stripItems } from "./board-ui";
-import { parseSceneParam, sceneIdInUrl, stepScene, urlWithScene, viewerEscapeTarget, viewerSceneIds } from "./scene-viewer";
+import { sceneTag, stripItems } from "./board-ui";
+import { isAiScene, parseSceneParam, sceneIdInUrl, stepScene, urlWithScene, viewerEscapeTarget, viewerSceneIds } from "./scene-viewer";
 
 const board = "https://pinneds.test/g/AAAAAAAAAAAAAAAAAAAAAA";
 
@@ -47,5 +47,19 @@ describe("viewerEscapeTarget (PIN-143)", () => {
     expect(viewerEscapeTarget({ menuOpen: true, confirming: true })).toBe("menu");
     expect(viewerEscapeTarget({ menuOpen: false, confirming: true })).toBe("confirm");
     expect(viewerEscapeTarget({ menuOpen: false, confirming: false })).toBe("viewer");
+  });
+});
+
+describe("isAiScene (PIN-222)", () => {
+  it("credits Muse Image on AI scenes and their remixes, from the print's tag", () => {
+    expect(isAiScene(sceneTag({ kind: "ai" }))).toBe(true);
+    expect(isAiScene(sceneTag({ kind: "ai", parentSceneId: "p" }))).toBe(true);
+    // Older scenes carry no kind: they were composed, not collaged.
+    expect(isAiScene(sceneTag({}))).toBe(true);
+  });
+
+  it("never credits a collage, whatever its reason or whether it is a remix", () => {
+    expect(isAiScene(sceneTag({ kind: "collage" }))).toBe(false);
+    expect(isAiScene(sceneTag({ kind: "collage", parentSceneId: "p" }))).toBe(false);
   });
 });
