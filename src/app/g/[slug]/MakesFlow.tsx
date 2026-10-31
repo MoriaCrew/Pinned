@@ -69,13 +69,13 @@ export function MakesIndicator({
   lowMakesWarning,
   canBuy,
   onAddMakes,
-  locale = "en",
+  locale,
 }: {
   credits: { availableMakes: number } | undefined;
   lowMakesWarning: number;
   canBuy: boolean;
   onAddMakes: () => void;
-  locale?: Locale;
+  locale: Locale;
 }) {
   if (!credits) return null;
   const state = makesState(credits.availableMakes, lowMakesWarning);
@@ -103,12 +103,12 @@ export function BillingBanner({
   kind,
   availableMakes,
   onDismiss,
-  locale = "en",
+  locale,
 }: {
   kind: BillingBannerKind;
   availableMakes: number | null;
   onDismiss: () => void;
-  locale?: Locale;
+  locale: Locale;
 }) {
   const line =
     kind === "processing"
@@ -153,7 +153,7 @@ export function MakesBuySheet({
   unavailable = false,
   onBuy,
   onClose,
-  locale = "en",
+  locale,
 }: {
   packs: MakesPack[];
   canBuy: boolean;
@@ -163,7 +163,7 @@ export function MakesBuySheet({
   unavailable?: boolean;
   onBuy: (lookupKey: string) => void;
   onClose: () => void;
-  locale?: Locale;
+  locale: Locale;
 }) {
   const packGroup = `makes-pack-${useId()}`;
   const [selectedKey, setSelectedKey] = useState<string | null>(packs[0]?.lookupKey ?? null);
@@ -237,12 +237,12 @@ export function MakesPoolEmpty({
   kind,
   canBuy,
   onAddMakes,
-  locale = "en",
+  locale,
 }: {
   kind: "photo" | "scene";
   canBuy: boolean;
   onAddMakes: () => void;
-  locale?: Locale;
+  locale: Locale;
 }) {
   return (
     <div className={styles.makesPoolEmpty} role="alert">

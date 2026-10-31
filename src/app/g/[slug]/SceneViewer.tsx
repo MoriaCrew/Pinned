@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
 import { viewerEscapeTarget } from "../../../domain/scene-viewer";
-import { t } from "../../../i18n";
+import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, CreditLine, IconButton, Menu, cx } from "../../../ui";
 import type { PrintSlot } from "./BoardScenes";
 import styles from "./board.module.css";
@@ -43,6 +44,7 @@ export function SceneViewer({
   more?: ViewerMoreItem[];
   confirmDelete?: ViewerDeleteConfirm | null;
 }) {
+  const locale = useLocale();
   const titleId = useId();
   const confirmId = useId();
   const ref = useRef<HTMLDivElement>(null);
@@ -101,21 +103,21 @@ export function SceneViewer({
       <section className={cx("pn-sheet", styles.viewerPanel)}>
         <div className="pn-sheet-head">
           <h2 className="pn-print-idea" id={titleId}>
-            {slot.idea ? `“${slot.idea}”` : t("en", "ui.scene")}
+            {slot.idea ? tf(locale, "ui.quoted", { text: slot.idea }) : t(locale, "ui.scene")}
           </h2>
-          <IconButton icon="close" label={t("en", "ui.close")} variant="ghost" onClick={onClose} />
+          <IconButton icon="close" label={t(locale, "ui.close")} variant="ghost" onClick={onClose} />
         </div>
         <CreditLine items={slot.credits} remixOf={slot.remixOf} className={styles.viewerCredits} />
         {confirmDelete ? (
           // In the actions row's place, inside the panel's flow: never over the idea and Close.
           <div className={styles.viewerConfirm} role="group" aria-labelledby={confirmId}>
-            <p id={confirmId}>{t("en", "board.sceneDeleteConfirm")}</p>
+            <p id={confirmId}>{t(locale, "board.sceneDeleteConfirm")}</p>
             <div className="pn-print-actions">
               <Button disabled={confirmDelete.deleting} onClick={confirmDelete.onConfirm}>
-                {confirmDelete.deleting ? t("en", "board.deleting") : t("en", "board.delete")}
+                {confirmDelete.deleting ? t(locale, "board.deleting") : t(locale, "board.delete")}
               </Button>
               <Button variant="quiet" disabled={confirmDelete.deleting} autoFocus onClick={keep}>
-                {t("en", "board.deleteKeep")}
+                {t(locale, "board.deleteKeep")}
               </Button>
             </div>
             {confirmDelete.error ? (
@@ -127,11 +129,11 @@ export function SceneViewer({
         ) : (
           <div className="pn-print-actions">
             <Button variant="primary" icon="share" onClick={slot.onShare} disabled={slot.sharing}>
-              {t("en", "share.button")}
+              {t(locale, "share.button")}
             </Button>
             {onRemix ? (
               <Button icon="remix" onClick={onRemix}>
-                {t("en", "ui.remix")}
+                {t(locale, "ui.remix")}
               </Button>
             ) : null}
             <span className="pn-spacer" />
@@ -139,7 +141,7 @@ export function SceneViewer({
               <span ref={moreRef} className={styles.viewerMore}>
                 <IconButton
                   icon="more"
-                  label={t("en", "ui.more")}
+                  label={t(locale, "ui.more")}
                   variant="ghost"
                   aria-haspopup="menu"
                   aria-expanded={moreOpen}
@@ -154,7 +156,7 @@ export function SceneViewer({
                         item.onSelect?.();
                       },
                     }))}
-                    label={t("en", "ui.more")}
+                    label={t(locale, "ui.more")}
                     className={styles.viewerMenu}
                   />
                 ) : null}

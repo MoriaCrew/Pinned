@@ -6,6 +6,7 @@ import { parseSceneParam } from "../../../domain/scene-viewer";
 import { isSkinId } from "../../../domain/skins";
 import { isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import { getBoardView } from "../../../server/board-api";
 import { getBoardRepository } from "../../../server/board-repository";
@@ -38,10 +39,11 @@ export async function generateMetadata({
   // The public origin goes on every path, the fallback included, so
   // the card URL never resolves against an internal request host.
   const origin = await publicOrigin();
+  const locale = await getLocale();
   const fallback: Metadata = {
     ...(origin ? { metadataBase: new URL(origin) } : {}),
-    title: "Pinneds board",
-    description: t("en", "board.previewDescription"),
+    title: t(locale, "board.pageTitle"),
+    description: t(locale, "board.previewDescription"),
     robots: { index: false, follow: false },
   };
   try {
@@ -57,7 +59,7 @@ export async function generateMetadata({
       slug,
       origin,
       scenes,
-      fallbackDescription: t("en", "board.previewDescription"),
+      fallbackDescription: t(locale, "board.previewDescription"),
     });
     return {
       // PIN-102: og:image / twitter:image come from the board card
