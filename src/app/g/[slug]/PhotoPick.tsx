@@ -12,14 +12,16 @@ import { Icon } from "../../../ui";
  * capture="environment" so phones open the rear camera; "Choose
  * photo" is a plain input for the library. Capture must never go
  * on the only input — that would force the camera and hide the
- * library. Both inputs feed the exact same onChange pipeline.
+ * library. The library input accepts several files in one pick
+ * (the batch queue caps them at Policy.photosPerBatch); the camera
+ * stays one shot at a time.
  */
-export function PhotoPick({ onFile }: { onFile: (file: File) => void }) {
+export function PhotoPick({ onFiles }: { onFiles: (files: File[]) => void }) {
   const locale = useLocale();
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = [...(event.target.files ?? [])];
     event.target.value = "";
-    if (file) onFile(file);
+    if (files.length > 0) onFiles(files);
   };
   return (
     <div className="pn-add-pick">
@@ -37,7 +39,7 @@ export function PhotoPick({ onFile }: { onFile: (file: File) => void }) {
         <label className="pn-btn pn-btn-secondary pn-add-pick-action">
           <Icon name="scene" size={20} />
           {t(locale, "add.choosePhoto")}
-          <input type="file" accept="image/*" className="pn-sr" onChange={onChange} />
+          <input type="file" accept="image/*" multiple className="pn-sr" onChange={onChange} />
         </label>
       </span>
     </div>

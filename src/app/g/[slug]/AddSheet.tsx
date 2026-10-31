@@ -31,8 +31,9 @@ import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
 import { isPoolEmptyCode } from "../../../domain/makes-ui";
-import { t, tCount, type Locale } from "../../../i18n";
+import { formatList, t, tCount, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
+import type { UploadItemStatus } from "../../../domain/upload-queue";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
@@ -92,6 +93,31 @@ export function reviewHelpLine(help: ReviewHelp, locale: Locale): string {
  * it in, a failure releases the URL. Open sheets are told on change.
  */
 export type PhotoMemory = PhotoMemoryStore;
+
+/**
+ * One step of a BoardClient batch (multi-photo pick): the sheet is
+ * remounted per photo with `resumeJobId` set to the item's upload
+ * id, so the whole single-photo review (pop-in, tap-to-add, face
+ * note, Pin N) is reused unchanged. The queue owns the preview
+ * URL; confirming, skipping and retrying are reported up and the
+ * board page advances the step or closes the sheet.
+ */
+export interface AddBatchStep {
+  itemStatus: UploadItemStatus;
+  previewUrl: string | null;
+  errorCode?: string;
+  error?: string;
+  /** 1-based position and queue size, for "Photo i of n". */
+  index: number;
+  total: number;
+  /** Per-item statuses in pick order, for the one-line progress summary. */
+  states: readonly UploadItemStatus[];
+  /** Files the last pick dropped over Policy.photosPerBatch. */
+  droppedCount: number;
+  onConfirmed(jobId: string): void;
+  onSkip(): void;
+  onRetry(): void;
+}
 
 const noSubscribe = () => () => {};
 
@@ -274,6 +300,8 @@ export function AddSheet({
   resumeJobId = null,
   photoMemory,
   onAddMakes,
+  onPickFiles,
+  batch = null,
   onClose,
 }: {
   slug: string;
@@ -290,6 +318,10 @@ export function AddSheet({
   photoMemory?: PhotoMemory;
   /** PIN-152: out of makes — open the buy sheet (only passed while buying can work). */
   onAddMakes?: () => void;
+  /** Batch pick: several files go to the BoardClient queue instead of the legacy single upload. */
+  onPickFiles?: (files: File[]) => void;
+  /** The current batch step, when this sheet is stepping through a multi-photo pick. */
+  batch?: AddBatchStep | null;
   onClose: () => void;
 }) {
   const locale = useLocale();
@@ -332,8 +364,11 @@ export function AddSheet({
     () => null,
   );
   const rememberedLive = photoForJob(memorySlot, resumeJobId);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(remembered);
-  const previewRef = useRef<string | null>(remembered);
+  // In a batch step the queue owns the preview (made from the
+  // downscaled blob); the sheet shows it but must never revoke it.
+  const batchPreviewUrl = batch?.previewUrl ?? null;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(batchPreviewUrl ?? remembered);
+  const previewRef = useRef<string | null>(batchPreviewUrl ?? remembered);
   const [tapError, setTapError] = useState("");
   const [lastTap, setLastTap] = useState<{ x: number; y: number } | null>(null);
   const [pendingTapPin, setPendingTapPin] = useState<PendingTapPin | null>(null);
@@ -342,6 +377,7 @@ export function AddSheet({
   // this sheet made, it revokes.
   function releasePreview() {
     const url = previewRef.current;
+    if (url && url === batchPreviewUrl) return; // the queue owns it
     if (url && photoMemory?.current?.url !== url) URL.revokeObjectURL(url);
   }
 
@@ -410,6 +446,14 @@ export function AddSheet({
     // Only when the remembered photo changes, not on later resets.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rememberedLive]);
+
+  // A batch step's preview lands once the driver downscales the file.
+  useEffect(() => {
+    if (batchPreviewUrl && previewRef.current === null) {
+      previewRef.current = batchPreviewUrl;
+      setPreviewUrl(batchPreviewUrl);
+    }
+  }, [batchPreviewUrl]);
 
   const upload = useMutation({
     mutationFn: async (file: File) => {
@@ -551,6 +595,11 @@ export function AddSheet({
     onSuccess: (_data, payload) => {
       // Pinned: that photo has no leftovers to come back to.
       if (photoMemory?.current?.jobId === payload.jobId) photoMemory.current = null;
+      if (batch) {
+        // The board page advances to the next photo (or closes).
+        batch.onConfirmed(payload.jobId);
+        return;
+      }
       setJobId(null);
       onClose();
     },
@@ -593,13 +642,26 @@ export function AddSheet({
     },
   });
 
-  const stage = addSheetStage({
-    uploadPending: upload.isPending,
+  const batchBusy = batch?.itemStatus === "queued" || batch?.itemStatus === "uploading";
+  const batchEnded =
+    batch?.itemStatus === "failed" ||
+    batch?.itemStatus === "refused" ||
+    batch?.itemStatus === "stopped";
+  const stageFromJob = addSheetStage({
+    uploadPending: upload.isPending || batchBusy,
     jobId,
     // A reopened photo is reviewed at once; its job view corrects it.
-    jobStatus: job?.status ?? (waitingForResume ? "ready" : null),
+    // In a batch step the job may not exist yet (still uploading):
+    // that reads as finding, never as a phantom ready review.
+    jobStatus: job?.status ?? (batch ? null : waitingForResume ? "ready" : null),
     candidateCount: candidatePins.length,
   });
+  // A batch item that stopped/failed before a job existed (pool
+  // empty, intake, transport) is an ended step: retry or skip.
+  const stage =
+    batchEnded && candidatePins.length === 0 && stageFromJob !== "review"
+      ? "ended"
+      : stageFromJob;
   // Its working copy expired or was deleted: no photo, no tap-to-add.
   const photoGone = job?.workingCopyGone === true;
   const payload = jobId ? confirmPayload(jobId, selected) : null;
@@ -705,21 +767,45 @@ export function AddSheet({
             {confirm.isPending ? t(locale, "add.pinning") : tCount(locale, "add.pinCount", selected.size)}
           </Button>
         ) : null}
-        <Button
-          variant={candidatePins.length > 0 ? "quiet" : "secondary"}
-          icon={candidatePins.length > 0 ? undefined : "camera"}
-          block={candidatePins.length === 0}
-          className="pn-add-another"
-          onClick={resetForAnother}
-        >
-          {t(locale, "add.another")}
-        </Button>
+        {batch ? (
+          <Button variant="quiet" className="pn-add-another" onClick={batch.onSkip}>
+            {t(locale, "add.skipPhoto")}
+          </Button>
+        ) : (
+          <Button
+            variant={candidatePins.length > 0 ? "quiet" : "secondary"}
+            icon={candidatePins.length > 0 ? undefined : "camera"}
+            block={candidatePins.length === 0}
+            className="pn-add-another"
+            onClick={resetForAnother}
+          >
+            {t(locale, "add.another")}
+          </Button>
+        )}
       </>
     );
   } else if (!seeAll && stage === "ended") {
-    footer = (
+    footer = batch ? (
+      <>
+        <Button variant="primary" size="lg" block onClick={batch.onRetry}>
+          {t(locale, "add.retryPhoto")}
+        </Button>
+        <Button variant="quiet" className="pn-add-another" onClick={batch.onSkip}>
+          {t(locale, "add.skipPhoto")}
+        </Button>
+      </>
+    ) : (
       <Button variant="primary" size="lg" icon="camera" block onClick={resetForAnother}>
         {t(locale, "add.another")}
+      </Button>
+    );
+  } else if (!seeAll && batch && (stage === "finding" || stage === "cutting")) {
+    // Still cutting: pinning waits for ready (confirm 409s a running
+    // job). Skipping leaves the job running; its candidates become
+    // leftovers the board can resume.
+    footer = (
+      <Button variant="secondary" block onClick={batch.onSkip}>
+        {t(locale, "add.skipPhoto")}
       </Button>
     );
   }
@@ -731,6 +817,24 @@ export function AddSheet({
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
   const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  const batchPoolEmpty = isPoolEmptyCode(batch?.errorCode);
+  const batchCounts = batch
+    ? {
+        ready: batch.states.filter((s) => s === "ready" || s === "done").length,
+        waiting: batch.states.filter((s) => s === "queued" || s === "uploading").length,
+        failed: batch.states.filter((s) => s === "failed" || s === "refused" || s === "stopped").length,
+      }
+    : null;
+  const batchSummary = batchCounts
+    ? formatList(
+        locale,
+        [
+          batchCounts.ready > 0 ? tCount(locale, "add.batchReadyCount", batchCounts.ready) : null,
+          batchCounts.waiting > 0 ? tCount(locale, "add.batchWaitingCount", batchCounts.waiting) : null,
+          batchCounts.failed > 0 ? tCount(locale, "add.batchFailedCount", batchCounts.failed) : null,
+        ].filter((part): part is string => part !== null),
+      )
+    : "";
   const outOfMakes = (
     <>
       <SheetLine tone="error">{t(locale, "makes.poolEmptyPhoto")}</SheetLine>
@@ -744,7 +848,24 @@ export function AddSheet({
 
   const photoContent = (
     <>
-      {stage === "pick" ? <PhotoPick onFile={(file) => upload.mutate(file)} /> : null}
+      {batch ? (
+        <p className="pn-add-help" role="status">
+          {tf(locale, "add.photoStep", { i: batch.index, n: batch.total })}
+          {batchSummary ? ` · ${batchSummary}` : ""}
+        </p>
+      ) : null}
+      {batch && batch.droppedCount > 0 ? (
+        <SheetLine>{tCount(locale, "add.droppedPhotos", batch.droppedCount)}</SheetLine>
+      ) : null}
+
+      {stage === "pick" ? (
+        <PhotoPick
+          onFiles={(files) => {
+            if (onPickFiles) onPickFiles(files);
+            else if (files[0]) upload.mutate(files[0]);
+          }}
+        />
+      ) : null}
 
       {stage === "pick" && stripView.kind !== "hidden" ? (
         <LibraryStrip
@@ -784,7 +905,7 @@ export function AddSheet({
       ) : null}
 
       {stage === "review" && photoGone && candidatePins.length > 0 ? <SheetLine>{t(locale, "add.photoGone")}</SheetLine> : null}
-      {resuming && jobQuery.isError && !jobQuery.data ? (
+      {resuming && jobQuery.isError && !jobQuery.data && !batchBusy ? (
         <SheetLine tone="error">{t(locale, "add.resumeFailed")}</SheetLine>
       ) : null}
       {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t(locale, "add.noneFound")}</SheetLine> : null}
@@ -844,6 +965,13 @@ export function AddSheet({
         jobPoolEmpty ? outOfMakes : <SheetLine tone="error">{failedLine}</SheetLine>
       ) : null}
       {job?.status === "refused" ? <SheetLine>{t(locale, "add.refused")}</SheetLine> : null}
+      {batch && batchEnded && !job && candidatePins.length === 0 ? (
+        batchPoolEmpty ? (
+          outOfMakes
+        ) : (
+          <SheetLine tone="error">{batch.error || t(locale, "add.failed")}</SheetLine>
+        )
+      ) : null}
       {uploadError ? (uploadPoolEmpty ? outOfMakes : <SheetLine tone="error">{uploadError}</SheetLine>) : null}
     </>
   );
