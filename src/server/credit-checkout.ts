@@ -139,6 +139,7 @@ export async function buyCredits(
       boardId: slug,
       packLookupKey: pack.lookupKey,
       credits: pack.credits,
+      eurCents: pack.eurCents,
       at: now,
       intentTtlSeconds: deps.policy.credits.intentTtlSeconds,
       pendingIntentCapPerBoard: deps.policy.credits.pendingIntentCapPerBoard,

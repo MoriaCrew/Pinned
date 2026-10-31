@@ -14,6 +14,7 @@ import { generateAdminToken, generateSlug } from "../../../domain/tokens";
 process.env.PLUS_MODE = "mock";
 process.env.AI_MOCK = "1";
 process.env.DATA_BACKEND = "memory";
+process.env.SESSION_SECRET = "s".repeat(40);
 process.env.POLICY_OVERRIDES_JSON = JSON.stringify({
   plus: { hostRoutesPerIp: { limit: 3, windowMs: 600_000 }, requestMaxBytes: 256 },
 });
@@ -36,6 +37,7 @@ let createBoardRoute: (request: Request) => Promise<Response>;
 let getBoardRoute: SlugHandler;
 let skinRoute: SlugHandler;
 let plusRoute: SlugHandler;
+let joinRoute: SlugHandler;
 let getBoard: (slug: string) => Promise<StoredBoard | null>;
 
 beforeAll(async () => {
@@ -43,6 +45,7 @@ beforeAll(async () => {
   ({ GET: getBoardRoute } = await import("./[slug]/route"));
   ({ PATCH: skinRoute } = await import("./[slug]/skin/route"));
   ({ POST: plusRoute } = await import("./[slug]/plus/route"));
+  ({ POST: joinRoute } = await import("./[slug]/participants/route"));
   const { getBoardRepository } = await import("../../../server/board-repository");
   getBoard = (slug) => getBoardRepository().getBoard(slug) as Promise<StoredBoard | null>;
 });
@@ -67,6 +70,20 @@ async function createHostedBoard(headers: Record<string, string> = {}) {
   const { board } = (await res.json()) as { board: { slug: string } };
   const setCookie = res.headers.get("set-cookie") ?? "";
   return { slug: board.slug, cookie: setCookie.split(";")[0], setCookie };
+}
+
+/** Join as a board participant; returns the board session cookie pair. */
+async function joinedCookie(slug: string): Promise<string> {
+  const res = await joinRoute(
+    new Request(`http://t/api/boards/${slug}/participants`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": freshIp() },
+      body: JSON.stringify({ displayName: "Member" }),
+    }),
+    params(slug),
+  );
+  expect(res.status).toBe(201);
+  return (res.headers.get("set-cookie") ?? "").split(";")[0];
 }
 
 interface Send {
@@ -102,7 +119,7 @@ async function view(slug: string, cookie?: string) {
   expect(res.status).toBe(200);
   return (await res.json()) as {
     board: { themeId: string | null };
-    viewer: { isHost: boolean };
+    viewer: { isHost: boolean; canChangeLook: boolean };
     plus: { active: boolean; plan?: string; mode: string; priceLabels: { board: string; host: string } };
   };
 }
@@ -138,15 +155,15 @@ describe("host cookie on board creation (PIN-103)", () => {
     const a = await createHostedBoard();
     const b = await createHostedBoard();
     const asHost = await view(a.slug, a.cookie);
-    expect(asHost.viewer).toEqual({ isHost: true });
+    expect(asHost.viewer).toEqual({ isHost: true, canChangeLook: true });
     expect(asHost.plus).toEqual({
       active: false,
       mode: "mock",
       priceLabels: { board: "$3.99", host: "$4.99/month" },
     });
     expect(JSON.stringify(asHost)).not.toMatch(/tokenHash|issuedAt/);
-    expect((await view(a.slug)).viewer).toEqual({ isHost: false });
-    expect((await view(a.slug, b.cookie)).viewer).toEqual({ isHost: false });
+    expect((await view(a.slug)).viewer).toEqual({ isHost: false, canChangeLook: false });
+    expect((await view(a.slug, b.cookie)).viewer).toEqual({ isHost: false, canChangeLook: false });
   });
 });
 
@@ -235,6 +252,35 @@ describe("PATCH /api/boards/[slug]/skin (PIN-103)", () => {
     const res = await patchSkin(slug, { skinId: PLUS_SKIN }, { cookie });
     expect(res.status).toBe(200);
     expect(await getBoard(slug)).toMatchObject({ themeId: PLUS_SKIN });
+  });
+
+  it("a joined member changes the look only while the board has Plus (PIN-181)", async () => {
+    const { slug, cookie } = await createHostedBoard();
+    const member = await joinedCookie(slug);
+    const before = (await getBoard(slug))!.version;
+    // No Plus: the member gets the same 403 as no credential; nothing written.
+    await expectRefused(await patchSkin(slug, { skinId: FREE_SKIN }, { cookie: member }), 403, "host_only");
+    expect((await getBoard(slug))?.version).toBe(before);
+    expect((await view(slug, member)).viewer).toEqual({ isHost: false, canChangeLook: false });
+
+    expect((await postPlus(slug, { plan: "board" }, { cookie })).status).toBe(200);
+    expect((await view(slug, member)).viewer).toEqual({ isHost: false, canChangeLook: true });
+    expect((await patchSkin(slug, { skinId: PLUS_SKIN }, { cookie: member })).status).toBe(200);
+    expect(await getBoard(slug)).toMatchObject({ themeId: PLUS_SKIN });
+    expect((await patchSkin(slug, { skinId: FREE_SKIN }, { cookie: member })).status).toBe(200);
+
+    // Another board's member, and a member cookie aimed at an unknown board: uniform 403.
+    const other = await createHostedBoard();
+    const outsider = (await joinedCookie(other.slug)).replace(other.slug, slug);
+    const unknown = generateSlug();
+    for (const res of [
+      await patchSkin(slug, { skinId: FREE_SKIN }, { cookie: outsider }),
+      await patchSkin(unknown, { skinId: FREE_SKIN }, { cookie: member.replace(slug, unknown) }),
+    ]) {
+      await expectRefused(res, 403, "host_only");
+    }
+    // Buying Plus stays host-only.
+    await expectRefused(await postPlus(slug, { plan: "host" }, { cookie: member }), 403, "host_only");
   });
 });
 

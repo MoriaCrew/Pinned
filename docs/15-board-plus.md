@@ -3,18 +3,24 @@
 Server seam for an optional paid add-on. The UI is built
 separately; this page is the contract it builds on.
 `PLUS_MODE` is `off` (nothing can be bought), `mock` (demo) or
-`stripe` (credit packs via hosted Checkout, PIN-149; the
-credits themselves land by webhook only, PIN-150).
+`stripe` (the Board Plus pack via hosted Checkout, PIN-149; the
+makes and Plus land by webhook only, PIN-150 / PIN-181).
 
 ## What it is
 
 - The core loop is free while `Policy.credits.enabled` is off
   (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
   and the AI budget are unchanged. With credits on, AI makes
-  spend the board pool instead (PIN-151 below); **guests never
-  pay.**
-- Board Plus is bought by the board's **host** (the browser that
-  created the board) and today unlocks the Plus skins.
+  ("creations" in the UI) spend the board pool instead (PIN-151
+  below). Each board starts with a free pool of 5
+  (`credits.starterMakes`). **Guests never have to pay.**
+- **One purchase (PIN-181).** €2.99 once for this board buys
+  Board Plus (every look, foil stickers) plus 20 creations. Any
+  joined member, or the host, can buy it for the board; it is a
+  gift to the board, not to the buyer. No host plan is sold.
+- **Look control.** The host can always change the look (free
+  skins; Plus skins once the board has Plus). Once the board has
+  Plus, any joined member can change it too.
 - **Which skins are Plus is owned by the skins catalogue**
   (`src/domain/skins.ts`, `Skin.plus`; today `darkroom`,
   `postcard`, `marigold`). `src/domain/plus.ts` derives
@@ -23,18 +29,20 @@ credits themselves land by webhook only, PIN-150).
   existing `Board.themeId`; `isBoardThemeId` accepts every skin id
   plus the first-generation theme ids.
 
-## Plans
+## The purchase (PIN-181)
 
-| Plan | id | Billing | Covers | Display price (Policy) |
+| What | Who can buy | Billing | Grants | Policy |
 | --- | --- | --- | --- | --- |
-| This board | `board` | one-time | this board | `plus.priceLabels.board` = `$3.99` |
-| Host plan | `host` | monthly | every board the host runs (see limits) | `plus.priceLabels.host` = `$4.99/month` |
+| Board Plus · 20 creations (`pinneds_plus_20`) | any joined member or the host | €2.99 once, this board | 20 makes + `Board.plus = { plan: "board", source: "stripe" }` | `credits.packs`, `credits.plusOnPurchase` |
 
-Prices are placeholder **labels** in Policy (overridable through
-`POLICY_OVERRIDES_JSON` or per board), never literals in code and
-never used to charge anything. The host plan covers the board
-plan (`planCovers`), so buying `board` on a host-plan board is a
-no-op.
+It is bought through the credits buy route (PIN-149) and granted
+by the webhook (PIN-150 section). The plan ids `board` / `host`
+stay in the domain: `board` is what a purchase records, and the
+mock checkout still demos both. `host` covers `board`
+(`planCovers`). No host plan is sold: the draft
+`pinneds_host_monthly` price stays draft. `plus.priceLabels` are
+legacy display labels, never used to charge (a UI slice removes
+them).
 
 ## Host identity
 
@@ -88,8 +96,9 @@ no-op.
 ## API
 
 Every `[slug]` route runs the slug gate first (malformed slug →
-the uniform 404). The two host-only routes then run the cheap,
-I/O-free gates, in order:
+the uniform 404). The skin and plus routes then run the cheap,
+I/O-free gates, in order (since PIN-181 the body cap runs before
+the credential check):
 
 1. `Sec-Fetch-Site` present and not `same-origin` → 403
    `cross_site`.
@@ -98,14 +107,18 @@ I/O-free gates, in order:
 3. Per-IP budget `Policy.plus.hostRoutesPerIp` (default 60 per
    10 min, shared by both routes, in-process) → 429
    `rate_limited`.
-4. Host cookie missing or malformed → 403 `host_only`.
-5. Body over `Policy.plus.requestMaxBytes` (default 1024) → 413
+4. Body over `Policy.plus.requestMaxBytes` (default 1024) → 413
    `body_too_large`.
+5. No credential cookie → 403 `host_only`: a well-formed host
+   cookie, or for the skin route a board session cookie.
 
-After the gates, the route loads the board and checks the host
-token against the stored hash and age. A wrong or expired token
-and an unknown board are the same 403 `host_only`, so the routes
-reveal nothing about whether a board exists. Input errors are 400.
+After the gates, the route loads the board and checks the
+credential: the host token against the stored hash and age, or
+(skin route only) a joined member's board session while the
+board has Plus. A wrong or expired credential, a member without
+Plus and an unknown board are the same 403 `host_only`, so the
+routes reveal nothing about whether a board exists. Input errors
+are 400.
 Error bodies are `{ error, code }`. The guards live in
 `src/app/api/boards/request-guards.ts` for other routes to adopt
 later. Board delete (`DELETE /api/boards/{slug}`, PIN-167) is also
@@ -113,10 +126,14 @@ host-only but answers every failure with the uniform 404
 (`docs/13-auth.md`).
 
 - `PATCH /api/boards/{slug}/skin` `{ skinId }` → 200 `{ board }`.
-  400 `skin_unknown` (not `isBoardThemeId`); 402 `plus_required`
-  for a Plus skin without an entitlement that counts. Choosing the
-  current skin is a 200 no-op: no write, no version bump.
-- `POST /api/boards/{slug}/plus` `{ plan: "board" | "host" }` →
+  Allowed for the host, or since PIN-181 a joined member while
+  `hasPlus(board, mode)` (`resolveSkinActor`; the member's Plus is
+  checked again inside the write). 400 `skin_unknown` (not
+  `isBoardThemeId`); 402 `plus_required` for a Plus skin without
+  an entitlement that counts (only the host can hit it: a member
+  needs Plus to get this far). Choosing the current skin is a 200
+  no-op: no write, no version bump.
+- `POST /api/boards/{slug}/plus` (host only) `{ plan: "board" | "host" }` →
   200 with one of:
   - `{ status: "granted", plus }`
   - `{ status: "unavailable" }` (PLUS_MODE=off, or a paid grant the
@@ -155,7 +172,9 @@ host-only but answers every failure with the uniform 404
   the host cookie. A Plus skin as the initial `themeId` is 402
   `plus_required` (a new board holds no entitlement).
 - `GET /api/boards/{slug}` (board view), additive fields:
-  - `viewer: { isHost: boolean }`
+  - `viewer: { isHost: boolean, canChangeLook: boolean }`
+    (`canChangeLook`, PIN-181: the host, or a joined viewer while
+    the board has Plus; the skin route re-checks)
   - `plus: { active: boolean, plan?: "board" | "host", mode:
     "off" | "mock" | "stripe", priceLabels: { board, host } }`
   - `credits: { availableMakes: number }` (PIN-151, only while
@@ -179,11 +198,14 @@ host-only but answers every failure with the uniform 404
   synchronous in-memory body), the same shape as PIN-90's
   `mutateReclaimAttempt`. So every decision is made against the
   exact board being written:
-  - the skin entitlement check
+  - the skin entitlement check (and a member's Plus, PIN-181)
   - the no-op "already wearing it"
   - the mock's plan coverage (`host` survives a concurrent `board`
     in either order)
   - "never replace a stripe grant with a mock"
+  - the purchase grant (`decidePurchasePlusGrant`, PIN-181): no
+    write when a stripe grant of any plan exists, else a paid
+    `board` grant that also replaces a mock one
 
   A patch bumps `Board.version` by exactly one and never touches
   counters. A skin change also replaces the stored theme tokens
@@ -209,13 +231,13 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   `source: "mock"`. No money moves; the UI must say it is a demo.
   The stored source keeps mock grants distinguishable forever.
   Never set `mock` on prod.
-- `stripe` (PIN-149): sells the credit packs through hosted
+- `stripe` (PIN-149): sells the Board Plus pack through hosted
   Stripe Checkout (adapter section below). Requires
   `STRIPE_SECRET_KEY` in the same env — `stripe` without a key
   parses as `off` in config (fail closed: sells nothing, never
   errors per request; `GET /api/health` shows the effective
-  mode). Plus plans (board/host skins) are **not** sold in this
-  mode yet: the plan route answers `unavailable`, and a stored
+  mode). Plus comes only with that pack (PIN-181): the plan
+  route still answers `unavailable`, and a stored
   `source: "stripe"` grant counts while a mock one does not.
   **Dev runs `stripe` since PIN-153** (sandbox only: the dev
   backend flips together with `Policy.credits.enabled` and
@@ -230,10 +252,28 @@ Check a backend with `GET /api/health` → `plusMode`.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `priceLabels.board` / `.host` | `$3.99` / `$4.99/month` | display only |
+| `priceLabels.board` / `.host` | `$3.99` / `$4.99/month` | legacy display labels, never charged (a UI slice removes them) |
 | `hostCookieDays` | 365 | Server-side credential age, checked with the board's effective Policy, so a per-board override applies there. Cookie `Max-Age` is set once at create from the env-level Policy. |
-| `requestMaxBytes` | 1024 | JSON body cap on the host routes |
-| `hostRoutesPerIp` | 60 / 600,000 ms | in-process per-IP brake, both host routes |
+| `requestMaxBytes` | 1024 | JSON body cap on the skin and plus routes (and the credits buy route) |
+| `hostRoutesPerIp` | 60 / 600,000 ms | in-process per-IP brake shared by the skin and plus routes |
+
+## Policy keys (`credits`)
+
+Every key is deep-overridable through `POLICY_OVERRIDES_JSON` or
+per board. `packs` is an array, so an override replaces the whole
+list.
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
+| `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
+| `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
+| `plusOnPurchase` | `true` | a webhook grant also gives the board Plus (PIN-181) |
+| `pendingIntentCapPerBoard` | 3 | open checkout intents per board |
+| `intentTtlSeconds` | 1800 | how long an intent holds a cap slot (PIN-178) |
+| `checkoutPerIp` | 20 / 600,000 ms | buy route per-IP brake |
+| `webhookMaxBytes` | 1,048,576 | webhook body cap (PIN-178) |
 
 ## Stripe catalog (PIN-146)
 
@@ -245,10 +285,23 @@ object ids from config.
 
 | Item (lookup key) | Grants | Price | Status |
 | --- | --- | --- | --- |
-| `pinneds_credits_25` | 25 makes | €4.99 one-time | live |
-| `pinneds_credits_60` | 60 makes | €9.99 one-time | live |
-| `pinneds_credits_150` | 150 makes | €19.99 one-time | live |
-| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not yet offered |
+| `pinneds_plus_20` | Board Plus for the board + 20 creations | €2.99 one-time | live (PIN-181) |
+| `pinneds_credits_25` | 25 makes | €4.99 one-time | retired (PIN-181) |
+| `pinneds_credits_60` | 60 makes | €9.99 one-time | retired (PIN-181) |
+| `pinneds_credits_150` | 150 makes | €19.99 one-time | retired (PIN-181) |
+| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not offered |
+
+"Creations" is the customer-facing word for makes; code keeps
+`credits`/`makes`. The Checkout page shows the item's name
+"Board Plus · 20 creations" and its description. The lookup key
+(`pinneds_plus_20`, item `plus_20`) names the product; the pack's
+`credits` say what it holds.
+
+`retired` (PIN-181) means no longer sold: `assertLiveCreditPack`
+refuses it like a draft, and the seed archives it. The entry
+stays in the manifest so the seed can find what to archive, and
+purchases made before retirement keep their own terms (PIN-150
+section).
 
 Every catalog product and price carries metadata
 `catalog=pinneds`, `item_key`, `credits` (packs only) and
@@ -273,8 +326,12 @@ in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
 recurrence all match — those fields are immutable, so drift
 mints a new price with `transfer_lookup_key=true` and archives
-the old one. POSTs carry idempotency keys, and re-running a
-converged sandbox creates nothing. The pure decision functions
+the old one. A retired item is archived instead: its product
+and every active price under its lookup key get
+`active=false`, nothing is created for it, and an
+already-archived item plans `retired` (a no-op). POSTs carry
+idempotency keys, and re-running a converged sandbox creates
+nothing. The pure decision functions
 (`catalogValidationErrors`, `planProduct`, `planPrice`,
 `buildCatalogPlan`) are unit-tested in
 `src/billing/catalog.test.ts`. This slice changes no runtime
@@ -288,8 +345,9 @@ PIN-149 (below).
 no Stripe calls in the domain — checkout/webhook
 slices translate Stripe events into its operations, taking amounts
 from `Policy.credits` (packs pinned to the PIN-146 catalog by a
-test, `starterMakes` 25 granted once per board, paid makes never
-expire, `pendingIntentCapPerBoard` 3, `intentTtlSeconds` 1800).
+test, `starterMakes` granted once per board (5 since PIN-181),
+paid makes never expire, `pendingIntentCapPerBoard` 3,
+`intentTtlSeconds` 1800).
 
 The account tracks `balance` (makes owned, never negative),
 `frozen` (the disputed subset of `balance`, held per dispute id)
@@ -412,13 +470,15 @@ How a buy flows (`buyCredits`, `src/server/credit-checkout.ts`):
    to the catalog by test) and the Stripe **price is resolved
    by `lookup_key`** (`prices.list`, active only) through a
    short in-process cache (5 min; lookup keys survive price
-   transfers, ids do not). Unknown/draft/mis-sized packs are
-   refused from the committed catalog before any Stripe call;
-   a catalog pack with no active price is a 503. Nothing is
-   written yet, so a bad price leaves no intent behind.
+   transfers, ids do not). Unknown/draft/retired/mis-sized
+   packs are refused from the committed catalog before any
+   Stripe call; a catalog pack with no active price is a 503.
+   Nothing is written yet, so a bad price leaves no intent
+   behind.
 2. The opaque `CheckoutIntent` is created (per-board pending
-   cap + TTL from Policy, enforced in the store) and the ledger
-   purchase recorded with `purchaseId` = the intent id.
+   cap + TTL from Policy, enforced in the store; since PIN-181
+   it also stores the pack's `credits` + `eurCents`) and the
+   ledger purchase recorded with `purchaseId` = the intent id.
 3. Only then is the hosted Checkout Session created. If that
    fails, the intent and purchase are closed again so the cap
    slot is freed, and the caller gets a generic 503.
@@ -513,9 +573,9 @@ and dispute lifecycle pages):
   nothing (its ids are still mapped). The session must name
   its intent by `metadata.checkout_intent_id` /
   `client_reference_id` (never a slug), and before granting
-  the handler cross-checks the pack (`pack_lookup_key`,
-  metadata + intent + `Policy.credits.packs` credits) and
-  the money (`amount_total`/`currency` against the pack's
+  the handler cross-checks the pack (`pack_lookup_key` and
+  credits, metadata against the intent's stored terms) and
+  the money (`amount_total`/`currency` against the stored
   `eurCents`; for a foreign presentment currency the settled
   EUR amount is read from the charge's BalanceTransaction -
   its amount/currency are the settlement values - after
@@ -534,6 +594,20 @@ and dispute lifecycle pages):
   conflicting remap refuses) so later refund/dispute events,
   which carry only charge/payment_intent ids, resolve back
   via `findByStripeIds`; the intent then closes.
+- **Plus on grant (PIN-181).** While the board's
+  `credits.plusOnPurchase` is on, the grant also writes
+  `Board.plus = { plan: "board", source: "stripe" }` through
+  `updateBoardSettings` with `decidePurchasePlusGrant`: no
+  write when the board already holds a stripe grant of any
+  plan (a replay, or a paid host plan, is never downgraded); a
+  mock grant is replaced. It runs after the makes grant AND on
+  the `duplicate_grant` path, so a Plus write that throws
+  (propagated: 500, Stripe retries) or a crash between the two
+  writes is repaired by the next delivery. With no board
+  repository wired the makes still land and the event
+  dead-letters `plus_grant_unavailable`, re-runnable once
+  fixed. A `stripe` grant counts in every `PLUS_MODE`, `off`
+  included.
 - `async_payment_failed` + `expired` are the terminal
   events: they close the intent and its ledger purchase,
   never grant; a purchase the ledger refuses to close (e.g.
@@ -567,6 +641,15 @@ and dispute lifecycle pages):
   freeze no-ops, and a pre-grant freeze defers, capped at
   what actually lands in the pool.
 
+**Purchase terms (PIN-181).** The buy route stores the pack's
+`credits` and `eurCents` on the intent (server-only, never in
+the public shape). The amount check, refunds and disputes
+price from those stored terms, so a later Policy price change
+or a retired pack never reprices an old purchase. Intents
+created before PIN-181 have no `eurCents`: they fall back to
+the board's Policy pack by lookup key, and dead-letter
+`pack_mismatch` once Policy no longer offers that pack.
+
 Money -> makes (one documented formula): for a pack of
 `credits` makes at `eurCents`, clawbacks use
 `min(credits, floor(cents * credits / eurCents))` on the
@@ -582,7 +665,13 @@ FX-guessed: settled EUR comes from the reported
 BalanceTransaction - or, for a fresh dispute carrying no
 balance transactions yet, from its presentment amount at
 the charge BalanceTransaction's own Stripe-reported
-`exchange_rate`, so the freeze lands at `created`. Refund
+`exchange_rate`, so the freeze lands at `created`. That rate
+converts major units, so the conversion only runs between
+two 2-decimal currencies: a zero-decimal or three-decimal
+presentment currency (Stripe's lists on
+docs.stripe.com/currencies, kept as constants in the service),
+or a missing one, dead-letters `fx_unverifiable` (PIN-181).
+Refund
 counting is atomic in the intent store (`countRefund`
 prices the delta from the stored cumulative inside the
 write), and a dispute's final clawback is claimed
@@ -606,11 +695,14 @@ again keeps the one record) - reasons include
 `amount_mismatch`, `amount_unverifiable`, `pack_mismatch`,
 `unknown_purchase`, `unknown_mapping` (refund/dispute for a
 charge we never mapped), `mapping_conflict`,
-`freeze_no_available`, `ledger_refused`, `fx_unverifiable`
-and `reinstated_after_final_clawback`. Records carry ids
-only - no payloads, no secrets. Plus-plan (board/host)
-Stripe sales stay unbuilt: the draft `pinneds_host_monthly`
-price is seeded only (PIN-146).
+`freeze_no_available`, `ledger_refused`, `fx_unverifiable`,
+`reinstated_after_final_clawback` and `plus_grant_unavailable`
+(PIN-181: makes granted, Plus not written). Records carry ids
+only - no payloads, no secrets. Plus is sold only inside the
+pack (PIN-181); a separate host plan stays unbuilt: the draft
+`pinneds_host_monthly` price is seeded only (PIN-146).
+Refunds and disputes claw back makes but do **not** revoke
+Plus in v1 (follow-up below).
 
 ## Pool debit on makes (PIN-151)
 
@@ -629,7 +721,7 @@ possible in a test harness) the pool reads empty and debits
 refuse: fail closed, never gift a make.
 
 **Starter timing.** The once-per-board starter pool
-(`Policy.credits.starterMakes`, default 25) is granted by
+(`Policy.credits.starterMakes`, default 5 since PIN-181) is granted by
 board creation when credits are on, under the deterministic
 ledger event id `starter:{boardId}`; it never blocks creation.
 Every later credit touch — a board-view balance read (each
@@ -730,7 +822,7 @@ reload, and changes are announced (`aria-live="polite"`).
   `cash`, `transfer`, money-`balance`), no dollars, no
   per-person anything (a test scans the EN + FR `makes.*`
   strings). At or under `Policy.credits.lowMakesWarning`
-  (default 5, deep-overridable like every credits key; 0
+  (default 2 since PIN-181, deep-overridable like every credits key; 0
   disables it) the indicator shows its low state; at zero it
   says new scenes will be collages until someone adds more —
   the free collage lane, still labelled `Collage` on the print.
@@ -885,6 +977,13 @@ a genuinely unknown charge still dead-letters.
   shared in-process `checkRateLimit`, a soft limit per instance.
 - Adopt `request-guards.ts` on the other state-changing routes.
 - UI behaviour for a Plus skin whose grant stopped counting.
+- PIN-181: revoke (or keep, by decision) Plus when a purchase is
+  fully refunded or a dispute is lost. v1 claws back the makes
+  only; the board keeps its `stripe` grant.
+- PIN-181 UI slice: the one-purchase sheet, "creations" copy,
+  Change look for members (`viewer.canChangeLook`; today
+  `you-menu.ts` ties Change look to Delete board for the host),
+  and removing `plus.priceLabels`.
 
 ## Tests
 
@@ -938,3 +1037,14 @@ a genuinely unknown charge still dead-letters.
   Firestore), `src/server/credit-checkout.test.ts` (return
   resolver only reads) and the route's 413 + slug-redacted 500
   log in `src/app/api/billing/stripe-webhook-routes.test.ts`.
+- PIN-181: `src/billing/catalog.test.ts` (one live pack,
+  retired archive plans, full mirror equality),
+  `src/policy/policy.test.ts` (defaults + `plusOnPurchase`),
+  `src/domain/plus.test.ts` (`decidePurchasePlusGrant`),
+  `src/server/stripe-webhook.test.ts` (stored terms after a
+  Policy change, legacy fallback, zero/three-decimal FX dead
+  letters, Plus once, retry repair, no downgrade, mock
+  replaced, flag off, `plus_grant_unavailable`),
+  `src/server/board-plus.test.ts` and
+  `src/app/api/boards/plus-routes.test.ts` (member skin with and
+  without Plus, uniform 403, `canChangeLook`).
