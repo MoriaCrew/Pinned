@@ -200,3 +200,19 @@ describe("scene image ?size=preview (PIN-133)", () => {
     }
   });
 });
+
+describe("POST /api/boards with credits off (PIN-205)", () => {
+  it("stores no starterMakes and writes no maker counter: creation unchanged", async () => {
+    const res = await createBoardRoute(
+      req("http://t/api/boards", {
+        method: "POST",
+        headers: { "x-forwarded-for": "192.0.2.30" },
+        body: JSON.stringify({ title: "Credits off" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    const { board } = (await bodyOf(res)) as { board: { slug: string } };
+    expect(board).not.toHaveProperty("starterMakes");
+    expect(await getBoardRepository().getBoard(board.slug)).not.toHaveProperty("starterMakes");
+  });
+});

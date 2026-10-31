@@ -21,11 +21,13 @@ as the code it unblocks — allowlist changes need their own reviewed PR.
 ## Never commit (any branch, any file, any commit message)
 
 - API keys, tokens, passwords, session secrets (Meta, Baseten, Modal,
-  Fireworks, DB, storage) — values live only in local `.env`, host env,
-  GitHub Actions secrets. `.env.example` holds names with empty values.
+  Fireworks, Stripe secret keys and the webhook signing secret,
+  Firebase, DB, storage) — values live only in local `.env`, host
+  env, Secret Manager, GitHub Actions secrets. `.env.example` holds
+  names with empty values.
 - Private keys/certs (`*.pem`, `*.key`, `*.p12`), credential JSON,
   `.env*` files other than `.env.example`.
-- Personal data: real player photos (originals *or* cut-outs), names +
+- Personal data: real personal photos (originals *or* cut-outs), names +
   photos together, emails, chat screenshots with identities. Test assets
   in `eval/` must be consented samples, clearly synthetic where possible.
 - Full request/response dumps from live AI calls containing user content.

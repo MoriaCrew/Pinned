@@ -27,8 +27,8 @@ Oct 30):
 
 A scene costs the flat Muse Image price, whatever its token
 counts (PIN-180). Before the call the gateway reserves $0.01
-against the daily budget (so the $2 default admits 200
-scenes). After
+against the daily budget (so the $5 code default admits 500
+scenes, and prod's $50 during judging admits 5,000). After
 it, the `AiCallLog` row is priced at $0.01 per generated image:
 `images` on the row is how many images the reply held, so a
 reply with no image (a refusal) and a failed call are priced
@@ -36,6 +36,17 @@ at $0. Input and output tokens stay on the row for
 attribution but never move the price. The scene job's own
 `costUsd` is the same $0.01 for an AI scene and $0 for a
 collage.
+
+## SAM `store` flag (PIN-213)
+
+SAM store flag: PIN-213, default off until probed. `Policy.samStore`
+unset (the default) sends no `store` field on SAM `/v1/responses`
+calls, exactly as before; `false` sends `store: false` on every
+concept and tap (point) cut. Set it per board
+(`policyOverrides.samStore`) for the one live probe, then globally
+via `POLICY_OVERRIDES_JSON`. Muse Image compose already sends
+`store: false` (`Policy.sceneStore`). The SAM lab route does not use
+the flag.
 
 ## Collage reason
 
@@ -77,7 +88,11 @@ carry `expireAtTs` (a Timestamp mirror of `expireAt`, written by
 `FirestoreGameRepository`) so the operator can enable a TTL
 policy on `aiCallLogs.expireAtTs` in the Firebase console or via
 `gcloud firestore fields ttls update`. Until that policy exists,
-rows are retained — code does not fake deletion. Composite
+rows are retained — code does not fake deletion. The same
+console step applies to `starterAllowances.expireAtTs` (PIN-204,
+the free-creations-per-maker counters keyed by a hashed client
+address or user id, docs/15): with the policy on, a counter goes
+when its window ends; without it, counters are kept. Composite
 indexes for the rollups live in `firestore.indexes.json`
 (board/participant/day, user/day, operation/day); deploy them
 with the usual `firebase deploy --only firestore:indexes`.

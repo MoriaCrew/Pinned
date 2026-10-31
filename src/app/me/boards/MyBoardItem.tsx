@@ -67,7 +67,6 @@ export function MyBoardItem({
       document.removeEventListener("keydown", onKey);
     };
     // close only sets state and focuses: re-bind when the menu opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   async function remove() {

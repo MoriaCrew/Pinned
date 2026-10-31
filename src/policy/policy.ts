@@ -107,6 +107,10 @@ export const PolicySchema = z
     userSessionDays: z.number().int().min(1).default(30),
     /** Life of the cookie that remembers a language picked by hand (PIN-190, docs/18-i18n.md). */
     localeCookieDays: z.number().int().min(1).default(365),
+    /** How long browsers remember "HTTPS only" for this site (the
+     * Strict-Transport-Security max-age, PIN-212). Read by
+     * next.config.ts at BUILD, so a change needs a rebuild. */
+    hstsMaxAgeDays: z.number().int().min(1).default(365),
     /** Sign-in provider pin + freshness (PIN-94): session exchange
      * only accepts these Firebase `sign_in_provider` values, so
      * enabling another provider (e.g. Anonymous) in a console can
@@ -134,6 +138,13 @@ export const PolicySchema = z
         windowMs: z.number().int().min(1).default(600_000),
       })
       .default({ limit: 60, windowMs: 600_000 }),
+    /** Board create per-IP brake (PIN-61; moved from RATE_LIMITS in PIN-205, in-process like boardDeletePerIp). The per-maker free creations rule (credits.starterBoardsPerMaker) is the shared, durable limit. */
+    boardCreatePerIp: z
+      .object({
+        limit: z.number().int().min(1).default(10),
+        windowMs: z.number().int().min(1).default(3_600_000),
+      })
+      .default({ limit: 10, windowMs: 3_600_000 }),
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Since PIN-181
      * Plus is sold only inside the credits pack (any joined member
@@ -187,6 +198,10 @@ export const PolicySchema = z
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(5),
+        /** Free creations per maker (PIN-204): only a maker's first `starterBoardsPerMaker` new boards per `starterMakerWindowMs` get the starter pool; later boards start at 0. 0 = no new board gets a pool. A maker is a signed-in user, else the client address (docs/15, "Free creations rule"). */
+        starterBoardsPerMaker: z.number().int().min(0).default(3),
+        /** Fixed window for starterBoardsPerMaker in ms (default 7 days), anchored at the maker's first counted board. */
+        starterMakerWindowMs: z.number().int().min(1).default(604_800_000),
         /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
         lowMakesWarning: z.number().int().min(0).default(2),
         /** PIN-181: a webhook-granted purchase also grants the board Plus (`source: "stripe"`). Off = makes only. */
@@ -207,6 +222,8 @@ export const PolicySchema = z
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 5,
+        starterBoardsPerMaker: 3,
+        starterMakerWindowMs: 604_800_000,
         lowMakesWarning: 2,
         plusOnPurchase: true,
         pendingIntentCapPerBoard: 3,
@@ -241,6 +258,16 @@ export const PolicySchema = z
       .default("flattened"),
     sceneSize: SceneSize.default("1024x1536"),
     sceneStore: z.boolean().default(false),
+    /**
+     * SAM `/v1/responses` `store` flag (PIN-213). docs/11 decided
+     * `store: false` everywhere, but the SAM call has never sent
+     * the field. Undefined (the default) omits it: the wire body is
+     * byte-identical to before. `false` sends `store: false`; `true`
+     * sends `store: true`. Flip per board (policyOverrides) after one
+     * live probe proves SAM accepts the field, then globally via
+     * POLICY_OVERRIDES_JSON.
+     */
+    samStore: z.boolean().optional(),
     timeoutsMs: z
       .object({
         spark: z.number().int().positive().default(30_000),
@@ -291,19 +318,18 @@ export const PolicySchema = z
       .object({
         elements: z.string().min(1).default("elements.v1"),
         scene: z.string().min(1).default("scene.v1"),
-        chips: z.string().min(1).default("chips.v1"),
+        // PIN-214: v2 writes the chips in the viewer's UI language.
+        chips: z.string().min(1).default("chips.v2"),
         tapName: z.string().min(1).default("tap-name.v1"),
       })
-      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v1", tapName: "tap-name.v1" }),
-    /** Fixed suggestion chips: instant fallback while generated chips load or fail (docs/11 Q10, PIN-75). */
-    sceneChips: z
-      .array(z.string().min(1))
-      .default([
-        "on a sunny picnic blanket",
-        "in a tiny museum",
-        "floating in space",
-        "at a birthday party",
-      ]),
+      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v2", tapName: "tap-name.v1" }),
+    /**
+     * Fixed idea chips shown: the instant fallback while generated
+     * chips load or fail (docs/11 Q10, PIN-75). The text is i18n
+     * (`make.chip.*`, FIXED_CHIP_KEYS in src/domain/chips.ts), so
+     * it follows the viewer's language (PIN-214); 0 hides them.
+     */
+    sceneChipsCount: z.number().int().min(0).default(4),
   })
   .superRefine((p, ctx) => {
     if (p.elementsPerPhoto.max < p.elementsPerPhoto.min) {
@@ -395,6 +421,7 @@ export const PolicyOverridesSchema = z.object({
   joinNewWindowMs: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
   localeCookieDays: z.number().int().min(1).optional(),
+  hstsMaxAgeDays: z.number().int().min(1).optional(),
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
   myBoardsRemovePerIp: z
@@ -404,6 +431,12 @@ export const PolicyOverridesSchema = z.object({
     })
     .optional(),
   boardDeletePerIp: z
+    .object({
+      limit: z.number().int().min(1).optional(),
+      windowMs: z.number().int().min(1).optional(),
+    })
+    .optional(),
+  boardCreatePerIp: z
     .object({
       limit: z.number().int().min(1).optional(),
       windowMs: z.number().int().min(1).optional(),
@@ -427,6 +460,8 @@ export const PolicyOverridesSchema = z.object({
       enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
+      starterBoardsPerMaker: z.number().int().min(0).optional(),
+      starterMakerWindowMs: z.number().int().min(1).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),
       plusOnPurchase: z.boolean().optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
@@ -450,6 +485,7 @@ export const PolicyOverridesSchema = z.object({
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
   sceneSize: SceneSize.optional(),
   sceneStore: z.boolean().optional(),
+  samStore: z.boolean().optional(),
   timeoutsMs: z
     .object({
       spark: z.number().int().positive().optional(),
@@ -490,7 +526,7 @@ export const PolicyOverridesSchema = z.object({
       tapName: z.string().min(1).optional(),
     })
     .optional(),
-  sceneChips: z.array(z.string().min(1)).optional(),
+  sceneChipsCount: z.number().int().min(0).optional(),
 });
 
 export type PolicyOverrides = z.infer<typeof PolicyOverridesSchema>;

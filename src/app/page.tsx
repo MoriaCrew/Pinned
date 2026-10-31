@@ -4,7 +4,7 @@ import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../domain/board-delete-
 import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
 import { t, tf, type Locale } from "../i18n";
 import { getLocale } from "../i18n/server";
-import { ButtonLink, Sticker, Tag, Wordmark } from "../ui";
+import { ButtonLink, Icon, Sticker, Tag, Wordmark, type IconName } from "../ui";
 import { You } from "./auth/You";
 import { LANDING_SETS, landingSetById } from "./landing-sets.data";
 import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
@@ -110,7 +110,6 @@ export default async function HomePage({
                 <span className="pn-print-wrap" style={{ "--t": -0.9 } as CSSProperties}>
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
                       <img
                         src={photo.src}
                         alt=""
@@ -156,7 +155,6 @@ export default async function HomePage({
                 <span className="pn-print-wrap" style={{ "--t": 0.9 } as CSSProperties}>
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
                       <img src={scene.src} alt="" loading="lazy" style={{ objectPosition: scene.objectPosition }} />
                     </span>
                     <span className="pn-print-meta">
@@ -171,11 +169,38 @@ export default async function HomePage({
         </section>
 
         <footer className="pn-landing-foot">
-          <a href="https://github.com/MoriaCrew/Pinned">{t(locale, "footer.source")}</a>
+          {/* PIN-222: which Meta model does what, one quiet line each. */}
+          <section className="pn-landing-meta" aria-labelledby="made-with-meta">
+            <h2 className="pn-landing-meta-title" id="made-with-meta">
+              {t(locale, "landing.meta.title")}
+            </h2>
+            <ul className="pn-landing-meta-list">
+              {metaLines(locale).map((line) => (
+                <li key={line.icon}>
+                  <Icon name={line.icon} size={18} />
+                  {line.text}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <div className="pn-landing-links">
+            <a href="https://github.com/MoriaCrew/Pinned/blob/main/docs/19-meta-models.md">{t(locale, "landing.meta.more")}</a>
+            <a href="https://github.com/MoriaCrew/Pinned">{t(locale, "footer.source")}</a>
+          </div>
         </footer>
       </div>
     </main>
   );
+}
+
+/** One line per Meta model (PIN-222), each led by the icon of what it does. */
+function metaLines(locale: Locale): { icon: IconName; text: string }[] {
+  return [
+    { icon: "pin", text: t(locale, "landing.meta.spark") },
+    { icon: "cut", text: t(locale, "landing.meta.sam") },
+    { icon: "scene", text: t(locale, "landing.meta.image") },
+    { icon: "mic", text: t(locale, "landing.meta.voice") },
+  ];
 }
 
 function StepText({ locale, n, title, body }: { locale: Locale; n: number; title: string; body: string }) {

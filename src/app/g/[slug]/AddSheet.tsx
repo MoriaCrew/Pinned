@@ -37,6 +37,7 @@ import type { UploadItemStatus } from "../../../domain/upload-queue";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
+import { boardQueryKey } from "./board-query";
 import { LibraryList, LibraryStrip, useLibraryPins } from "./LibraryPins";
 import { PhotoPick } from "./PhotoPick";
 import {
@@ -69,8 +70,6 @@ interface JobView {
   pins: (BoardViewPin & { boardId: string })[];
   elements: (CandidateElement & { flattenedUrl: string; createdAt: number })[];
 }
-
-export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
 /** The review's help line (PIN-126). */
 export function reviewHelpLine(help: ReviewHelp, locale: Locale): string {
@@ -211,7 +210,6 @@ function CutPhoto({
   return (
     <div className="pn-cut-photo" data-stage={stage} data-working={tap?.working ? "" : undefined} style={style}>
       <div className="pn-cut-frame">
-        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
         <img
           src={src}
           alt={t(locale, "add.photoAlt")}
@@ -437,7 +435,6 @@ export function AddSheet({
       };
     },
     // Unmount only; photoMemory is the board page's stable ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -449,7 +446,6 @@ export function AddSheet({
       setPreviewUrl(rememberedLive);
     }
     // Only when the remembered photo changes, not on later resets.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rememberedLive]);
 
   // A batch step's preview lands once the driver downscales the file.
@@ -568,7 +564,6 @@ export function AddSheet({
   useEffect(() => {
     setSelected((current) => selectionWithCandidates(current, dropped, candidateIds));
     // candidateIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateIds.join(","), dropped]);
 
   const confirm = useMutation({

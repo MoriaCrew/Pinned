@@ -330,7 +330,7 @@
 .pn-board-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(36px * var(--display-scale)); line-height: 1.05; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); text-wrap: balance; }
 .pn-board-meta { margin: 0; font: 500 13px/18px var(--font-mono); letter-spacing: .02em; color: var(--ink-muted); }
 .pn-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
-.pn-section-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
+.pn-section-title { margin: 0; scroll-margin-top: var(--space-4); font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
 .pn-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: 0 var(--space-4); margin: var(--space-5) 0 var(--space-3); }
 
 /* ---------- Dock ---------- */
@@ -624,9 +624,17 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-foot { grid-area: foot; margin-top: var(--space-4); color: var(--ink-muted); }
 .pn-landing-foot a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
 .pn-landing-foot a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* "Made with Meta AI" (PIN-222): a credit, not an ad. A small label, then one muted line per model. */
+.pn-landing-meta { display: grid; gap: var(--space-2); margin-bottom: var(--space-2); }
+.pn-landing-meta-title { margin: 0; font: 650 11px/14px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.pn-landing-meta-list { display: grid; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; font: 500 14px/20px var(--font-ui); }
+.pn-landing-meta-list li { display: flex; align-items: center; gap: var(--space-2); }
+.pn-landing-meta-list .pn-icon { flex: none; }
+.pn-landing-links { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
 
 @media (min-width: 540px) {
   .pn-landing-actions { grid-auto-flow: column; justify-content: start; }
+  .pn-landing-meta-list { display: flex; flex-wrap: wrap; }
 }
 @media (min-width: 840px) {
   .pn-landing-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "brand pile" "copy pile" "how how" "foot foot"; column-gap: var(--space-7); row-gap: var(--space-5); padding-top: var(--space-6); }
