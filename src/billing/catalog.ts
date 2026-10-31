@@ -230,6 +230,8 @@ export type ProductPlan =
 export type PricePlan =
   | { kind: "create" }
   | { kind: "reuse"; priceId: string }
+  /** An archived price still holds the lookup key on the right terms: reactivate it (PIN-233). */
+  | { kind: "unarchive"; priceId: string }
   /** Immutable fields drifted: mint a new price, transfer the lookup key, archive the old. */
   | { kind: "transfer"; oldPriceId: string }
   /** Retired item: archive every still-active price under its lookup key. */
@@ -288,7 +290,10 @@ export function planProduct(
 /**
  * Price identity is the lookup key. Amount, currency, product,
  * tax behavior and recurrence are immutable on a Stripe price,
- * so any drift means a transfer, never an in-place edit.
+ * so any drift means a transfer, never an in-place edit. `prices`
+ * must include archived ones (PIN-233): an archived price can
+ * still hold the key, so planning a create for it would be
+ * rejected; on matching terms it is reactivated instead.
  */
 export function planPrice(
   item: CatalogItem,
@@ -301,7 +306,8 @@ export function planPrice(
       .map((price) => price.id);
     return priceIds.length > 0 ? { kind: "archive", priceIds } : { kind: "retired" };
   }
-  const existing = prices.find((price) => price.lookup_key === item.lookupKey);
+  const holders = prices.filter((price) => price.lookup_key === item.lookupKey);
+  const existing = holders.find((price) => price.active !== false) ?? holders[0];
   if (!existing) return { kind: "create" };
   const matches =
     existing.unit_amount === item.unitAmount &&
@@ -309,11 +315,11 @@ export function planPrice(
     existing.product === productId &&
     (existing.tax_behavior ?? "unspecified") === item.taxBehavior &&
     (existing.recurring?.interval ?? null) ===
-      (item.recurring?.interval ?? null) &&
-    existing.active !== false;
-  return matches
-    ? { kind: "reuse", priceId: existing.id }
-    : { kind: "transfer", oldPriceId: existing.id };
+      (item.recurring?.interval ?? null);
+  if (!matches) return { kind: "transfer", oldPriceId: existing.id };
+  return existing.active === false
+    ? { kind: "unarchive", priceId: existing.id }
+    : { kind: "reuse", priceId: existing.id };
 }
 
 /**

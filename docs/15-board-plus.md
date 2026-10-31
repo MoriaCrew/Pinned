@@ -428,7 +428,12 @@ in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
 recurrence all match — those fields are immutable, so drift
 mints a new price with `transfer_lookup_key=true` and archives
-the old one. A retired item is archived instead: its product
+the old one. The price lookup reads archived prices too (Stripe
+lists only active ones unless asked, paginated like every list):
+an archived price can still hold its lookup key, and creating
+another price for that key is rejected, so a matching archived
+price is reactivated (`unarchive`) and a drifted one transfers
+(PIN-233). A retired item is archived instead: its product
 and every active price under its lookup key get
 `active=false`, nothing is created for it, and an
 already-archived item plans `retired` (a no-op). POSTs carry

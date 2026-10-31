@@ -176,14 +176,29 @@ describe("catalog convergence plan (PIN-146)", () => {
       { tax_behavior: "exclusive" },
       { tax_behavior: null },
       { recurring: { interval: "month" } }, // one-time pack priced as a sub
-      { active: false }, // archived prices cannot be reused
     ];
     for (const drift of drifts) {
       expect(planPrice(pack, "prod_20", [price(drift)])).toEqual({
         kind: "transfer",
         oldPriceId: "price_20",
       });
+      // Archived and drifted: the key still moves to a new price.
+      expect(planPrice(pack, "prod_20", [price({ ...drift, active: false })])).toEqual({
+        kind: "transfer",
+        oldPriceId: "price_20",
+      });
     }
+  });
+
+  it("price: an archived price still holding the key is reactivated, never planned as a create (PIN-233)", () => {
+    expect(planPrice(pack, "prod_20", [price({ active: false })])).toEqual({
+      kind: "unarchive",
+      priceId: "price_20",
+    });
+    // An active holder wins over an archived one in the same listing.
+    expect(
+      planPrice(pack, "prod_20", [price({ id: "price_old", active: false }), price()]),
+    ).toEqual({ kind: "reuse", priceId: "price_20" });
   });
 
   it("price: the recurring host price reuses only a monthly match", () => {
