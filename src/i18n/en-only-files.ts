@@ -34,12 +34,6 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/app/g/[slug]/SceneViewer.tsx",
   "src/app/g/[slug]/page.tsx",
 
-  // PIN-194 UI kit
-  "src/ui/board.tsx",
-  "src/ui/primitives.tsx",
-  "src/ui/scenes.tsx",
-  "src/ui/skin-picker.tsx",
-  "src/ui/stickers.tsx",
 
 
   // PIN-196 server errors (rest: PIN-201)
