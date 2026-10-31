@@ -18,6 +18,7 @@ import {
   getJobView,
   getSceneChips,
   requestScene,
+  sweepStaleDecomposeJobs,
   tapAddPin,
   uploadPhoto,
   type BoardApiDeps,
@@ -436,6 +437,57 @@ describe("photo debit (PIN-151)", () => {
     expect(replay.id).toBe(UPLOAD_ID);
     expect((await h.ledger.getBalance(slug)).available).toBe(2);
     expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
+  it("stale sweep keeps a paid-but-unfinished job's candidates and never eats the make (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const paid = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(paid.status).toBe("ready");
+    // The debit landed, then the request died before finishing:
+    // rewind the stored job to a stale `running`.
+    await h.jobs.update({ ...paid, status: "running", updatedAt: T0 });
+    const later = { ...h.api, now: () => T0 + 300_000 };
+    expect(await sweepStaleDecomposeJobs(slug, later)).toBe(1);
+    const swept = await h.jobs.get(paid.id);
+    expect(swept?.status).toBe("failed");
+    expect(swept?.errorCode).toBe("stale_running");
+    // Paid: candidates stay confirmable, pool unchanged, no refund dance.
+    expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit_refund")).toHaveLength(0);
+
+    // Unpaid stale job with candidates: discarded like every unpaid failure.
+    const unpaidElement: Element = {
+      id: "el-unpaid",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Unpaid",
+      description: "never debited",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-unpaid/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-unpaid/flattened.png`,
+      sourcePhotoId: "job-unpaid",
+      faceFlag: false,
+      createdAt: T0,
+    };
+    await h.boards.createElement(unpaidElement);
+    await h.jobs.create({
+      id: "job-unpaid",
+      boardId: slug,
+      participantId: owner.id,
+      status: "running",
+      workingRef: `tmp/boards/${slug}/jobs/job-unpaid/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-unpaid"],
+      pinIds: ["pin-unpaid"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    expect(await sweepStaleDecomposeJobs(slug, later)).toBe(1);
+    expect(await h.boards.getElement("el-unpaid")).toBeNull();
   });
 
   it("never debits a failed photo", async () => {

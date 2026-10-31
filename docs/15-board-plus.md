@@ -771,7 +771,10 @@ the job first), it discards the unexposed candidates and refunds
 the make under the deterministic ledger event
 `refund:photo:{jobId}` (a `debit_refund` entry naming
 `debit:photo:{jobId}`; idempotent by event id and per debit, so
-retries of the finish can never double-refund).
+retries of the finish can never double-refund). If the request
+died after debiting (no live runner to refund), the sweep checks
+the ledger instead and keeps the paid job's candidates
+confirmable — the board never pays for a result it cannot pin.
 
 **Race rule.** The ledger debit is one atomic per-board
 read-modify-write, so two makes racing for the last credit

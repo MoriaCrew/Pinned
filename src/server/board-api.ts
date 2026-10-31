@@ -57,6 +57,7 @@ import {
   CREDITS_POOL_EMPTY,
   creditsEnabled,
   ensureStarterMakes,
+  photoDebitEventId,
   readAvailableMakes,
 } from "./credit-pool";
 
@@ -426,8 +427,29 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
  * just before losing this race sees its guarded finish fail and
  * refunds (decompose-job). With credits on, landed-but-undebited
  * candidates are discarded like every unpaid failure; off, the
- * keep-what-landed rule stands.
+ * keep-what-landed rule stands. One exception (Bugbot #147): if
+ * the debit DID land and the request then died before finishing,
+ * the sweep must not eat a paid make — it checks the ledger and
+ * keeps a paid job's candidates confirmable (no refund either:
+ * the user gets exactly what they paid for, via leftovers).
  */
+/**
+ * Did this job's photo make actually land? Only consulted when a
+ * stale transition was just written (rare), so a ledger scan is
+ * fine. No store while credits are on means no debit could have
+ * landed (tryDebitMake pool-empties); a read error also answers
+ * "paid" — preserving possibly-paid candidates beats discarding
+ * them on a transient failure.
+ */
+async function jobWasDebited(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean> {
+  if (!deps.credits) return false;
+  const entries = await deps.credits.listEntries(job.boardId).catch(() => null);
+  if (entries === null) return true;
+  return entries.some(
+    (entry) => entry.type === "debit" && entry.id === photoDebitEventId(job.id),
+  );
+}
+
 export async function failStaleJobIfNeeded(
   job: DecomposeJob,
   deps: BoardApiDeps,
@@ -447,6 +469,7 @@ export async function failStaleJobIfNeeded(
     return (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
   }
   if (creditsEnabled(deps.policy) && job.pinIds.length > 0) {
+    if (await jobWasDebited(job, deps)) return failed;
     const snapshot: DecomposeJob = {
       ...failed,
       elementIds: [...job.elementIds],
