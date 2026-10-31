@@ -19,10 +19,12 @@ and hashes._
 | Firestore / Storage | `eur3` / `moriacrew-pinned-dev.firebasestorage.app` | `eur3` / `moriacrew-pinned-prod.firebasestorage.app` |
 
 App Hosting builds on push and **does not wait for CI**. Feature PRs
-merge into `dev`; prod changes only through a `dev` → `main`
-promotion PR merged by Robin with a **merge commit** (never squash:
-a squash leaves `main` with a commit `dev` lacks, and the next
-promotion conflicts).
+merge into `dev`; prod changes only through a promotion PR into
+`main`, merged by Robin. The `Protect main` ruleset (SECURITY.md)
+allows **squash merges only** with linear history, so each
+promotion lands on `main` as one squash commit that `dev`'s history
+never contains. §4 shows how to cut every promotion after the first
+so it never conflicts.
 
 ## 2. Environment matrix
 
@@ -112,9 +114,26 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
 
 1. Every PR meant for this promotion is merged to `dev`, and
    dev.pinneds.com passes the smoke in §5.
-2. Open a PR `dev` → `main` (or reuse the open promotion PR), title
-   `Promotion: dev → main (<date>)`, listing the PIN issues it ships.
-3. CI green → Robin merges with **Create a merge commit**.
+2. Open the promotion PR, titled `Promotion: dev → main (<date>)`,
+   listing the PIN issues it ships.
+   - **While `main` is an ancestor of `dev`** (true for the first
+     Studio promotion: `git merge-base --is-ancestor origin/main origin/dev && echo ok`),
+     a plain `dev` → `main` PR works (or reuse the open one).
+   - **Every later promotion:** `main` now holds a squash commit that
+     `dev` lacks, so a `dev` → `main` PR would conflict wherever a
+     file changed both before and after the last promotion. Instead,
+     cut a branch from `main` whose files are exactly `dev`'s:
+     ```sh
+     git fetch origin main dev
+     git checkout -b promote/$(date +%Y-%m-%d) origin/main
+     git restore --source=origin/dev --staged --worktree -- .   # also applies deletions
+     git commit -m "Promote dev to prod ($(git rev-parse --short origin/dev))"
+     git diff --stat origin/dev   # must print nothing: tree == dev
+     git push -u origin HEAD
+     ```
+     and open the PR from that branch into `main`.
+3. CI green and Bugbot triaged → Robin merges with **Squash and
+   merge** (the only method the ruleset allows).
 4. Watch the build: Firebase console → App Hosting → `pinned-web`
    (prod) → Rollouts. Then confirm the running revision picked up
    `runConfig`:
