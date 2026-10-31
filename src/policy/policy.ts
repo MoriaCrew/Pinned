@@ -251,6 +251,16 @@ export const PolicySchema = z
       .default("flattened"),
     sceneSize: SceneSize.default("1024x1536"),
     sceneStore: z.boolean().default(false),
+    /**
+     * SAM `/v1/responses` `store` flag (PIN-213). docs/11 decided
+     * `store: false` everywhere, but the SAM call has never sent
+     * the field. Undefined (the default) omits it: the wire body is
+     * byte-identical to before. `false` sends `store: false`; `true`
+     * sends `store: true`. Flip per board (policyOverrides) after one
+     * live probe proves SAM accepts the field, then globally via
+     * POLICY_OVERRIDES_JSON.
+     */
+    samStore: z.boolean().optional(),
     timeoutsMs: z
       .object({
         spark: z.number().int().positive().default(30_000),
@@ -301,19 +311,18 @@ export const PolicySchema = z
       .object({
         elements: z.string().min(1).default("elements.v1"),
         scene: z.string().min(1).default("scene.v1"),
-        chips: z.string().min(1).default("chips.v1"),
+        // PIN-214: v2 writes the chips in the viewer's UI language.
+        chips: z.string().min(1).default("chips.v2"),
         tapName: z.string().min(1).default("tap-name.v1"),
       })
-      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v1", tapName: "tap-name.v1" }),
-    /** Fixed suggestion chips: instant fallback while generated chips load or fail (docs/11 Q10, PIN-75). */
-    sceneChips: z
-      .array(z.string().min(1))
-      .default([
-        "on a sunny picnic blanket",
-        "in a tiny museum",
-        "floating in space",
-        "at a birthday party",
-      ]),
+      .default({ elements: "elements.v1", scene: "scene.v1", chips: "chips.v2", tapName: "tap-name.v1" }),
+    /**
+     * Fixed idea chips shown: the instant fallback while generated
+     * chips load or fail (docs/11 Q10, PIN-75). The text is i18n
+     * (`make.chip.*`, FIXED_CHIP_KEYS in src/domain/chips.ts), so
+     * it follows the viewer's language (PIN-214); 0 hides them.
+     */
+    sceneChipsCount: z.number().int().min(0).default(4),
   })
   .superRefine((p, ctx) => {
     if (p.elementsPerPhoto.max < p.elementsPerPhoto.min) {
@@ -463,6 +472,7 @@ export const PolicyOverridesSchema = z.object({
   sceneInputMode: z.enum(["flattened", "transparent", "whole"]).optional(),
   sceneSize: SceneSize.optional(),
   sceneStore: z.boolean().optional(),
+  samStore: z.boolean().optional(),
   timeoutsMs: z
     .object({
       spark: z.number().int().positive().optional(),
@@ -503,7 +513,7 @@ export const PolicyOverridesSchema = z.object({
       tapName: z.string().min(1).optional(),
     })
     .optional(),
-  sceneChips: z.array(z.string().min(1)).optional(),
+  sceneChipsCount: z.number().int().min(0).optional(),
 });
 
 export type PolicyOverrides = z.infer<typeof PolicyOverridesSchema>;

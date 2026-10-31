@@ -4,10 +4,12 @@ import "server-only";
  * AI_MOCK=1. Deterministic, offline, and free of any user-visible
  * "(mock)" strings (docs/11 section 5.2).
  */
+import { fixedSceneChips } from "../domain/chips";
 import { mockGateway } from "./mock-gateway";
 import {
   buildSceneResponsesBody,
   buildSegmentPromptText,
+  normalizeChips,
   normalizeElements,
   normalizeTapName,
   type ElementNamer,
@@ -17,7 +19,6 @@ import {
   type NamedElement,
   type SceneComposer,
   type ChipSuggester,
-  templateChips,
   type Segmenter,
 } from "./ports";
 
@@ -101,12 +102,17 @@ export const mockSegmenter: Segmenter = {
 export const MOCK_SCENE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII=";
 
+/**
+ * Offline chips follow the request's language like the real ones
+ * (PIN-214): the fixed idea chips in `input.locale`, capped and
+ * normalized like generated chips.
+ */
 export const mockChipSuggester: ChipSuggester = {
   async suggestChips(input) {
     return {
       status: "ready",
       value: {
-        chips: templateChips(input.labels, input),
+        chips: normalizeChips(fixedSceneChips(input.locale, input.maxChips), input),
         promptVersion: input.promptVersion,
       },
     };
