@@ -100,6 +100,7 @@ async function harness() {
       boardId: SLUG,
       packLookupKey: PACK,
       credits: 25,
+      eurCents: 499,
       at: NOW,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 10,
@@ -420,6 +421,7 @@ describe("paid sessions past the intent TTL (PIN-178)", () => {
       boardId: SLUG,
       packLookupKey: PACK,
       credits: 25,
+      eurCents: 499,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 1,
     };
@@ -900,5 +902,70 @@ describe("dead letters are re-runnable (PIN-178)", () => {
     expect(await h.deliver(early)).toMatchObject({ outcome: "duplicate", duplicate: true });
     const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
     expect(clawbacks).toHaveLength(1);
+  });
+});
+
+describe("stored purchase terms (PIN-181)", () => {
+  const changes: Array<[string, Parameters<typeof resolvePolicy>[0]]> = [
+    ["the same pack repriced", { credits: { packs: [{ ...TEST_PACK, eurCents: 999 }] } }],
+    ["the pack retired", null],
+  ];
+  for (const [name, overrides] of changes) {
+    it(`an old purchase keeps its own price after a Policy change: ${name}`, async () => {
+      const h = await harness();
+      const intent = await h.createIntent(); // stored: 25 makes for 499 cents
+      h.deps.policy = resolvePolicy(overrides);
+      expect(
+        (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+      ).toBe("granted");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+      // floor(250 * 25 / 499) = 12 under the stored terms.
+      expect(
+        (await h.deliver(evt("evt_re", "refund.created", refund({ amount: 250 })))).outcome,
+      ).toBe("refund_clawed");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+      // ceil(100 * 25 / 499) = 6 frozen; the lost close claws floor = 5 and frees 1.
+      expect(
+        (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 100 })))).outcome,
+      ).toBe("frozen");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13, frozen: 6, available: 7 });
+      expect(
+        (await h.deliver(
+          evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 100, status: "lost" })),
+        )).outcome,
+      ).toBe("dispute_final_clawed");
+      expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 8, frozen: 0, available: 8 });
+      expect(await h.records.listDeadLetters()).toEqual([]);
+    });
+  }
+
+  it("a legacy intent without stored terms falls back to the Policy pack by lookup key", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    // Simulate a record written before PIN-181: no eurCents.
+    const legacy = (found: CheckoutIntent | null) => {
+      if (found) delete found.eurCents;
+      return found;
+    };
+    const realGet = h.intents.get.bind(h.intents);
+    h.intents.get = async (id) => legacy(await realGet(id));
+    const realFind = h.intents.findByStripeIds.bind(h.intents);
+    h.intents.findByStripeIds = async (lookup) => legacy(await realFind(lookup));
+
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    expect(
+      (await h.deliver(evt("evt_re", "refund.created", refund({ amount: 250 })))).outcome,
+    ).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+    // Once Policy no longer offers that pack, a legacy purchase has no terms: operator flag.
+    h.deps.policy = resolvePolicy(null);
+    expect(
+      (await h.deliver(evt("evt_re2", "refund.created", refund({ id: "re_test_fake_2", amount: 100 }))))
+        .outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["pack_mismatch"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
   });
 });

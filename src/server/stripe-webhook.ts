@@ -26,8 +26,10 @@ import "server-only";
  * that ledger idempotency makes the re-run safe.
  *
  * MONEY -> MAKES (the one documented formula). For a pack of
- * `credits` makes sold for `eurCents` (Policy.credits.packs),
- * a settled-EUR amount of `c` cents is worth, cumulatively:
+ * `credits` makes sold for `eurCents` (the terms the intent
+ * stored at buy time, PIN-181; legacy intents read
+ * Policy.credits.packs), a settled-EUR amount of `c` cents is
+ * worth, cumulatively:
  *
  *     makesFloor(c)  = min(credits, floor(c * credits / eurCents))
  *     makesFreeze(c) = min(credits, ceil (c * credits / eurCents))
@@ -107,14 +109,17 @@ export const STRIPE_WEBHOOK_EVENT_TYPES = [
   "charge.dispute.closed",
 ] as const;
 
+/** The price terms one purchase is held to (PIN-181): its stored intent terms, or the Policy pack for a legacy intent. */
+export type PackTerms = Pick<PolicyCreditPack, "credits" | "eurCents">;
+
 /** `min(credits, floor(cents * credits / eurCents))` - refund + final-clawback conversion (see module note). */
-export function makesFloorForCents(cents: number, pack: PolicyCreditPack): number {
+export function makesFloorForCents(cents: number, pack: PackTerms): number {
   if (!Number.isInteger(cents) || cents <= 0) return 0;
   return Math.min(pack.credits, Math.floor((cents * pack.credits) / pack.eurCents));
 }
 
 /** `min(credits, ceil(cents * credits / eurCents))` - dispute freezes round up to protect the pool. */
-export function makesFreezeForCents(cents: number, pack: PolicyCreditPack): number {
+export function makesFreezeForCents(cents: number, pack: PackTerms): number {
   if (!Number.isInteger(cents) || cents <= 0) return 0;
   return Math.min(pack.credits, Math.ceil((cents * pack.credits) / pack.eurCents));
 }
@@ -212,10 +217,20 @@ async function policyFor(deps: StripeWebhookDeps, boardId: string): Promise<Poli
   return deps.resolvePolicyForBoard ? deps.resolvePolicyForBoard(boardId) : deps.policy;
 }
 
-function packFor(
-  policy: Policy,
-  intent: CheckoutIntent,
-): PolicyCreditPack | null {
+/**
+ * The terms a purchase is priced against (PIN-181): the
+ * `{ credits, eurCents }` its intent stored at buy time, so a
+ * later Policy price change (or a retired pack) never reprices
+ * an old purchase. Only a legacy intent without `eurCents` falls
+ * back to the board's Policy pack by lookup key; null when that
+ * pack is gone (the callers dead-letter `pack_mismatch`).
+ */
+async function packFor(deps: StripeWebhookDeps, intent: CheckoutIntent): Promise<PackTerms | null> {
+  const stored = intent.eurCents;
+  if (typeof stored === "number" && Number.isInteger(stored) && stored > 0) {
+    return { credits: intent.credits, eurCents: stored };
+  }
+  const policy = await policyFor(deps, intent.boardId);
   return policy.credits.packs.find((pack) => pack.lookupKey === intent.packLookupKey) ?? null;
 }
 
@@ -451,7 +466,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     });
   }
 
-  const pack = packFor(await policyFor(deps, intent.boardId), intent);
+  const pack = await packFor(deps, intent);
   const metadata = obj(session.metadata);
   const metadataPack = str(metadata?.pack_lookup_key);
   const metadataCredits = str(metadata?.credits);
@@ -589,7 +604,7 @@ interface ResolvedPurchase {
   intent: CheckoutIntent;
   account: BoardCreditAccount;
   purchase: CreditPurchase;
-  pack: PolicyCreditPack;
+  pack: PackTerms;
 }
 
 /** Resolve a refund/dispute's charge/payment_intent to intent + purchase + pack, dead-lettering each miss. */
@@ -635,7 +650,7 @@ async function resolveStripePurchase(
       boardId: intent.boardId,
     });
   }
-  const pack = packFor(await policyFor(deps, intent.boardId), intent);
+  const pack = await packFor(deps, intent);
   if (!pack || pack.credits !== intent.credits) {
     return deadLetter(deps, ctx, "pack_mismatch", {
       ...ids,

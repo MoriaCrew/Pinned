@@ -44,6 +44,7 @@ beforeAll(async () => {
     boardId: slug,
     packLookupKey: "pinneds_plus_20",
     credits: 20,
+    eurCents: 299,
     at: Date.now(),
     intentTtlSeconds: 1_800,
     pendingIntentCapPerBoard: 3,

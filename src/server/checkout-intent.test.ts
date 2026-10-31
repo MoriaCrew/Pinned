@@ -99,6 +99,7 @@ function createInput(over: Partial<CreateCheckoutIntentInput> = {}): CreateCheck
     boardId: BOARD,
     packLookupKey: "pinneds_credits_25",
     credits: 25,
+    eurCents: 499,
     at: AT,
     intentTtlSeconds: TTL_SECONDS,
     pendingIntentCapPerBoard: CAP,
@@ -118,6 +119,8 @@ function describeCheckoutIntentStore(
       expect(intent.boardId).toBe(BOARD);
       expect(intent.packLookupKey).toBe("pinneds_credits_25");
       expect(intent.credits).toBe(25);
+      // PIN-181: the price terms persist with the intent.
+      expect(intent.eurCents).toBe(499);
       expect(intent.purchaseId).toBe(intent.id);
       expect(intent.status).toBe("pending");
       expect(intent.createdAt).toBe(AT);
@@ -306,6 +309,7 @@ function describeCheckoutIntentStore(
       const { store } = make();
       await expect(store.create(createInput({ boardId: " " }))).rejects.toThrow(RangeError);
       await expect(store.create(createInput({ credits: 0 }))).rejects.toThrow(RangeError);
+      await expect(store.create(createInput({ eurCents: 0 }))).rejects.toThrow(RangeError);
       await expect(store.create(createInput({ intentTtlSeconds: 0 }))).rejects.toThrow(RangeError);
       await expect(
         store.create(createInput({ pendingIntentCapPerBoard: 0 })),
@@ -346,6 +350,9 @@ describe("CheckoutIntent opacity (PIN-148)", () => {
     expect(serialized.toLowerCase()).not.toContain("board");
     expect(serialized.toLowerCase()).not.toContain("slug");
     expect(pub).not.toHaveProperty("purchaseId");
+    // PIN-181: the stored price terms stay server-side.
+    expect(intent.eurCents).toBe(499);
+    expect(pub).not.toHaveProperty("eurCents");
   });
 
   it("the default mint is a random UUID unrelated to the board", async () => {
