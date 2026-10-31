@@ -60,6 +60,7 @@ import { logServerError } from "./safe-log";
 import {
   CREDITS_POOL_EMPTY,
   creditsEnabled,
+  photosUseMakes,
   ensureStarterMakes,
   photoDebitEventId,
   readAvailableMakes,
@@ -477,8 +478,9 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
  * 2 x margin a still-live job belongs to a dead request. The transition is
  * CAS on the read status and never debits; a runner that debited
  * just before losing this race sees its guarded finish fail and
- * refunds (decompose-job). With credits on, landed-but-undebited
- * candidates are discarded like every unpaid failure; off, the
+ * refunds (decompose-job). While photos use makes, landed-but-
+ * undebited candidates are discarded like every unpaid failure;
+ * otherwise (credits off, or free photos since PIN-229) the
  * keep-what-landed rule stands. One exception (Bugbot #147): if
  * the debit DID land and the request then died before finishing,
  * the sweep must not eat a paid make — it checks the ledger and
@@ -511,8 +513,8 @@ async function jobIsPaid(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean
 }
 
 /**
- * Discard a stale-failed job's candidates while credits are on and
- * no debit landed for it, persisting the emptied id lists. Paid
+ * Discard a stale-failed job's candidates while photos use makes
+ * and no debit landed for it, persisting the emptied id lists. Paid
  * jobs keep their candidates (jobIsPaid). Idempotent, so it
  * doubles as the retry for a cleanup a dead request left
  * half-done between the fail write and the discard: without the
@@ -524,7 +526,7 @@ async function discardUnpaidStaleCandidates(
   deps: BoardApiDeps,
   now: number,
 ): Promise<DecomposeJob> {
-  if (!creditsEnabled(deps.policy) || failed.pinIds.length === 0) return failed;
+  if (!photosUseMakes(deps.policy) || failed.pinIds.length === 0) return failed;
   if (await jobIsPaid(failed, deps)) return failed;
   const snapshot: DecomposeJob = {
     ...failed,
@@ -703,13 +705,17 @@ export async function uploadPhoto(
     }
 
     // PIN-151 preflight (after the Policy daily cap above, which
-    // keeps applying): with credits on and an empty pool the
-    // photo AI path refuses here — the same 429 deny shape as the
-    // cap — before intake, any job or any AI spend. The starter
-    // pool lands lazily inside this read for older boards.
-    const availableMakes = await readAvailableMakes(slug, deps);
-    if (availableMakes !== null && availableMakes < 1) {
-      throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+    // keeps applying): while photos use makes and the pool is
+    // empty the photo AI path refuses here — the same 429 deny
+    // shape as the cap — before intake, any job or any AI spend.
+    // The starter pool lands lazily inside this read for older
+    // boards. Photos that use no make (PIN-229, the default) skip
+    // the pool entirely: a creation is an AI scene.
+    if (photosUseMakes(deps.policy)) {
+      const availableMakes = await readAvailableMakes(slug, deps);
+      if (availableMakes !== null && availableMakes < 1) {
+        throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+      }
     }
   }
 

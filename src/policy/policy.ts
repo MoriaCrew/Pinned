@@ -200,6 +200,8 @@ export const PolicySchema = z
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(5),
+        /** PIN-229: does a finished photo (its cut-outs) use a make? false (default) = a creation is an AI scene: photos never touch the pool (no preflight, no debit) and keep the credits-off keep-what-landed rule. true = the PIN-151 rule (1 make per finished photo job). */
+        photosUseMakes: z.boolean().default(false),
         /** Free creations per maker (PIN-204): only a maker's first `starterBoardsPerMaker` new boards per `starterMakerWindowMs` get the starter pool; later boards start at 0. 0 = no new board gets a pool. A maker is a signed-in user, else the client address (docs/15, "Free creations rule"). */
         starterBoardsPerMaker: z.number().int().min(0).default(3),
         /** Fixed window for starterBoardsPerMaker in ms (default 7 days), anchored at the maker's first counted board. */
@@ -224,6 +226,7 @@ export const PolicySchema = z
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 5,
+        photosUseMakes: false,
         starterBoardsPerMaker: 3,
         starterMakerWindowMs: 604_800_000,
         lowMakesWarning: 2,
@@ -463,6 +466,7 @@ export const PolicyOverridesSchema = z.object({
       enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
+      photosUseMakes: z.boolean().optional(),
       starterBoardsPerMaker: z.number().int().min(0).optional(),
       starterMakerWindowMs: z.number().int().min(1).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),

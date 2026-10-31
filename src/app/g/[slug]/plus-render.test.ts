@@ -225,7 +225,7 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(out).toContain("Anyone on the board can get Plus. Everyone here gets it.");
     const order = ["+20 creations", "Every skin", "Foil stickers", "Deeper scenes", "Full-size downloads"].map((text) => at(out, text));
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(out).toContain("For everyone on this board. Photos and scenes.");
+    expect(out).toContain("For everyone on this board. One per AI scene.");
     expect(out).toContain("More photos in one scene");
     // The two planned perks say so; nothing else is tagged.
     expect(out.match(/pn-perk-soon/g)).toHaveLength(2);
