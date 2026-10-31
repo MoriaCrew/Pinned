@@ -27,8 +27,8 @@ Oct 30):
 
 A scene costs the flat Muse Image price, whatever its token
 counts (PIN-180). Before the call the gateway reserves $0.01
-against the daily budget (so the $2 default admits 200
-scenes). After
+against the daily budget (so the $5 code default admits 500
+scenes, and prod's $50 during judging admits 5,000). After
 it, the `AiCallLog` row is priced at $0.01 per generated image:
 `images` on the row is how many images the reply held, so a
 reply with no image (a refusal) and a failed call are priced
