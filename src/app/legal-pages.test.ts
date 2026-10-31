@@ -105,6 +105,29 @@ describe("privacy page (PIN-26)", () => {
     expect(page).not.toContain("Google sign-in");
     expect(page).not.toContain("card number");
     expect(page).toContain("pinned_player_");
+    // The cookies paragraph and the processors line follow the same flags.
+    expect(page).not.toContain("Stripe");
+    expect(page).not.toContain("sign-in window");
+    expect(page).not.toContain("checkout in progress");
+    expect(page).toContain("Meta's model API handles requests");
+  });
+
+  it("names only the outside cookie pages this deploy opens", async () => {
+    state.cfg = { ...state.cfg, authMode: "optional", plusMode: "off" };
+    let page = text(await privacy());
+    expect(page).toContain("Google's sign-in window is run by Google under its own cookie and privacy policies.");
+    expect(page).not.toContain("Stripe");
+
+    state.cfg = { ...state.cfg, authMode: "link-only", plusMode: "stripe" };
+    page = text(await privacy());
+    expect(page).toContain("Stripe's checkout page is run by Stripe under its own cookie and privacy policies.");
+    expect(page).not.toContain("sign-in window");
+    expect(page).toContain("Meta's model API and Stripe handle requests");
+
+    state.cfg = { ...state.cfg, authMode: "link-only", plusMode: "mock" };
+    page = text(await privacy());
+    expect(page).toContain("or a checkout in progress");
+    expect(page).not.toContain("Stripe");
   });
 
   it("keeps a space between sentences around every optional line", async () => {

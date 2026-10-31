@@ -25,6 +25,17 @@ export default async function PrivacyPage() {
   const policy = getPolicy();
   const signIn = cfg.authMode === "optional";
   const payments = cfg.plusMode === "stripe";
+  // A checkout note is kept only where Board Plus is on sale (mock or Stripe).
+  const checkout = cfg.plusMode !== "off";
+  // Outside pages with their own cookies, named only where this deploy opens them.
+  const thirdPartyCookies =
+    signIn && payments
+      ? "Google's sign-in window and Stripe's checkout page are run by Google and Stripe under their own cookie and privacy policies."
+      : signIn
+        ? "Google's sign-in window is run by Google under its own cookie and privacy policies."
+        : payments
+          ? "Stripe's checkout page is run by Stripe under its own cookie and privacy policies."
+          : null;
   // Which calls send `store: false` (Policy sceneStore; samStore since PIN-213, unset = no flag sent).
   const noStore = [policy.samStore === false ? "cutting things out" : null, policy.sceneStore ? null : "making a scene"]
     .filter(Boolean)
@@ -131,7 +142,7 @@ export default async function PrivacyPage() {
         <p>
           Pinneds runs on Google Cloud through Firebase: the app in Google&apos;s europe-west4 region (Netherlands)
           and the database in Firestore&apos;s eur3 location (Europe). Pictures are kept in Cloud Storage in the
-          same Firebase project. Meta&apos;s model API{payments ? " and Stripe" : ""} handle requests on their own
+          same Firebase project. Meta&apos;s model API{payments ? " and Stripe handle" : " handles"} requests on their own
           systems, which may be outside Europe.
         </p>
       </LegalSection>
@@ -185,11 +196,10 @@ export default async function PrivacyPage() {
           </div>
         </dl>
         <p>
-          The app also keeps a few small notes in your browser&apos;s storage, such as which tips you have seen or
-          a checkout in progress. They stay on your device.
-          {signIn ? " When you sign in, Google's sign-in library keeps its own sign-in state in your browser." : null}{" "}
-          Google&apos;s sign-in window and Stripe&apos;s checkout page are run by Google and Stripe under their own
-          cookie and privacy policies.
+          The app also keeps a few small notes in your browser&apos;s storage, such as which tips you have seen
+          {checkout ? " or a checkout in progress" : null}. They stay on your device.
+          {signIn ? " When you sign in, Google's sign-in library keeps its own sign-in state in your browser." : null}
+          {thirdPartyCookies ? ` ${thirdPartyCookies}` : null}
         </p>
       </LegalSection>
 
