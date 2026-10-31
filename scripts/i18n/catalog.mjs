@@ -5,9 +5,10 @@
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkCatalog, findUnusedKeys } from "./core.mjs";
 
-export const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const MESSAGES_DIR = path.join(ROOT, "src/i18n/messages");
 export const GLOSSARY_PATH = path.join(ROOT, "src/i18n/glossary.json");
 

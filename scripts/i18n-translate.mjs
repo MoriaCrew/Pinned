@@ -242,9 +242,16 @@ async function translateOnce(ctx, requested, fixes) {
   return validateBatch(requested, parsed, ctx.checkOpts);
 }
 
+/**
+ * Translate one batch, retrying failing keys once. `failed` holds keys
+ * whose model output failed the checks; an operational error on the
+ * retry (budget, network, HTTP) keeps the first pass and is returned
+ * as `error` so the caller can stop without touching untried keys.
+ */
 async function translateBatch(ctx, keys) {
   const requested = Object.fromEntries(keys.map((k) => [k, ctx.en[k]]));
   const first = await translateOnce(ctx, requested);
+  if (first.parseError) ctx.stats.parseBatches++;
   const ok = { ...first.ok };
   const warnings = { ...first.warnings };
   let failed = first.failed;
@@ -253,12 +260,15 @@ async function translateBatch(ctx, keys) {
     const retryKeys = keys.filter((k) => k in failed);
     const retryReq = Object.fromEntries(retryKeys.map((k) => [k, ctx.en[k]]));
     ctx.log(`  retrying ${retryKeys.length} key(s)`);
-    const second = await translateOnce(ctx, retryReq, first.parseError ? { reply: first.parseError } : failed);
-    Object.assign(ok, second.ok);
-    Object.assign(warnings, second.warnings);
-    failed = second.failed;
+    try {
+      const second = await translateOnce(ctx, retryReq, first.parseError ? { reply: first.parseError } : failed);
+      Object.assign(ok, second.ok);
+      Object.assign(warnings, second.warnings);
+      failed = second.failed;
+    } catch (error) {
+      return { ok, failed: {}, warnings, error, untried: retryKeys };
+    }
   }
-  if (first.parseError) ctx.stats.parseBatches++;
   return { ok, failed, warnings };
 }
 
@@ -330,35 +340,52 @@ async function runLocale(locale, opts, env, budget, glossary, prompts) {
   log(`\n[${locale}] ${languageName(locale)} — ${todo.length} key(s) to translate in ${batches.length} batch(es)`);
 
   const done = {};
-  const failed = {};
+  const failed = {}; // model output failed the checks after the retry
+  const errored = {}; // never got a usable answer (budget, network, HTTP)
   const warnings = {};
   const corrections = [];
   const rejectedCorrections = [];
   let stopped = null;
+  const fatal = (err) => err instanceof BudgetStop || err.status === 401 || err.status === 403 || err.status === 404;
   for (const [i, keys] of batches.entries()) {
     log(` batch ${i + 1}/${batches.length} (${keys.length} keys)`);
+    let r;
     try {
-      const r = await translateBatch(ctx, keys);
-      if (opts.review) {
+      r = await translateBatch(ctx, keys);
+    } catch (err) {
+      r = { ok: {}, failed: {}, warnings: {}, error: err, untried: keys };
+    }
+    if (opts.review && !r.error) {
+      try {
         const rev = await reviewBatch(ctx, r.ok);
         corrections.push(...rev.applied);
         rejectedCorrections.push(...rev.rejected);
+      } catch (err) {
+        // Budget hit on the reviewer: keep the checked, unreviewed translations.
+        r.error = err;
+        r.untried = [];
       }
-      Object.assign(done, r.ok);
-      Object.assign(failed, r.failed);
-      Object.assign(warnings, r.warnings);
-    } catch (err) {
-      stopped = err.message;
-      for (const k of keys) failed[k] = err.message;
-      if (err instanceof BudgetStop || err.status === 401 || err.status === 403 || err.status === 404) break;
+    }
+    Object.assign(done, r.ok);
+    Object.assign(failed, r.failed);
+    Object.assign(warnings, r.warnings);
+    if (r.error) {
+      stopped = r.error.message;
+      for (const k of r.untried) errored[k] = r.error.message;
+      if (fatal(r.error)) {
+        for (const k of batches.slice(i + 1).flat()) errored[k] = "not attempted";
+        break;
+      }
     }
   }
 
-  // Stale entries that failed now fall back to English rather than keep a wrong translation.
+  // Only drop an existing string when the lock proves its English changed
+  // and the model's new output failed the checks; errors never delete.
   const next = { ...current };
   const nextLockKeys = { ...(lock?.keys ?? {}) };
   for (const key of Object.keys(failed)) {
-    if (key in next && nextLockKeys[key] !== entryHash(en[key], TRANSLATE_PROMPT)) {
+    const locked = nextLockKeys[key];
+    if (key in next && locked && locked !== entryHash(en[key], TRANSLATE_PROMPT)) {
       delete next[key];
       delete nextLockKeys[key];
     }
@@ -384,8 +411,11 @@ async function runLocale(locale, opts, env, budget, glossary, prompts) {
     log(` wrote ${locale}.json (${Object.keys(catalog).length}/${Object.keys(en).length} keys) and ${locale}.lock.json`);
   }
 
-  log(` translated ${Object.keys(done).length}, failed ${Object.keys(failed).length}, warnings ${Object.keys(warnings).length}`);
+  log(
+    ` translated ${Object.keys(done).length}, failed ${Object.keys(failed).length}, not done ${Object.keys(errored).length}, warnings ${Object.keys(warnings).length}`,
+  );
   for (const [k, e] of Object.entries(failed)) log(`   FAIL ${k}: ${e}`);
+  for (const [k, e] of Object.entries(errored)) log(`   NOT-DONE ${k}: ${e}`);
   for (const [k, w] of Object.entries(warnings)) log(`   WARN ${k}: ${w.join("; ")}`);
   for (const c of corrections) log(`   REVIEW ${c.key}: "${c.from}" → "${c.to}" (${c.reason})`);
   for (const c of rejectedCorrections) log(`   REVIEW-REJECTED ${c.key}: ${c.why}`);
@@ -393,7 +423,7 @@ async function runLocale(locale, opts, env, budget, glossary, prompts) {
     log(` STOP CONDITION: ${ctx.stats.parseBatches}/${batches.length} batches unparseable on first try`);
   }
   if (stopped) log(` stopped: ${stopped}`);
-  return { stopped, failed: Object.keys(failed).length };
+  return { stopped, failed: Object.keys(failed).length + Object.keys(errored).length };
 }
 
 async function main() {
