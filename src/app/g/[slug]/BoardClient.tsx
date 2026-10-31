@@ -93,8 +93,12 @@ export interface BoardClientView extends BoardViewLike {
   viewer?: { isHost: boolean; /** PIN-181: host, or joined while the board has Plus. */ canChangeLook: boolean };
   /** PIN-103: the board's Plus state and billing mode (the price comes from the Policy pack). */
   plus?: PlusView;
-  /** PIN-151: present only while credits are enabled; PIN-152 renders it. */
-  credits?: { availableMakes: number };
+  /**
+   * PIN-151: present only while credits are enabled; PIN-152 renders it.
+   * PIN-230: `freePhotosLeft` only for a board without Plus (no photo
+   * limit otherwise); PIN-231 renders it in the Add sheet.
+   */
+  credits?: { availableMakes: number; freePhotosLeft?: number };
 }
 
 export interface BoardClientPolicy {
@@ -124,7 +128,12 @@ export interface BoardClientPolicy {
   dictationMaxSeconds: number;
   dictationEnabled: boolean;
   /** Policy.credits offer for the creations UI (PIN-152): packs (the Plus sheet sells the first, PIN-182) + the low threshold. The indicator renders only while the board view carries credits. */
-  makes?: { packs: MakesPack[]; lowMakesWarning: number };
+  makes?: {
+    packs: MakesPack[];
+    lowMakesWarning: number;
+    /** Policy.credits.lowFreePhotosWarning: the Add sheet's quiet free-photos line (PIN-231). */
+    lowFreePhotosWarning: number;
+  };
 }
 
 interface SceneAttempt {
@@ -1435,6 +1444,7 @@ function BoardBody({
             jobPollIntervalMs={policy.jobPollIntervalMs}
             elementsPerPhotoMax={policy.elementsPerPhotoMax}
             libraryStripMax={policy.libraryStripMax}
+            lowFreePhotosWarning={policy.makes?.lowFreePhotosWarning ?? 0}
             resumeJobId={batchCurrent ? batchCurrent.uploadId : resumeJobId}
             onAddMakes={
               makes.canBuy && view.credits

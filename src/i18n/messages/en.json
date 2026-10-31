@@ -448,6 +448,8 @@
   "ui.plusPerkCreations.one": "+{n} creation",
   "ui.plusPerkCreations.other": "+{n} creations",
   "ui.plusPerkCreationsBody": "For everyone on this board. One per AI scene.",
+  "ui.plusPerkPhotos": "Unlimited photos",
+  "ui.plusPerkPhotosBody": "Add as many photos as you like to this board",
   "ui.plusPerkSkins": "Every skin",
   "ui.plusPerkSkinsBody": "Darkroom, Postcard and seasonal drops like Marigold",
   "ui.plusPerkFoil": "Foil stickers",
@@ -512,5 +514,10 @@
   "makes.poolEmpty": "This board is out of creations. Get Plus to keep going.",
   "makes.poolEmptyPlus": "This board is out of creations. Add more to keep going.",
   "makes.poolEmptyPhoto": "This board is out of creations, so photos can't be cut out right now.",
-  "makes.poolEmptyScene": "This board ran out of creations, so that scene couldn't be made."
+  "makes.poolEmptyScene": "This board ran out of creations, so that scene couldn't be made.",
+  "makes.freePhotosLeft.one": "{n} free photo left on this board",
+  "makes.freePhotosLeft.other": "{n} free photos left on this board",
+  "makes.freePhotosUsed": "This board used its free photos. Get Plus for unlimited photos.",
+  "makes.freePhotosUsedOff": "This board used its free photos, so new photos can't be added right now.",
+  "makes.freePhotosPlusOn": "This board has Plus now, so photos are unlimited. Try again."
 }
