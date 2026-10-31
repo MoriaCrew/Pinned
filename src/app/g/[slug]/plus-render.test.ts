@@ -145,6 +145,8 @@ describe("Plus flow overlays (PIN-111)", () => {
     expect(out).toContain("Once, for this board.");
     expect(out).toContain("Demo checkout. Nothing is charged.");
     expect(out).not.toMatch(/<button[^>]*disabled=""[^>]*>Get Plus/);
+    // The trust note belongs to a real checkout only.
+    expect(out).not.toContain("local currency");
     // No plans, no Host plan, no dollars.
     expect(out).not.toContain("Host plan");
     expect(out).not.toContain("$");
@@ -251,6 +253,16 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(sheet()).not.toContain('role="alert"');
   });
 
+  it("shows the one trust line under the button only for a real checkout that can sell", () => {
+    const note = "You may be charged in your local currency. Appears as PINNEDS on your statement.";
+    expect(sheet({ paymentNote: true })).toContain(note);
+    expect(sheet({ paymentNote: true }).match(/local currency/g)).toHaveLength(1);
+    expect(sheet()).not.toContain("local currency");
+    expect(sheet({ paymentNote: true, available: false })).not.toContain("local currency");
+    const fr = sheet({ paymentNote: true, locale: "fr" });
+    expect(fr).toContain("Le paiement peut se faire dans votre devise locale. Apparaît sous le nom PINNEDS sur votre relevé.");
+  });
+
   it("renders in French with French prices", () => {
     const out = sheet({ locale: "fr" });
     expect(out).toContain("Board Plus");
@@ -272,6 +284,7 @@ describe("the Plus sheet on the board (PIN-182)", () => {
     const out = open({ ...guest, makes: makesFlow({ sheetOpen: true }) });
     expect(out).toContain("Board Plus");
     expect(out).toContain("Get Plus · €2.99");
+    expect(out).toContain("You may be charged in your local currency. Appears as PINNEDS on your statement.");
     expect(out).not.toContain("Trying on");
     expect(out).not.toContain("Demo checkout");
     expect(out).not.toMatch(/<button[^>]*disabled=""[^>]*>Get Plus/);
@@ -303,6 +316,26 @@ describe("the Plus sheet on the board (PIN-182)", () => {
     // The host's demo button is live.
     const host = open({ plus: plusView({ mode: "mock" }), makes: makesFlow({ sheetOpen: true }) });
     expect(host).not.toMatch(/<button[^>]*disabled=""[^>]*>Get Plus/);
+  });
+
+  it("mock with Plus on: the add button is disabled under the demo line, for the host too", () => {
+    const plusOn = plusView({ mode: "mock", active: true, plan: "board" });
+    for (const isHost of [true, false]) {
+      const out = open({ isHost, plus: plusOn, makes: makesFlow({ sheetOpen: true }) });
+      expect(out).toMatch(/<button[^>]*disabled=""[^>]*>Add 20 creations · €2.99/);
+      // The banner and the line under the button.
+      expect(out.match(/Demo checkout\. Nothing is charged\./g)).toHaveLength(2);
+      expect(out).not.toContain("Only the board&#x27;s host can do that.");
+      expect(out).not.toContain("local currency");
+    }
+  });
+
+  it("only stripe shows the trust line: not mock, not off", () => {
+    const sheetFor = (mode: PlusView["mode"], look = flow({})) =>
+      open({ look, plus: plusView({ mode }), makes: makesFlow({ sheetOpen: true }) });
+    expect(sheetFor("stripe")).toContain("local currency");
+    expect(sheetFor("mock")).not.toContain("local currency");
+    expect(sheetFor("off")).not.toContain("local currency");
   });
 
   it("off: opened by Keep it, it is Coming soon even for the host", () => {

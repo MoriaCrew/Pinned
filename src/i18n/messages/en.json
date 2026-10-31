@@ -322,6 +322,7 @@
   "ui.perkSoon": "Soon",
   "ui.plusIsOn": "Plus is on",
   "ui.plusOnce": "Once, for this board.",
+  "ui.plusPayNote": "You may be charged in your local currency. Appears as PINNEDS on your statement.",
   "ui.plusGet": "Get Plus",
   "ui.plusAdd.one": "Add {n} creation",
   "ui.plusAdd.other": "Add {n} creations",

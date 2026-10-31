@@ -846,7 +846,10 @@ announced (`aria-live="polite"`).
   `formatEur(pack.eurCents, locale)`, never a label. With Plus
   already on, the list collapses to the creations line plus "Plus is
   on", the lead becomes the add-creations lead, and the button reads
-  "Add N creations · €2.99". With nothing to buy (billing off, or the
+  "Add N creations · €2.99". On the stripe path one more quiet line
+  sits under the button: "You may be charged in your local currency.
+  Appears as PINNEDS on your statement." (never in mock or off).
+  With nothing to buy (billing off, or the
   checkout answered `unavailable`) the button is disabled "Coming
   soon" under "Payments open after the hackathon. Nothing is
   charged." EN and FR both render (`locale`, default `en`).
@@ -860,6 +863,8 @@ announced (`aria-live="polite"`).
   inline line on the sheet. `mock` posts the host-only demo grant
   (`POST plus`, the demo note stays): a joined guest sees the sheet
   with the button disabled and "Only the board's host can do that."
+  With Plus already on, the demo grant adds no creations, so the
+  button is disabled for everyone, with the demo line under it.
   `off` sells nothing. Webhook granting stays the only way creations
   and Plus land (PIN-150, PIN-181).
 - **Who can open it.** Anyone on the board. `PlusFlow` is mounted for
@@ -899,9 +904,8 @@ announced (`aria-live="polite"`).
   English like every other board surface today. Prices format
   from `eurCents` per locale (`€2.99` / `2,99 €`), never from
   the pack's English display label. The PIN-152 "per make" line
-  and the local-currency and statement-name notes left with the
-  buy sheet; Stripe Checkout shows the local price and the
-  merchant name itself.
+  left with the buy sheet; the local-currency and statement-name
+  notes stay as the one `ui.plusPayNote` line on the stripe path.
 
 Tests: `src/domain/makes-ui.test.ts` (states, flag parsing + URL
 strip, banner never claims success without a rise, checkout

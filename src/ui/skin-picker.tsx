@@ -159,6 +159,7 @@ export function PlusSheet({
   plusActive,
   available,
   lockedLine = null,
+  paymentNote = false,
   busy = false,
   error = null,
   foilSrc,
@@ -174,6 +175,8 @@ export function PlusSheet({
   available: boolean;
   /** The button shows but cannot be pressed; this line says why (a guest in the demo). */
   lockedLine?: string | null;
+  /** A real checkout follows (stripe): one quiet line about the local currency and the statement name. */
+  paymentNote?: boolean;
   busy?: boolean;
   /** A checkout error, already worded; announced when it appears. */
   error?: string | null;
@@ -222,6 +225,7 @@ export function PlusSheet({
             {cta}
           </Button>
           {line ? <p className="pn-plus-soon">{line}</p> : null}
+          {offer && paymentNote ? <p className="pn-plus-soon">{t(locale, "ui.plusPayNote")}</p> : null}
           {error ? (
             <p className="pn-plus-error" role="alert">
               {error}

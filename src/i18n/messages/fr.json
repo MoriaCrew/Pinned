@@ -20,6 +20,7 @@
   "ui.perkSoon": "Bientôt",
   "ui.plusIsOn": "Plus est activé",
   "ui.plusOnce": "Une seule fois, pour ce tableau.",
+  "ui.plusPayNote": "Le paiement peut se faire dans votre devise locale. Apparaît sous le nom PINNEDS sur votre relevé.",
   "ui.plusGet": "Obtenir Plus",
   "ui.plusAdd.one": "Ajouter {n} création",
   "ui.plusAdd.other": "Ajouter {n} créations",

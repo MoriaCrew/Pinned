@@ -325,6 +325,10 @@ export function PlusFlow({
   const path = plusPurchasePath(plus?.mode);
   const stripe = path === "stripe";
   const available = path !== "none" && !(stripe ? makes.unavailable : state.unavailable);
+  // The demo grant adds no creations, so with Plus on its button cannot pretend;
+  // before that it is the host's alone.
+  const demoLockedLine =
+    path !== "mock" ? null : plus?.active ? t("en", "plus.demoNote") : isHost ? null : t("en", "plus.hostOnly");
   const sheetOpen = state.sheet === "plus" || makes.sheetOpen;
   const closePlus = () => {
     if (state.sheet === "plus") look.closeSheet();
@@ -370,7 +374,8 @@ export function PlusFlow({
             pack={pack}
             plusActive={plus.active}
             available={available}
-            lockedLine={path === "mock" && !isHost ? t("en", "plus.hostOnly") : null}
+            lockedLine={demoLockedLine}
+            paymentNote={stripe}
             busy={stripe ? makes.busy : state.checkingOut}
             error={stripe && makes.error ? checkoutErrorLine(makes.error) : null}
             foilSrc={foilSrc}
