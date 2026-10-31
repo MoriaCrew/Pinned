@@ -267,7 +267,7 @@ describe("credits disabled (shipped default, PIN-151)", () => {
 });
 
 describe("starter grant (PIN-151)", () => {
-  it("grants exactly once at creation and exposes only availableMakes in the view", async () => {
+  it("grants exactly once at creation and exposes only the counts in the view", async () => {
     const h = makeHarness(ENABLED(3));
     const { slug, owner } = await boardWithOwner(h);
 
@@ -279,7 +279,8 @@ describe("starter grant (PIN-151)", () => {
 
     for (let i = 0; i < 2; i += 1) {
       const view = await getBoardView(slug, owner, h.api);
-      expect(view?.credits).toEqual({ availableMakes: 3 });
+      // Counts only (no money, no per-person data); free photos since PIN-230.
+      expect(view?.credits).toEqual({ availableMakes: 3, freePhotosLeft: h.policy.credits.freePhotosPerBoard });
     }
     await ensureStarterMakes(slug, h.api);
     expect(await entriesOf(h, slug)).toHaveLength(1);
@@ -297,7 +298,7 @@ describe("starter grant (PIN-151)", () => {
     expect(await h.ledger.getAccount("old-board")).toBeNull();
 
     const view = await getBoardView("old-board", null, h.api);
-    expect(view?.credits).toEqual({ availableMakes: 5 });
+    expect(view?.credits).toEqual({ availableMakes: 5, freePhotosLeft: h.policy.credits.freePhotosPerBoard });
     expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
       starterEventId("old-board"),
     ]);
@@ -311,7 +312,7 @@ describe("cheap balance read (PIN-179)", () => {
     const grant = vi.spyOn(h.ledger, "grantStarter");
     const reads = vi.spyOn(h.ledger, "getBalance");
     for (let i = 0; i < 3; i += 1) {
-      expect((await getBoardView(slug, owner, h.api))?.credits).toEqual({ availableMakes: 3 });
+      expect((await getBoardView(slug, owner, h.api))?.credits).toMatchObject({ availableMakes: 3 });
     }
     expect(grant).not.toHaveBeenCalled();
     expect(reads).toHaveBeenCalledTimes(3);
@@ -329,7 +330,7 @@ describe("cheap balance read (PIN-179)", () => {
     const views = await Promise.all(
       Array.from({ length: 4 }, () => getBoardView("old-board", null, h.api)),
     );
-    expect(views.map((v) => v?.credits)).toEqual(Array(4).fill({ availableMakes: 5 }));
+    expect(views.map((v) => v?.credits?.availableMakes)).toEqual(Array(4).fill(5));
     expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
       starterEventId("old-board"),
     ]);

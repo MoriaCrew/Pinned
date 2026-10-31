@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "That upload id is not valid.",
   "error.uploadIdConflict": "That upload is already in use.",
   "error.makesPoolEmpty": "This board is out of makes.",
+  "error.freePhotosUsed": "This board used its free photos.",
   "error.tapMissing": "Tap a spot in the photo.",
   "error.keepMissing": "Choose which pins to keep.",
   "error.tooManyPinsPhoto": "Too many pins for one photo.",

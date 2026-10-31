@@ -57,8 +57,8 @@
   `refund:photo:{jobId}` — see docs/15).
 - `Policy.maxConcurrentDecomposeJobs` caps simultaneously running
   decomposes per instance (busy = a code-less 429 the client backs
-  off on; coded `credits_pool_empty` / `photos_per_day` stops stop
-  the queue). The App Hosting `runConfig` concurrency in
+  off on; coded `credits_pool_empty` / `photos_per_day` /
+  `free_photos_used` (PIN-230) stops stop the queue). The App Hosting `runConfig` concurrency in
   `apphosting.yaml` is the second line.
 
 ## Lifecycle runbook

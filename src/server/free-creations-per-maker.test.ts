@@ -65,7 +65,8 @@ describe("free creations per maker (PIN-205)", () => {
     expect((await h.boards.getBoard(fourth))?.starterMakes).toBe(0);
     // Starter marked granted at 0, so polls stay one head read (PIN-179).
     expect(await h.ledger.getBalance(fourth)).toMatchObject({ available: 0, starterGranted: true });
-    expect((await getBoardView(fourth, null, h.deps))?.credits).toEqual({ availableMakes: 0 });
+    // PIN-230: past the maker's free boards there are no free photos either.
+    expect((await getBoardView(fourth, null, h.deps))?.credits).toEqual({ availableMakes: 0, freePhotosLeft: 0 });
     expect((await h.ledger.getBalance(await h.create(MAKER_B))).available).toBe(5);
   });
 
@@ -122,7 +123,7 @@ describe("free creations per maker (PIN-205)", () => {
     const slug = await h.create(MAKER_A);
     expect(grant).toHaveBeenCalledTimes(1);
     expect(await h.ledger.getAccount(slug)).toBeNull();
-    expect((await getBoardView(slug, null, h.deps))?.credits).toEqual({ availableMakes: 0 });
+    expect((await getBoardView(slug, null, h.deps))?.credits).toMatchObject({ availableMakes: 0 });
     expect((await h.ledger.listEntries(slug)).map((e) => [e.id, e.amount])).toEqual([
       [starterEventId(slug), 0],
     ]);
