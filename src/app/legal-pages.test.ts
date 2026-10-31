@@ -107,6 +107,27 @@ describe("privacy page (PIN-26)", () => {
     expect(page).toContain("pinned_player_");
   });
 
+  it("keeps a space between sentences around every optional line", async () => {
+    const glued = /[a-z)]\.(?:<!-- -->)?[A-Z]/;
+    const variants: Array<[Partial<AppConfig>, Policy | null]> = [
+      [{ authMode: "optional", plusMode: "stripe" }, resolvePolicy({ credits: { enabled: true }, samStore: false })],
+      [{ authMode: "link-only", plusMode: "off" }, resolvePolicy({ sceneStore: true, faces: "allow" })],
+    ];
+    for (const [cfg, policy] of variants) {
+      state.cfg = { ...state.cfg, ...cfg };
+      state.policy = policy;
+      expect(await privacy()).not.toMatch(glued);
+      expect(await terms()).not.toMatch(glued);
+    }
+  });
+
+  it("never calls a hash anonymous, and names the maker counter only when credits are on", async () => {
+    expect(text(await privacy())).not.toMatch(/one-way|anonymi[sz]/i);
+    expect(text(await privacy())).not.toContain("new boards each person starts");
+    state.policy = resolvePolicy({ credits: { enabled: true } });
+    expect(text(await privacy())).toContain("we also count the new boards each person starts");
+  });
+
   it("names the face reminder only when Policy shows it", async () => {
     expect(text(await privacy())).toContain("the app reminds you to pin it only if the people in it are happy");
     state.policy = resolvePolicy({ faces: "allow" });

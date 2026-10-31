@@ -57,7 +57,7 @@ export default async function PrivacyPage() {
           </li>
           <li>
             <strong>What you type.</strong> Your name on each board, board titles, pin names and scene ideas. If
-            you add a 4-digit number to switch phones, we keep only a one-way hash of it.
+            you add a 4-digit number to switch phones, we keep it only in hashed form.
           </li>
           <li>
             <strong>Face reminder.</strong> The AI notes whether a photo shows a face. We keep that yes-or-no with
@@ -80,8 +80,11 @@ export default async function PrivacyPage() {
           </li>
           <li>
             <strong>Abuse protection.</strong> To slow down abuse, the app counts requests per internet (IP)
-            address. The counters we save keep only a one-way hash of the address. Our hosting provider, Google
-            Cloud, also keeps standard request logs.
+            address. The counters we save hold a hash of the address, not the address itself.
+            {policy.credits.enabled
+              ? " To share free creations fairly, we also count the new boards each person starts, by a hash of their user id when signed in, else of their address."
+              : null}{" "}
+            Our hosting provider, Google Cloud, also keeps standard request logs.
           </li>
           {payments ? (
             <li>
