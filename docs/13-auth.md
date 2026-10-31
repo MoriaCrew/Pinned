@@ -12,8 +12,8 @@ and the cross-board library (PIN-85) build on it. Spec:
   uniform 404 and no user code runs on the board flow — the
   flag-off parity tests in `src/server/user-session.test.ts` and
   `src/app/api/auth/auth-routes.test.ts` are the contract.
-- `AUTH_MODE=optional`: a player *may* sign in with Google.
-  Link-only playing keeps working unchanged; sign-in only adds
+- `AUTH_MODE=optional`: a participant *may* sign in with Google.
+  The link-only board flow keeps working unchanged; sign-in only adds
   identity linking.
 
 Unknown `AUTH_MODE` values fail closed to `link-only`

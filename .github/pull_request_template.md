@@ -17,17 +17,20 @@
 - [ ] Bugbot review finished and every finding triaged (fix / follow-up PIN / justified dismissal in-thread):
 - [ ] Unit / contract tests:
 - [ ] Preview click-through (phone viewport) for UI changes:
-- [ ] Screenshots attached (UI changes):
+- [ ] Phone-viewport screenshots attached (UI changes):
 
 ## AI / cost impact
 
-<!-- Models + prompt versions touched; mock behaviour; expected calls/game; eval-set result if prompts changed. Write "None" if no AI surface changed. -->
+<!-- Models + prompt versions touched; mock behaviour; expected calls per photo/scene; fixture or spike result if prompts changed. Write "None" if no AI surface changed. -->
 
 ## Safety & privacy
 
-- [ ] No secrets, `.env`, or real player photos in this diff
+- [ ] No secrets, `.env`, or real personal photos in this diff
+- [ ] `pre-commit` (gitleaks) ran; no `--no-verify`
+- [ ] Limits come from `Policy` (no new numeric literals), or N/A
+- [ ] New UI strings are in `en.json` only (no other locale or `*.lock.json` edits), or N/A
 - [ ] Originals-never-persisted invariant intact (or N/A — say why)
-- [ ] Prompt safety rules untouched, or eval pass noted above
+- [ ] Prompts untouched, or version bumped and evidence noted above
 
 ## Rollback
 

@@ -1,11 +1,27 @@
-# App Hosting environment overrides: PROD backend (PIN-28).
+# App Hosting environment overrides: PROD backend (pinneds.com).
 # Merged over apphosting.yaml when the prod backend builds `main`.
-# Live Meta AI on prod approved Oct 28 for the Oct 31-Nov 1
-# weekend promotion. This file only takes effect when `main`
-# is promoted; merging it to `dev` changes nothing live.
-# Secrets are referenced by name (never by value) and already
-# exist in the prod project's Secret Manager with accessor
-# grants for the App Hosting compute service account.
+# Prod auto-builds on every push to `main` and does not wait for CI.
+# Runbook (pre-flight, promotion, smoke, rollback): docs/DEPLOY.md.
+#
+# Secrets are referenced by name (never by value). Every secret named
+# here must exist in the prod project's Secret Manager, with access
+# granted to the pinned-web backend, BEFORE `main` is pushed: a
+# missing secret fails the build.
+#
+# PIN-209 (Oct 31, decided by Robin): judging-week setup. Live AI
+# behind a $50/day, 10,000-call guard; Google sign-in on the app's own
+# domain; all seven UI languages; one warm instance. After judging
+# ends (Nov 8): lower the budget and set minInstances back to 0.
+runConfig:
+  # One warm instance so judges never wait on a cold start.
+  minInstances: 1
+  maxInstances: 4
+  cpu: 1
+  # sharp buffers, SAM masks, collages and link-preview images share
+  # this memory; running out kills every in-flight request.
+  memoryMiB: 1024
+  concurrency: 10
+
 env:
   - variable: AI_MOCK
     value: "0"
@@ -17,10 +33,13 @@ env:
     secret: SESSION_SECRET
     availability:
       - RUNTIME
+  # Daily guard on live AI (fail closed: scenes fall back to a
+  # collage, photo uploads say the budget is used up). A photo is
+  # about 7 calls (1 Spark + up to 6 SAM), a scene 1 call.
   - variable: AI_DAILY_BUDGET_USD
-    value: "2"
+    value: "50"
   - variable: AI_DAILY_CALL_LIMIT
-    value: "200"
+    value: "10000"
   - variable: APP_BASE_URL
     value: https://pinneds.com
   - variable: DATA_BACKEND
@@ -29,9 +48,18 @@ env:
     value: moriacrew-pinned-prod
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: moriacrew-pinned-prod
-  # PIN-57: web config inherited from apphosting.yaml as Secret
-  # Manager references (prod values already stored). AUTH_MODE
-  # stays inherited link-only until sign-in is proven live on
-  # dev; add AUTH_MODE=optional here at promotion (PIN-76).
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-prod.firebasestorage.app
+  # PIN-57/PIN-163: optional Google sign-in on pinneds.com itself.
+  # The web config secrets are inherited from apphosting.yaml.
+  # Needs the OAuth redirect URI https://pinneds.com/__/auth/handler
+  # on the prod web client and pinneds.com as an authorized domain
+  # (docs/DEPLOY.md, pre-flight). Read at BUILD and RUNTIME.
+  - variable: AUTH_MODE
+    value: optional
+  - variable: AUTH_SAME_ORIGIN
+    value: "1"
+  # PIN-199: all seven UI languages (docs/18-i18n.md). Read at BUILD
+  # (prerendered pages) and RUNTIME: a plain value is both.
+  - variable: UI_LOCALES
+    value: en,fr,es,pt-BR,de,it,id

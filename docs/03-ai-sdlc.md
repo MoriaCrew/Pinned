@@ -1,95 +1,75 @@
-# Pinned — AI SDLC: Linear → Agent → PR → Review (solo developer)
+# Pinneds — AI SDLC: Linear → agent → PR → `dev` → `main`
 
-_One human (Robin) steers; Muse coordinates; coding agents execute
-one Linear issue at a time. This doc is the operating system for the
-10 days. If a step here slows delivery without protecting quality, cut
-the step — and amend this doc in the same PR._
+_One human (Robin) steers; coding agents (Claude Code, Muse Code,
+Cursor) execute one Linear issue at a time. If a step slows delivery
+without protecting quality, cut it and amend this doc in the same PR.
+Agent rules: [`AGENTS.md`](../AGENTS.md); environments and promotion:
+[`DEPLOY.md`](DEPLOY.md)._
 
 ## 1. Systems of record
 
-| Concern | Home | Rule |
-| --- | --- | --- |
-| What to build & status | Linear team **PIN** (Pinned) | No Linear issue → no code (except typo/docs hotfixes, still PR'd) |
-| Code, prompts, docs | GitHub `MoriaCrew/Pinned` (public) | `main` is always deployable |
-| Spec/decisions | `docs/11`, `docs/adr/003` in repo | docs/11 sections cited in issues + PRs |
-| Secrets | Host env + GitHub Actions secrets | Never in repo, issues, or PRs |
-| Demo evidence | Issue comments + README links | Every milestone gate links proof |
+- **Linear** (team PIN, private): what to build and status. No issue,
+  no code; typo and docs hotfixes are still PR'd. Issue body:
+  Outcome · Scope · Checks · Stop conditions, about a day or ~400
+  changed lines (split if larger). Labels: one `area/*` and one
+  `executor/*` (`claude`, `muse`, `cursor`, `operator`).
+- **GitHub** `MoriaCrew/Pinned` (public): code, prompts, docs. `dev`
+  integrates; `main` is prod. Spec and decisions: `docs/11`,
+  `docs/adr/003`; cite sections in issues and PRs.
+- **Secrets:** host env, Secret Manager, GitHub Actions secrets.
+  Never in the repo, issues or PRs.
 
-## 2. Issue anatomy (every PIN issue)
+## 2. The loop (per issue)
 
-- **Title:** verb + outcome (e.g. "Judge a submission with rubric + teaser").
-- **Body:** Why (FR/NFR IDs) · Scope (in/out) · Acceptance criteria
-  (checklist, testable) · AI notes (models/prompts touched, mock behaviour)
-  · Test plan. Sized to ≤1 day; split if larger.
-- **Labels:** one `area/*` (game, ai, vision, poster, infra, demo, docs)
-  + `executor/*` when an agent will run it.
-- **Milestone:** M1 Core Loop (Day 4) · M2 Host+Memory (Day 7) ·
-  M3 Playtest+Submit (Day 10).
+1. **Pick up:** issue → *In Progress*; branch `PIN-{n}/short-slug`
+   from `dev`.
+2. **Build:** scope only. Limits from `Policy`, AI calls only through
+   gateway ports with a mock, prompts versioned in `prompts/`, new UI
+   strings in `en.json` only. Small named commits.
+3. **PR to `dev`**, titled `PIN-{n}: …`, with
+   [the template](../.github/pull_request_template.md) filled: short
+   issue ID, `docs/11` sections, exact test commands and results,
+   AI/cost impact, phone screenshots for UI, rollback.
+4. **Gates:** CI (typecheck, tests, build), gitleaks and Cursor Bugbot
+   must all have *finished* green; pending is not a pass (PR #1 merged
+   at 15:20 and Bugbot landed a real Medium finding at 15:23). Triage
+   every finding in-thread: fix, follow-up issue, or written
+   dismissal. Medium+ security findings block merge.
+5. **Squash-merge to `dev`**, delete the branch, move the issue to
+   *Done* with the PR number and any follow-ups filed.
 
-## 3. The loop (per issue)
+## 3. Promotion: `dev` → `main`
 
-1. **Pick up:** move issue → *In Progress*; create branch
-   `PIN-{n}/short-slug` from `main` (e.g. `PIN-7/rubric-judging`).
-2. **Build (agent):** implement scope only; prompts versioned under
-   `prompts/`; new AI calls go through `ModelGateway` with a mock;
-   add/adjust tests per the issue's test plan. Agent commits in small,
-   named steps; never rewrites history on shared branches.
-3. **PR:** open against `main` using the PR template: short issue ID
-   (`PIN-n`, never a full Linear URL — §4), FR/NFR IDs, what changed,
-   test evidence (commands + output), AI/cost impact, screenshots for
-   UI, rollback note. CI must be green.
-4. **Review (human = Robin, assisted by Muse + Cursor Bugbot):**
-   check acceptance criteria one by one on the preview deploy; request
-   changes on the PR, not in chat. **Bugbot gate:** do not merge until
-   Bugbot's review has *finished* (pending ≠ pass — PR #1 merged at
-   15:20, Bugbot landed 15:23 with a real Medium finding; see PIN-19).
-   Triage every finding in-thread: fix in the PR, file a follow-up
-   `PIN` issue, or dismiss with a written reason. Medium+ security
-   findings block merge. Solo rule: no self-merge without (a) green CI,
-   (b) Bugbot triaged, (c) a preview click-through, (d) PR description
-   evidence filled in.
-5. **Merge & update:** squash-merge; production deploy from `main`;
-   smoke the golden path; move Linear issue → *Done* with PR + deploy
-   links and any follow-up issues filed. Branch deleted.
-6. **Daily steer (Muse):** re-rank backlog against milestone gates,
-   flag scope creep against the Day-5 pivot gate and Nov-3 freeze.
+Robin promotes; an agent never merges to `main`. After a hosted smoke
+on the dev backend (`dev.pinneds.com`: add a photo, make a scene,
+remix, share, `/api/health`), Robin squash-merges a promotion PR into
+`main`, the only method the `Protect main` ruleset allows (squash,
+linear history; `SECURITY.md`). The first Studio promotion is a plain
+`dev` → `main` PR; later ones are cut from `main` with `dev`'s tree
+restored on top so they never conflict (`DEPLOY.md` §4). Prod builds
+automatically from `main` (`pinneds.com`). Per-environment settings
+and rollback: `DEPLOY.md`.
 
-## 4. Branch, commit & PR conventions
+## 4. Conventions and guardrails
 
-- Branches: `PIN-{n}/slug` (agents), `docs/slug`, `fix/slug` (hotfix).
-- Commits: imperative, scoped — `feat(game): …`, `feat(ai): …`,
-  `fix(vision): …`, `docs: …`, `chore(ci): …`.
-- One issue per PR; PRs >~400 lines get split. No direct pushes to
-  `main` after Day-1 bootstrap; `main` protected (PR + CI required).
-- **Public-link hygiene:** this repo is public, Linear is private.
-  Public artifacts (PRs, commits, README, code) carry only the short
-  `PIN-n` ID — full Linear URLs leak issue-title slugs and dead-end
-  judges at a login wall. Full links live inside Linear, which also
-  auto-links PRs from the branch name for authenticated viewers.
+- Branches `PIN-{n}/slug`; no direct pushes to `dev` or `main`.
+  Commits are imperative and scoped: `feat(ai): …`, `fix(board): …`,
+  `docs: …`, `chore(ci): …`. One issue per PR.
+- **Public-link hygiene:** the repo is public, Linear is private.
+  Commits, PRs, code and docs carry only the short `PIN-n` ID, never
+  a full Linear URL (it leaks the title slug and dead-ends judges at
+  a login wall).
+- No paid model calls in CI (`AI_MOCK=1` plus fixtures); live calls
+  only when an issue asks, with spend recorded. No `.env`, keys or
+  real personal photos in git; a firing scanner means rotate first
+  (`SECURITY.md`). Secrets, console and DNS steps are
+  `executor/operator` (Robin).
+- If a check cannot be met, stop and comment on the issue with
+  evidence and options; never silently narrow scope.
 
-## 5. Agent guardrails (Muse / coding agents)
+## 5. Definition of done
 
-- Work only the assigned issue's scope; file discoveries as new issues.
-- Never call paid models in CI — `AI_MOCK=1` + fixtures; live calls only
-  in explicit smoke/eval runs with budget logging.
-- Never commit `.env`, keys, original playtest photos, or generated
-  posters of real players. Sample assets live in `eval/` (consented).
-- Roast-policy and persona system prompts are safety-critical: changes
-  require eval-set pass (0 policy violations) noted in the PR.
-- If an acceptance criterion can't be met, stop, comment on the issue
-  with evidence + options — don't silently narrow scope.
-
-## 6. Ceremonies (15 min/day max, solo-friendly)
-
-- **Morning:** pick today's issues (≤3), confirm milestone gate distance.
-- **Evening:** merge or explicitly park every open PR; update Linear;
-  note cost-to-date vs $150 budget.
-- **Gates:** Day 4 four-phone game · Day 5 guessing keep/cut · Day 7
-  rematch-memory check · Nov 3 feature freeze · Nov 4 submit by 21:00 ET.
-
-## 7. Definition of Done
-
-Acceptance criteria ticked with evidence · CI green · preview verified
-on a phone viewport · docs/prompts updated if behaviour changed ·
-Linear issue closed with PR + deploy links · no new `TODO` without an
+Checks ticked with evidence · CI, gitleaks and Bugbot green · UI
+checked on a phone viewport · docs and prompts updated if behaviour
+changed · issue closed with the PR number · no new `TODO` without an
 issue number.

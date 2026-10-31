@@ -42,13 +42,10 @@ import {
   type StripeIntentLookup,
   type StripeIntentMapping,
 } from "./checkout-intent";
+import { toFirestoreData } from "./firestore-util";
 
 const CHECKOUT_INTENTS = "checkoutIntents";
 const CHECKOUT_INTENT_BOARDS = "checkoutIntentBoards";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 function assertIntentId(intentId: string): void {
   if (typeof intentId !== "string" || !intentId.trim()) {

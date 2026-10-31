@@ -21,6 +21,7 @@ import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
 import { hasPlus, isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { validSceneSize } from "../domain/scene-ratio";
+import { startOfUtcDay } from "../domain/time";
 import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "../gateway/ports";
 import type { Policy } from "../policy/policy";
@@ -540,11 +541,6 @@ export async function sweepStaleDecomposeJobs(
     if (after.status === "failed" && job.status !== "failed") failedCount += 1;
   }
   return failedCount;
-}
-
-function startOfUtcDay(now: number): number {
-  const d = new Date(now);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 /**

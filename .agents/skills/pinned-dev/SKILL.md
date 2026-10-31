@@ -8,15 +8,19 @@ description: Work safely and consistently on the Pinneds Studio Next.js, Firebas
 Use this skill for implementation, debugging, testing, prompt, or
 Firebase work in the Pinned repository. Studio pivot (PIN-49): the
 game is dropped. Spec: `docs/11-studio.md`; decisions:
-`docs/adr/003-studio-architecture.md`. Game docs are archived in
-`docs/archive/` — do not apply them.
+`docs/adr/003-studio-architecture.md`; doc index: `docs/README.md`.
+Game docs are archived in `docs/archive/` — do not apply them.
 
 ## Start every task
 
 1. Read the assigned `PIN-*` issue, then `AGENTS.md`.
 2. Read the relevant sections of `docs/11-studio.md` (spec),
    `docs/adr/003-studio-architecture.md`, `docs/06` (photo intake),
-   `docs/07` (SAM lab) and `docs/08` (UX) as the issue needs.
+   `docs/07` (SAM lab), `docs/13` (sign-in), `docs/14` (design
+   system), `docs/15` (Board Plus, makes), `docs/16` (AI usage and
+   budget), `docs/17` (landing showcase sets), `docs/18` (languages),
+   `docs/19` (Meta models) and `docs/DEPLOY.md` (environments) as
+   the issue needs.
 3. Check `git status` and preserve changes you did not make.
 4. Work on a `PIN-{n}/short-slug` branch from current `dev`. PRs go
    to `dev`, titled `PIN-{n}: …`. Never merge to `main` without
@@ -29,35 +33,44 @@ game is dropped. Spec: `docs/11-studio.md`; decisions:
   comes from the one typed `Policy` object (`docs/11` §5.1:
   defaults → env → per-board overrides). Prompts, validators and UI
   read the same object.
-- Route every AI call through the gateway capability ports
-  (`ElementNamer`, `Segmenter`, `SceneComposer`) with the decorator
-  chain: timeout → retry → reserve budget (fail closed) → call →
-  log cost → fall back. Never import provider SDKs in UI or domain
-  code. Provider refusals are the typed outcome `refused`, never a
-  500.
+- Route every AI call through the six gateway capability ports in
+  `src/gateway/index.ts` (`ElementNamer`, `Segmenter`,
+  `SceneComposer`, `ChipSuggester`, `TapNamer`, `SpeechTranscriber`)
+  with the decorator chain: timeout → retry → reserve budget (fail
+  closed) → call → log cost → fall back. Never import provider SDKs
+  in UI or domain code. Provider refusals are the typed outcome
+  `refused`, never a 500.
 - Read environment only through `src/config.ts`. Server modules
   carry `server-only`.
-- Default to `AUTH_MODE=link-only` and `AI_MOCK=1`. Board
-  participants never authenticate; sign-in comes later behind
-  `AUTH_MODE` (PIN-57). Do not add Firebase Auth or live AI calls
+- Default to `AUTH_MODE=link-only`, `AI_MOCK=1` and `PLUS_MODE=off`.
+  Google sign-in (`AUTH_MODE=optional`, PIN-57, `docs/13`) and
+  billing (`PLUS_MODE`, `docs/15`) ship behind flags; link-only
+  play never needs an account, and flag-off behaviour stays
+  byte-identical (flag-off tests). No live AI or Stripe calls
   unless the assigned issue explicitly requires them and its gate
-  has passed.
+  has passed. Never commit keys.
 - Firestore and Storage are server-only; assets are served through
   a route that checks the board link. Keep client rules deny-all.
 - Never persist original photos. Persist only the stripped working
-  copy under `tmp/` (Policy TTL, `docs/11` A6) and derived cut-outs
+  copy under `tmp/` (deleted at "Pin selected" or past
+  `workingCopyTtlHours`, `docs/11` A6) and derived cut-outs
   (`elements/`) and scenes (`scenes/`). People are allowed in pins:
   a face flag shows the one-line consent note (`faces: note`),
   never blocks.
 - Jobs: `DecomposeJob`/`SceneJob` move `pending → running → ready /
   failed / refused`, idempotent, claim-before-call; request does
   the work, client polls. No queue in slices 1–2.
-- Put all UI copy in `src/i18n/messages/en.json`; keep French as an
-  empty fallback stub unless the issue explicitly requests
-  translation. Follow `docs/08`: icon + ≤6 words, 44 px targets.
+- Put all UI copy in `src/i18n/messages/en.json`, inside its prefix
+  group. There are 7 locales (en, fr, es, pt-BR, de, it, id) with
+  catalog parity checks (`npm run i18n:check`): never hand-edit the
+  other locale files or `*.lock.json`; missing keys fall back to
+  English and `npm run i18n:translate` (dev-time, `docs/18`) fills
+  them. Follow `docs/14`: no emoji, short verb-first labels, 44 px
+  targets.
 - Prompt behavior changes update a versioned file under `prompts/`
-  (`elements.v1`, `scene.v1`) and require matching fixture or
-  golden-set evidence. Store the prompt version with every output.
+  (`elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v1`) and require
+  matching fixture or spike evidence. Store the prompt version with
+  every output.
 - Validate board slugs as `^[A-Za-z0-9_-]{22}$` before any
   Firestore path is built.
 

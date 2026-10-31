@@ -1,174 +1,149 @@
-# Pinneds Studio — your stuff, pinned together
+# Pinneds — your stuff, pinned together
 
-> Anyone with the board link uploads a photo. Muse Spark names the
-> things in it, SAM 3.1 cuts each one out, and the cut-outs are pinned
-> to the board with the owner's name. Anyone then picks a few pins
-> from anyone, writes or taps a scene prompt, and Muse Image composes
-> them into a new image in the board's gallery — credited to the
-> people whose things are in it. No sign-up needed: the link is
-> the invitation. Signing in with Google is optional and adds a
-> personal library (your boards and pins, on every device).
+Friends drop photos onto one shared board. Meta's models cut out the things in them, and
+anyone can mix everyone's pins into new scenes that credit whose things are in them.
 
-**Meta Global AI Developer Hackathon** · Indie Developer track · Theme:
-*Build for Your World* · Solo developer · Oct 26 – Nov 4, 2026
+- **Live app:** https://pinneds.com (live from Nov 1)
+- **Dev, live models:** https://dev.pinneds.com
+- **Video:** 3-minute video: link added at submission <!-- VIDEO_URL -->
+- **Hackathon:** [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details),
+  Indie track, theme *Build for Your World*. Solo developer, Oct 26 – Nov 4, 2026.
 
-- Hackathon: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details
-- Meta event page: https://dev.meta.ai/events/global-hackathon
-- Repository: https://github.com/MoriaCrew/Pinned (public, AGPL-3.0 — see License below)
+<p align="center">
+  <img src="public/landing/sets/cat/scene-street-skate.webp" width="360"
+       alt="A ginger cat in a green beanie and red heart sunglasses rides a patterned skateboard down a sunny street">
+</p>
+<p align="center"><sub>A scene from the landing page, made from three made-up friends' pins: a cat, a
+beanie with heart sunglasses, a skateboard. Muse Image made their photos, Muse Spark named
+the things, SAM 3.1 cut them out and Muse Image composed the scene
+(<a href="docs/17-showcase-sets.md">docs/17</a>).</sub></p>
 
-## Studio in 30 seconds
+## What it does in 30 seconds
 
-1. **Share.** Create a board, get a link (`/g/{slug}`), drop it in the
-   group chat. Nothing to install, no sign-up.
-2. **Pin.** Anyone uploads a photo; Spark names the things in it and
-   SAM cuts them out. The cut-outs land on the board as pins with the
-   owner's name. Tap the photo in the Add sheet to cut out something
-   naming missed (PIN-78).
-3. **Make a scene.** Pick 1–4 pins from anyone (Policy
-   `pinsPerScene`), write a prompt or tap a suggestion chip, and Muse
-   Image composes them into a new image in the board's gallery —
-   credited to whoever brought each thing.
-4. **Remix.** Any scene can be remixed: the parent scene image plus
-   any new pins go back to Muse Image as references, statelessly
-   (`store: false`; PIN-79). Credits carry the full contributor set.
-5. **Rename or delete.** A pin's owner can rename their own thing
-   (More, Rename; up to Policy `elementLabelMaxChars`; credits and
-   scenes show the new name, PIN-157) or delete it; its pins go and
-   scenes that used it are hidden (PIN-77).
-6. **Your library (optional).** Sign in with Google and the boards
-   you join and the cut-outs you pinned follow you: *My boards*
-   lists them, *My pins* is your cut-out library, and any of your
-   pins can be pinned onto another board you belong to (PIN-57).
-   Signing in never gates the loop above — the board link is
-   still the only key to a board.
+1. **Share.** Start a board and send its link to the group chat. No app, no sign-up: the
+   link is the invitation.
+2. **Pin.** Anyone adds a photo. Muse Spark names the things in it, SAM 3.1 cuts each one
+   out, and they land on the board as stickers with the owner's name. Missed something?
+   Tap it in the photo.
+3. **Make a scene.** Pick 1–4 pins from anyone, then type an idea, tap a suggested one or
+   say it out loud. Muse Image composes a new picture, "Made from" the people whose things
+   are in it.
+4. **Remix.** Any scene can be remixed with new pins and a new idea; the credits carry
+   everyone who contributed.
 
-## Try it
+Also: owners can rename or delete their pins (deleting one hides the scenes that used
+it); people are allowed in photos, and a face gets a one-line consent note, never a
+block; optional Google sign-in adds *My boards* and *My pins* on every device but never
+gates a board; the UI speaks 7 languages (English, French, Spanish, Portuguese (Brazil),
+German, Italian, Indonesian), chosen per visitor from one shared link.
 
-### Hosted dev (live models)
+## How Meta's models power it
 
-Open **https://dev.pinneds.com** in a browser.
+Five Meta models. Four run inside the app behind six capability ports in `src/gateway/`;
+the fifth ran at build time. Prompts, Policy keys, fallbacks, costs and evidence for each:
+[`docs/19-meta-models.md`](docs/19-meta-models.md).
 
-- **Make your own board:** use the Start action on the landing page
-  (it goes to `/new`). Create the board, then copy the board URL
-  from your browser's address bar and share that link — anyone with
-  it can join, pin photos and make scenes. Board links are
-  capability secrets, so this README intentionally contains no board
-  link or slug.
-- **Join someone else's board:** open the board link they sent you.
-  There is no board directory and no sign-up; if you don't have a
-  link, ask the board's owner for one or start your own board above.
-- When a seeded demo board is configured on the host, the landing
-  page also shows a demo action that opens it; if it's absent, just
-  create a board — solo works too.
+| Model (ID) | What it does in Pinneds | Port |
+| --- | --- | --- |
+| **Muse Spark** (`muse-spark-1.3`) | Names 1–6 things per photo as short noun phrases SAM can cut, and flags faces (`elements.v1`). Names a cut-out you tapped, from its crop (`tap-name.v1`). Suggests scene ideas for the picked pins, cached 24 h (`chips.v1`). | `ElementNamer`, `TapNamer`, `ChipSuggester` |
+| **SAM 3.1** (`sam-3.1`) | Cuts out each named thing (one concept per call, four calls at a time) and whatever you tap (point prompt), keeping the most confident usable mask. | `Segmenter` |
+| **Muse Image** (`muse-image-1.0`) | Composes 1–4 pins into one new scene through `/v1/responses` (`scene.v1`, `store: false`); a remix sends the parent scene first. It also made the source photos of the Meta-made landing sets. | `SceneComposer` |
+| **Muse Voice Transcribe** (`muse-voice-transcribe-1.0`) | Turns a spoken scene idea (up to 30 s) into text. The audio is never stored. | `SpeechTranscriber` |
+| **Muse Spark Open** (`meta-models/muse-spark-open-1026`, on Baseten) | Build time only: translated the UI into six languages, with a second reviewer pass (`translate-ui.v1`, `review-ui.v1`). Never called by the running app. | `scripts/i18n-translate.mjs` |
 
-Status as of Oct 29, 2026: the dev backend above is the live demo.
-Prod (`pinneds.com`) promotion is still pending (see Known v1 limits).
+Every runtime call goes through one decorator chain (`src/gateway/decorators.ts`):
+timeout → retry once on 429/5xx → reserve budget, fail closed → call → log the estimated
+cost → a typed `ready / failed / refused` outcome. A refusal is a friendly line, never a
+500, and a scene that runs out of AI budget becomes a free collage of the cut-outs.
 
-### Local, offline with mock AI (no API key)
+```mermaid
+flowchart LR
+  photo["Photo"] --> strip["EXIF stripped<br/>working copy"]
+  strip --> name["Muse Spark<br/>names the things"]
+  name --> cut["SAM 3.1<br/>cuts each one out"]
+  cut --> pins["Pins on the board"]
+  strip -->|tap| point["SAM 3.1<br/>point cut"]
+  point --> tapname["Muse Spark<br/>names the tapped pin"]
+  tapname --> pins
+  pins --> chips["Muse Spark<br/>idea chips"]
+  voice["Spoken idea"] --> asr["Muse Voice<br/>transcribes"]
+  chips --> idea["Scene idea"]
+  asr --> idea
+  pins --> compose["Muse Image<br/>composes"]
+  idea --> compose
+  compose --> scene["Credited scene"]
+  scene -->|remix| compose
+  entext["English UI text"] -.->|build time| sparkopen["Muse Spark Open<br/>translates + reviews"]
+  sparkopen -.-> langs["6 more languages"]
+```
 
-Requirements: Node 20.9+ and npm. `.env.example` defaults to
-`AI_MOCK=1` and the in-memory data backend, so the full flow —
-boards, pins, mock scenes — runs with no API key and no paid calls.
+## Architecture
+
+Spec: [`docs/11-studio.md`](docs/11-studio.md) §5. Decisions:
+[ADR-003](docs/adr/003-studio-architecture.md).
+
+- **Policy as data.** One typed Zod `Policy` (`src/policy/policy.ts`) holds every count,
+  size, cap, timeout and TTL: defaults in code, then env `POLICY_OVERRIDES_JSON`, then
+  per-board overrides. Prompts, validators and the UI read the same object.
+  `src/config.ts` is the only file that reads `process.env`.
+- **Six ports and decorators.** `ElementNamer`, `TapNamer`, `ChipSuggester`, `Segmenter`,
+  `SceneComposer` and `SpeechTranscriber` each have a Meta adapter (plain `fetch`, no
+  provider SDK), a mock adapter (the default, `AI_MOCK=1`) and a recorded-fixture
+  adapter. Product code only gets the decorated ports (`src/server/ai-ports.ts`). Spend
+  is reserved before a call on a per-day counter, with per-person and per-board caps.
+- **Jobs, request and poll.** A `DecomposeJob` (photo → pins) and a `SceneJob` (pins →
+  scene) move `pending → running → ready / failed / refused`, idempotent by id with
+  claim-before-call, so a repeated request never pays twice. The request does the work;
+  the board page polls (TanStack Query). No queue.
+- **Data model** (`src/domain/board.ts`). An `Element` is an owned cut-out, a `Pin` puts
+  it on a `Board`, and a `Scene` credits its `elementIds` and records its `promptVersion`
+  and `costUsd`. Firestore when hosted, in memory locally. Board links are 128-bit
+  capability slugs, validated before any data path is built.
+- **Privacy.**
+  - Original photos are never stored. An upload is checked, stripped of EXIF and
+    re-encoded into a working copy under `tmp/`. Only cut-outs (`elements/`) and scenes
+    (`scenes/`) persist, served through routes that check the board link; client
+    Firestore and Storage rules deny everything.
+  - The working copy is deleted when the uploader confirms their pins ("Pin N"). Any copy
+    older than Policy `workingCopyTtlHours` (24 h) is swept the next time someone adds a
+    photo to that board, and a bucket lifecycle rule in `storage.lifecycle.json` deletes
+    leftover working copies as the backstop.
+  - Calls to Meta run in Standard mode: not used for training, which is not the same as
+    not stored. The Muse Image compose call sends `store: false`. We make no "zero data
+    retention" claim.
+
+## Run it locally
+
+### Offline, with mock models (no key)
+
+Needs Node 20.9+ and npm. The defaults in `.env.example` (`AI_MOCK=1`,
+`DATA_BACKEND=memory`) run the whole loop with no key and no paid calls. Mock pins are
+always the same few things, and a mock scene is a collage of the cut-outs.
 
 ```bash
 git clone https://github.com/MoriaCrew/Pinned.git
 cd Pinned
 npm install
 cp .env.example .env.local   # PowerShell: Copy-Item .env.example .env.local
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# paste that value after SESSION_SECRET= in .env.local (joining a board needs it)
 npm run dev
 ```
 
-Open http://localhost:3000 in a browser. Health check:
-http://localhost:3000/api/health
+Open http://localhost:3000 and start a board. Health check:
+http://localhost:3000/api/health.
 
-To run against live models locally instead, set `AI_MOCK=0` and a
-real `META_API_KEY` in `.env.local` (never commit it; see
-`.env.example` and `SECURITY.md`).
+### With live models
 
-## How Meta's models power it
+Set `AI_MOCK=0` and your own `META_API_KEY` in `.env.local` (never commit it; see
+`SECURITY.md`). `META_MODEL_SPARK`, `META_MODEL_SAM`, `META_MODEL_IMAGE` and
+`META_MODEL_VOICE` override the model IDs. `AI_DAILY_BUDGET_USD` (default 5; `0` turns AI
+off) and `AI_DAILY_CALL_LIMIT` (default 500) cap the day's spend. Every call logs an
+estimated cost (`docs/16-ai-usage.md`). Hosting is Firebase App Hosting: the `dev` branch
+builds the dev backend and `main` builds prod (`apphosting*.yaml`,
+[`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
-| Model | Role in Pinneds Studio |
-| --- | --- |
-| **Muse Spark** (`muse-spark-1.3`, Meta Model API) | Names the elements in a photo (short noun phrases that feed SAM), flags faces for the one-line consent note, and writes generated scene-suggestion chips. |
-| **SAM 3.1** (`sam-3.1`, Meta Model API) | Cuts each named thing out of the photo: concept prompts, plus tap (point) prompts to add what naming missed. |
-| **Muse Image** (`muse-image-1.0`, Meta Model API) | Composes selected pins into a new scene from reference images (`/v1/responses`); stateless remix re-attaches the parent scene image as a reference. |
-
-Model IDs, prompt versions, timeouts and caps are Policy values
-(see Architecture), not literals scattered through the code.
-
-## Architecture map
-
-Start with `docs/11-studio.md` (product spec, §5 architecture) and
-`docs/adr/003-studio-architecture.md` (ADR-003). The code follows
-them directly:
-
-- **Policy as data** — `src/policy/policy.ts`: one typed Zod
-  `Policy` (defaults in code, then env `POLICY_OVERRIDES_JSON`, then
-  per-board overrides). It owns every count, size, cap, timeout and
-  TTL — e.g. `elementsPerPhoto` 1–6, `pinsPerScene` 1–4, `faces:
-  note`, `sceneInputMode: flattened`, `sceneSize: 1024x1536`,
-  Spark/SAM/scene timeouts 30 s / 20 s / 120 s. Prompts, validators
-  and the UI all read the same object.
-- **Capability ports + decorators** — `src/gateway/`: the only AI
-  surfaces are `ElementNamer`, `Segmenter` and `SceneComposer`
-  (`ports.ts`), each with a Meta adapter (`meta-ports.ts`), a mock
-  adapter (`mock-ports.ts`) and a recorded-fixture adapter
-  (`fixture-ports.ts`). Every call runs one decorator chain
-  (`decorators.ts`): timeout → retry on 429/5xx → reserve daily
-  budget, fail closed (`budget.ts`) → call → log cost (`costs.ts`).
-  A provider refusal is a typed `refused` outcome with a friendly
-  line — never a 500.
-- **Jobs, request + poll** — `DecomposeJob` (photo → pins) and
-  `SceneJob` (pins → scene) move
-  `pending → running → ready / failed / refused`, idempotent by job
-  id with claim-before-call (`src/server/decompose-job.ts`,
-  `src/server/scene-job.ts`). The request does the work; the board
-  page polls with TanStack Query. There is no queue in v1.
-- **Routes** — pages: `/` (landing: one showcase set per visit,
-  `/?set=<id>` pins one; see `docs/14`, and `docs/17` to make a
-  set), `/new` (create a board),
-  `/g/{slug}` (the board), `/me/boards` + `/me/pins` (signed-in
-  library). API under `src/app/api/boards/`: board create/view/
-  delete (host only),
-  `photos` (upload → decompose), `pins/confirm`,
-  `pins/from-library`, `claim`, `jobs/{jobId}` +
-  `jobs/{jobId}/tap-add`, `scenes` (+ scene image),
-  `elements/{elementId}` (`DELETE` = delete my element), `chips`;
-  sign-in under `/api/auth/session` + `/api/me*`; plus
-  `/api/health`. Every board route validates the slug
-  (`^[A-Za-z0-9_-]{22}$`, 128-bit base64url) before any data path
-  is built.
-- **Data model** — an owned `Element` (cut-out), a `Pin` placing it
-  on a `Board`, and a `Scene` crediting its `elementIds`
-  (`docs/11` §5.4). Optional sign-in adds a minimal user profile
-  (`users/{uid}`: display name + photo, never email) and a
-  per-user board index (`docs/13-auth.md`). Hosted data is
-  Firestore; local dev defaults to the in-memory backend
-  (`DATA_BACKEND=memory`).
-
-### Storage and privacy
-
-- Original photos are never stored: uploads are stripped (EXIF
-  removed, re-encoded) into a short-lived working copy under `tmp/`;
-  only cut-outs (`elements/`) and scenes (`scenes/`) persist, served
-  through routes that check the board link. Client storage rules
-  stay deny-all (`docs/06-photo-intake.md`).
-- Honest TTL note: Policy sets `workingCopyTtlHours` to 24, but the
-  bucket lifecycle backstop in `storage.lifecycle.json` currently
-  deletes `tmp/` at 14 days — so don't read the working copy as a
-  hard 24-hour deletion guarantee yet (`docs/11` §5.5, A6).
-- People are allowed in pins — when Spark flags a face
-  (`faces: note`) the app asks "everyone in this photo OK with being
-  remixed?" and never blocks; the provider's guardrails refuse what
-  they refuse, and refusals show as a friendly message, not an error.
-- Inputs go to Meta under Standard mode (not used for training).
-  Compose calls send `store: false`; there is no "zero data
-  retention" claim.
-
-## Testing
-
-CI (`.github/workflows/ci.yml`) runs with `AI_MOCK=1` — it never
-makes paid model calls. Quality gates, exactly as in `package.json`:
+## Tests and CI
 
 ```bash
 npm run typecheck
@@ -176,92 +151,61 @@ npm test
 npm run build
 ```
 
-Live on Oct 29, 2026 at `dev` commit `fc406c9`: `npm test` under
-`AI_MOCK=1` reports **408 passed / 1 skipped** (56 files). Live-model
-checks run on demand only, with cost logged (`docs/11` §5.9, §8).
+On `dev` at `f010eb7` (Oct 31, 2026), `npm test` reports **1,507 tests passed, 2
+skipped**, in 133 test files. CI (`.github/workflows/ci.yml`) runs all three with
+`AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full history on every
+PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook, and Cursor Bugbot
+reviews every PR. Domain and Policy logic have unit tests; the gateway has contract tests
+that replay recorded spike fixtures (`eval/fixtures/studio/`). Live-model runs happen by
+hand, with cost logged; results are in [`eval/studio-findings.md`](eval/studio-findings.md).
 
-Operator scripts (also in `package.json`): `npm run seed:demo`
-creates one synthetic demo board through the public boards API and
-prints its slug once — record it privately, never commit it; setting
-`DEMO_BOARD_SLUG` in the host env turns on the landing demo link.
-`npm run usage:report -- <slug> [...]` prints per-board
-people/elements/pins/scenes counts, and `npm run usage:costs`
-prints per-board estimated AI costs (slugs are passed locally only,
-or printed hashed, never committed).
+## Billing: Board Plus
 
-Billing (makes credits, "creations" in the UI; design in
-`docs/15-board-plus.md`): modes are
-`PLUS_MODE=off|mock|stripe` — `off` sells nothing (the default, and
-prod), `mock` is the no-money demo, `stripe` sells the one Board Plus
-pack (€2.99 once per board: Plus + 20 creations; any joined member can
-buy it for the board; each board starts with 5 free) via hosted
-Checkout with webhook-only grants. Once a board has Plus, any joined
-member can change its look. The dev backend runs
-`stripe` against the pinneds-dev **sandbox** since PIN-153 (including
-`Policy.credits.enabled`, which defaults off in code). Operator
-scripts: `npm run seed:stripe-catalog` converges a sandbox onto the
-committed catalog (dry-run unless `--apply`);
-`npm run billing:webhook-endpoint` ensures the dev webhook endpoint
-and stores its signing secret in Secret Manager without printing it;
-`npm run billing:reconcile` is the read-only paid-vs-granted report
-(exit 1 on anomalies — runbook in `docs/15-board-plus.md`). Keys come
-from env var names / Secret Manager only, never from git.
-
-## Known v1 limits (status Oct 29, 2026)
-
-- **Tap-to-add labels.** A tapped cut-out is named by a Spark crop
-  pass (PIN-117, `prompts/tap-name.v1.md`): a real label and
-  `faceFlag`, so a tapped person gets the face consent note. The
-  generic label "My thing" remains only as the typed fallback.
-- **Costs are estimates.** About $0.02 per photo (spike figure,
-  `docs/11` §8, T5) and $0.01 per scene (Muse Image's flat list
-  price per generated image, `docs/16-ai-usage.md`). The provider
-  dashboard is authoritative.
-- **Optional sign-in, link-first.** Identity on a board is a
-  signed participant cookie; anyone with the board link can join,
-  anyone without it cannot find the board. Google sign-in
-  (`AUTH_MODE=optional`, live on dev since Oct 29; PIN-57) only
-  *adds* the My boards / My pins library and cross-device
-  restore — it never gates pinning or scene-making, and
-  `AUTH_MODE=link-only` remains the default. Prod stays
-  link-only until promotion.
-- **Prod promotion pending.** Dev (https://dev.pinneds.com) is the
-  live, model-backed demo. Firebase projects
-  `moriacrew-pinned-dev` / `moriacrew-pinned-prod` exist (Firestore
-  `eur3`, App Hosting `pinned-web` in `europe-west4`), but as of
-  Oct 29 prod has not been promoted — don't treat `pinneds.com` as
-  the demo URL yet.
-- **Cuts can miss.** SAM returns no match for some named things;
-  those simply don't become pins. Tap-to-add is the workaround.
-
-## Hackathon note
-
-Feature freeze is Tue Nov 3, 2026 (end of day); submission is due
-Wed Nov 4, 2026, 9:00 PM ET. Until then, slices land as small
-`PIN-*` PRs to `dev`; `main`/prod promotion rides the freeze.
-
-Pinneds started this week as an AI-hosted photo game and pivoted to
-Studio on Oct 28; the game design is kept for history in
-`docs/archive/` only — nothing in this README describes the game.
+`PLUS_MODE` is `off` (the default: nothing is sold), `mock` (a no-money demo) or `stripe`.
+With `stripe` the app sells one pack, **Board Plus (€2.99, Stripe)**: once per board, it
+unlocks every board look and foil stickers and adds 20 creations (AI makes). Any member
+can buy it for the board; guests never have to pay. Creations are a Policy switch
+(`credits.enabled`, off in code): when on, a board starts with 5 free, a photo or an AI
+scene uses one, and a collage is free. Purchases are granted by Stripe webhook only, and
+keys come from Secret Manager, never git. Design and runbook:
+[`docs/15-board-plus.md`](docs/15-board-plus.md).
 
 ## Docs
 
-- `docs/11-studio.md` — Pinneds Studio spec: product, Policy, ports,
-  jobs, data model, UX, slices, test plan, open questions
-- `docs/adr/003-studio-architecture.md` — Policy as data, capability
-  ports + decorators, jobs, Element/Pin split, stateless remix
-- `docs/03-ai-sdlc.md` — issue → coding agent → PR → review workflow (solo + Muse)
-- `docs/06-photo-intake.md` — photo intake and ephemeral storage
-- `docs/07-sam-lab.md` — SAM 3.1 lab notes and measurements
-- `docs/08-ux-principles.md` — minimal, icon-first UX rules
-- `docs/09-design-system.md` — board themes (see docs/11 A5)
-- `docs/10-custom-domains.md` — pinneds.com domain setup
-- `docs/12-submission.md` — hackathon submission packet + video plan
-- `docs/13-auth.md` — optional Google sign-in (`AUTH_MODE`), claim flow, user library
-- `docs/18-i18n.md` — UI languages: how a request picks one, `UI_LOCALES`, adding strings
-- `docs/archive/` — game-era requirements and research; history only
-- `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
-- `AGENTS.md` — instructions for coding agents working this repo
+- [`docs/README.md`](docs/README.md): index of every doc
+- [`docs/19-meta-models.md`](docs/19-meta-models.md): each Meta model, prompt, cost and fallback
+- [`docs/11-studio.md`](docs/11-studio.md): product and architecture spec
+- [`docs/adr/003-studio-architecture.md`](docs/adr/003-studio-architecture.md): Policy, ports, jobs, remix
+- [`docs/DEPLOY.md`](docs/DEPLOY.md): deploy runbook and env matrix
+- [`docs/13-auth.md`](docs/13-auth.md): optional Google sign-in
+- [`docs/15-board-plus.md`](docs/15-board-plus.md): Board Plus and creations
+- [`docs/16-ai-usage.md`](docs/16-ai-usage.md): AI call log and cost estimates
+- [`docs/17-showcase-sets.md`](docs/17-showcase-sets.md): how the landing sets are made
+- [`docs/18-i18n.md`](docs/18-i18n.md): languages and translation
+- [`SECURITY.md`](SECURITY.md) and [`AGENTS.md`](AGENTS.md): public-repo guardrails and agent rules
+
+## Known limits
+
+- **Cuts can miss.** Sometimes SAM finds no usable mask for a named thing, and it doesn't
+  become a pin; tapping it in the photo is the workaround. Spark names the same photo a
+  little differently from run to run.
+- **Costs are estimates** from Meta list prices (`src/gateway/costs.ts`). The provider
+  dashboard is authoritative.
+- **Not every picture is from Meta.** The classic landing set, the `/new` look-picker
+  samples (`public/start/`), the board theme art (`public/themes/`) and the eval fixture
+  photos are Higgsfield images (SAM 3.1 cut out the stickers). The try-on and cat landing
+  sets are Meta end to end.
+- **AI-written text is English in places.** Pin names, idea chips and some scene text
+  stay English whatever the UI language (PIN-214, PIN-200).
+- **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
+  checked them yet. Latin-script languages only.
+
+## Built with
+
+Next.js 15 (App Router) and TypeScript, Firebase App Hosting, Firestore and Cloud Storage,
+the Meta Model API, Stripe Checkout, sharp, Zod, TanStack Query and Vitest; built by one
+developer with AI coding agents, one issue per PR ([`docs/03-ai-sdlc.md`](docs/03-ai-sdlc.md)).
+`PIN-n` in code and commits is the Linear issue ID; history is in `git log`.
 
 ## License
 

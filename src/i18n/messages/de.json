@@ -335,7 +335,6 @@
   "add.photoStep": "Foto {i} von {n}",
   "add.skipPhoto": "Dieses Foto überspringen",
   "add.retryPhoto": "Dieses Foto nochmal versuchen",
-  "add.nextPhoto": "Nächstes Foto",
   "add.droppedPhotos.one": "Nur die ersten Fotos passen. 1 wurde weggelassen.",
   "add.droppedPhotos.other": "Nur die ersten Fotos passen. {n} wurden weggelassen.",
   "add.batchWaitingCount.one": "1 wartet",

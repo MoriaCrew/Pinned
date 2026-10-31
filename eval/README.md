@@ -1,14 +1,16 @@
 # Evaluation fixtures
 
-PIN-15 owns the 20-photo golden set and runner. This directory is the
-policy boundary until then.
+The synthetic fixtures under `fixtures/studio/` and the live spike runner
+`scripts/studio-spike.mjs` (`npm run spike:studio`) serve as the golden
+set; results are in `studio-findings.md`. The 20-photo golden set (PIN-15)
+was canceled. This directory is the policy boundary for fixtures.
 
 ## Fixture rules
 
 - Use only consented operator photos or clearly synthetic/generated
   images. Higgsfield-generated desk/object scenes are suitable SAM and
   labelling fixtures when they contain no real person or private data.
-- Never add real player submissions, family photos, faces, badges,
+- Never add real user uploads, family photos, faces, badges,
   documents, screens with private content, or EXIF-bearing originals.
 - Record each fixture's source, expected object label, orientation/HEIC
   case where relevant, and consent/synthetic status beside the asset.
@@ -21,4 +23,4 @@ Easy isolated objects, cluttered desks, transparent/reflective objects,
 multiple candidate objects, dark/blurry images, rotated EXIF images,
 HEIC inputs, screens/documents for safety flags, and prompt-injection
 text placed inside an image. Measure segmentation fallbacks, label
-validity, safety-flag accuracy, latency, and cost per board.
+validity, safety-flag accuracy, latency, and cost per photo and scene.

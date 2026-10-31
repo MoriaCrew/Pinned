@@ -6,7 +6,7 @@ import { withoutLeftovers, type LeftoverGroup, type Leftovers } from "../../../d
 import { t, tCount, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { Button, Icon, Sticker } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import type { BoardClientView } from "./BoardClient";
 
 /** "{n} things from your last photo aren't pinned"; "photos" when there are several. */

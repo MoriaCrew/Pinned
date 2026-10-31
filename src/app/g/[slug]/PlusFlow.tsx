@@ -30,7 +30,7 @@ import type { SkinId } from "../../../domain/skins";
 import { t, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { IconButton, PlusSheet, TryOnBar, cx, skinName, type PlusPack } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import type { BoardClientView } from "./BoardClient";
 import { ChangeLookSheet } from "./ChangeLookSheet";
 import { checkoutErrorLine, type MakesFlow } from "./MakesFlow";
@@ -158,7 +158,6 @@ export function useLookFlow({
       if (outcome === "failed") dispatch({ type: "retryTryOn", skin: step.skin });
     });
     // applySkin only closes over the query client, the slug and dispatch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billingFlag, slug, isHost, plus?.active, boardSkin]);
 
   // A confirmation fades; an error stays until dismissed or replaced.

@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test && npm run i18n:check",
     "tokens": "node scripts/build-tokens.mjs",
     "og:card": "WRITE_OG_CARD=1 vitest run src/server/og-card.test.ts",
     "test": "vitest run",
