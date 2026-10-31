@@ -47,8 +47,8 @@ export default async function PrivacyPage() {
             smaller working copy and strips its metadata (EXIF, such as location and camera details). The photo
             you uploaded is never stored: only the working copy, so you can tap to add things the AI missed. It
             is deleted when you pin your picks. If you leave without pinning, it can no longer be used after{" "}
-            {plural(policy.workingCopyTtlHours, "hour")} and is deleted the next time anyone adds or pins a photo
-            on that board; a storage rule deletes any copy still left after that.
+            {plural(policy.workingCopyTtlHours, "hour")} and is deleted the next time anyone adds a photo to that
+            board; a storage rule deletes any copy still left after that.
           </li>
           <li>
             <strong>Cut-outs and scenes.</strong> Each thing cut out of your photo is stored as a picture, with a
