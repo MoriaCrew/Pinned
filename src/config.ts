@@ -67,7 +67,8 @@ export interface AppConfig {
   demoBoardSlug: string | null;
   /**
    * Public contact address shown on /privacy and /terms (PIN-26),
-   * from LEGAL_CONTACT_EMAIL. Env only, never committed. Null when
+   * from LEGAL_CONTACT_EMAIL. Public, so it is a plain value in the
+   * App Hosting env yaml (docs/DEPLOY.md §2), not a secret. Null when
    * unset or not address-shaped: the pages then point to GitHub
    * issues instead of inventing an address.
    */

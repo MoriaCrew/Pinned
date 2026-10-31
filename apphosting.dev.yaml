@@ -21,6 +21,10 @@ env:
     value: "500"
   - variable: APP_BASE_URL
     value: https://dev.pinneds.com
+  # PIN-26: public contact on /privacy and /terms. A plain value: the
+  # address is printed on both pages, so it is not a secret.
+  - variable: LEGAL_CONTACT_EMAIL
+    value: contact@moriacrew.com
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID
