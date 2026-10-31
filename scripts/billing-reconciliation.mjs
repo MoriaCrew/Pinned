@@ -14,14 +14,22 @@
  *     --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
  *
  * The secret is read from the env var NAMED by --env-var
- * (default STRIPE_SECRET_KEY) and is never printed; live keys
- * are refused. Firestore auth is Application Default
+ * (default STRIPE_SECRET_KEY) and is never printed. A live key
+ * needs --live --i-understand-live and --project
+ * moriacrew-pinned-prod (PIN-210, scripts/stripe/operator-mode.mjs);
+ * a sandbox run never reads prod. Firestore auth is Application Default
  * Credentials. Mirrors buildBillingReconciliationReport in
  * src/domain/billing-reconciliation.ts — keep in sync (a test
  * pins the mirror). Runbook: docs/15 (PIN-153 section).
  */
 import { createHash } from "node:crypto";
 import { Firestore } from "@google-cloud/firestore";
+import {
+  LIVE_CONFIRM_FLAG,
+  LIVE_FLAG,
+  projectModeError,
+  resolveStripeMode,
+} from "./stripe/operator-mode.mjs";
 
 const args = process.argv.slice(2);
 function arg(name) {
@@ -161,12 +169,26 @@ async function main() {
     console.error(`Env var ${envName} is not set; refusing to run.`);
     process.exit(2);
   }
-  if (apiKey.includes("_live_")) {
-    console.error(`Env var ${envName} holds a LIVE key; reconciliation here is sandbox-only.`);
+  const gate = resolveStripeMode({
+    key: apiKey,
+    envName,
+    live: args.includes(LIVE_FLAG),
+    confirmed: args.includes(LIVE_CONFIRM_FLAG),
+  });
+  if (!gate.ok) {
+    console.error(gate.error);
     process.exit(2);
   }
+  // Live: only an explicit --project counts (never ADC/env defaults).
   const projectId =
-    arg("--project") || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || undefined;
+    gate.mode === "live"
+      ? arg("--project")
+      : arg("--project") || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || undefined;
+  const projectError = projectModeError(gate.mode, projectId);
+  if (projectError) {
+    console.error(projectError);
+    process.exit(2);
+  }
   const db = new Firestore(projectId ? { projectId } : {});
   try {
     const [paidSessions, intentsSnap, deadLettersSnap, accountsSnap] = await Promise.all([
@@ -209,7 +231,7 @@ async function main() {
       boardHash,
     );
     console.log(
-      `billing reconciliation project=${projectId ?? "(adc default)"} keyEnv=${envName} ` +
+      `billing reconciliation stripe=${gate.mode} project=${projectId ?? "(adc default)"} keyEnv=${envName} ` +
         `paidSessions=${paidSessions.length} purchases=${purchases.length} intents=${intents.length}`,
     );
     for (const row of report.paidNoGrant) {

@@ -3,8 +3,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { STRIPE_API_VERSION } from "../config";
 import { STRIPE_WEBHOOK_EVENT_TYPES } from "../server/stripe-webhook";
+import * as operatorMode from "../../scripts/stripe/operator-mode.mjs";
 import {
   DEV_WEBHOOK_URL,
+  LIVE_WEBHOOK_URL,
   WEBHOOK_ENDPOINT_EVENTS,
   planWebhookEndpoint,
   webhookEndpointConverged,
@@ -92,12 +94,16 @@ describe("webhook endpoint plan (PIN-153)", () => {
     expect(plan.missingEvents).toHaveLength(11);
   });
 
-  it("the ensure script carries the same URL, events and API version (mirror)", () => {
+  it("the ensure script carries the same URLs, events and API version (mirror)", () => {
     const script = readFileSync(
       path.resolve(__dirname, "../../scripts/ensure-stripe-webhook-endpoint.mjs"),
       "utf8",
     );
-    expect(script).toContain(DEV_WEBHOOK_URL);
+    // PIN-210: both URLs live in the shared operator-mode module the script imports.
+    expect(script).toContain('from "./stripe/operator-mode.mjs"');
+    expect(operatorMode.DEV_WEBHOOK_URL).toBe(DEV_WEBHOOK_URL);
+    expect(operatorMode.LIVE_WEBHOOK_URL).toBe(LIVE_WEBHOOK_URL);
+    expect(LIVE_WEBHOOK_URL).toBe("https://pinneds.com/api/billing/stripe/webhook");
     expect(script).toContain(STRIPE_API_VERSION);
     for (const event of STRIPE_WEBHOOK_EVENT_TYPES) {
       expect(script).toContain(`"${event}"`);
