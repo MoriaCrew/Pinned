@@ -109,6 +109,17 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
    typical judging traffic is far below that.
 8. **Domain (read-only):** `curl -sI https://pinneds.com | head -1` and
    `curl -sI https://www.pinneds.com | grep -i location`.
+9. **Translations complete** (PIN-227). Prod serves all seven
+   languages (`UI_LOCALES`), so every English string must exist in
+   the six others first, or visitors see English holes:
+   ```sh
+   git fetch origin dev && git checkout origin/dev
+   npm run i18n:check -- --strict   # every language N/N, exit 0
+   ```
+   If it fails: on a branch from `dev`, `npm run i18n:translate -- --all`
+   (needs `BASETEN_API_KEY`; delta only, cents), PR to `dev`, merge,
+   re-run the check. French stays informal "tu" and says *épingle*,
+   never *chose* (`docs/18-i18n.md`, "Words").
 
 ## 4. Promote
 
@@ -149,6 +160,10 @@ curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"opti
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
+# Languages (PIN-227): French browser → French, saved English wins, unknown → English
+curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
+curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
+curl -s -H "Accept-Language: ja" https://pinneds.com/ | grep -o '<html lang="en"'
 ```
 
 On a phone: create and join a board; upload a fixture photo from
