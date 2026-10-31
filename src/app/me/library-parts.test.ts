@@ -120,7 +120,6 @@ describe("Strings owned by the landing and library screens (PIN-104)", () => {
       "landing.another",
       "notFound.home",
       "auth.signIn",
-      "auth.signOut",
       "myBoards.emptyAction",
       "myPins.emptyAction",
       "myPins.backToBoard",
