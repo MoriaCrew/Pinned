@@ -594,7 +594,11 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 /* The "you" button sits top right over the hero, so the wordmark never moves down. */
 .pn-landing-you { position: absolute; top: var(--space-4); right: var(--space-4); z-index: 3; }
 .pn-landing-brand { grid-area: brand; }
-.pn-landing-pile { --tilt: 9deg; grid-area: pile; position: relative; width: min(100%, 440px); aspect-ratio: 1 / .84; margin-inline: auto; }
+/* The pile and the "Show another" link under it (PIN-175); the link is a plain anchor, 44px tall, outside the hidden art. */
+.pn-landing-show { grid-area: pile; display: grid; justify-items: center; gap: var(--space-1); min-width: 0; }
+/* The stickers are positioned and a couple spill past the pile box, so the link is lifted above them to stay clickable. */
+.pn-landing-another { position: relative; z-index: 1; }
+.pn-landing-pile { --tilt: 9deg; position: relative; width: min(100%, 440px); aspect-ratio: 1 / .84; margin-inline: auto; }
 .pn-landing-copy { grid-area: copy; display: grid; gap: var(--space-4); min-width: 0; }
 .pn-landing-promise { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(clamp(38px, 9.6vw, 58px) * var(--display-scale)); line-height: 1.02; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); text-wrap: balance; color: var(--ink); }
 .pn-landing-body { margin: 0; max-width: 36ch; font: 400 17px/26px var(--font-ui); color: var(--ink); }
@@ -607,9 +611,9 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-art .pn-print-wrap { width: 88%; }
 .pn-landing-art .pn-print-frame { display: block; }
 .pn-landing-art-stickers .pn-sticker { position: absolute; }
-.pn-landing-tag { position: absolute; z-index: 2; box-shadow: 0 1px 3px var(--shade); }
-.pn-landing-tag-a { left: 0; top: 16%; rotate: -4deg; }
-.pn-landing-tag-b { right: -8px; bottom: 6px; rotate: 3deg; }
+/* A name tag over the step-1 photo: the set gives its centre (left/top in % of the art box) and tilt inline. */
+.pn-landing-chip { position: absolute; z-index: 2; display: flex; translate: -50% -50%; }
+.pn-landing-chip .pn-tag { box-shadow: 0 1px 3px var(--shade); }
 .pn-landing-step-text { display: grid; gap: var(--space-1); min-width: 0; }
 .pn-landing-step-no { font: 500 13px/18px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
 .pn-landing-step-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
@@ -625,7 +629,8 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
   .pn-landing-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "brand pile" "copy pile" "how how" "foot foot"; column-gap: var(--space-7); row-gap: var(--space-5); padding-top: var(--space-6); }
   .pn-landing-brand { align-self: end; }
   .pn-landing-copy { align-self: start; }
-  .pn-landing-pile { align-self: center; grid-row: 1 / span 2; width: 100%; max-width: 460px; aspect-ratio: 1 / .92; }
+  .pn-landing-show { align-self: center; grid-row: 1 / span 2; }
+  .pn-landing-pile { width: 100%; max-width: 460px; aspect-ratio: 1 / .92; }
   .pn-landing-how { margin-top: var(--space-6); }
   .pn-landing-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
   .pn-landing-step { grid-template-columns: 1fr; align-items: start; gap: var(--space-3); }

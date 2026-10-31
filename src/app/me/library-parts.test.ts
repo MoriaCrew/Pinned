@@ -117,6 +117,7 @@ describe("Strings owned by the landing and library screens (PIN-104)", () => {
     const buttons = [
       "landing.start",
       "landing.demo",
+      "landing.another",
       "notFound.home",
       "auth.signIn",
       "auth.signOut",
