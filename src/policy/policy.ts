@@ -39,6 +39,12 @@ const DEFAULT_CREDIT_PACKS = [
 export const PolicySchema = z
   .object({
     elementsPerPhoto: Range.default({ min: 1, max: 6 }),
+    /** Multi-photo pick (batch upload): most files one pick may queue, and how many of them the client uploads at once (serial by default: each in-request job holds sharp buffers; the App Hosting runConfig concurrency is the second line). */
+    photosPerBatch: z.number().int().min(1).default(5),
+    batchUploadConcurrency: z.number().int().min(1).default(1),
+    /** Client upload retries for transient answers only (code-less 429 brakes, 503, network loss after a job check): attempts per file and the backoff step in ms (delay grows per attempt). Coded stops (pool-empty, per-day) never retry. */
+    uploadRetryMaxAttempts: z.number().int().min(1).default(3),
+    uploadRetryBackoffMs: z.number().int().min(0).default(2_000),
     /** In-process brake on simultaneously running decompose jobs (memory guard beside the runConfig concurrency; busy answers a code-less 429 the client backs off on). */
     maxConcurrentDecomposeJobs: z.number().int().min(1).default(2),
     /** Stale-job margin past the summed Policy timeouts (AI-only) bound: the runner fails itself at bound + margin before debiting (the margin covers its non-AI render/store/persist tail); only jobs still pending/running past bound + 2 x margin are swept to failed. */
@@ -346,8 +352,13 @@ const RangeOverride = Range.partial();
 const FractionRangeOverride = FractionRange.partial();
 export const PolicyOverridesSchema = z.object({
   elementsPerPhoto: RangeOverride.optional(),
+  photosPerBatch: z.number().int().min(1).optional(),
+  batchUploadConcurrency: z.number().int().min(1).optional(),
+  uploadRetryMaxAttempts: z.number().int().min(1).optional(),
+  uploadRetryBackoffMs: z.number().int().min(0).optional(),
   maxConcurrentDecomposeJobs: z.number().int().min(1).optional(),
   staleJobMarginMs: z.number().int().min(0).optional(),
+
   conceptMaxWords: z.number().int().min(1).optional(),
   pinsPerScene: RangeOverride.optional(),
   photosPerParticipantPerDay: z.number().int().min(0).optional(),

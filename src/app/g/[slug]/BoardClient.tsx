@@ -63,7 +63,9 @@ import {
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
-import { AddSheet, boardQueryKey, type PhotoMemory } from "./AddSheet";
+import { AddSheet, boardQueryKey, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { useUploadQueue } from "./useUploadQueue";
+import { nextStepItem, stepPosition } from "../../../domain/upload-queue";
 import { createPhotoMemory } from "./photo-memory";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type PrintSlot, type SceneSlot } from "./BoardScenes";
@@ -106,6 +108,11 @@ export interface BoardClientPolicy {
   sceneSize: string;
   /** Policy elementsPerPhoto.max, tap-adds included (PIN-78). */
   elementsPerPhotoMax: number;
+  /** Policy batch upload: pick cap, client concurrency, transient-retry bounds. */
+  photosPerBatch: number;
+  batchUploadConcurrency: number;
+  uploadRetryMaxAttempts: number;
+  uploadRetryBackoffMs: number;
   /** Policy signInNudge (PIN-84). */
   signInNudge: boolean;
   /** Policy libraryStripMax: the Add sheet's "From your other boards" cap (PIN-121). */
@@ -236,6 +243,39 @@ function BoardBody({
   // PIN-122: "Pin them" reopens the Add sheet at this photo's review;
   // the last photo's local preview survives sheet closes meanwhile.
   const [resumeJobId, setResumeJobId] = useState<string | null>(null);
+  // Batch upload (multi-photo pick): the queue lives here so closing
+  // the sheet never kills an upload; the sheet steps through items.
+  const uploadQueue = useUploadQueue({
+    slug,
+    uploadMaxPx: policy.uploadMaxPx,
+    uploadJpegQuality: policy.uploadJpegQuality,
+    jobPollIntervalMs: policy.jobPollIntervalMs,
+    photosPerBatch: policy.photosPerBatch,
+    batchUploadConcurrency: policy.batchUploadConcurrency,
+    uploadRetryMaxAttempts: policy.uploadRetryMaxAttempts,
+    uploadRetryBackoffMs: policy.uploadRetryBackoffMs,
+  });
+  const [batchStepKey, setBatchStepKey] = useState<string | null>(null);
+  const batchCurrent = batchStepKey
+    ? (uploadQueue.items.find((item) => item.key === batchStepKey) ?? null)
+    : null;
+  const batchPosition = batchCurrent ? stepPosition(uploadQueue.items, batchCurrent.key) : null;
+  const batchStepProp: AddBatchStep | null =
+    batchCurrent && batchPosition
+      ? {
+          itemStatus: batchCurrent.status,
+          previewUrl: batchCurrent.previewUrl ?? null,
+          ...(batchCurrent.errorCode ? { errorCode: batchCurrent.errorCode } : {}),
+          ...(batchCurrent.error ? { error: batchCurrent.error } : {}),
+          index: batchPosition.index,
+          total: batchPosition.total,
+          states: uploadQueue.items.map((item) => item.status),
+          droppedCount: uploadQueue.dropped,
+          onConfirmed: () => advanceBatch(batchCurrent.key, "done"),
+          onSkip: () => advanceBatch(batchCurrent.key, "skipped"),
+          onRetry: () => uploadQueue.retryItem(batchCurrent.key),
+        }
+      : null;
   const [photoMemory] = useState<PhotoMemory>(createPhotoMemory);
   useEffect(
     () => () => {
@@ -788,8 +828,39 @@ function BoardBody({
     setMakeOpen(true);
   }
 
+  /** Step the batch past one item (pinned or skipped), or close at the end. */
+  function advanceBatch(key: string, treated: "done" | "skipped") {
+    if (treated === "done") uploadQueue.markDone(key);
+    else uploadQueue.skipItem(key);
+    const next = nextStepItem(
+      uploadQueue.items.map((item) => (item.key === key ? { ...item, status: treated } : item)),
+    );
+    if (next) {
+      setBatchStepKey(next.key);
+    } else {
+      setBatchStepKey(null);
+      setAddOpen(false);
+    }
+  }
+
+  function handlePickFiles(files: File[]) {
+    const firstKey = uploadQueue.enqueue(files);
+    // Topping up an in-flight batch steps to its earliest
+    // unfinished photo, never past it to the newly picked ones.
+    // Even when the whole top-up was over the batch cap (enqueue
+    // created nothing), open that step: the batch sheet shows the
+    // dropped-files note instead of the pick vanishing silently.
+    const stepKey = nextStepItem(uploadQueue.items)?.key ?? firstKey;
+    if (stepKey) {
+      setResumeJobId(null);
+      setBatchStepKey(stepKey);
+    }
+  }
+
   function runIntent(intent: JoinIntent) {
     if (intent.kind === "add") {
+      // An unfinished batch resumes at its next photo; else a fresh pick.
+      setBatchStepKey(nextStepItem(uploadQueue.items)?.key ?? null);
       setResumeJobId(null);
       setAddOpen(true);
     } else if (intent.kind === "make") {
@@ -1230,7 +1301,18 @@ function BoardBody({
             leftovers={leftovers}
             elements={view.elements}
             onPin={(group) => {
-              setResumeJobId(group.jobId);
+              // A leftover from this session's batch reopens as its
+              // batch step (preview + tap-to-add ride along, and
+              // confirming marks the queue item done) instead of a
+              // bare resume the queue would later resurface.
+              const queued = uploadQueue.items.find((item) => item.uploadId === group.jobId);
+              if (queued) {
+                setBatchStepKey(queued.key);
+                setResumeJobId(null);
+              } else {
+                setBatchStepKey(null);
+                setResumeJobId(group.jobId);
+              }
               setAddOpen(true);
             }}
           />
@@ -1300,7 +1382,11 @@ function BoardBody({
 
         {addOpen && view.me ? (
           <AddSheet
-            key={resumeJobId ?? "new"}
+            key={
+              batchCurrent
+                ? `batch-${batchCurrent.key}-${batchCurrent.uploadId}`
+                : (resumeJobId ?? "new")
+            }
             slug={slug}
             meId={view.me.id}
             boardView={view}
@@ -1309,19 +1395,23 @@ function BoardBody({
             jobPollIntervalMs={policy.jobPollIntervalMs}
             elementsPerPhotoMax={policy.elementsPerPhotoMax}
             libraryStripMax={policy.libraryStripMax}
-            resumeJobId={resumeJobId}
+            resumeJobId={batchCurrent ? batchCurrent.uploadId : resumeJobId}
             onAddMakes={
               makes.canBuy && view.credits
                 ? () => {
                     setAddOpen(false);
+                    setBatchStepKey(null);
                     setResumeJobId(null);
                     openBuyMakes();
                   }
                 : undefined
             }
+            onPickFiles={handlePickFiles}
+            batch={batchStepProp}
             photoMemory={photoMemory}
             onClose={() => {
               setAddOpen(false);
+              setBatchStepKey(null);
               setResumeJobId(null);
             }}
           />

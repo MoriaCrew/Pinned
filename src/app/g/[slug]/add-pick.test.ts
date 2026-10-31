@@ -19,11 +19,11 @@ function findInputs(node: ReactNode, out: ReactElement[] = []): ReactElement[] {
   return out;
 }
 
-type InputProps = { type?: string; accept?: string; capture?: string; onChange?: (event: ChangeEvent<HTMLInputElement>) => void };
+type InputProps = { type?: string; accept?: string; capture?: string; multiple?: boolean; onChange?: (event: ChangeEvent<HTMLInputElement>) => void };
 
 describe("add-photo pick actions (PIN-118)", () => {
   it("renders Take photo with the camera capture and Choose photo without it", () => {
-    const out = renderToStaticMarkup(h(PhotoPick, { onFile: noop }));
+    const out = renderToStaticMarkup(h(PhotoPick, { onFiles: noop }));
     expect(out).toContain("Take photo");
     expect(out).toContain("Choose photo");
     expect(out.match(/type="file"/g)).toHaveLength(2);
@@ -35,29 +35,33 @@ describe("add-photo pick actions (PIN-118)", () => {
     expect(out.indexOf('capture="environment"')).toBeLessThan(out.indexOf("Choose photo"));
   });
 
-  it("wires both inputs to the same handler, which resets the value and forwards the file", () => {
-    const onFile = vi.fn();
-    const inputs = findInputs(PhotoPick({ onFile })).map((el) => el.props as InputProps);
+  it("wires both inputs to the same handler, which resets the value and forwards every picked file", () => {
+    const onFiles = vi.fn();
+    const inputs = findInputs(PhotoPick({ onFiles })).map((el) => el.props as InputProps);
     expect(inputs).toHaveLength(2);
     expect(inputs[0].capture).toBe("environment");
     expect(inputs[1].capture).toBeUndefined();
+    // Multi-pick belongs to the library only; the camera is one shot.
+    expect(inputs[0].multiple).toBeUndefined();
+    expect(inputs[1].multiple).toBe(true);
     expect(inputs[0].onChange).toBeTypeOf("function");
     expect(inputs[1].onChange).toBe(inputs[0].onChange);
 
-    const file = { name: "synthetic.jpg" } as File;
-    const target = { files: [file], value: "synthetic.jpg" };
+    const one = { name: "synthetic.jpg" } as File;
+    const two = { name: "synthetic-2.jpg" } as File;
+    const target = { files: [one, two], value: "synthetic.jpg" };
     inputs[1].onChange?.({ target } as unknown as ChangeEvent<HTMLInputElement>);
-    expect(onFile).toHaveBeenCalledExactlyOnceWith(file);
-    // Reset so picking the same photo again re-fires onChange.
+    expect(onFiles).toHaveBeenCalledExactlyOnceWith([one, two]);
+    // Reset so picking the same photos again re-fires onChange.
     expect(target.value).toBe("");
   });
 
   it("ignores an empty pick (chooser cancelled)", () => {
-    const onFile = vi.fn();
-    const [first] = findInputs(PhotoPick({ onFile })).map((el) => el.props as InputProps);
+    const onFiles = vi.fn();
+    const [first] = findInputs(PhotoPick({ onFiles })).map((el) => el.props as InputProps);
     const target = { files: [], value: "" };
     first.onChange?.({ target } as unknown as ChangeEvent<HTMLInputElement>);
-    expect(onFile).not.toHaveBeenCalled();
+    expect(onFiles).not.toHaveBeenCalled();
   });
 });
 
