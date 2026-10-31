@@ -804,7 +804,7 @@ concurrent first touches grant once; replay after reload) runs
 against the fake Firestore in
 `src/server/firestore-credit-ledger-store.test.ts`.
 
-## Plus sheet + creations UI (PIN-152, PIN-182)
+## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183)
 
 The user-facing word for makes is **creations** (the code keeps
 `makes` / `credits`). There is exactly one sheet that asks for
@@ -823,19 +823,23 @@ behaviour is unchanged. The count rides the existing board poll,
 so spends and grants appear without a reload, and changes are
 announced (`aria-live="polite"`).
 
-- **Indicator.** "N creations left" for the whole board —
-  activity language only, never money words (`wallet`, `gift
-  card`, `cash`, `transfer`, money-`balance`), no dollars, no
-  per-person anything (a test scans the EN + FR `makes.*` and
-  `ui.plus*` strings, and that EN never says "make"). At or under
-  `Policy.credits.lowMakesWarning` (default 2 since PIN-181,
-  deep-overridable like every credits key; 0 disables it) the
-  indicator shows its low state; at zero it says new scenes will
-  be collages until someone adds more — the free collage lane,
-  still labelled `Collage` on the print. Its button, the Add
-  sheet's out-of-creations button and the pool-empty line's
-  button all say "Get Plus" and open the Plus sheet (thresholds
-  and hiding the indicator above the threshold are PIN-183).
+- **Indicator (PIN-183).** It speaks only when it matters. While
+  `makesState` is `ok` (more than `Policy.credits.lowMakesWarning`
+  left, default 2 since PIN-181; 0 means no low state) it renders
+  nothing: no header card, no button, a board with plenty looks
+  like a credits-off board. At or under the threshold it is one
+  quiet line under the title in the board-meta style, no card:
+  "N creations left · Get Plus", where "Get Plus" is a text button
+  that opens the Plus sheet. At zero: "Out of creations. New scenes
+  will be collages." plus the same button — the free collage lane,
+  still labelled `Collage` on the print. Once the board has Plus
+  the button reads "Add creations" (the same label on every way
+  into the sheet below). The button is left out while billing is
+  off; the line stays. Copy is activity language only, never money
+  words (`wallet`, `gift card`, `cash`, `transfer`, money-`balance`),
+  no dollars, no per-person anything (a test scans the EN + FR
+  `makes.*` and `ui.plus*` strings, and that EN never says "make").
+  The count is always findable in the you menu (below).
 - **Plus sheet.** Title, lead ("Anyone on the board can get Plus.
   Everyone here gets it."), a perks list and one button. Perks in
   order: "+N creations" (N = `Policy.credits.packs[0].credits`; "For
@@ -868,10 +872,28 @@ announced (`aria-live="polite"`).
   `off` sells nothing. Webhook granting stays the only way creations
   and Plus land (PIN-150, PIN-181).
 - **Who can open it.** Anyone on the board. `PlusFlow` is mounted for
-  every viewer; the try-on bar, "Keep it" and the Change look sheet
-  stay host-only because the look flow only gives the host a
-  try-on (members' Change look is PIN-183). The host's Keep it on
+  every viewer; the try-on bar and "Keep it" stay host-only because
+  the look flow only gives the host a try-on. The host's Keep it on
   a Plus try-on, and a 402 from the skin route, open the same sheet.
+  So do the indicator's button, both pool-empty buttons and the
+  you menu's Board Plus entry; someone who has not joined is asked
+  for a name first (the `buyMakes` join intent).
+- **You menu (PIN-183).** On a board with creations (the view
+  carries `credits`) everyone sees a "Board Plus" entry, after My
+  pins and before Change look, with a quiet subline: "N creations
+  left", or "Plus is on · N creations left" once the board has Plus.
+  It opens the Plus sheet. Change look shows for the host and for
+  any joined member while `viewer.canChangeLook` (a member needs
+  Plus on the board); Delete board stays host-only. The menu kit
+  takes an optional `detail` line per item for the subline.
+- **Members and the look (PIN-183).** A joined member who may
+  change the look opens the same Change look sheet. Every skin is
+  open to them (Plus is on) and a pick is saved at once with the
+  skin PATCH the server already accepts for members; there is no
+  try-on bar for members (`useLookFlow` gets `canChangeLook` next
+  to `isHost`; `isHost` keeps the try-on, Keep it, the return look
+  and Delete board). The page shows the member's pick while it
+  saves and the "Look changed" line after it (`shownLook`).
 - **Return landing.** `?billing=processing|cancelled` from
   `GET /billing/return` becomes a transient `aria-live`
   banner, and the flag is stripped from the URL at once.
@@ -891,31 +913,53 @@ announced (`aria-live="polite"`).
   host and the refetched view has `plus.active`, the look flow
   saves the skin once (`returnSkinStep`: wait, apply or clear)
   and forgets it. A cancelled or failed return only forgets it.
-- **Pool-empty outcomes.** The photo 429
-  (`credits_pool_empty`, PIN-151) and a photo job failing with
-  that `errorCode` replace the Add sheet's generic failure
-  with out-of-creations copy plus a "Get Plus" button
-  (while buying works). A scene job failing with that code
-  (the last-creation race loser) gets the same line on
-  its problem card. Every other error keeps its old copy.
+- **Pool-empty outcomes (PIN-183).** Running out is an offer, never
+  an error. The photo 429 (`credits_pool_empty`, PIN-151) and a
+  photo job failing with that `errorCode` replace the Add sheet's
+  generic failure with "This board is out of creations. Get Plus to
+  keep going." (a neutral status line, not an alert) and a button
+  into the Plus sheet. A scene job failing with that code (the
+  last-creation race loser) gets the same line on its problem
+  card, with the button first in the card's new action slot, next
+  to Change idea and Try again. Once the board has Plus the line
+  says "Add more to keep going." and the button "Add creations".
+  With billing off there is no button and the plain fact stays
+  ("out of creations, so photos can't be cut out right now").
+  Every other error keeps its old copy. The 429's body carries
+  `code: "credits_pool_empty"` (`errorResponse` adds it for this
+  code only), which is how the Add sheet tells it from a rate limit.
+- **My boards.** A card whose board has Plus (`hasPlus` in this
+  PLUS_MODE, so a mock grant counts only in `mock`) carries a small
+  "Plus" tag under its title (`MyBoardCard.plus`).
 - **Copy.** Strings live under `makes.*` and `ui.plus*` in
   `src/i18n/messages/{en,fr}.json` in key parity (a test pins
-  it); the components take a locale and the board passes
-  English like every other board surface today. Prices format
+  it); the components take the page's language (the board passes
+  its `locale`, kit parts read `useLocale()`). Whole sentences with
+  placeholders, so word order can differ by language: the you
+  menu's "Plus is on · N creations left" is one plural pair
+  (`you.plusOnLeft`), not a count glued onto words. Prices format
   from `eurCents` per locale (`€2.99` / `2,99 €`), never from
   the pack's English display label. The PIN-152 "per make" line
   left with the buy sheet; the local-currency and statement-name
   notes stay as the one `ui.plusPayNote` line on the stripe path.
 
-Tests: `src/domain/makes-ui.test.ts` (states, flag parsing + URL
+Tests: `src/domain/makes-ui.test.ts` (states, thresholds, the
+Get Plus / Add creations label, pool-empty copy, flag parsing + URL
 strip, banner never claims success without a rise, checkout
 answers, prices), `src/domain/plus-ui.test.ts`
-(`plusPurchasePath`, `returnSkinStep`, the look flow reducer),
+(`plusPurchasePath`, `returnSkinStep`, `shownLook`, the look flow
+reducer), `src/domain/you-menu.test.ts` and
+`src/app/auth/you-render.test.ts` (Board Plus and Change look for
+guest, member, member with Plus and host, the sublines in EN and FR),
 `src/app/g/[slug]/plus-render.test.ts` (the sheet in every mode
-and for a guest, order of the perks, Plus on, Coming soon, FR) and
-`src/app/g/[slug]/makes-render.test.ts` (hidden while credits
-absent, indicator states, banner states, pool-empty copy, EN/FR
-parity and copy guardrails), plus `src/ui/kit.test.ts` and the
+and for a guest, order of the perks, Plus on, Coming soon, FR, a
+member changing the look) and `src/app/g/[slug]/makes-render.test.ts`
+(nothing above the threshold, the low and empty lines, banner
+states, pool-empty copy, wiring guards, EN/FR parity and copy
+guardrails), `src/app/g/[slug]/board-render.test.ts` (the problem
+card's action), `src/app/api/boards/shared.test.ts` (the 429's
+code), `src/server/my-boards.test.ts` and `src/app/me/library-parts.test.ts`
+(the Plus tag), plus `src/ui/kit.test.ts` and the
 `lowMakesWarning` cases in `src/policy/policy.test.ts`. No
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
@@ -1022,11 +1066,11 @@ a genuinely unknown charge still dead-letters.
 - PIN-181: revoke (or keep, by decision) Plus when a purchase is
   fully refunded or a dispute is lost. v1 claws back the makes
   only; the board keeps its `stripe` grant.
-- PIN-181 UI slice, remaining: Change look for members
-  (`viewer.canChangeLook`; today `you-menu.ts` ties Change look to
-  Delete board for the host) and the indicator's thresholds (PIN-183).
-  The one-purchase sheet, "creations" copy and the removal of
-  `plus.priceLabels` landed in PIN-182.
+- PIN-181 UI slice: the one-purchase sheet, "creations" copy and
+  the removal of `plus.priceLabels` landed in PIN-182; the
+  indicator's thresholds, the out-of-creations invitation, Board
+  Plus in the you menu and Change look for members landed in
+  PIN-183.
 
 ## Tests
 
