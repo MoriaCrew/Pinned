@@ -658,8 +658,14 @@ export async function runDecomposeJob(
         // Refund FIRST; only a landed refund may discard the paid
         // candidates. A ledger failure throws into the catch below,
         // which retries finish + refund once before propagating.
+        // The discard clears the in-memory job only, so persist the
+        // emptied id lists onto the stored (swept) job too, guarded
+        // by its terminal status so nothing is resurrected.
         await refundIfDebited();
         await discardJobCandidates(deps, job);
+        finishedJob.elementIds = [];
+        finishedJob.pinIds = [];
+        await deps.jobs.update(finishedJob, finishedJob.status);
       }
       return finishedJob;
     }
@@ -679,8 +685,12 @@ export async function runDecomposeJob(
       if (retried.status !== "ready") {
         // Same order as the lost-finish path: refund first; a
         // ledger failure propagates with the paid candidates kept.
+        // Persist the emptied id lists onto the stored job as well.
         await refundIfDebited();
         await discardJobCandidates(deps, job);
+        retried.elementIds = [];
+        retried.pinIds = [];
+        await deps.jobs.update(retried, retried.status);
       }
       return retried;
     }

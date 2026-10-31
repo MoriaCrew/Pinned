@@ -793,6 +793,12 @@ describe("paid make survives a failed terminal write (PIN-151)", () => {
     expect(entries.filter((e) => e.type === "debit_refund").map((e) => e.id)).toEqual([
       photoRefundEventId(job.id),
     ]);
+    // The stored swept job no longer lists the discarded pins,
+    // in the returned view or in the store (Bugbot #147).
+    expect(job.pinIds).toEqual([]);
+    expect(job.elementIds).toEqual([]);
+    expect((await api.jobs.get(job.id))?.pinIds).toEqual([]);
+    expect((await api.jobs.get(job.id))?.elementIds).toEqual([]);
   });
 
   it("photo: a failing refund after a lost finish keeps the paid candidates (Bugbot #147)", async () => {
