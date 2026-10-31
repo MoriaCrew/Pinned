@@ -92,6 +92,8 @@ export const PolicySchema = z
      * users/{uid} profile + board index persist until account
      * deletion lands (PIN-57c) — this TTL bounds the cookie only. */
     userSessionDays: z.number().int().min(1).default(30),
+    /** Life of the cookie that remembers a language picked by hand (PIN-190, docs/18-i18n.md). */
+    localeCookieDays: z.number().int().min(1).default(365),
     /** Sign-in provider pin + freshness (PIN-94): session exchange
      * only accepts these Firebase `sign_in_provider` values, so
      * enabling another provider (e.g. Anonymous) in a console can
@@ -371,6 +373,7 @@ export const PolicyOverridesSchema = z.object({
   joinMaxNewPerIp: z.number().int().min(1).optional(),
   joinNewWindowMs: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
+  localeCookieDays: z.number().int().min(1).optional(),
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
   myBoardsRemovePerIp: z

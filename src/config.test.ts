@@ -8,6 +8,13 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.aiMock).toBe(true);
   });
 
+  it("UI_LOCALES: English only by default; known codes on, unknown dropped (PIN-190)", () => {
+    expect(parseConfig({}).uiLocales).toEqual(["en"]);
+    expect(parseConfig({ UI_LOCALES: "" }).uiLocales).toEqual(["en"]);
+    expect(parseConfig({ UI_LOCALES: "fr,es,xx" }).uiLocales).toEqual(["en", "fr", "es"]);
+    expect(parseConfig({ UI_LOCALES: "en,fr,es,pt-BR,de,it,id" }).uiLocales).toHaveLength(7);
+  });
+
   it("demo board slug: valid slug kept, anything else fails closed to null (PIN-73)", () => {
     expect(parseConfig({}).demoBoardSlug).toBeNull();
     expect(parseConfig({ DEMO_BOARD_SLUG: "" }).demoBoardSlug).toBeNull();

@@ -1,6 +1,7 @@
 /** Server configuration. Single place that reads process.env. */
 import { isFirebaseProjectId } from "./domain/auth-proxy";
 import type { PlusMode } from "./domain/plus";
+import { parseLocaleList, type Locale } from "./i18n/locales";
 
 export type AuthMode = "link-only" | "optional";
 
@@ -94,6 +95,15 @@ export interface AppConfig {
   stripeApiVersion: typeof STRIPE_API_VERSION;
   storageBucket: string | null;
   labEnabled: boolean;
+  /**
+   * UI languages this deploy offers (PIN-190, docs/18-i18n.md):
+   * UI_LOCALES is a comma list ("en,fr,es"); unknown codes are
+   * dropped and English is always on. Default English only, so the
+   * app renders as before until languages are turned on (PIN-199).
+   * Hosted, it must be available at build time too: a page
+   * prerendered with English only stays English.
+   */
+  uiLocales: Locale[];
   meta: MetaConfig;
 }
 
@@ -211,6 +221,7 @@ export function parseConfig(
       (nonEmpty(env.FIREBASE_PROJECT_ID)
         ? `${nonEmpty(env.FIREBASE_PROJECT_ID)}.firebasestorage.app`
         : null),
+    uiLocales: parseLocaleList(env.UI_LOCALES),
     meta: {
       apiKey: nonEmpty(env.META_API_KEY),
       baseUrl: (nonEmpty(env.META_API_BASE_URL) ?? "https://api.meta.ai/v1").replace(/\/$/, ""),

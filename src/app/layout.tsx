@@ -5,6 +5,9 @@ import { getConfig } from "../config";
 import { resolveAuthUi } from "../domain/auth-ui";
 import { DEFAULT_SKIN } from "../domain/skins";
 import { t } from "../i18n";
+import { LocaleProvider } from "../i18n/client";
+import { getLocale } from "../i18n/server";
+import { getPolicy } from "../policy/server";
 import { AuthProvider } from "./auth/AuthProvider";
 // Tokens, then components, then the small global reset (docs/14).
 import "../ui/tokens.css";
@@ -17,11 +20,16 @@ const PRELOADED_FONTS = [
   "/fonts/BricolageGrotesque-200-800.woff2",
 ];
 
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
 // The landing's own words (docs/14 Words): the name, the one-liner, what it does.
-export const metadata: Metadata = {
-  title: t("en", "landing.title"),
-  description: `${t("en", "landing.tagline")} ${t("en", "landing.body")}`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: t(locale, "landing.title"),
+    description: `${t(locale, "landing.tagline")} ${t(locale, "landing.body")}`,
+  };
+}
 
 // Mobile-first (docs/08): without this, phones lay out at 980px.
 export const viewport: Viewport = {
@@ -37,8 +45,10 @@ export const viewport: Viewport = {
  * header carries the "you" button. Link-only renders no provider
  * and no auth DOM.
  */
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   const cfg = getConfig();
+  // PIN-190 (docs/18-i18n.md): English unless UI_LOCALES turns more on.
+  const locale = await getLocale();
   const ui = resolveAuthUi({
     authMode: cfg.authMode,
     apiKey: cfg.firebaseWebApiKey,
@@ -49,9 +59,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     preload(href, { as: "font", type: "font/woff2", crossOrigin: "anonymous" });
   }
   return (
-    <html lang="en" data-theme={DEFAULT_SKIN}>
+    <html lang={locale} data-theme={DEFAULT_SKIN}>
       <body>
-        {ui.enabled ? <AuthProvider config={ui.config}>{children}</AuthProvider> : children}
+        <LocaleProvider
+          locale={locale}
+          enabled={cfg.uiLocales}
+          cookieMaxAgeSeconds={getPolicy().localeCookieDays * SECONDS_PER_DAY}
+        >
+          {ui.enabled ? <AuthProvider config={ui.config}>{children}</AuthProvider> : children}
+        </LocaleProvider>
       </body>
     </html>
   );

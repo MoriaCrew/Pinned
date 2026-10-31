@@ -254,6 +254,7 @@ Studio on Oct 28; the game design is kept for history in
 - `docs/10-custom-domains.md` — pinneds.com domain setup
 - `docs/12-submission.md` — hackathon submission packet + video plan
 - `docs/13-auth.md` — optional Google sign-in (`AUTH_MODE`), claim flow, user library
+- `docs/18-i18n.md` — UI languages: how a request picks one, `UI_LOCALES`, adding strings
 - `docs/archive/` — game-era requirements and research; history only
 - `SECURITY.md` — public-repo guardrails: never-commit list + leak runbook
 - `AGENTS.md` — instructions for coding agents working this repo
