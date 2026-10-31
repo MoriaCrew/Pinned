@@ -13,6 +13,8 @@ import {
   parseTryOn,
   plusPurchasePath,
   plusSheetLocked,
+  closesPlusSheetAfterMock,
+  type MockGrantOutcome,
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
@@ -25,7 +27,8 @@ import {
   type SkinResult,
 } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
-import { t, tf } from "../../../i18n";
+import { t, tf, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { IconButton, PlusSheet, TryOnBar, cx, skinName, type PlusPack } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
@@ -68,7 +71,7 @@ export interface LookFlow {
   keep: () => void;
   undo: () => void;
   /** The mock checkout (POST plus, host only); resolves true once Plus was granted. */
-  getPlus: () => Promise<boolean>;
+  getPlus: () => Promise<MockGrantOutcome>;
   dismissNotice: () => void;
 }
 
@@ -199,8 +202,8 @@ export function useLookFlow({
     }
   }
 
-  async function getPlus(): Promise<boolean> {
-    if (state.checkingOut || plusPurchasePath(plus?.mode) !== "mock") return false;
+  async function getPlus(): Promise<MockGrantOutcome> {
+    if (state.checkingOut || plusPurchasePath(plus?.mode) !== "mock") return "skipped";
     const skin = state.tryOn;
     dispatch({ type: "checkoutStart" });
     const result = await startCheckout();
@@ -217,17 +220,18 @@ export function useLookFlow({
           dispatch({ type: "closeSheet" });
           void queryClient.invalidateQueries({ queryKey: key });
         }
-        return true;
+        return "granted";
       case "unavailable":
         dispatch({ type: "checkoutUnavailable" });
-        return false;
+        return "unavailable";
       case "redirect":
         // Stays busy while the browser leaves for checkout.
         window.location.href = result.url;
-        return false;
+        return "redirect";
       case "failed":
+        // The dock notice carries the error; the sheet must not stay up looking idle.
         dispatch({ type: "checkoutFailed" });
-        return false;
+        return "failed";
     }
   }
 
@@ -272,18 +276,18 @@ export function useLookFlow({
   };
 }
 
-function noticeLine(notice: LookNotice): string {
+function noticeLine(locale: Locale, notice: LookNotice): string {
   switch (notice.kind) {
     case "applied":
-      return tf("en", "look.applied", { skin: skinName(notice.skin) });
+      return tf(locale, "look.applied", { skin: skinName(notice.skin) });
     case "granted":
-      return tf("en", "plus.granted", { skin: skinName(notice.skin) });
+      return tf(locale, "plus.granted", { skin: skinName(notice.skin) });
     case "lookFailed":
-      return t("en", "look.failed");
+      return t(locale, "look.failed");
     case "grantedLookFailed":
-      return t("en", "plus.grantedLookFailed");
+      return t(locale, "plus.grantedLookFailed");
     case "plusFailed":
-      return t("en", "plus.failed");
+      return t(locale, "plus.failed");
   }
 }
 
@@ -324,6 +328,7 @@ export function PlusFlow({
   /** Picking things: the tray owns the thumb zone, so the try-on bar steps aside. */
   picking?: boolean;
 }) {
+  const locale = useLocale();
   const { state } = look;
   const notice = state.notice;
   const showBar = showTryOnBar(look.tryOn, state.applying, picking);
@@ -335,7 +340,7 @@ export function PlusFlow({
   // The demo grant adds no creations, so with Plus on its button cannot pretend;
   // before that it is the host's alone.
   const demoLockedLine =
-    path !== "mock" ? null : plus?.active ? t("en", "plus.demoNote") : isHost ? null : t("en", "plus.hostOnly");
+    path !== "mock" ? null : plus?.active ? t(locale, "plus.demoNote") : isHost ? null : t(locale, "plus.hostOnly");
   const sheetOpen = state.sheet === "plus" || makes.sheetOpen;
   // One guard for both flows: neither close path alone knows about the
   // other's in-flight request.
@@ -346,7 +351,7 @@ export function PlusFlow({
   };
   const getPlus = () => {
     if (stripe && pack) makes.buy(pack.lookupKey, look.tryOn);
-    else void look.getPlus().then((granted) => granted && makes.closeSheet());
+    else void look.getPlus().then((kind) => closesPlusSheetAfterMock(kind) && makes.closeSheet());
   };
   return (
     <>
@@ -355,11 +360,11 @@ export function PlusFlow({
           {notice ? (
             <div className={cx(styles.lookNotice, failed && styles.lookNoticeError)} role={failed ? "alert" : "status"}>
               <p>
-                {noticeLine(notice)}
-                {notice.kind === "granted" && plus?.mode === "mock" ? <small>{t("en", "plus.demoCharged")}</small> : null}
+                {noticeLine(locale, notice)}
+                {notice.kind === "granted" && plus?.mode === "mock" ? <small>{t(locale, "plus.demoCharged")}</small> : null}
               </p>
               {failed ? (
-                <IconButton icon="close" variant="ghost" size={18} label={t("en", "ui.close")} onClick={look.dismissNotice} />
+                <IconButton icon="close" variant="ghost" size={18} label={t(locale, "ui.close")} onClick={look.dismissNotice} />
               ) : null}
             </div>
           ) : null}
@@ -387,14 +392,14 @@ export function PlusFlow({
             lockedLine={demoLockedLine}
             paymentNote={stripe}
             busy={stripe ? makes.busy : state.checkingOut}
-            error={stripe && makes.error ? checkoutErrorLine(makes.error) : null}
+            error={stripe && makes.error ? checkoutErrorLine(makes.error, locale) : null}
             foilSrc={foilSrc}
             onGet={getPlus}
             onClose={closePlus}
           />
           {available && plus.mode === "mock" ? (
             <p className={styles.demoNote} role="note">
-              {t("en", "plus.demoNote")}
+              {t(locale, "plus.demoNote")}
             </p>
           ) : null}
         </>

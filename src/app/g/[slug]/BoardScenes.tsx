@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { formatElapsed, type RemixSource } from "../../../domain/board-ui";
-import { t } from "../../../i18n";
+import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Developing, SceneCard, SectionHead, cx, type Credit, type SceneKind } from "../../../ui";
 import styles from "./board.module.css";
 
@@ -64,11 +65,12 @@ export type PrintSlot = Extract<SceneSlot, { type: "print" }>;
  * narrow a tall print so it and its caption fit a phone screen.
  */
 export function BoardScenes({ slots, count }: { slots: SceneSlot[]; count: number }) {
+  const locale = useLocale();
   return (
     <section aria-labelledby="board-scenes">
-      <SectionHead title={t("en", "board.scenes")} count={count} id="board-scenes" focusable />
+      <SectionHead title={t(locale, "board.scenes")} count={count} id="board-scenes" focusable />
       {slots.length === 0 ? (
-        <p className={styles.quietLine}>{t("en", "board.scenesEmpty")}</p>
+        <p className={styles.quietLine}>{t(locale, "board.scenesEmpty")}</p>
       ) : (
         <div className={styles.strip}>
           <ul className="pn-prints">
@@ -134,8 +136,9 @@ function DevelopingSlot({
 }
 
 function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }) {
+  const locale = useLocale();
   return (
-    <article className="pn-print-wrap" style={{ "--t": 0 } as CSSProperties} aria-label={`${t("en", "ui.scene")}: ${slot.idea}`}>
+    <article className="pn-print-wrap" style={{ "--t": 0 } as CSSProperties} aria-label={`${t(locale, "ui.scene")}: ${slot.idea}`}>
       <div className="pn-print">
         <div className={cx("pn-print-frame", styles.problem)} style={{ aspectRatio: slot.ratio }}>
           <p className={styles.problemLine} role="alert">
@@ -143,7 +146,7 @@ function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }
           </p>
         </div>
         <div className="pn-print-body">
-          {slot.idea ? <p className="pn-print-idea">{`“${slot.idea}”`}</p> : null}
+          {slot.idea ? <p className="pn-print-idea">{tf(locale, "ui.quoted", { text: slot.idea })}</p> : null}
           {slot.action || slot.onChangeIdea || slot.onTryAgain ? (
             <div className={styles.problemActions}>
               {slot.action ? (
@@ -153,12 +156,12 @@ function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }
               ) : null}
               {slot.onChangeIdea ? (
                 <Button size="sm" onClick={slot.onChangeIdea}>
-                  {t("en", "board.changeIdea")}
+                  {t(locale, "board.changeIdea")}
                 </Button>
               ) : null}
               {slot.onTryAgain ? (
                 <Button size="sm" onClick={slot.onTryAgain}>
-                  {t("en", "board.retry")}
+                  {t(locale, "board.retry")}
                 </Button>
               ) : null}
             </div>

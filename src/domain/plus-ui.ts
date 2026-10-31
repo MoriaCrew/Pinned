@@ -106,6 +106,19 @@ export function plusSheetLocked(makesBusy: boolean, checkingOut: boolean): boole
   return makesBusy || checkingOut;
 }
 
+/** The outcome of the mock grant, as the sheet acts on it. */
+export type MockGrantOutcome = "granted" | "unavailable" | "redirect" | "failed" | "skipped";
+
+/**
+ * After the mock grant answers, the merged sheet closes on a grant
+ * (the look applies or the board refetches) and on a failure (the
+ * dock notice says so; an idle-looking sheet would hide it). It stays
+ * up for "unavailable" (it shows Coming soon) and for a redirect.
+ */
+export function closesPlusSheetAfterMock(kind: MockGrantOutcome): boolean {
+  return kind === "granted" || kind === "failed";
+}
+
 /** What to do with the try-on stored before a Stripe checkout once the host is back. */
 export type ReturnSkinStep =
   /** Not yet (the view has not caught up) or nothing was stored: do nothing. */

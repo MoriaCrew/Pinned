@@ -63,10 +63,10 @@ describe("board things grid (PIN-98)", () => {
   });
 
   it("lists Rename above Delete in my More menu, and Delete alone when the board cannot rename (PIN-157)", () => {
-    const items = pinMenuItems({ onRename: noop, onDelete: noop });
+    const items = pinMenuItems("en", { onRename: noop, onDelete: noop });
     expect(items.map((item) => item.label)).toEqual(["Rename", "Delete"]);
     expect(items.map((item) => "danger" in item && item.danger === true)).toEqual([false, true]);
-    expect(pinMenuItems({ onDelete: noop }).map((item) => item.label)).toEqual(["Delete"]);
+    expect(pinMenuItems("en", { onDelete: noop }).map((item) => item.label)).toEqual(["Delete"]);
     const mine = html(
       h(BoardThings, { cards, count: 2, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion, onRename: noop }),
     );

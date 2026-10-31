@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { afterBoardDeleteHref, runBoardDelete, type BoardDeletePhase } from "../../../domain/board-delete-ui";
 import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Sheet } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
@@ -35,34 +36,35 @@ export function DeleteBoardSheetView({
   onDelete: () => void;
   onKeep: () => void;
 }) {
+  const locale = useLocale();
   const keepId = useId();
   const keep = () => {
     if (!busy) onKeep();
   };
   return (
     <Sheet
-      title={t("en", "board.deleteBoardTitle")}
+      title={t(locale, "board.deleteBoardTitle")}
       onClose={keep}
       initialFocusId={keepId}
       footer={
         <>
           <Button size="lg" block className={styles.deleteYes} disabled={busy} onClick={onDelete}>
-            {busy ? t("en", "board.deleting") : t("en", "board.deleteBoardYes")}
+            {busy ? t(locale, "board.deleting") : t(locale, "board.deleteBoardYes")}
           </Button>
           <Button id={keepId} size="lg" block disabled={busy} onClick={keep}>
-            {t("en", "board.deleteBoardKeep")}
+            {t(locale, "board.deleteBoardKeep")}
           </Button>
         </>
       }
     >
       <div className={styles.deleteText}>
-        <p className={styles.deleteName}>{tf("en", "board.deleteBoardName", { board: title })}</p>
-        <p className={styles.deleteBody}>{t("en", "board.deleteBoardBody")}</p>
+        <p className={styles.deleteName}>{tf(locale, "board.deleteBoardName", { board: title })}</p>
+        <p className={styles.deleteBody}>{t(locale, "board.deleteBoardBody")}</p>
         <p className={styles.deleteError} role="alert">
           {error === "failed"
-            ? t("en", "board.deleteBoardFailed")
+            ? t(locale, "board.deleteBoardFailed")
             : error === "gone"
-              ? t("en", "board.deleteBoardGone")
+              ? t(locale, "board.deleteBoardGone")
               : ""}
         </p>
       </div>

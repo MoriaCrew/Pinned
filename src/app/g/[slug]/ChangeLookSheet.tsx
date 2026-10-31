@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { chooseLook, type PlusState } from "../../../domain/plus-ui";
 import { SKINS, type SkinId } from "../../../domain/skins";
 import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Sheet, SkinPicker, skinName } from "../../../ui";
 import styles from "./board.module.css";
 
@@ -33,13 +34,14 @@ export function ChangeLookSheet({
   onPick: (skin: SkinId) => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const [selected, setSelected] = useState<SkinId>(tryOn ?? boardSkin);
   const group = `look-${useId()}`;
   const choice = chooseLook(selected, { boardSkin, tryOn, plus });
-  const label = tf("en", choice.kind === "tryOn" ? "look.try" : "look.use", { skin: skinName(selected) });
+  const label = tf(locale, choice.kind === "tryOn" ? "look.try" : "look.use", { skin: skinName(selected) });
   return (
     <Sheet
-      title={t("en", "look.title")}
+      title={t(locale, "look.title")}
       onClose={onClose}
       className={styles.lookSheet}
       footer={
@@ -60,7 +62,7 @@ export function ChangeLookSheet({
         onChange={setSelected}
         sample={sample}
         name={group}
-        legend={t("en", "look.title")}
+        legend={t(locale, "look.title")}
       />
     </Sheet>
   );

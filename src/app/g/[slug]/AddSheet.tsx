@@ -31,7 +31,8 @@ import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
 import { isPoolEmptyCode, poolEmptyCopy } from "../../../domain/makes-ui";
-import { t, tCount } from "../../../i18n";
+import { t, tCount, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
 import { useAuth } from "../../auth/AuthProvider";
@@ -71,10 +72,10 @@ interface JobView {
 export const boardQueryKey = (slug: string) => ["board", slug] as const;
 
 /** The review's help line (PIN-126). */
-export function reviewHelpLine(help: ReviewHelp): string {
-  if (help.kind === "noneKept") return t("en", "add.noneKept");
-  if (help.kind === "someLeftOut") return tCount("en", "add.leftOut", help.n);
-  return t("en", "add.tapDrop");
+export function reviewHelpLine(help: ReviewHelp, locale: Locale): string {
+  if (help.kind === "noneKept") return t(locale, "add.noneKept");
+  if (help.kind === "someLeftOut") return tCount(locale, "add.leftOut", help.n);
+  return t(locale, "add.tapDrop");
 }
 
 /**
@@ -178,6 +179,7 @@ function CutPhoto({
   tap: { working: boolean; disabled: boolean; onTap: (point: { x: number; y: number }) => void } | null;
   lastTap: { x: number; y: number } | null;
 }) {
+  const locale = useLocale();
   const [ratio, setRatio] = useState<number | null>(null);
   const style = ratio ? ({ "--ratio": ratio } as CSSProperties) : undefined;
   return (
@@ -186,7 +188,7 @@ function CutPhoto({
         {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview of the picked file */}
         <img
           src={src}
-          alt={t("en", "add.photoAlt")}
+          alt={t(locale, "add.photoAlt")}
           onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             if (naturalWidth > 0 && naturalHeight > 0) setRatio(naturalWidth / naturalHeight);
@@ -197,7 +199,7 @@ function CutPhoto({
           <button
             type="button"
             className="pn-cut-tap"
-            aria-label={t("en", "add.tapHint")}
+            aria-label={t(locale, "add.tapHint")}
             disabled={tap.disabled}
             onClick={(event) => {
               const point = normalizedTapPoint(
@@ -290,6 +292,7 @@ export function AddSheet({
   onAddMakes?: () => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const queryClient = useQueryClient();
   // PIN-121: the library strip and its "See all" list. Disabled auth
   // (link-only or signed out) keeps the photo-only sheet.
@@ -422,7 +425,7 @@ export function AddSheet({
       });
       const data = (await response.json()) as { job?: PublicJob; error?: string; code?: string };
       if (!response.ok && isPoolEmptyCode(data.code)) setUploadPoolEmpty(true);
-      if (!response.ok || !data.job) throw new Error(data.error || t("en", "add.failed"));
+      if (!response.ok || !data.job) throw new Error(data.error || t(locale, "add.failed"));
       return data.job;
     },
     onMutate: () => {
@@ -439,7 +442,7 @@ export function AddSheet({
       rememberPhoto(job.id);
     },
     onError: (cause) => {
-      setUploadError(cause instanceof Error ? cause.message : t("en", "add.failed"));
+      setUploadError(cause instanceof Error ? cause.message : t(locale, "add.failed"));
       // Closed mid-upload and it failed: nothing to resume, drop the preview.
       const url = previewRef.current;
       if (!mounted.current && url && photoMemory) {
@@ -459,7 +462,7 @@ export function AddSheet({
         { cache: "no-store" },
       );
       const data = (await response.json()) as JobView & { error?: string };
-      if (!response.ok) throw new Error(data.error || t("en", "add.failed"));
+      if (!response.ok) throw new Error(data.error || t(locale, "add.failed"));
       return data;
     },
     enabled: jobId !== null,
@@ -527,7 +530,7 @@ export function AddSheet({
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error || t("en", "add.pinFailed"));
+      if (!response.ok) throw new Error(data.error || t(locale, "add.pinFailed"));
       return data;
     },
     onMutate: async (payload) => {
@@ -543,7 +546,7 @@ export function AddSheet({
     },
     onError: (_cause, _payload, context) => {
       if (context?.previous) queryClient.setQueryData(boardQueryKey(slug), context.previous);
-      setUploadError(t("en", "add.pinFailed"));
+      setUploadError(t(locale, "add.pinFailed"));
     },
     onSuccess: (_data, payload) => {
       // Pinned: that photo has no leftovers to come back to.
@@ -568,7 +571,7 @@ export function AddSheet({
         },
       );
       const data = (await response.json()) as { error?: string; pin?: { id: string } };
-      if (!response.ok) throw new Error(data.error || t("en", "add.tapFailed"));
+      if (!response.ok) throw new Error(data.error || t(locale, "add.tapFailed"));
       return data;
     },
     onMutate: (point) => {
@@ -581,7 +584,7 @@ export function AddSheet({
       }
     },
     onError: (cause) =>
-      setTapError(cause instanceof Error ? cause.message : t("en", "add.tapFailed")),
+      setTapError(cause instanceof Error ? cause.message : t(locale, "add.tapFailed")),
     onSettled: (_data, _cause, point) => {
       // The job poll stops at terminal status, so pull the new
       // candidate (or the gone-copy flag) in explicitly.
@@ -680,10 +683,10 @@ export function AddSheet({
   const onBoardFamilies = familiesOnBoard(library.cards ?? [], boardView);
 
   const title = seeAll
-    ? t("en", "add.allTitle")
+    ? t(locale, "add.allTitle")
     : stage === "review" && candidatePins.length > 0
-      ? t("en", "add.reviewTitle")
-      : t("en", "add.title");
+      ? t(locale, "add.reviewTitle")
+      : t(locale, "add.title");
 
   // "See all" opens only from the pick step, which has no footer.
   let footer: ReactNode = null;
@@ -699,7 +702,7 @@ export function AddSheet({
             disabled={!canPin}
             onClick={() => payload && confirm.mutate(payload)}
           >
-            {confirm.isPending ? t("en", "add.pinning") : tCount("en", "add.pinCount", selected.size)}
+            {confirm.isPending ? t(locale, "add.pinning") : tCount(locale, "add.pinCount", selected.size)}
           </Button>
         ) : null}
         <Button
@@ -709,14 +712,14 @@ export function AddSheet({
           className="pn-add-another"
           onClick={resetForAnother}
         >
-          {t("en", "add.another")}
+          {t(locale, "add.another")}
         </Button>
       </>
     );
   } else if (!seeAll && stage === "ended") {
     footer = (
       <Button variant="primary" size="lg" icon="camera" block onClick={resetForAnother}>
-        {t("en", "add.another")}
+        {t(locale, "add.another")}
       </Button>
     );
   }
@@ -727,15 +730,15 @@ export function AddSheet({
   // PIN-180: the day's AI budget / call limit / switch closed the namer or
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
-  const failedLine = t("en", budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
   // PIN-183: where buying works this is an invitation, not an error.
   const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive: boardView.plus?.active === true });
   const outOfMakes = (
     <>
-      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t("en", poolEmpty.line)}</SheetLine>
+      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t(locale, poolEmpty.line)}</SheetLine>
       {onAddMakes && poolEmpty.action ? (
         <Button variant="primary" onClick={onAddMakes}>
-          {t("en", poolEmpty.action)}
+          {t(locale, poolEmpty.action)}
         </Button>
       ) : null}
     </>
@@ -757,8 +760,8 @@ export function AddSheet({
       ) : null}
 
       {showFaceNote ? (
-        <Hint point="none" dismissLabel={t("en", "add.gotIt")} onDismiss={() => setDismissedFaceJobId(jobId)}>
-          {t("en", "add.faceNote")}
+        <Hint point="none" dismissLabel={t(locale, "add.gotIt")} onDismiss={() => setDismissedFaceJobId(jobId)}>
+          {t(locale, "add.faceNote")}
         </Hint>
       ) : null}
 
@@ -782,27 +785,27 @@ export function AddSheet({
         />
       ) : null}
 
-      {stage === "review" && photoGone && candidatePins.length > 0 ? <SheetLine>{t("en", "add.photoGone")}</SheetLine> : null}
+      {stage === "review" && photoGone && candidatePins.length > 0 ? <SheetLine>{t(locale, "add.photoGone")}</SheetLine> : null}
       {resuming && jobQuery.isError && !jobQuery.data ? (
-        <SheetLine tone="error">{t("en", "add.resumeFailed")}</SheetLine>
+        <SheetLine tone="error">{t(locale, "add.resumeFailed")}</SheetLine>
       ) : null}
-      {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t("en", "add.noneFound")}</SheetLine> : null}
-      {stage === "finding" ? <CutStatus tag={t("en", "cutout.findingTag")}>{t("en", "add.finding")}</CutStatus> : null}
+      {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t(locale, "add.noneFound")}</SheetLine> : null}
+      {stage === "finding" ? <CutStatus tag={t(locale, "cutout.findingTag")}>{t(locale, "add.finding")}</CutStatus> : null}
       {stage === "cutting" ? (
-        <CutStatus tag={t("en", "cutout.cuttingTag")}>
+        <CutStatus tag={t(locale, "cutout.cuttingTag")}>
           {progress.ready === 0
-            ? t("en", "cutout.cuttingFirst")
-            : tCount("en", "cutout.readySoFar", progress.ready)}
+            ? t(locale, "cutout.cuttingFirst")
+            : tCount(locale, "cutout.readySoFar", progress.ready)}
         </CutStatus>
       ) : null}
 
       {stage === "review" && showTap ? (
         tapWorking ? (
-          <CutStatus tag={t("en", "cutout.cuttingTag")}>{t("en", "add.tapWorking")}</CutStatus>
+          <CutStatus tag={t(locale, "cutout.cuttingTag")}>{t(locale, "add.tapWorking")}</CutStatus>
         ) : (
           <p className="pn-add-tapline">
             <Icon name="tap" size={20} />
-            {t("en", "add.tapHint")}
+            {t(locale, "add.tapHint")}
           </p>
         )
       ) : null}
@@ -823,7 +826,7 @@ export function AddSheet({
                   key={pin.id}
                   src={element.imageUrl}
                   label={element.label}
-                  owner={{ id: meId, name: t("en", "add.you") }}
+                  owner={{ id: meId, name: t(locale, "add.you") }}
                   seed={pin.elementId}
                   state={dropped.has(pin.id) ? "dropped" : "rest"}
                   onToggle={() => toggle(pin.id)}
@@ -833,7 +836,7 @@ export function AddSheet({
             })}
           </ul>
           <p className="pn-add-help" aria-live="polite">
-            {reviewHelpLine(reviewHelp(candidatePins.length, candidatePins.filter((pin) => dropped.has(pin.id)).length))}
+            {reviewHelpLine(reviewHelp(candidatePins.length, candidatePins.filter((pin) => dropped.has(pin.id)).length), locale)}
           </p>
         </div>
       ) : null}
@@ -842,7 +845,7 @@ export function AddSheet({
       {job?.status === "failed" && candidatePins.length === 0 ? (
         jobPoolEmpty ? outOfMakes : <SheetLine tone="error">{failedLine}</SheetLine>
       ) : null}
-      {job?.status === "refused" ? <SheetLine>{t("en", "add.refused")}</SheetLine> : null}
+      {job?.status === "refused" ? <SheetLine>{t(locale, "add.refused")}</SheetLine> : null}
       {uploadError ? (uploadPoolEmpty ? outOfMakes : <SheetLine tone="error">{uploadError}</SheetLine>) : null}
     </>
   );
@@ -851,7 +854,7 @@ export function AddSheet({
     // No own data-theme: the sheet renders inside the board's skin root,
     // so it wears whatever look the board shows (a try-on included).
     <div className="pn-add-root">
-      <Sheet title={title} onClose={onClose} closeLabel={t("en", "add.close")} footer={footer} className="pn-add-sheet">
+      <Sheet title={title} onClose={onClose} closeLabel={t(locale, "add.close")} footer={footer} className="pn-add-sheet">
         {seeAll ? (
           <>
             <Button
@@ -865,7 +868,7 @@ export function AddSheet({
                 setSeeAll(false);
               }}
             >
-              {t("en", "add.back")}
+              {t(locale, "add.back")}
             </Button>
             <LibraryList
               status={library.status}

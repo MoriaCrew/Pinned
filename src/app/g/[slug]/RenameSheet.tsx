@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { normalizeElementLabel } from "../../../domain/element-label";
 import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Sheet, TextField } from "../../../ui";
 import styles from "./board.module.css";
 
@@ -35,12 +36,13 @@ export function RenameSheet({
   onEdit?: () => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const formId = useId();
   const fieldId = `${formId}-name`;
   const [draft, setDraft] = useState(label);
   const check = normalizeElementLabel(draft, maxChars);
   // An empty field only disables Save; too long or refused characters say why.
-  const hint = !check.ok && check.reason !== "empty" ? tf("en", "board.renameInvalid", { max: maxChars }) : "";
+  const hint = !check.ok && check.reason !== "empty" ? tf(locale, "board.renameInvalid", { max: maxChars }) : "";
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,16 +52,16 @@ export function RenameSheet({
 
   return (
     <Sheet
-      title={t("en", "board.renameTitle")}
+      title={t(locale, "board.renameTitle")}
       onClose={onClose}
       initialFocusId={fieldId}
       footer={
         <>
           <Button variant="primary" size="lg" block type="submit" form={formId} disabled={busy || !check.ok}>
-            {t("en", "board.renameSave")}
+            {t(locale, "board.renameSave")}
           </Button>
           <Button variant="quiet" size="lg" block onClick={onClose}>
-            {t("en", "board.renameCancel")}
+            {t(locale, "board.renameCancel")}
           </Button>
         </>
       }
@@ -67,7 +69,7 @@ export function RenameSheet({
       <form id={formId} className={styles.renameForm} onSubmit={onSubmit}>
         <TextField
           id={fieldId}
-          label={t("en", "board.renameField")}
+          label={t(locale, "board.renameField")}
           value={draft}
           softMaxLength={maxChars}
           enterKeyHint="done"
