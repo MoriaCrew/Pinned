@@ -33,6 +33,8 @@
  *   BASETEN_BASE_URL  default https://inference.baseten.co/v1
  *   I18N_MODEL        default meta-models/muse-spark-open-1026
  *
+ * Full i18n guide: docs/18-i18n.md (PIN-190/PIN-199).
+ *
  * Adding a language: PIN-190 adds `src/i18n/messages/<code>.json`
  * (may be `{}`); add a register line to prompts/translate-ui.v1.md and
  * fixed terms to src/i18n/glossary.json, then run --locale <code>.
