@@ -17,7 +17,7 @@ export interface FreePhotoAllowanceInput {
   creditsEnabled: boolean;
   /** The board holds Plus that counts under the running PLUS_MODE. */
   hasPlus: boolean;
-  /** The board's own Policy override (`policyOverrides.credits.freePhotosPerBoard`): an operator's explicit choice for this board (e.g. the shared demo board, DEPLOY §6.4) wins over what creation stored. */
+  /** The board's own Policy override (`policyOverrides.credits.freePhotosPerBoard`): an operator's explicit choice for this one board wins over what creation stored. */
   boardOverride?: number;
   /** Board.freePhotos, decided at creation (PIN-230); absent on older boards. */
   stored: number | undefined;

@@ -85,8 +85,10 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   new boards would farm free photos). Boards without the field
 >   use the Policy value. A board's own override
 >   (`policyOverrides.credits.freePhotosPerBoard`) wins over the
->   stored amount: an operator's explicit choice for that board,
->   e.g. the shared demo board (DEPLOY §6.4).
+>   stored amount: an operator's explicit choice for that one
+>   board. (The demo board needs none: it is a normal board and
+>   gets Plus, so no photo limit, once billing is live, DEPLOY
+>   §6.4.)
 > - **At the limit:** `POST /photos` answers a typed 429
 >   `{ code: "free_photos_used" }` before intake, any job or any
 >   AI call — checked before the daily cap, since waiting a day
@@ -329,7 +331,8 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   **Dev runs `stripe` since PIN-153** (sandbox only: the dev
   backend flips together with `Policy.credits.enabled` and
   the registered webhook endpoint - PIN-153 section below).
-  Prod keeps `off` with no key reference. PIN-149/PIN-150
+  Prod stays `off` until the PIN-210 prod switch turns on live
+  Stripe ("Going live on prod" below). PIN-149/PIN-150
   deliberately shipped reference-only so no backend ever took
   a payment with no fulfilment path.
 
@@ -403,8 +406,9 @@ when a price is replaced.
 onto the manifest (plain `fetch`, no SDK; it mirrors the
 manifest — a test pins the mirror). It is a dry-run unless
 `--apply` is passed, takes the secret from the env var named by
-`--env-var` (never printed; live keys refused), and prints item
-keys and object ids only:
+`--env-var` (never printed; a live key is refused unless
+`--live --i-understand-live`, PIN-210), and prints item keys and
+object ids only:
 
 ```
 node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_LOCAL_AGENT_KEY
@@ -1181,6 +1185,97 @@ and backfills the mapping; the PIN-147 pre-grant freeze /
 pre-clawback semantics then apply unchanged. A dispute for
 a genuinely unknown charge still dead-letters.
 
+## Going live on prod (PIN-210)
+
+Prod (pinneds.com) sells the Board Plus pack with **live** Stripe
+only once the prod switch (merge order below) reaches `main`, after
+both live secrets exist: App Hosting fails the build when a
+referenced secret does not exist. The operator
+scripts default to sandbox. A live run needs a live key **and**
+`--live --i-understand-live`, touches only `moriacrew-pinned-prod`
+and `https://pinneds.com/api/billing/stripe/webhook`, and prints
+ids, never keys or secrets (`scripts/stripe/operator-mode.mjs`).
+Operator machine only, never CI or a cloud agent.
+
+**Prerequisites (operator gates).** Stripe account activated for
+live payments (business details, bank account, statement
+descriptor; Checkout branding and receipts checked); pinneds.com
+shows terms, refund/withdrawal and contact pages (PIN-26); the
+tax/VAT route is signed off (PIN-154; prices are EUR
+tax-inclusive); `gcloud auth login`,
+`gcloud auth application-default login` and `firebase login` as
+an owner of the prod project. Three live restricted keys
+(Workbench → API keys → Create restricted key; everything not
+listed stays None):
+
+| Key | Kept in | Permissions (from the code) |
+| --- | --- | --- |
+| runtime | prod Secret Manager `STRIPE_SECRET_KEY` | Checkout Sessions: Write (create; the webhook's retrieve and list-by-PaymentIntent) · Prices: Read (lookup-key price) · PaymentIntents: Read · Charges: Read · Balance: Read (settled-EUR balance transactions) |
+| setup | `.env.local` `STRIPE_PINNED_PROD_SETUP_KEY`; delete after go-live | Products: Write · Prices: Write · Webhook Endpoints: Write |
+| read | `.env.local` `STRIPE_PINNED_PROD_READ_KEY` | Checkout Sessions: Read |
+
+Signatures are checked locally and refunds are made in the
+Dashboard, so no key needs Refunds or Disputes. A 403 names the
+missing permission: add read on that one resource only.
+
+**Commands, in order** (`P=moriacrew-pinned-prod`):
+
+1. Runtime key, first (step 3 copies its grants):
+   `firebase apphosting:secrets:set STRIPE_SECRET_KEY --project "$P"`
+   (value typed at the prompt), then
+   `firebase apphosting:secrets:grantaccess STRIPE_SECRET_KEY --backend pinned-web --project "$P"`.
+2. Catalog: `node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_PROD_SETUP_KEY --live --i-understand-live`
+   plans `plus_20 product=create price=create`, the retired packs
+   `retired`, and skips the draft host plan; re-run with
+   `--apply` (ends with `CATALOG_IDS_JSON`); a third run plans
+   only `reuse`.
+3. Webhook: `node --env-file=.env.local scripts/ensure-stripe-webhook-endpoint.mjs --env-var STRIPE_PINNED_PROD_SETUP_KEY --live --i-understand-live --secret-project "$P"`
+   plans `create`; with `--apply` it creates the endpoint with the
+   11 events, pipes the one-time signing secret over gcloud stdin
+   into `STRIPE_WEBHOOK_SECRET` in `$P` and mirrors the
+   `STRIPE_SECRET_KEY` grants onto it. Then (idempotent)
+   `firebase apphosting:secrets:grantaccess STRIPE_WEBHOOK_SECRET --backend pinned-web --project "$P"`.
+4. Both exist (metadata only):
+   `gcloud secrets describe STRIPE_SECRET_KEY --project "$P" --format="value(name)"`,
+   same for `STRIPE_WEBHOOK_SECRET`. Say so on PIN-210.
+
+**Merge order.** Live billing comes in two pieces (Robin, Oct 31):
+
+1. **This runbook and the operator scripts** (PIN-210, #182) merge
+   to `dev` before the Nov 3 freeze. They change nothing on prod or
+   dev: the scripts only run from an operator machine.
+2. **The prod switch** is a separate config-only PR (PIN-210, "turn
+   on live billing on prod"). It adds one block to
+   `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
+   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
+   (the dev backend ignores that file). Merge it only after step 4.
+   If that happens before the freeze, it rides promotion #2. If not,
+   run a config-only promotion as soon as step 4 is done, even during
+   judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
+   then, so that promotion carries only the switch.
+
+**Smoke after the rollout.** `GET https://pinneds.com/api/health`
+shows `plusMode: "stripe"`; a webhook POST with a bad
+`Stripe-Signature` answers 400; a new board shows 5 creations.
+Robin buys the €2.99 pack **on the demo board** with a real card
+and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
+board, and this makes it a paying customer's board). Checkout says
+"Board Plus · 20 creations", the demo board shows Plus and 20 more
+creations, and the endpoint's delivery in Workbench is 200. Refund
+check, on a throwaway board: buy the pack again, then refund it in
+the Dashboard (Payments → the payment → Refund, full). The refund
+events claw back the 20 creations; the board keeps Plus (see
+Follow-ups). Then
+`node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
+exits 0 (`clean=true`), and the setup key is deleted.
+
+**Rollback.** Set `PLUS_MODE` to `off` in `apphosting.prod.yaml`
+and roll out `main`: buying answers "unavailable" and the webhook
+503s, so Stripe retries a delivery for up to three days (a paid
+session grants once billing is back, or refund it). The pool
+stays on; `"enabled":false` in the override stops it too.
+Stopping for good: disable the endpoint in Workbench.
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).
@@ -1238,6 +1333,12 @@ a genuinely unknown charge still dead-letters.
   and `src/billing/webhook-endpoint.test.ts` (exact 11-event
   list + dev URL, create/reuse/drift/wildcard plans,
   ensure-script mirror incl. the pinned API version).
+- PIN-210: `src/billing/stripe-operator-mode.test.ts` (key-prefix
+  and flag matrix; prod URL/project defaults; all three scripts
+  spawned with a fake `fetch` and a fake `gcloud`: refusals make
+  no call, live/sandbox dry-runs only read, live apply pipes the
+  signing secret into prod over stdin and mirrors IAM there) and
+  the live-mode cases in `src/billing/catalog.test.ts`.
 - PIN-178: `src/server/stripe-webhook.test.ts` (paid at 30:30,
   after the return redirect, after a cap check expired the
   intent, async success two days later all grant; paid after

@@ -15,6 +15,13 @@ import { STRIPE_WEBHOOK_EVENT_TYPES } from "../server/stripe-webhook";
 /** The hosted dev webhook target (PIN-150 route on the dev backend). */
 export const DEV_WEBHOOK_URL = "https://dev.pinneds.com/api/billing/stripe/webhook";
 
+/**
+ * The prod (pinneds.com) target for the live account (PIN-210).
+ * The script's live/sandbox gate lives in
+ * `scripts/stripe/operator-mode.mjs`; a test pins both URLs there.
+ */
+export const LIVE_WEBHOOK_URL = "https://pinneds.com/api/billing/stripe/webhook";
+
 /** The exact event list to register: PIN-150's list, nothing else. */
 export const WEBHOOK_ENDPOINT_EVENTS: readonly string[] = STRIPE_WEBHOOK_EVENT_TYPES;
 

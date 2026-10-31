@@ -214,26 +214,26 @@ describe("free photos per board (PIN-230)", () => {
     expect(await freePhotosLeftOf(h, legacy.slug)).toBe(2);
   });
 
-  it("a per-board override (the shared demo board) beats the amount creation stored", async () => {
+  it("a per-board override beats the amount creation stored", async () => {
     const h = harness(ON(1));
-    const slug = "demo-board-demo-board1";
+    const slug = "override-board-override1";
     await h.boards.createBoard({
       slug,
-      title: "Demo board",
+      title: "Override board",
       freePhotos: 0,
       policyOverrides: { credits: { freePhotosPerBoard: 3 } },
       counters: emptyBoardCounters(),
       createdAt: T0,
       version: 1,
     });
-    const judge = await joinBoard(slug, { displayName: "Judge" }, null, {
+    const member = await joinBoard(slug, { displayName: "Sam" }, null, {
       boards: h.boards,
       sessionSecret: SECRET,
       policy: h.policy,
       now: () => T0,
     });
     expect(await freePhotosLeftOf(h, slug)).toBe(3);
-    expect((await uploadPhoto(slug, judge.participant, await photoBytes(), h.deps)).status).toBe("ready");
+    expect((await uploadPhoto(slug, member.participant, await photoBytes(), h.deps)).status).toBe("ready");
     expect(await freePhotosLeftOf(h, slug)).toBe(2);
   });
 

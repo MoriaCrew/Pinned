@@ -202,29 +202,22 @@ element; delete the throwaway board.
 4. **Demo-board overrides** (no deploy; Firestore console →
    `boards/<slug>` → field `policyOverrides`, a map). Try it on a
    throwaway board first: an invalid value makes that board answer
-   500.
+   500. Robin (Oct 31): the demo board is a **normal board**. It
+   gets the free tier like any other board; only the caps that would
+   lock judges out of joining are raised:
    ```json
-   { "dailyBudgetUsd": 80, "dailyCallLimit": 16000,
-     "participantsPerBoard": 500, "joinMaxNewPerIp": 200,
-     "scenesPerBoardPerDay": 300, "scenesPerParticipantPerDay": 30,
-     "photosPerParticipantPerDay": 40,
-     "credits": { "starterMakes": 1000, "freePhotosPerBoard": 1000 } }
+   { "participantsPerBoard": 500, "joinMaxNewPerIp": 200 }
    ```
-   The board's own budget is checked against the same daily counter,
-   so the demo board keeps working after the global cap is hit.
-   `credits.starterMakes` matters from promotion #2, when live billing
-   turns the creations pool on with 5 free creations per board
-   (PIN-210). Every judge shares the demo board's pool, so it must be
-   in the override **before** promotion #2: the pool is granted once,
-   on the board's first touch after credits turn on, from the board's
-   own Policy. A creation is one AI scene (PIN-229), and a board
-   without Plus also stops at `credits.freePhotosPerBoard` photos
-   (15, PIN-230), which every judge would share too: the override
-   lifts it to 1,000 (a board's own override wins over what creation
-   stored). 1,000 scenes plus 1,000 photos is at most about $30 of AI
-   at today's prices (`eval/studio-findings.md`) and the daily caps
-   above still apply. Check after promotion #2: the demo board shows 1,000
-   creations, a new board shows 5.
+   Once live billing is on (§7), Robin buys Board Plus on the demo
+   board with a real card and keeps it. That purchase is the live
+   go-live check (`docs/15-board-plus.md`, "Going live on prod"), and
+   it makes the demo board a paying customer's board: every skin,
+   foil stickers, no photo limit and 5 + 20 AI scenes. Each judge's
+   own new board shows the free tier (5 AI scenes) and the Plus
+   offer. Spend stays bounded by the global daily budget. If the
+   demo board needs headroom during judging, raise its daily caps
+   here (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`); do
+   not give it a free pool.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
    `apphosting.prod.yaml` (it ships with promotion #2).
@@ -243,13 +236,23 @@ element; delete the throwaway board.
 
 ## 7. Live billing
 
-Turned on by PIN-210 with promotion #2, after Stripe live activation,
-the tax decision (PIN-154) and the legal pages (PIN-26). Steps and
-smoke: `docs/15-board-plus.md`, "Going live on prod".
+PIN-210 comes in two pieces (Robin, Oct 31). The operator scripts and
+runbook land on `dev` before the freeze and change nothing on prod.
+The prod switch, a config-only PR to `apphosting.prod.yaml`, merges
+once Stripe live activation and the tax decision (PIN-154) are done
+and both live secrets exist. The legal pages (PIN-26) are already on
+`dev`. If the switch is ready by the Nov 3 freeze it rides promotion
+#2; otherwise a config-only promotion turns it on as soon as it is
+ready, even during judging week (§8). The live purchase is made on
+the demo board and kept (§6.4). Steps, smoke and rollback:
+`docs/15-board-plus.md`, "Going live on prod".
 
 ## 8. Judging week (Nov 4–8)
 
 - **Freeze** `main` and `dev` (dev.pinneds.com is the fallback demo).
+  One planned exception: if the live-billing switch (§7) wasn't
+  ready by the freeze, it goes out as a config-only promotion once it
+  is. Run the §5 smoke and the billing smoke in `docs/15` right after.
 - **Twice a day:** health, the demo board, `usage:costs`.
 - **Meta slow or down:** set the demo board's `dailyBudgetUsd` to 0.
   Scenes become honest collages, uploads say AI is switched off,
