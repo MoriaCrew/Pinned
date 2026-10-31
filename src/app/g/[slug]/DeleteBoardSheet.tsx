@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { afterBoardDeleteHref, boardDeleteOutcome } from "../../../domain/board-delete-ui";
+import { afterBoardDeleteHref, runBoardDelete, type BoardDeletePhase } from "../../../domain/board-delete-ui";
 import { t, tf } from "../../../i18n";
 import { Button, Sheet } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
@@ -72,24 +72,25 @@ export function DeleteBoardSheetView({
 
 /**
  * Runs the delete: `DELETE /api/boards/{slug}` (the host cookie rides
- * along, PIN-167). On 204 the board page stops polling (`onDeleted`)
- * and gives way to the landing with the "Board deleted" notice, which
- * replaces this history entry so Back never returns to a dead board.
- * On a 404 or any failure the board stays and the sheet says why.
+ * along, PIN-167). The board page pauses its poll while the request
+ * runs (`onPhase`). On 204 it gives way to the landing with the "Board
+ * deleted" notice, which replaces this history entry so Back never
+ * returns to a dead board. On a 404 or any failure the board stays,
+ * the poll resumes and the sheet says why.
  */
 export function DeleteBoardSheet({
   slug,
   title,
   signedIn,
-  onDeleted,
+  onPhase,
   onClose,
 }: {
   slug: string;
   title: string;
   /** My boards is the landing for a signed-in host, the home page otherwise. */
   signedIn: boolean;
-  /** The board is gone: stop polling and drop its cached data. */
-  onDeleted: () => void;
+  /** Where our own delete is: the page polls only while "idle" and drops the board's data on "left". */
+  onPhase: (phase: BoardDeletePhase) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -101,19 +102,9 @@ export function DeleteBoardSheet({
     if (busy) return;
     setBusy(true);
     setError("");
-    let response: Response | null = null;
-    try {
-      response = await fetch(`/api/boards/${encodeURIComponent(slug)}`, {
-        method: "DELETE",
-        credentials: "same-origin",
-      });
-    } catch {
-      // Offline or dropped: the same retryable failure as a 500.
-    }
-    const outcome = boardDeleteOutcome(response);
+    const outcome = await runBoardDelete(slug, (url, init) => fetch(url, init), onPhase);
     if (outcome === "deleted") {
       // Stays "Deleting…" until the landing page replaces this one.
-      onDeleted();
       router.replace(afterBoardDeleteHref(signedIn));
       return;
     }

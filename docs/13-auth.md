@@ -343,11 +343,14 @@ Client (PIN-168): the host's "you" menu has a danger **Delete board**
 It opens a sheet that names the board, says it is gone for everyone,
 pictures included, and can't be undone; focus starts on Keep board,
 Escape and the scrim keep the board, and nothing closes it while the
-delete runs. On 204 the page stops polling, clears the board's query
-cache and replaces itself with `/me/boards?deleted=1` (signed in) or
-`/?deleted=1`, which show a one-line "Board deleted" notice and strip
-the flag (no slug travels). A 404 (already deleted, or no longer the
-host) or any other failure keeps the board and says so in the sheet.
+delete runs. The page pauses its poll before the DELETE goes out: the
+server marks the board deleted before it answers (the picture sweep
+runs after), so a poll in that window would 404 on the host's own
+delete. On 204 the page clears the board's query cache and replaces
+itself with `/me/boards?deleted=1` (signed in) or `/?deleted=1`, which
+show a one-line "Board deleted" notice and strip the flag (no slug
+travels). A 404 (already deleted, or no longer the host) or any other
+failure keeps the board, resumes the poll and says so in the sheet.
 Everyone else with the board open: the board poll's 404 (not a
 generic load error) renders the same not-found as an unknown link,
 which unmounts the board and so ends the polling.

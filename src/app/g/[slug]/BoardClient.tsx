@@ -16,7 +16,12 @@ import {
   type BoardViewLike,
   type BoardViewScene,
 } from "../../../domain/board-view";
-import { boardPollError, isBoardGone } from "../../../domain/board-delete-ui";
+import {
+  boardPollEnabled,
+  boardPollError,
+  showBoardGone,
+  type BoardDeletePhase,
+} from "../../../domain/board-delete-ui";
 import { rollbackElementLabel, withElementLabel } from "../../../domain/element-label";
 import {
   attemptPollInterval,
@@ -265,9 +270,9 @@ function BoardBody({
   // opening (even of the same thing) must not close or speak in this one.
   const [renamingOpenId, setRenamingOpenId] = useState(0);
   const renameOpens = useRef(0);
-  // PIN-168: the host's Delete board confirm, and "the board is gone, we are leaving".
+  // PIN-168: the host's Delete board confirm, and where our own delete is.
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
-  const [leaving, setLeaving] = useState(false);
+  const [deletePhase, setDeletePhase] = useState<BoardDeletePhase>("idle");
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   // Join sheet: open while an intent waits for a name (or "edit").
@@ -311,8 +316,8 @@ function BoardBody({
       return (await response.json()) as BoardClientView;
     },
     initialData: initialView,
-    // PIN-168: no more polling once our own delete went through.
-    enabled: !leaving,
+    // PIN-168: no polling while our own delete is in flight or done.
+    enabled: boardPollEnabled(deletePhase),
     refetchInterval: policy.pollIntervalMs,
     refetchIntervalInBackground: false,
   });
@@ -1093,9 +1098,10 @@ function BoardBody({
 
   // PIN-168: the host deleted this board while it was open here (the
   // poll got a 404). Show the not-found an unknown link shows; that
-  // unmounts the board, so the polling stops with it. Not for the host
-  // who is leaving after their own delete.
-  if (!leaving && isBoardGone(boardQuery.error)) notFound();
+  // unmounts the board, so the polling stops with it. Not while our own
+  // delete is in flight or done: that 404 is ours, and the host lands
+  // on the "Board deleted" page instead.
+  if (showBoardGone(deletePhase, boardQuery.error)) notFound();
 
   return (
     <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>
@@ -1151,7 +1157,7 @@ function BoardBody({
               {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
             </p>
           ) : null}
-          {boardQuery.isError && !leaving ? (
+          {boardQuery.isError && deletePhase === "idle" ? (
             <div className={styles.errorRow}>
               <p className={styles.error} role="alert">
                 {t("en", "board.loadError")}
@@ -1376,9 +1382,9 @@ function BoardBody({
             slug={slug}
             title={view.board.title}
             signedIn={auth.enabled && auth.status === "signedIn"}
-            onDeleted={() => {
-              setLeaving(true);
-              queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === slug });
+            onPhase={(phase) => {
+              setDeletePhase(phase);
+              if (phase === "left") queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === slug });
             }}
             onClose={() => setDeleteBoardOpen(false)}
           />

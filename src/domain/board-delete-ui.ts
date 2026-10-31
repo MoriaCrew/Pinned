@@ -55,3 +55,46 @@ export const isBoardGone = (error: unknown): boolean => error instanceof BoardGo
 /** What a failed board poll throws: a 404 is "gone", the rest a load error. */
 export const boardPollError = (status: number): Error =>
   status === 404 ? new BoardGoneError() : new Error("load failed");
+
+/**
+ * Where this page is in its own delete: nothing asked ("idle"), the
+ * DELETE in flight ("pending"), or deleted and leaving for the landing
+ * ("left"). The server marks the board deleted before it answers (the
+ * picture sweep runs after), so a poll 404 while "pending" is our own
+ * delete landing, not someone else's.
+ */
+export type BoardDeletePhase = "idle" | "pending" | "left";
+
+/** The board poll runs only while no delete of ours is in flight or done. */
+export const boardPollEnabled = (phase: BoardDeletePhase): boolean => phase === "idle";
+
+/** A poll 404 swaps the page to not-found only when it can't be our own delete. */
+export const showBoardGone = (phase: BoardDeletePhase, pollError: unknown): boolean =>
+  phase === "idle" && isBoardGone(pollError);
+
+type DeleteAnswer = { ok: boolean; status: number };
+
+/**
+ * The host's DELETE. Reports "pending" before the request goes out (so
+ * the poll pauses first), then "left" on a 204 or back to "idle" on
+ * anything else, and returns the outcome.
+ */
+export async function runBoardDelete(
+  slug: string,
+  send: (url: string, init: RequestInit) => Promise<DeleteAnswer>,
+  onPhase: (phase: BoardDeletePhase) => void,
+): Promise<BoardDeleteOutcome> {
+  onPhase("pending");
+  let response: DeleteAnswer | null = null;
+  try {
+    response = await send(`/api/boards/${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+  } catch {
+    // Offline or dropped: the same retryable failure as a 500.
+  }
+  const outcome = boardDeleteOutcome(response);
+  onPhase(outcome === "deleted" ? "left" : "idle");
+  return outcome;
+}
