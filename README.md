@@ -45,7 +45,7 @@ the fifth ran at build time. Prompts, Policy keys, fallbacks, costs and evidence
 
 | Model (ID) | What it does in Pinneds | Port |
 | --- | --- | --- |
-| **Muse Spark** (`muse-spark-1.3`) | Names 1–6 things per photo as short noun phrases SAM can cut, and flags faces (`elements.v1`). Names a cut-out you tapped, from its crop (`tap-name.v1`). Suggests scene ideas for the picked pins, cached 24 h (`chips.v1`). | `ElementNamer`, `TapNamer`, `ChipSuggester` |
+| **Muse Spark** (`muse-spark-1.3`) | Names 1–6 things per photo as short noun phrases SAM can cut, and flags faces (`elements.v1`). Names a cut-out you tapped, from its crop (`tap-name.v1`). Suggests scene ideas for the picked pins in the viewer's UI language, cached 24 h per language (`chips.v2`). | `ElementNamer`, `TapNamer`, `ChipSuggester` |
 | **SAM 3.1** (`sam-3.1`) | Cuts out each named thing (one concept per call, four calls at a time) and whatever you tap (point prompt), keeping the most confident usable mask. | `Segmenter` |
 | **Muse Image** (`muse-image-1.0`) | Composes 1–4 pins into one new scene through `/v1/responses` (`scene.v1`, `store: false`); a remix sends the parent scene first. It also made the source photos of the Meta-made landing sets. | `SceneComposer` |
 | **Muse Voice Transcribe** (`muse-voice-transcribe-1.0`) | Turns a spoken scene idea (up to 30 s) into text. The audio is never stored. | `SpeechTranscriber` |
@@ -165,8 +165,8 @@ hand, with cost logged; results are in [`eval/studio-findings.md`](eval/studio-f
 With `stripe` the app sells one pack, **Board Plus (€2.99, Stripe)**: once per board, it
 unlocks every board look and foil stickers and adds 20 creations (AI makes). Any member
 can buy it for the board; guests never have to pay. Creations are a Policy switch
-(`credits.enabled`, off in code): when on, a board starts with 5 free, a photo or an AI
-scene uses one, and a collage is free. Purchases are granted by Stripe webhook only, and
+(`credits.enabled`, off in code): when on, a maker's first 3 boards a week start with 5
+free (later ones start at 0), a photo or an AI scene uses one, and a collage is free. Purchases are granted by Stripe webhook only, and
 keys come from Secret Manager, never git. Design and runbook:
 [`docs/15-board-plus.md`](docs/15-board-plus.md).
 
@@ -195,8 +195,9 @@ keys come from Secret Manager, never git. Design and runbook:
   samples (`public/start/`), the board theme art (`public/themes/`) and the eval fixture
   photos are Higgsfield images (SAM 3.1 cut out the stickers). The try-on and cat landing
   sets are Meta end to end.
-- **AI-written text is English in places.** Pin names, idea chips and some scene text
-  stay English whatever the UI language (PIN-214, PIN-200).
+- **AI-written text is English in places.** Pin names and some scene text stay English
+  whatever the UI language (PIN-200). Generated idea chips follow the UI language
+  (PIN-214); the fixed starter chips stay English until their translations land.
 - **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
   checked them yet. Latin-script languages only.
 

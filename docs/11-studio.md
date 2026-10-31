@@ -160,7 +160,7 @@ object. The defaults below are proposals; tune them from evidence.
 | Retries on 429/5xx | 1 |
 | Daily AI budget | the existing `AI_DAILY_BUDGET_USD` (see A2) |
 | Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`, `muse-voice-transcribe-1.0` |
-| Prompt versions | `elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v1` |
+| Prompt versions | `elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v2` |
 | `credits.enabled` / `credits.starterMakes` | `false` / 5 (PIN-151: the makes pool, docs/15; 25 before PIN-181; off = pre-credit behaviour exactly, on = 1 make per successful photo or AI scene, collage stays free) |
 
 > **A2 (budget), as of Oct 31:** the original hosted $2 / 200 calls
@@ -462,7 +462,9 @@ owning issue in brackets decides or verifies.
     lands with time to spare (cut order, §7). **Resolved:** generated
     chips shipped (PIN-75: `chips.v1`, cached per label set); the
     fixed list is the instant fallback (`sceneChips` in Policy).
-    [PIN-54]
+    Since PIN-214 both follow the viewer's UI language (`chips.v2`,
+    cached per language; fixed chips are `make.chip.*` i18n keys,
+    Policy keeps `sceneChipsCount`). [PIN-54]
 
 ## 10. Context to load
 

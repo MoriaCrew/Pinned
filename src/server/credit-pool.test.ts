@@ -398,7 +398,7 @@ describe("photo debit (PIN-151)", () => {
     const tapped = await tapAddPin(slug, owner, job.id, { x: 0.5, y: 0.5 }, h.api);
     expect(tapped.pin.id).toBeTruthy();
     await confirmPins(slug, owner, { jobId: job.id, pinIds: [job.pinIds[0]] }, h.api);
-    const chips = await getSceneChips(slug, owner, { elementIds: [job.elementIds[0]] }, h.api);
+    const chips = await getSceneChips(slug, owner, { elementIds: [job.elementIds[0]] }, h.api, "en");
     expect(chips.chips.length).toBeGreaterThan(0);
 
     expect((await h.ledger.getBalance(slug)).available).toBe(2);

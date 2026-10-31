@@ -422,6 +422,14 @@
   overscroll-behavior: contain;
 }
 
+/* "Composed by Muse Image" (PIN-222): a quiet credit under the credits, never scrolled away with them. */
+.viewerComposed {
+  flex: none;
+  margin: 0;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-ui);
+}
+
 .viewerMore {
   position: relative;
 }
