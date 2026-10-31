@@ -33,8 +33,8 @@ export function freePhotoAllowance(input: FreePhotoAllowanceInput): number | nul
  * Photos that count against the allowance: a job that finished
  * `ready` (it gave cut-outs), or one still pending/running and not
  * yet stale (`now - updatedAt <= staleBoundMs`, the stale sweep's
- * bound), so parallel uploads cannot slip past the limit while a
- * dead job cannot hold a slot forever. Failed and refused photos
+ * bound): a photo already cutting holds its slot, while a dead job
+ * cannot hold one forever. Failed and refused photos
  * never count. Discarding cut-outs does not give a photo back: the
  * limit bounds AI cost, which a ready photo has already spent.
  */

@@ -70,8 +70,11 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >
 > - **What counts:** a photo whose job finished `ready` (it gave
 >   cut-outs), or one still pending/running and not yet stale (the
->   stale sweep's bound), so parallel uploads cannot slip past the
->   limit and a dead job never holds a slot. Failed and refused
+>   stale sweep's bound), so a photo already cutting holds its slot
+>   and a dead job never does. Only truly simultaneous requests
+>   (both read before either job exists) can pass together, at
+>   most the upload concurrency over the limit, as with the daily
+>   cap. Failed and refused
 >   photos never count. Discarding cut-outs does not give the
 >   photo back: the limit bounds AI cost the photo already spent.
 >   Counted from the board's photo jobs (`listForBoard`), no new
