@@ -6,9 +6,11 @@ import "server-only";
  * reads the board as missing and every write to it is refused —
  * nothing racing the row clean-up below can bring it back (the
  * index writer re-checks too). Jobs in flight are not waited for
- * (a stuck job must never block a delete). Last, the board's stored
- * objects go (PIN-169, board-storage.ts): best-effort, never thrown
- * to the caller, and a job that outlives the board sweeps again.
+ * (a stuck job must never block a delete). Then My boards rows are
+ * unlinked and, always, the board's stored objects go (PIN-169,
+ * board-storage.ts): both best-effort, never thrown to the caller
+ * once the tombstone is set, and a job that outlives the board
+ * sweeps again.
  */
 import type { BoardRepository } from "../domain/board-repository";
 import type { UserRepository } from "../domain/user-repository";
@@ -43,21 +45,38 @@ export async function deleteBoardForEveryone(
   if (!(await deps.boards.deleteBoard(slug, now))) {
     throw new BoardApiError("Board not found.", 404);
   }
-  const uids = new Set(
-    (await deps.boards.listParticipants(slug)).flatMap((p) =>
-      p.userId && isSafeUid(p.userId) ? [p.userId] : [],
-    ),
-  );
+  // From here on a retry only gets the 404, so nothing may throw or
+  // skip the storage sweep (PIN-233 F8): unlinking is best-effort, and
+  // a My boards row it leaves behind reads as a deleted board anyway.
+  await unlinkMyBoards(slug, deps);
+  await sweepDeletedBoardStorage(slug, deps);
+}
+
+/** Drop the board from its signed-in participants' My boards. Never throws. */
+async function unlinkMyBoards(slug: string, deps: DeleteBoardDeps): Promise<void> {
+  let uids: Set<string>;
+  try {
+    uids = new Set(
+      (await deps.boards.listParticipants(slug)).flatMap((p) =>
+        p.userId && isSafeUid(p.userId) ? [p.userId] : [],
+      ),
+    );
+  } catch (error) {
+    logRowsLeftBehind(error);
+    return;
+  }
   for (const uid of uids) {
     try {
       await deps.users.deleteUserBoard(uid, slug);
     } catch (error) {
-      // Best-effort: the board is already gone for everyone. Logged
-      // by error name only — never the slug (a capability) or a uid.
-      console.error("Board delete left a My boards row behind.", {
-        error: error instanceof Error ? error.name : "unknown",
-      });
+      logRowsLeftBehind(error);
     }
   }
-  await sweepDeletedBoardStorage(slug, deps);
+}
+
+/** By error name only — never the slug (a capability) or a uid. */
+function logRowsLeftBehind(error: unknown): void {
+  console.error("Board delete left a My boards row behind.", {
+    error: error instanceof Error ? error.name : "unknown",
+  });
 }
