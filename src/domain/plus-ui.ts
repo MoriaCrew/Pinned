@@ -11,7 +11,7 @@
  * - A Plus skin without Plus is tried on locally: nothing changes
  *   for anyone else until it is kept, and keeping it asks for Plus.
  */
-import type { PlusPlan, PlusView } from "./plus";
+import type { PlusView } from "./plus";
 import { getSkin, isPlusSkinId, isSkinId, type SkinId } from "./skins";
 
 /** The Plus fields of the board view the page reads (all optional on old payloads). */
@@ -71,9 +71,14 @@ export function keepStep(skin: SkinId, plus: Pick<PlusState, "active"> | null | 
   return canApplyDirectly(skin, plus) ? "apply" : "offer";
 }
 
-/** Plus can be bought here (mode "off" shows the plans as Coming soon). */
-export function canBuyPlus(plus: Pick<PlusState, "mode"> | null | undefined): boolean {
-  return plus?.mode !== undefined && plus.mode !== "off";
+/**
+ * How the Plus sheet's one button buys (PIN-182, docs/15). `stripe`:
+ * the Policy pack through the credits checkout route (any joined
+ * member). `mock`: the host-only demo grant (POST plus). `none`: billing
+ * is off or unknown, so the sheet says "Coming soon" and sells nothing.
+ */
+export function plusPurchasePath(mode: PlusState["mode"] | undefined): "stripe" | "mock" | "none" {
+  return mode === "stripe" ? "stripe" : mode === "mock" ? "mock" : "none";
 }
 
 /**
@@ -195,8 +200,7 @@ export interface LookFlowState {
   tryOn: SkinId | null;
   /** Skin shown while its PATCH runs (optimistic); null when none. */
   applying: SkinId | null;
-  plan: PlusPlan;
-  /** POST /plus in flight. */
+  /** POST /plus (the mock checkout) in flight. */
   checkingOut: boolean;
   /** Checkout said "unavailable": the Plus sheet shows Coming soon. */
   unavailable: boolean;
@@ -209,7 +213,6 @@ export const initialLookFlow: LookFlowState = {
   sheet: "none",
   tryOn: null,
   applying: null,
-  plan: "board",
   checkingOut: false,
   unavailable: false,
   grantedNow: false,
@@ -222,7 +225,6 @@ export type LookFlowEvent =
   | { type: "tryOn"; skin: SkinId }
   | { type: "endTryOn" }
   | { type: "offerPlus" }
-  | { type: "choosePlan"; plan: PlusPlan }
   | { type: "applyStart"; skin: SkinId }
   | { type: "applyDone"; skin: SkinId }
   | { type: "applyFailed" }
@@ -247,8 +249,6 @@ export function lookFlow(state: LookFlowState, event: LookFlowEvent): LookFlowSt
       return { ...state, tryOn: null, sheet: state.sheet === "plus" ? "none" : state.sheet };
     case "offerPlus":
       return { ...state, sheet: "plus", unavailable: false, notice: null };
-    case "choosePlan":
-      return { ...state, plan: event.plan };
     case "applyStart":
       return { ...state, sheet: "none", applying: event.skin, notice: null };
     case "applyDone":

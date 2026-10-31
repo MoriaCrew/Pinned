@@ -123,9 +123,8 @@ export const PolicySchema = z
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Since PIN-181
      * Plus is sold only inside the credits pack (any joined member
-     * can buy it for the board, `credits.plusOnPurchase`); the
-     * price labels are legacy display-only placeholders that
-     * nothing charges from. hostCookieDays is the host
+     * can buy it for the board, `credits.plusOnPurchase`); its
+     * price lives in `credits.packs`. hostCookieDays is the host
      * credential's life: the server checks it against the stored
      * issue time with the board's effective Policy (so a per-board
      * override does apply there), while the cookie's Max-Age is
@@ -136,12 +135,6 @@ export const PolicySchema = z
      */
     plus: z
       .object({
-        priceLabels: z
-          .object({
-            board: z.string().min(1).default("$3.99"),
-            host: z.string().min(1).default("$4.99/month"),
-          })
-          .default({ board: "$3.99", host: "$4.99/month" }),
         hostCookieDays: z.number().int().min(1).default(365),
         requestMaxBytes: z.number().int().min(1).default(1024),
         hostRoutesPerIp: z
@@ -152,7 +145,6 @@ export const PolicySchema = z
           .default({ limit: 60, windowMs: 600_000 }),
       })
       .default({
-        priceLabels: { board: "$3.99", host: "$4.99/month" },
         hostCookieDays: 365,
         requestMaxBytes: 1024,
         hostRoutesPerIp: { limit: 60, windowMs: 600_000 },
@@ -398,12 +390,6 @@ export const PolicyOverridesSchema = z.object({
   signInNudge: z.boolean().optional(),
   plus: z
     .object({
-      priceLabels: z
-        .object({
-          board: z.string().min(1).optional(),
-          host: z.string().min(1).optional(),
-        })
-        .optional(),
       hostCookieDays: z.number().int().min(1).optional(),
       requestMaxBytes: z.number().int().min(1).optional(),
       hostRoutesPerIp: z

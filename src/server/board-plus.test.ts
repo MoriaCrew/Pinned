@@ -21,8 +21,7 @@ import { issueHostCredential } from "./host-session";
 
 const T0 = Date.UTC(2026, 9, 30, 12, 0, 0);
 const DAY_MS = 24 * 60 * 60 * 1000;
-const policy = resolvePolicy({ plus: { priceLabels: { board: "$1.00" }, hostCookieDays: 3 } });
-const LABELS = { board: "$1.00", host: "$4.99/month" };
+const policy = resolvePolicy({ plus: { hostCookieDays: 3 } });
 const PLUS_SKIN = PLUS_SKIN_IDS[0];
 const FREE_SKIN = "cork";
 const MOCK_GRANT: BoardPlus = { plan: "board", source: "mock", grantedAt: T0 };
@@ -165,7 +164,7 @@ describe("changeBoardSkin (PIN-103)", () => {
       themeId: FREE_SKIN,
     });
     const view = await getBoardView(board.slug, null, h.deps, { hostToken });
-    expect(view?.plus).toEqual({ active: false, mode: "mock", priceLabels: LABELS });
+    expect(view?.plus).toEqual({ active: false, mode: "mock" });
   });
 
   it("a new board cannot start on a Plus skin (402)", async () => {
@@ -202,7 +201,7 @@ describe("startBoardPlus (PIN-103)", () => {
     const result = await startBoardPlus(board.slug, hostToken, { plan: "board" }, h.withCheckout(checkout));
     expect(result).toEqual({
       status: "granted",
-      plus: { active: true, plan: "board", mode: "mock", priceLabels: LABELS },
+      plus: { active: true, plan: "board", mode: "mock" },
     });
     expect((await h.boards.getBoard(board.slug))?.plus).toEqual(MOCK_GRANT);
   });
@@ -240,7 +239,7 @@ describe("board view Plus fields (PIN-103)", () => {
     const { board } = await createBoardWithHost({ title: "View" }, h.deps);
     const view = await getBoardView(board.slug, null, h.deps);
     expect(view?.viewer).toEqual({ isHost: false, canChangeLook: false });
-    expect(view?.plus).toEqual({ active: false, mode: "off", priceLabels: LABELS });
+    expect(view?.plus).toEqual({ active: false, mode: "off" });
   });
 
   it("canChangeLook: the host always, a joined viewer only while Plus counts (PIN-181)", async () => {
@@ -264,7 +263,7 @@ describe("board view Plus fields (PIN-103)", () => {
     await h.grant(board.slug, { plan: "host", source: "mock", grantedAt: T0 });
     const view = await getBoardView(board.slug, null, h.deps, { hostToken });
     expect(view?.viewer).toEqual({ isHost: true, canChangeLook: true });
-    expect(view?.plus).toEqual({ active: true, plan: "host", mode: "mock", priceLabels: LABELS });
+    expect(view?.plus).toEqual({ active: true, plan: "host", mode: "mock" });
     expect((await getBoardView(board.slug, null, h.deps, { hostToken: issueHostCredential(T0).token }))?.viewer).toEqual({
       isHost: false,
       canChangeLook: false,

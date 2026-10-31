@@ -22,7 +22,6 @@ import {
   TryOnBar,
   skinMood,
   skinName,
-  type PlusPlan,
 } from "../../../ui";
 
 const LAB = "/lab";
@@ -124,7 +123,6 @@ function BoardDemo({ skin, picking }: { skin: SkinId; picking?: boolean }) {
 
 export function UiLab() {
   const [skin, setSkin] = useState<SkinId>("zine");
-  const [plan, setPlan] = useState<PlusPlan>("board");
   const row: CSSProperties = { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" };
   return (
     <main className="pn-skin-root" data-theme="paper" style={{ minHeight: "100dvh", padding: 24, display: "grid", gap: 40 }}>
@@ -164,7 +162,7 @@ export function UiLab() {
           </div>
         </Phone>
         <Phone skin="marigold">
-          <PlusSheet plan={plan} onPlanChange={setPlan} prices={{ board: "$3.99", host: "$4.99" }} available={false} foilSrc={byId["rubber-duck"].src} layer="absolute" onClose={noop} />
+          <PlusSheet pack={{ credits: 20, eurCents: 299 }} plusActive={false} available foilSrc={byId["rubber-duck"].src} layer="absolute" onClose={noop} />
         </Phone>
       </section>
 

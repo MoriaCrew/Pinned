@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   billingBannerKind,
-  canBuyMakes,
   creditCheckoutBody,
-  formatEur,
-  formatPerMake,
   makesState,
   parseBillingFlag,
   readCreditCheckoutResponse,
@@ -15,18 +12,18 @@ import {
   type BillingBannerKind,
   type BillingFlag,
   type CreditCheckoutErrorKind,
-  type MakesPack,
 } from "../../../domain/makes-ui";
 import type { PlusMode } from "../../../domain/plus";
+import { plusPurchasePath } from "../../../domain/plus-ui";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
-import { Button, Icon, IconButton, Sheet } from "../../../ui";
+import { Button, IconButton } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
 
 /** Refetches after a billing return before the banner stops waiting (display timing only). */
 const BILLING_REFETCH_ATTEMPTS = 5;
 const BILLING_REFETCH_MS = 2000;
-/** How long the "makes are in" banner stays (display timing only). */
+/** How long the "creations are in" banner stays (display timing only). */
 const ADDED_BANNER_MS = 8000;
 
 const baselineKey = (slug: string) => `pinned.makesBaseline:${slug}`;
@@ -57,12 +54,13 @@ function clearBillingParam() {
 }
 
 /**
- * The makes indicator (PIN-152): how many makes this board has
- * left, for everyone on it. Renders nothing at all while the
- * board view carries no credits (disabled = the shipped
- * default), so a credits-off board looks exactly as before.
- * The count rides the board poll, so spends and grants show
- * up without a reload; changes are announced politely.
+ * The creations indicator (PIN-152; "creations" is the UI word for
+ * makes): how many this board has left, for everyone on it. Renders
+ * nothing at all while the board view carries no credits (disabled =
+ * the shipped default), so a credits-off board looks exactly as
+ * before. The count rides the board poll, so spends and grants show
+ * up without a reload; changes are announced politely. Its button
+ * opens the Plus sheet.
  */
 export function MakesIndicator({
   credits,
@@ -96,17 +94,20 @@ export function MakesIndicator({
 /**
  * The billing-return banner (PIN-152): processing while the
  * webhook grant is still on its way, "in" only once the count
- * has actually risen, one neutral line for a checkout that
+ * has actually risen (with "Plus is on" once the refetched view
+ * says so, PIN-182), one neutral line for a checkout that
  * never finished. Live region, dismissible once settled.
  */
 export function BillingBanner({
   kind,
   availableMakes,
+  plusActive = false,
   onDismiss,
   locale = "en",
 }: {
   kind: BillingBannerKind;
   availableMakes: number | null;
+  plusActive?: boolean;
   onDismiss: () => void;
   locale?: Locale;
 }) {
@@ -114,7 +115,9 @@ export function BillingBanner({
     kind === "processing"
       ? t(locale, "makes.processing")
       : kind === "added"
-        ? tf(locale, "makes.added", { left: tCount(locale, "makes.left", availableMakes ?? 0) })
+        ? tf(locale, plusActive ? "makes.addedPlus" : "makes.added", {
+            left: tCount(locale, "makes.left", availableMakes ?? 0),
+          })
         : kind === "cancelled"
           ? t(locale, "makes.cancelled")
           : kind === "failed"
@@ -137,101 +140,15 @@ const CHECKOUT_ERROR_KEYS: Record<CreditCheckoutErrorKind, MessageKey> = {
   generic: "makes.errorGeneric",
 };
 
-/**
- * The buy sheet (PIN-152): the Policy packs as a radio group
- * (the Plus sheet's plan pattern), EUR tax-included prices,
- * a per-make line in plain words, the local-currency note
- * and the statement name. Anyone on the board can add makes
- * for the board. With buying unavailable (off/mock) the
- * sheet says so plainly and sells nothing.
- */
-export function MakesBuySheet({
-  packs,
-  canBuy,
-  busy = false,
-  error = null,
-  unavailable = false,
-  onBuy,
-  onClose,
-  locale = "en",
-}: {
-  packs: MakesPack[];
-  canBuy: boolean;
-  busy?: boolean;
-  error?: CreditCheckoutErrorKind | null;
-  /** The checkout route answered "unavailable": show the not-open line. */
-  unavailable?: boolean;
-  onBuy: (lookupKey: string) => void;
-  onClose: () => void;
-  locale?: Locale;
-}) {
-  const packGroup = `makes-pack-${useId()}`;
-  const [selectedKey, setSelectedKey] = useState<string | null>(packs[0]?.lookupKey ?? null);
-  const selected = packs.find((pack) => pack.lookupKey === selectedKey) ?? packs[0] ?? null;
-  const available = canBuy && !unavailable && selected !== null;
-  return (
-    <Sheet
-      title={t(locale, "makes.title")}
-      onClose={onClose}
-      footer={
-        <>
-          <Button
-            variant="primary"
-            size="lg"
-            block
-            disabled={!available || busy}
-            onClick={() => selected && onBuy(selected.lookupKey)}
-          >
-            {busy
-              ? t(locale, "makes.buying")
-              : selected
-                ? tf(locale, "makes.buy", {
-                    pack: tCount(locale, "makes.packCount", selected.credits),
-                    price: formatEur(selected.eurCents, locale),
-                  })
-                : t(locale, "makes.add")}
-          </Button>
-          {!available ? <p className={styles.makesSheetNote}>{t(locale, "makes.unavailable")}</p> : null}
-          <Button variant="quiet" block onClick={onClose}>
-            {t(locale, "ui.notNow")}
-          </Button>
-        </>
-      }
-    >
-      <p className={styles.makesLead}>{t(locale, "makes.lead")}</p>
-      <fieldset className="pn-plans">
-        <legend className="pn-sr">{t(locale, "makes.title")}</legend>
-        {packs.map((pack) => (
-          <label key={pack.lookupKey} className="pn-plan">
-            <input
-              type="radio"
-              name={packGroup}
-              value={pack.lookupKey}
-              checked={selected?.lookupKey === pack.lookupKey}
-              onChange={() => setSelectedKey(pack.lookupKey)}
-            />
-            <span className="pn-plan-name">{tCount(locale, "makes.packCount", pack.credits)}</span>
-            <span className="pn-plan-price">{tf(locale, "makes.priceTtc", { price: formatEur(pack.eurCents, locale) })}</span>
-            <span className="pn-plan-note">{tf(locale, "makes.perMake", { price: formatPerMake(pack, locale) })}</span>
-            <span className="pn-plan-check" aria-hidden="true">
-              <Icon name="check" size={14} strokeWidth={2.5} />
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <p className={styles.makesSheetNote}>{t(locale, "makes.localCurrency")}</p>
-      <p className={styles.makesSheetNote}>{t(locale, "makes.statement")}</p>
-      <p className={styles.makesError} role="alert">
-        {error ? t(locale, CHECKOUT_ERROR_KEYS[error]) : ""}
-      </p>
-    </Sheet>
-  );
+/** The Plus sheet's inline line for a failed checkout call. */
+export function checkoutErrorLine(error: CreditCheckoutErrorKind, locale: Locale = "en"): string {
+  return t(locale, CHECKOUT_ERROR_KEYS[error]);
 }
 
 /**
- * Out-of-makes outcome line (PIN-152): make-aware copy where
+ * Out-of-creations outcome line (PIN-152): creation-aware copy where
  * a photo or scene stopped at the empty pool, with the way
- * into the buy sheet when buying can actually work.
+ * into the Plus sheet when buying can actually work.
  */
 export function MakesPoolEmpty({
   kind,
@@ -257,6 +174,7 @@ export function MakesPoolEmpty({
 }
 
 export interface MakesFlow {
+  /** The Plus sheet can be opened and can sell (stripe) or demo (mock); false in off. */
   canBuy: boolean;
   sheetOpen: boolean;
   openSheet: () => void;
@@ -264,17 +182,18 @@ export interface MakesFlow {
   busy: boolean;
   error: CreditCheckoutErrorKind | null;
   unavailable: boolean;
+  /** Post the pack to the credits route and leave for hosted Checkout. */
   buy: (lookupKey: string) => void;
   banner: BillingBannerKind | null;
   dismissBanner: () => void;
 }
 
 /**
- * The makes flow on the board (PIN-152): the buy sheet's
- * checkout call and the billing-return banner. Buying posts
- * the chosen pack to the PIN-149 route and leaves for the
- * hosted checkout URL it returns; the count at that moment
- * is kept (sessionStorage) so the return banner can tell a
+ * The creations flow on the board (PIN-152, PIN-182): the Plus
+ * sheet's open state, its stripe checkout call and the billing-return
+ * banner. Buying posts the Policy pack to the PIN-149 route and
+ * leaves for the hosted checkout URL it returns; the count at that
+ * moment is kept (sessionStorage) so the return banner can tell a
  * real rise from a redirect that granted nothing.
  */
 export function useMakesFlow({
@@ -351,7 +270,7 @@ export function useMakesFlow({
   }, [banner, slug]);
 
   async function startCheckout(lookupKey: string) {
-    if (buying.current || !canBuyMakes(plusMode)) return;
+    if (buying.current || plusPurchasePath(plusMode) !== "stripe") return;
     buying.current = true;
     setBusy(true);
     setError(null);
@@ -382,7 +301,7 @@ export function useMakesFlow({
   }
 
   return {
-    canBuy: canBuyMakes(plusMode),
+    canBuy: plusPurchasePath(plusMode) !== "none",
     sheetOpen,
     openSheet: () => {
       setError(null);
@@ -390,7 +309,10 @@ export function useMakesFlow({
       setSheetOpen(true);
     },
     closeSheet: () => {
-      if (!busy) setSheetOpen(false);
+      if (busy) return;
+      setError(null);
+      setUnavailable(false);
+      setSheetOpen(false);
     },
     busy,
     error,

@@ -3,7 +3,6 @@ import {
   showTryOnBar,
   activeTryOn,
   canApplyDirectly,
-  canBuyPlus,
   chooseLook,
   effectiveSkin,
   foilPinId,
@@ -12,6 +11,7 @@ import {
   lookFlow,
   lookSample,
   parseTryOn,
+  plusPurchasePath,
   readCheckoutResponse,
   readSkinResponse,
   safeRedirectUrl,
@@ -66,10 +66,11 @@ describe("applying a look", () => {
     expect(keepStep("marigold", free)).toBe("offer");
   });
 
-  it("sells Plus only when billing is not off", () => {
-    expect(canBuyPlus({ mode: "mock" })).toBe(true);
-    expect(canBuyPlus({ mode: "off" })).toBe(false);
-    expect(canBuyPlus(undefined)).toBe(false);
+  it("buys Plus through the credits checkout in stripe, the host demo in mock, nothing in off (PIN-182)", () => {
+    expect(plusPurchasePath("stripe")).toBe("stripe");
+    expect(plusPurchasePath("mock")).toBe("mock");
+    expect(plusPurchasePath("off")).toBe("none");
+    expect(plusPurchasePath(undefined)).toBe("none");
   });
 });
 
@@ -123,7 +124,7 @@ describe("server answers", () => {
   });
 
   it("reads POST plus", () => {
-    const view = { active: true, plan: "board", mode: "mock", priceLabels: { board: "$3.99", host: "$4.99/month" } };
+    const view = { active: true, plan: "board", mode: "mock" };
     expect(readCheckoutResponse(200, { status: "granted", plus: view })).toEqual({ kind: "granted", plus: view });
     expect(readCheckoutResponse(200, { status: "granted" })).toEqual({ kind: "granted", plus: null });
     expect(readCheckoutResponse(200, { status: "unavailable" })).toEqual({ kind: "unavailable" });
@@ -170,7 +171,6 @@ describe("look flow reducer", () => {
     const done = run([
       { type: "tryOn", skin: "marigold" },
       { type: "offerPlus" },
-      { type: "choosePlan", plan: "host" },
       { type: "checkoutStart" },
       { type: "checkoutGranted" },
       { type: "applyStart", skin: "marigold" },
@@ -179,7 +179,6 @@ describe("look flow reducer", () => {
     expect(done).toMatchObject({
       sheet: "none",
       tryOn: null,
-      plan: "host",
       grantedNow: false,
       notice: { kind: "granted", skin: "marigold" },
     });

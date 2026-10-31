@@ -1,14 +1,14 @@
 /**
  * Makes on the board page (PIN-152, docs/15-board-plus.md):
- * pure, client-safe rules for the makes indicator, the buy
- * sheet and the billing-return banner. The server owns every
- * decision that matters (credits enabled, PLUS_MODE, the
- * webhook grant); these helpers only decide what the board
- * shows. Copy speaks of "makes" only — an activity count for
- * the whole board, never money held or spent by a person.
+ * pure, client-safe rules for the makes indicator, the credits
+ * checkout the Plus sheet posts (PIN-182) and the billing-return
+ * banner. The server owns every decision that matters (credits
+ * enabled, PLUS_MODE, the webhook grant); these helpers only
+ * decide what the board shows. The UI calls makes "creations":
+ * an activity count for the whole board, never money held or
+ * spent by a person.
  */
 import type { Locale } from "../i18n";
-import type { PlusMode } from "./plus";
 import { safeRedirectUrl } from "./plus-ui";
 
 /** The PIN-151 typed pool-empty code (photo 429 + both jobs' errorCode), mirrored client-side. */
@@ -33,15 +33,6 @@ export function makesState(availableMakes: number, lowMakesWarning: number): Mak
   if (availableMakes <= 0) return "empty";
   if (lowMakesWarning > 0 && availableMakes <= lowMakesWarning) return "low";
   return "ok";
-}
-
-/**
- * Buying can actually work only in stripe mode: off/mock keep
- * the pre-credits behaviour (the buy route answers
- * "unavailable" there and writes nothing, PIN-149).
- */
-export function canBuyMakes(mode: PlusMode | undefined): boolean {
-  return mode === "stripe";
 }
 
 /** The flags `/billing/return` lands with (PIN-149), plus a defensive "failed". */
@@ -99,7 +90,7 @@ export function creditCheckoutBody(lookupKey: string): { lookupKey: string } {
 
 export type CreditCheckoutErrorKind = "cap" | "rate" | "join" | "generic";
 
-/** POST credits/checkout answer, as the buy sheet acts on it. */
+/** POST credits/checkout answer, as the Plus sheet acts on it. */
 export type CreditCheckoutResult =
   | { kind: "redirect"; url: string }
   | { kind: "unavailable" }
@@ -131,9 +122,4 @@ export function formatEur(cents: number, locale: Locale): string {
   const euros = Math.floor(cents / 100);
   const rest = String(Math.abs(cents % 100)).padStart(2, "0");
   return locale === "fr" ? `${euros},${rest} €` : `€${euros}.${rest}`;
-}
-
-/** The pack's price spread over its makes, rounded to the nearest cent. */
-export function formatPerMake(pack: Pick<MakesPack, "credits" | "eurCents">, locale: Locale): string {
-  return formatEur(Math.round(pack.eurCents / pack.credits), locale);
 }

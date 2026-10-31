@@ -381,10 +381,7 @@ export async function getBoardView(
     activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
     viewer: { isHost, canChangeLook: isHost || (viewer !== null && hasPlus(board, deps.plusMode ?? "off")) },
     ...(availableMakes !== null ? { credits: { availableMakes } } : {}),
-    plus: plusView(board, {
-      mode: deps.plusMode ?? "off",
-      priceLabels: deps.policy.plus.priceLabels,
-    }),
+    plus: plusView(board, deps.plusMode ?? "off"),
   };
 }
 
