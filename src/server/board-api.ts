@@ -27,6 +27,7 @@ import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { plusRequiredError } from "./board-plus";
 import { issueHostCredential, verifyHostToken } from "./host-session";
+import type { Locale } from "../i18n/locales";
 import { isMessageKey, userMessage } from "../i18n/user-message";
 import {
   addTapElement,
@@ -1351,23 +1352,31 @@ export async function deleteSceneObjects(scene: Scene, store: DerivativeStore): 
 
 /**
  * Suggestion chips for the picked pins (PIN-75): generated via the
- * decorated ChipSuggester, cached per label set, fixed Policy list
- * on any non-ready outcome. Validation errors (missing board/pin)
- * keep the API's uniform 404 discipline.
+ * decorated ChipSuggester, cached per language and label set, the
+ * fixed idea chips on any non-ready outcome, all in `locale`, the
+ * request's UI language (PIN-214). Validation errors (missing
+ * board/pin) keep the API's uniform 404 discipline.
  */
 export async function getSceneChips(
   slug: string,
   participant: Participant,
   rawInput: unknown,
   deps: BoardApiDeps,
+  locale: Locale,
 ): Promise<SceneChipsResult> {
-  return resolveSceneChips(slug, participant, rawInput, {
-    boards: deps.boards,
-    ...(deps.chipSuggester ? { suggester: deps.chipSuggester } : {}),
-    cache: deps.chipsCache ?? new InMemoryChipsCacheStore(),
-    policy: deps.policy,
-    now: deps.now,
-  });
+  return resolveSceneChips(
+    slug,
+    participant,
+    rawInput,
+    {
+      boards: deps.boards,
+      ...(deps.chipSuggester ? { suggester: deps.chipSuggester } : {}),
+      cache: deps.chipsCache ?? new InMemoryChipsCacheStore(),
+      policy: deps.policy,
+      now: deps.now,
+    },
+    locale,
+  );
 }
 
 const SCENE_IMAGE_TYPES: Record<string, string> = {

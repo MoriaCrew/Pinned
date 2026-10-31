@@ -173,7 +173,8 @@ export function fixtureSegmenter(fixtures: StudioFixtures): Segmenter {
 /**
  * No chips were recorded by PIN-50, so the fixture suggester
  * replays the deterministic template chips: same labels in, same
- * chips out, zero provider calls (PIN-75).
+ * chips out, zero provider calls (PIN-75). They stay English for
+ * every `input.locale` (no recorded chips in other languages).
  */
 export function fixtureChipSuggester(): ChipSuggester {
   return {

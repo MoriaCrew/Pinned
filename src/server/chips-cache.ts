@@ -1,8 +1,9 @@
 import "server-only";
 /**
- * Generated-chips cache port (PIN-75). One entry per sorted
- * lowercased label set, addressed by the sha256 of the canonical
- * key material (src/domain/chips) so the Firestore home is a
+ * Generated-chips cache port (PIN-75). One entry per prompt
+ * version, language (PIN-214) and sorted lowercased label set,
+ * addressed by the sha256 of the canonical key material
+ * (chipsCacheKey in src/domain/chips) so the Firestore home is a
  * direct doc get — no query, no new index. Labels themselves are
  * short element display names, already link-public on the board;
  * the hash just keeps doc ids tidy and slug-free.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { buildBoardPreview } from "../../../domain/board-preview";
+import { fixedSceneChips } from "../../../domain/chips";
 import { parseSceneParam } from "../../../domain/scene-viewer";
 import { isSkinId } from "../../../domain/skins";
 import { isValidSlug } from "../../../domain/tokens";
@@ -137,6 +138,8 @@ export default async function BoardPage({
   if (!view) notFound();
 
   const resolved = getPolicy(board.policyOverrides ?? null);
+  // PIN-214: the instant idea chips arrive in the viewer's language.
+  const sceneChips = fixedSceneChips(await getLocale(), resolved.sceneChipsCount);
   const query = await searchParams;
   const tryOnSkin = isSkinId(query.tryon) ? query.tryon : null;
 
@@ -149,7 +152,7 @@ export default async function BoardPage({
       tryOnSkin={tryOnSkin}
       initialSceneId={parseSceneParam(query.scene)}
       initialBilling={query.billing ?? null}
-      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips: resolved.sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementLabelMaxChars: resolved.elementLabelMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, photosPerBatch: resolved.photosPerBatch, batchUploadConcurrency: resolved.batchUploadConcurrency, uploadRetryMaxAttempts: resolved.uploadRetryMaxAttempts, uploadRetryBackoffMs: resolved.uploadRetryBackoffMs, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0, makes: { packs: resolved.credits.packs, lowMakesWarning: resolved.credits.lowMakesWarning } }}
+      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementLabelMaxChars: resolved.elementLabelMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, photosPerBatch: resolved.photosPerBatch, batchUploadConcurrency: resolved.batchUploadConcurrency, uploadRetryMaxAttempts: resolved.uploadRetryMaxAttempts, uploadRetryBackoffMs: resolved.uploadRetryBackoffMs, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0, makes: { packs: resolved.credits.packs, lowMakesWarning: resolved.credits.lowMakesWarning } }}
     />
   );
 }

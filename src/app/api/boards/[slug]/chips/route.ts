@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * Suggestion chips for the picked pins (PIN-75): cache-first, then
- * one decorated Spark call, then the fixed Policy list. The Make
- * sheet already shows the fixed list, so every AI outcome here is
- * a 200 — chips never block or break making a scene.
+ * one decorated Spark call, then the fixed idea chips, all in the
+ * request's UI language (PIN-214). The Make sheet already shows the
+ * fixed chips, so every AI outcome here is a 200 — chips never
+ * block or break making a scene.
  */
 export async function POST(
   request: Request,
@@ -63,7 +64,7 @@ export async function POST(
         { status: 401, headers: JSON_HEADERS },
       );
     }
-    const result = await getSceneChips(slug, viewer, body, boardApiDeps(policy));
+    const result = await getSceneChips(slug, viewer, body, boardApiDeps(policy), locale);
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
     return errorResponse(error, t(locale, "request.ideasFailed"));
