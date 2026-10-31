@@ -53,7 +53,7 @@ describe("makes indicator (PIN-152)", () => {
       h(MakesIndicator, { credits: { availableMakes: 3 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "fr" }),
     );
     expect(out).toContain("3 créations restantes");
-    expect(out).toContain("Ajouter des créations");
+    expect(out).toContain("Ajoute des créations");
   });
 });
 
@@ -110,11 +110,11 @@ describe("makes buy sheet (PIN-152)", () => {
 
   it("renders the sheet in French with French prices", () => {
     const out = sheet({ locale: "fr" });
-    expect(out).toContain("Ajouter des créations");
+    expect(out).toContain("Ajoute des créations");
     expect(out).toContain("25 créations");
     expect(out).toContain("4,99 € TTC");
     expect(out).toContain("Environ 0,20 € par création");
-    expect(out).toContain("Apparaît sous le nom PINNEDS");
+    expect(out).toContain("Apparaît comme PINNEDS");
     expect(out).toContain("Ajouter 25 créations · 4,99 €");
   });
 });
@@ -136,7 +136,7 @@ describe("billing return banner (PIN-152)", () => {
     expect(banner("cancelled")).toContain("No makes were added and nothing was charged.");
     expect(banner("failed")).toContain("That checkout didn&#x27;t finish.");
     expect(banner("checkLater")).toContain("Still waiting for your makes.");
-    expect(banner("added", 28, "fr")).toContain("Vos créations sont arrivées — 28 créations restantes.");
+    expect(banner("added", 28, "fr")).toContain("Tes créations sont là — 28 créations restantes.");
   });
 });
 
