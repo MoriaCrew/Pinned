@@ -495,29 +495,7 @@
   font: 650 15px/20px var(--font-ui);
 }
 
-/* Buy sheet: lead, quiet notes, and an error line that keeps its
-   height so the sheet never jumps when a line lands. */
-.makesLead {
-  margin: 0 0 var(--space-3);
-  color: var(--ink-muted);
-  font: 400 16px/24px var(--font-ui);
-}
-
-.makesSheetNote {
-  margin: var(--space-2) 0 0;
-  color: var(--ink-muted);
-  font: 500 14px/19px var(--font-ui);
-  text-align: center;
-}
-
-.makesError {
-  min-height: 20px;
-  margin: var(--space-2) 0 0;
-  color: var(--danger);
-  font: 650 15px/20px var(--font-ui);
-}
-
-/* Out-of-makes outcome (photo/scene): the line and the way in. */
+/* Out-of-creations outcome (photo/scene): the line and the way in. */
 .makesPoolEmpty {
   display: flex;
   flex-wrap: wrap;

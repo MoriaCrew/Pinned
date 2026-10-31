@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   CREDITS_POOL_EMPTY_CODE,
   billingBannerKind,
-  canBuyMakes,
   creditCheckoutBody,
   formatEur,
-  formatPerMake,
   isPoolEmptyCode,
   makesState,
   parseBillingFlag,
@@ -21,13 +19,6 @@ describe("makes state (PIN-152)", () => {
     expect(makesState(1, 5)).toBe("low");
     expect(makesState(6, 5)).toBe("ok");
     expect(makesState(3, 0)).toBe("ok");
-  });
-
-  it("offers buying only in stripe mode", () => {
-    expect(canBuyMakes("stripe")).toBe(true);
-    expect(canBuyMakes("mock")).toBe(false);
-    expect(canBuyMakes("off")).toBe(false);
-    expect(canBuyMakes(undefined)).toBe(false);
   });
 });
 
@@ -93,12 +84,13 @@ describe("credits checkout answers (PIN-152)", () => {
   });
 });
 
-describe("pack prices (PIN-152)", () => {
-  it("formats EUR prices and per-make amounts in EN and FR", () => {
-    expect(formatEur(499, "en")).toBe("€4.99");
+describe("pack prices (PIN-152, PIN-182)", () => {
+  it("formats EUR prices from cents in EN and FR", () => {
+    expect(formatEur(299, "en")).toBe("€2.99");
+    expect(formatEur(299, "fr").replace(/[  ]/g, " ")).toBe("2,99 €");
     expect(formatEur(1999, "en")).toBe("€19.99");
+    expect(formatEur(500, "fr").replace(/[  ]/g, " ")).toBe("5,00 €");
+    expect(formatEur(5, "en")).toBe("€0.05");
     expect(formatEur(499, "fr")).toBe("4,99 €");
-    expect(formatPerMake({ credits: 25, eurCents: 499 }, "en")).toBe("€0.20");
-    expect(formatPerMake({ credits: 150, eurCents: 1999 }, "fr")).toBe("0,13 €");
   });
 });

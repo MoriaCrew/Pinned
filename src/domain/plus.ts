@@ -41,11 +41,6 @@ export interface BoardPlus {
   grantedAt: number;
 }
 
-export interface PlusPriceLabels {
-  board: string;
-  host: string;
-}
-
 /** Plus membership comes from the skins catalogue only. */
 export function isPlusSkin(id: unknown): boolean {
   return isPlusSkinId(id);
@@ -130,26 +125,22 @@ export function decidePurchasePlusGrant(
 
 /**
  * Public Plus readout for the board view. Carries no secret:
- * entitlement state, the billing mode (so the UI can show a
- * "not available yet" state honestly) and the Policy labels.
- * `source` and `grantedAt` stay server-side.
+ * entitlement state and the billing mode (so the UI can pick
+ * the buy path and show a "not available yet" state honestly).
+ * The price is never here: the UI formats it from the Policy
+ * pack's `eurCents`. `source` and `grantedAt` stay server-side.
  */
 export interface PlusView {
   active: boolean;
   plan?: PlusPlan;
   mode: PlusMode;
-  priceLabels: PlusPriceLabels;
 }
 
-export function plusView(
-  board: Pick<Board, "plus">,
-  offer: { mode: PlusMode; priceLabels: PlusPriceLabels },
-): PlusView {
-  const active = hasPlus(board, offer.mode);
+export function plusView(board: Pick<Board, "plus">, mode: PlusMode): PlusView {
+  const active = hasPlus(board, mode);
   return {
     active,
     ...(active && board.plus != null ? { plan: board.plus.plan } : {}),
-    mode: offer.mode,
-    priceLabels: { board: offer.priceLabels.board, host: offer.priceLabels.host },
+    mode,
   };
 }

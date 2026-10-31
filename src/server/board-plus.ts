@@ -180,10 +180,7 @@ export async function startBoardPlus(
     case "granted":
       return {
         status: "granted",
-        plus: plusView(
-          { plus: result.plus },
-          { mode: deps.plusMode, priceLabels: deps.policy.plus.priceLabels },
-        ),
+        plus: plusView({ plus: result.plus }, deps.plusMode),
       };
     case "redirect":
       return { status: "redirect", url: result.url };

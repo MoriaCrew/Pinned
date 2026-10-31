@@ -135,19 +135,17 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(p.timeoutsMs.spark).toBe(30_000);
   });
 
-  it("plus: placeholder price labels + host cookie life, deep-overridable (PIN-103)", () => {
+  it("plus: host cookie life, deep-overridable; no price labels (PIN-103, PIN-182)", () => {
     expect(DEFAULT_POLICY.plus).toEqual({
-      priceLabels: { board: "$3.99", host: "$4.99/month" },
       hostCookieDays: 365,
       requestMaxBytes: 1024,
       hostRoutesPerIp: { limit: 60, windowMs: 600_000 },
     });
     const p = resolvePolicy(
-      { plus: { priceLabels: { host: "€4.99/mo" }, hostRoutesPerIp: { limit: 5 } } },
+      { plus: { hostRoutesPerIp: { limit: 5 } } },
       { plus: { hostCookieDays: 90 } },
     );
     expect(p.plus).toEqual({
-      priceLabels: { board: "$3.99", host: "€4.99/mo" },
       hostCookieDays: 90,
       requestMaxBytes: 1024,
       hostRoutesPerIp: { limit: 5, windowMs: 600_000 },
@@ -155,10 +153,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(() => resolvePolicy({ plus: { hostCookieDays: 0 } })).toThrow();
     expect(() => resolvePolicy({ plus: { requestMaxBytes: 0 } })).toThrow();
     expect(() => resolvePolicy({ plus: { hostRoutesPerIp: { limit: 0 } } })).toThrow();
-    expect(() => resolvePolicy({ plus: { priceLabels: { board: "" } } })).toThrow();
-    expect(
-      parsePolicyOverridesJson('{"plus":{"priceLabels":{"board":"$1"}}}'),
-    ).toEqual({ plus: { priceLabels: { board: "$1" } } });
+    // An override saved before PIN-182 still parses; the retired key is dropped.
+    const legacy = parsePolicyOverridesJson('{"plus":{"priceLabels":{"board":"$1"},"hostCookieDays":7}}');
+    expect(legacy).toEqual({ plus: { hostCookieDays: 7 } });
+    expect(resolvePolicy(legacy).plus).not.toHaveProperty("priceLabels");
   });
 
   it("scene preview size and WebP quality (PIN-133): defaults, env/board overrides, fail closed", () => {

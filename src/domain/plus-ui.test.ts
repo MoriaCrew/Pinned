@@ -3,7 +3,6 @@ import {
   showTryOnBar,
   activeTryOn,
   canApplyDirectly,
-  canBuyPlus,
   chooseLook,
   effectiveSkin,
   foilPinId,
@@ -12,8 +11,12 @@ import {
   lookFlow,
   lookSample,
   parseTryOn,
+  plusPurchasePath,
+  plusSheetLocked,
+  closesPlusSheetAfterMock,
   readCheckoutResponse,
   readSkinResponse,
+  returnSkinStep,
   safeRedirectUrl,
   urlWithoutTryOn,
   type LookFlowEvent,
@@ -66,10 +69,11 @@ describe("applying a look", () => {
     expect(keepStep("marigold", free)).toBe("offer");
   });
 
-  it("sells Plus only when billing is not off", () => {
-    expect(canBuyPlus({ mode: "mock" })).toBe(true);
-    expect(canBuyPlus({ mode: "off" })).toBe(false);
-    expect(canBuyPlus(undefined)).toBe(false);
+  it("buys Plus through the credits checkout in stripe, the host demo in mock, nothing in off (PIN-182)", () => {
+    expect(plusPurchasePath("stripe")).toBe("stripe");
+    expect(plusPurchasePath("mock")).toBe("mock");
+    expect(plusPurchasePath("off")).toBe("none");
+    expect(plusPurchasePath(undefined)).toBe("none");
   });
 });
 
@@ -123,7 +127,7 @@ describe("server answers", () => {
   });
 
   it("reads POST plus", () => {
-    const view = { active: true, plan: "board", mode: "mock", priceLabels: { board: "$3.99", host: "$4.99/month" } };
+    const view = { active: true, plan: "board", mode: "mock" };
     expect(readCheckoutResponse(200, { status: "granted", plus: view })).toEqual({ kind: "granted", plus: view });
     expect(readCheckoutResponse(200, { status: "granted" })).toEqual({ kind: "granted", plus: null });
     expect(readCheckoutResponse(200, { status: "unavailable" })).toEqual({ kind: "unavailable" });
@@ -170,7 +174,6 @@ describe("look flow reducer", () => {
     const done = run([
       { type: "tryOn", skin: "marigold" },
       { type: "offerPlus" },
-      { type: "choosePlan", plan: "host" },
       { type: "checkoutStart" },
       { type: "checkoutGranted" },
       { type: "applyStart", skin: "marigold" },
@@ -179,7 +182,6 @@ describe("look flow reducer", () => {
     expect(done).toMatchObject({
       sheet: "none",
       tryOn: null,
-      plan: "host",
       grantedNow: false,
       notice: { kind: "granted", skin: "marigold" },
     });
@@ -220,11 +222,73 @@ describe("look flow reducer", () => {
   });
 });
 
+describe("look after a Stripe return (PIN-182)", () => {
+  const back = { flag: "processing" as const, stored: { skin: "darkroom" as const, returned: true }, isHost: true, plusActive: true, boardSkin: "paper" as const };
+
+  it("applies the stored try-on once Plus counts on the refetched view", () => {
+    expect(returnSkinStep(back)).toEqual({ kind: "apply", skin: "darkroom" });
+  });
+
+  it("waits while the webhook has not granted Plus yet, or the first poll has not said who is host", () => {
+    expect(returnSkinStep({ ...back, plusActive: false })).toEqual({ kind: "wait" });
+    expect(returnSkinStep({ ...back, isHost: false })).toEqual({ kind: "wait" });
+  });
+
+  it("still applies after a reload that lost the return flag, once Plus counts", () => {
+    expect(returnSkinStep({ ...back, flag: null })).toEqual({ kind: "apply", skin: "darkroom" });
+    expect(returnSkinStep({ ...back, flag: null, plusActive: false })).toEqual({ kind: "wait" });
+  });
+
+  it("never applies a look left by an abandoned Checkout visit, whoever grants Plus later", () => {
+    const left = { skin: "darkroom" as const, returned: false };
+    expect(returnSkinStep({ ...back, flag: null, stored: left })).toEqual({ kind: "wait" });
+    // Arriving with the processing flag is the return itself.
+    expect(returnSkinStep({ ...back, flag: "processing", stored: left })).toEqual({ kind: "apply", skin: "darkroom" });
+  });
+
+  it("retryTryOn wears the look again without clearing the failure notice", () => {
+    const failed: LookFlowState = { ...initialLookFlow, notice: { kind: "lookFailed" } };
+    const next = lookFlow(failed, { type: "retryTryOn", skin: "darkroom" });
+    expect(next.tryOn).toBe("darkroom");
+    expect(next.notice).toEqual({ kind: "lookFailed" });
+  });
+
+  it("does nothing without a stored look", () => {
+    expect(returnSkinStep({ ...back, stored: null })).toEqual({ kind: "wait" });
+    expect(returnSkinStep({ ...back, stored: null, flag: null })).toEqual({ kind: "wait" });
+  });
+
+  it("forgets the look on a cancelled or failed return, and when the board already wears it", () => {
+    expect(returnSkinStep({ ...back, flag: "cancelled", plusActive: false })).toEqual({ kind: "clear" });
+    expect(returnSkinStep({ ...back, flag: "failed" })).toEqual({ kind: "clear" });
+    expect(returnSkinStep({ ...back, boardSkin: "darkroom" })).toEqual({ kind: "clear" });
+  });
+});
+
 describe("try-on bar (PIN-115)", () => {
   it("shows while a look is worn locally, and steps aside while saving or picking", () => {
     expect(showTryOnBar("marigold", null, false)).toBe(true);
     expect(showTryOnBar(null, null, false)).toBe(false);
     expect(showTryOnBar("marigold", "marigold", false)).toBe(false);
     expect(showTryOnBar("marigold", null, true)).toBe(false);
+  });
+});
+
+describe("plusSheetLocked (PIN-182)", () => {
+  it("keeps the sheet up while either purchase request is in flight", () => {
+    expect(plusSheetLocked(false, false)).toBe(false);
+    expect(plusSheetLocked(true, false)).toBe(true);
+    expect(plusSheetLocked(false, true)).toBe(true);
+    expect(plusSheetLocked(true, true)).toBe(true);
+  });
+});
+
+describe("closesPlusSheetAfterMock (PIN-182)", () => {
+  it("closes the merged sheet on a grant or a failure, keeps it for unavailable and redirect", () => {
+    expect(closesPlusSheetAfterMock("granted")).toBe(true);
+    expect(closesPlusSheetAfterMock("failed")).toBe(true);
+    expect(closesPlusSheetAfterMock("unavailable")).toBe(false);
+    expect(closesPlusSheetAfterMock("redirect")).toBe(false);
+    expect(closesPlusSheetAfterMock("skipped")).toBe(false);
   });
 });

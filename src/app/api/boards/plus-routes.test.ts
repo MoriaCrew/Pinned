@@ -120,7 +120,7 @@ async function view(slug: string, cookie?: string) {
   return (await res.json()) as {
     board: { themeId: string | null };
     viewer: { isHost: boolean; canChangeLook: boolean };
-    plus: { active: boolean; plan?: string; mode: string; priceLabels: { board: string; host: string } };
+    plus: { active: boolean; plan?: string; mode: string };
   };
 }
 
@@ -156,11 +156,7 @@ describe("host cookie on board creation (PIN-103)", () => {
     const b = await createHostedBoard();
     const asHost = await view(a.slug, a.cookie);
     expect(asHost.viewer).toEqual({ isHost: true, canChangeLook: true });
-    expect(asHost.plus).toEqual({
-      active: false,
-      mode: "mock",
-      priceLabels: { board: "$3.99", host: "$4.99/month" },
-    });
+    expect(asHost.plus).toEqual({ active: false, mode: "mock" });
     expect(JSON.stringify(asHost)).not.toMatch(/tokenHash|issuedAt/);
     expect((await view(a.slug)).viewer).toEqual({ isHost: false, canChangeLook: false });
     expect((await view(a.slug, b.cookie)).viewer).toEqual({ isHost: false, canChangeLook: false });
@@ -301,12 +297,7 @@ describe("POST /api/boards/[slug]/plus, PLUS_MODE=mock (PIN-103)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       status: "granted",
-      plus: {
-        active: true,
-        plan: "host",
-        mode: "mock",
-        priceLabels: { board: "$3.99", host: "$4.99/month" },
-      },
+      plus: { active: true, plan: "host", mode: "mock" },
     });
     expect((await getBoard(slug))?.plus).toMatchObject({ plan: "host", source: "mock" });
     expect((await view(slug)).plus).toMatchObject({ active: true, plan: "host" });

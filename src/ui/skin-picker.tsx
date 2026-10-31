@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
+import { formatEur } from "../domain/makes-ui";
 import { getSkin, type SkinId } from "../domain/skins";
-import { t, tf, type MessageKey } from "../i18n";
+import { t, tCount, tf, type Locale, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/client";
-import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
-import { Icon } from "./icons";
+import { DEFAULT_LOCALE } from "../i18n/locales";
+import { Icon, type IconName } from "./icons";
 import { Button, Tag, cx } from "./primitives";
 import { Sticker } from "./stickers";
 import { Sheet } from "./board";
@@ -147,78 +148,118 @@ export function TryOnBar({
   );
 }
 
-export type PlusPlan = "board" | "host";
+/** The one pack the sheet sells, as Policy offers it (`Policy.credits.packs[0]`). */
+export interface PlusPack {
+  credits: number;
+  eurCents: number;
+}
 
-export interface PlusPrices {
-  /** Display label for the one-time board plan, e.g. "$3.99" (Policy). */
-  board: string;
-  /** Display label for the monthly host plan, e.g. "$4.99" (Policy). */
-  host: string;
+interface Perk {
+  icon?: IconName;
+  foil?: boolean;
+  soon?: boolean;
+  title: string;
+  body?: string;
 }
 
 /**
- * The one screen that asks for money. Bought by whoever made the
- * board; everyone on it gets the perks. `available=false` (billing
- * off) shows the plans honestly with "Coming soon" and charges
- * nothing.
+ * The one screen that asks for money (docs/15, PIN-182): Board Plus
+ * and its creations as a single purchase for the board. Anyone on
+ * the board can buy it; everyone on it gets the perks. The price is
+ * formatted from the Policy pack, never a label. `available=false`
+ * (billing off) says "Coming soon" and charges nothing; with Plus
+ * already on, the sheet only adds creations.
  */
 export function PlusSheet({
-  plan,
-  onPlanChange,
-  prices,
+  pack,
+  plusActive,
   available,
-  busy,
+  lockedLine = null,
+  paymentNote = false,
+  busy = false,
+  error = null,
   foilSrc,
   onGet,
   onClose,
   layer = "fixed",
 }: {
-  plan: PlusPlan;
-  onPlanChange: (plan: PlusPlan) => void;
-  prices: PlusPrices;
+  pack: PlusPack | null;
+  /** The board already has Plus: the sheet only adds creations. */
+  plusActive: boolean;
+  /** Buying can work in this mode; false shows Coming soon and sells nothing. */
   available: boolean;
+  /** The button shows but cannot be pressed; this line says why (a guest in the demo). */
+  lockedLine?: string | null;
+  /** A real checkout follows (stripe): one quiet line about the local currency and the statement name. */
+  paymentNote?: boolean;
   busy?: boolean;
+  /** A checkout error, already worded; announced when it appears. */
+  error?: string | null;
   foilSrc?: string;
-  onGet?: (plan: PlusPlan) => void;
+  onGet?: () => void;
   onClose?: () => void;
   layer?: "fixed" | "absolute" | "none";
 }) {
+  const locale = useLocale();
+  const offer = available ? pack : null;
   // `soon`: planned, not built yet. The sheet says so instead of
   // promising it (docs/15: the demo stays honest).
-  const perks: { icon?: "skin" | "scene" | "download"; foil?: boolean; soon?: boolean; title: MessageKey; body: MessageKey }[] = [
-    { icon: "skin", title: "ui.plusPerkSkins", body: "ui.plusPerkSkinsBody" },
-    { foil: true, title: "ui.plusPerkFoil", body: "ui.plusPerkFoilBody" },
-    { icon: "scene", soon: true, title: "ui.plusPerkScenes", body: "ui.plusPerkScenesBody" },
-    { icon: "download", soon: true, title: "ui.plusPerkDownloads", body: "ui.plusPerkDownloadsBody" },
-  ];
-  const locale = useLocale();
-  const price = plan === "board" ? prices.board : prices.host;
-  // One radio group per sheet: two open sheets never share a name.
-  const planGroup = `plus-plan-${useId()}`;
+  const perks: Perk[] = [];
+  if (pack) {
+    perks.push({
+      icon: "plus",
+      title: tCount(locale, "ui.plusPerkCreations", pack.credits),
+      body: t(locale, "ui.plusPerkCreationsBody"),
+    });
+  }
+  if (plusActive) {
+    perks.push({ icon: "check", title: t(locale, "ui.plusIsOn") });
+  } else {
+    perks.push(
+      { icon: "skin", title: t(locale, "ui.plusPerkSkins"), body: t(locale, "ui.plusPerkSkinsBody") },
+      { foil: true, title: t(locale, "ui.plusPerkFoil"), body: t(locale, "ui.plusPerkFoilBody") },
+      { icon: "scene", soon: true, title: t(locale, "ui.plusPerkScenes"), body: t(locale, "ui.plusPerkScenesBody") },
+      { icon: "download", soon: true, title: t(locale, "ui.plusPerkDownloads"), body: t(locale, "ui.plusPerkDownloadsBody") },
+    );
+  }
+  // Whole sentences with placeholders (PIN-194), never glued fragments.
+  const price = offer ? formatEur(offer.eurCents, locale) : "";
+  const addKey = offer
+    ? (`ui.plusAddPrice.${new Intl.PluralRules(locale).select(offer.credits) === "one" ? "one" : "other"}` as MessageKey)
+    : null;
+  const cta = busy
+    ? t(locale, "makes.buying")
+    : offer
+      ? plusActive && addKey
+        ? tf(locale, addKey, { n: offer.credits, price })
+        : tf(locale, "ui.plusGetPrice", { price })
+      : t(locale, "ui.plusSoon");
+  const line = !offer ? t(locale, "ui.plusSoonLine") : lockedLine ?? (plusActive ? null : t(locale, "ui.plusOnce"));
   return (
     <Sheet
       title={t(locale, "ui.plusTitle")}
+      closeLabel={t(locale, "ui.close")}
       onClose={onClose}
       layer={layer}
       footer={
         <>
-          <Button
-            variant="primary"
-            size="lg"
-            block
-            disabled={!available || busy}
-            onClick={() => onGet?.(plan)}
-          >
-            {available ? tf(locale, "ui.plusGetPrice", { price }) : t(locale, "ui.plusSoon")}
+          <Button variant="primary" size="lg" block disabled={!offer || busy || lockedLine !== null} onClick={() => onGet?.()}>
+            {cta}
           </Button>
-          {!available ? <p className="pn-plus-soon">{t(locale, "ui.plusSoonLine")}</p> : null}
+          {line ? <p className="pn-plus-soon">{line}</p> : null}
+          {offer && paymentNote ? <p className="pn-plus-soon">{t(locale, "ui.plusPayNote")}</p> : null}
+          {error ? (
+            <p className="pn-plus-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           <Button variant="quiet" block onClick={onClose}>
             {t(locale, "ui.notNow")}
           </Button>
         </>
       }
     >
-      <p className="pn-plus-lead">{t(locale, "ui.plusLead")}</p>
+      <p className="pn-plus-lead">{t(locale, plusActive ? "makes.lead" : "ui.plusLead")}</p>
       <ul className="pn-perks">
         {perks.map((perk) => (
           <li key={perk.title}>
@@ -231,28 +272,14 @@ export function PlusSheet({
             )}
             <span>
               <b>
-                {t(locale, perk.title)}
+                {perk.title}
                 {perk.soon ? <Tag className="pn-perk-soon">{t(locale, "ui.perkSoon")}</Tag> : null}
               </b>
-              <small>{t(locale, perk.body)}</small>
+              {perk.body ? <small>{perk.body}</small> : null}
             </span>
           </li>
         ))}
       </ul>
-      <fieldset className="pn-plans">
-        <legend className="pn-sr">{t(locale, "ui.plusPlans")}</legend>
-        {(["board", "host"] as const).map((id) => (
-          <label key={id} className="pn-plan">
-            <input type="radio" name={planGroup} value={id} checked={plan === id} onChange={() => onPlanChange(id)} />
-            <span className="pn-plan-name">{t(locale, id === "board" ? "ui.plusPlanBoard" : "ui.plusPlanHost")}</span>
-            <span className="pn-plan-price">{id === "board" ? prices.board : prices.host}</span>
-            <span className="pn-plan-note">{t(locale, id === "board" ? "ui.plusPlanBoardNote" : "ui.plusPlanHostNote")}</span>
-            <span className="pn-plan-check" aria-hidden="true">
-              <Icon name="check" size={14} strokeWidth={2.5} />
-            </span>
-          </label>
-        ))}
-      </fieldset>
     </Sheet>
   );
 }

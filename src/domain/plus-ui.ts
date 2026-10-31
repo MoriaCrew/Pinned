@@ -11,7 +11,7 @@
  * - A Plus skin without Plus is tried on locally: nothing changes
  *   for anyone else until it is kept, and keeping it asks for Plus.
  */
-import type { PlusPlan, PlusView } from "./plus";
+import type { PlusView } from "./plus";
 import { getSkin, isPlusSkinId, isSkinId, type SkinId } from "./skins";
 
 /** The Plus fields of the board view the page reads (all optional on old payloads). */
@@ -71,9 +71,83 @@ export function keepStep(skin: SkinId, plus: Pick<PlusState, "active"> | null | 
   return canApplyDirectly(skin, plus) ? "apply" : "offer";
 }
 
-/** Plus can be bought here (mode "off" shows the plans as Coming soon). */
-export function canBuyPlus(plus: Pick<PlusState, "mode"> | null | undefined): boolean {
-  return plus?.mode !== undefined && plus.mode !== "off";
+/**
+ * How the Plus sheet's one button buys (PIN-182, docs/15). `stripe`:
+ * the Policy pack through the credits checkout route (any joined
+ * member). `mock`: the host-only demo grant (POST plus). `none`: billing
+ * is off or unknown, so the sheet says "Coming soon" and sells nothing.
+ */
+export function plusPurchasePath(mode: PlusState["mode"] | undefined): "stripe" | "mock" | "none" {
+  return mode === "stripe" ? "stripe" : mode === "mock" ? "mock" : "none";
+}
+
+/**
+ * The Plus sheet stays up while either purchase request is in flight
+ * (the credits checkout call or the mock grant), so Escape, the scrim
+ * and "Not now" cannot unmount it mid-request: a cancelled host would
+ * otherwise still be sent to Checkout, and a failed answer would land
+ * nowhere.
+ */
+export function plusSheetLocked(makesBusy: boolean, checkingOut: boolean): boolean {
+  return makesBusy || checkingOut;
+}
+
+/** The outcome of the mock grant, as the sheet acts on it. */
+export type MockGrantOutcome = "granted" | "unavailable" | "redirect" | "failed" | "skipped";
+
+/**
+ * After the mock grant answers, the merged sheet closes on a grant
+ * (the look applies or the board refetches) and on a failure (the
+ * dock notice says so; an idle-looking sheet would hide it). It stays
+ * up for "unavailable" (it shows Coming soon) and for a redirect.
+ */
+export function closesPlusSheetAfterMock(kind: MockGrantOutcome): boolean {
+  return kind === "granted" || kind === "failed";
+}
+
+/** What to do with the try-on stored before a Stripe checkout once the host is back. */
+export type ReturnSkinStep =
+  /** Not yet (the view has not caught up) or nothing was stored: do nothing. */
+  | { kind: "wait" }
+  /** Forget the stored look without applying it. */
+  | { kind: "clear" }
+  /** Save this look on the board, then forget it. */
+  | { kind: "apply"; skin: SkinId };
+
+/**
+ * After a Stripe checkout lands the host back on the board (PIN-182):
+ * the look they were trying on goes onto the board once the refetched
+ * view says Plus counts, whether or not the `?billing=` flag is still
+ * on the URL (it is stripped on arrival, and a reload loses it). A
+ * cancelled or failed return only forgets the look. Never applies a
+ * look the board already wears, or when the viewer is not the host
+ * (the first poll says who is).
+ */
+export function returnSkinStep({
+  flag,
+  stored,
+  isHost,
+  plusActive,
+  boardSkin,
+}: {
+  flag: "processing" | "cancelled" | "failed" | null;
+  /** The look stored before leaving, and whether this tab already came back from Checkout. */
+  stored: { skin: SkinId; returned: boolean } | null;
+  isHost: boolean;
+  plusActive: boolean;
+  boardSkin: SkinId;
+}): ReturnSkinStep {
+  if (stored === null) return { kind: "wait" };
+  if (flag === "cancelled" || flag === "failed") return { kind: "clear" };
+  // Only a tab that really came back from Checkout may apply: the
+  // processing flag on arrival, or the marker it left for a reload. An
+  // abandoned visit keeps its key but never that marker, so a later
+  // Plus grant by someone else cannot repaint the board with it.
+  if (!stored.returned && flag !== "processing") return { kind: "wait" };
+  // The webhook lands after the redirect: wait for Plus to count on the
+  // refetched view; nothing is forgotten until the save has answered.
+  if (!isHost || !plusActive) return { kind: "wait" };
+  return stored.skin === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored.skin };
 }
 
 /**
@@ -195,8 +269,7 @@ export interface LookFlowState {
   tryOn: SkinId | null;
   /** Skin shown while its PATCH runs (optimistic); null when none. */
   applying: SkinId | null;
-  plan: PlusPlan;
-  /** POST /plus in flight. */
+  /** POST /plus (the mock checkout) in flight. */
   checkingOut: boolean;
   /** Checkout said "unavailable": the Plus sheet shows Coming soon. */
   unavailable: boolean;
@@ -209,7 +282,6 @@ export const initialLookFlow: LookFlowState = {
   sheet: "none",
   tryOn: null,
   applying: null,
-  plan: "board",
   checkingOut: false,
   unavailable: false,
   grantedNow: false,
@@ -220,9 +292,10 @@ export type LookFlowEvent =
   | { type: "openLook" }
   | { type: "closeSheet" }
   | { type: "tryOn"; skin: SkinId }
+  /** A failed save after a return: wear the look again for a retry, keeping the failure notice. */
+  | { type: "retryTryOn"; skin: SkinId }
   | { type: "endTryOn" }
   | { type: "offerPlus" }
-  | { type: "choosePlan"; plan: PlusPlan }
   | { type: "applyStart"; skin: SkinId }
   | { type: "applyDone"; skin: SkinId }
   | { type: "applyFailed" }
@@ -243,12 +316,12 @@ export function lookFlow(state: LookFlowState, event: LookFlowEvent): LookFlowSt
       return state.checkingOut ? state : { ...state, sheet: "none" };
     case "tryOn":
       return { ...state, sheet: "none", tryOn: event.skin, notice: null };
+    case "retryTryOn":
+      return { ...state, tryOn: event.skin };
     case "endTryOn":
       return { ...state, tryOn: null, sheet: state.sheet === "plus" ? "none" : state.sheet };
     case "offerPlus":
       return { ...state, sheet: "plus", unavailable: false, notice: null };
-    case "choosePlan":
-      return { ...state, plan: event.plan };
     case "applyStart":
       return { ...state, sheet: "none", applying: event.skin, notice: null };
     case "applyDone":

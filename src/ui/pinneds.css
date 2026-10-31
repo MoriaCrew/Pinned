@@ -652,21 +652,8 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-perks b { display: block; font: 700 16px/22px var(--font-ui); }
 .pn-perk-soon { margin-left: var(--space-2); vertical-align: 2px; }
 .pn-perks small { display: block; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
-.pn-plus-price { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--line); }
-.pn-plus-price b { font: 700 28px/32px var(--font-mono); }
-.pn-plus-price span { color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
-/* Two plans (PIN-97): this board once, or the monthly host plan. */
-.pn-plans { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); border: 0; margin: 0; padding: 0; }
-.pn-plan { position: relative; display: grid; gap: 2px; padding: var(--space-3); min-height: var(--tap-main); border: 1.5px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface-raised); cursor: pointer; }
-.pn-plan input { position: absolute; opacity: 0; pointer-events: none; }
-.pn-plan-name { font: 700 15px/20px var(--font-ui); color: var(--ink); }
-.pn-plan-price { font: 700 24px/30px var(--font-mono); color: var(--ink); }
-.pn-plan-note { font: 500 13px/18px var(--font-ui); color: var(--ink-muted); }
-.pn-plan:has(input:checked) { border-color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
-.pn-plan:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-.pn-plan-check { position: absolute; top: var(--space-2); right: var(--space-2); display: none; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--surface-raised); }
-.pn-plan:has(input:checked) .pn-plan-check { display: grid; }
 .pn-plus-soon { margin: 0; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-align: center; }
+.pn-plus-error { margin: 0; color: var(--danger); font: 650 15px/20px var(--font-ui); text-align: center; }
 .pn-menu { position: absolute; z-index: 30; min-width: 12rem; display: grid; padding: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: var(--shadow-dock); }
 .pn-menu-item { display: flex; align-items: center; text-decoration: none; gap: var(--space-2); min-height: var(--tap); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink); font: 600 15px/20px var(--font-ui); text-align: left; cursor: pointer; }
 .pn-menu-item:hover { background: var(--surface-sunk); }

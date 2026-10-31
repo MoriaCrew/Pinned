@@ -15,7 +15,6 @@ import {
 } from "./plus";
 import { DEFAULT_SKIN, SKINS, SKIN_IDS, getSkin, isPlusSkinId } from "./skins";
 
-const LABELS = { board: "$3.99", host: "$4.99/month" };
 const MOCK: BoardPlus = { plan: "board", source: "mock", grantedAt: 1_000 };
 const PAID: BoardPlus = { plan: "board", source: "stripe", grantedAt: 1_000 };
 
@@ -98,20 +97,12 @@ describe("Board Plus domain (PIN-103)", () => {
     }
   });
 
-  it("view exposes state, mode and labels — never source or grant time", () => {
-    expect(plusView({}, { mode: "off", priceLabels: LABELS })).toEqual({
-      active: false,
-      mode: "off",
-      priceLabels: LABELS,
-    });
-    expect(plusView({ plus: null }, { mode: "mock", priceLabels: LABELS }).active).toBe(false);
-    expect(plusView({ plus: MOCK }, { mode: "off", priceLabels: LABELS })).toEqual({
-      active: false,
-      mode: "off",
-      priceLabels: LABELS,
-    });
-    const view = plusView({ plus: MOCK }, { mode: "mock", priceLabels: LABELS });
-    expect(view).toEqual({ active: true, plan: "board", mode: "mock", priceLabels: LABELS });
-    expect(JSON.stringify(view)).not.toMatch(/source|grantedAt/);
+  it("view exposes state and mode — never source, grant time or a price", () => {
+    expect(plusView({}, "off")).toEqual({ active: false, mode: "off" });
+    expect(plusView({ plus: null }, "mock").active).toBe(false);
+    expect(plusView({ plus: MOCK }, "off")).toEqual({ active: false, mode: "off" });
+    const view = plusView({ plus: MOCK }, "mock");
+    expect(view).toEqual({ active: true, plan: "board", mode: "mock" });
+    expect(JSON.stringify(view)).not.toMatch(/source|grantedAt|price/i);
   });
 });

@@ -32,8 +32,8 @@ describe("UI kit sentences (PIN-194), English unchanged", () => {
     expect(html(h(Pin, { src: "/a.webp", label: "Duck", state: "dropped", onToggle: () => {} }))).toContain('aria-label="Duck, left out"');
     const people = [{ id: "a", name: "Ana" }, { id: "b", name: "Bo" }];
     expect(html(h(AvatarStack, { people }))).toContain('aria-label="2 people: Ana, Bo"');
-    const sheet = html(h(PlusSheet, { plan: "board", onPlanChange: () => {}, prices: { board: "€3", host: "€5" }, available: true }));
-    expect(sheet).toContain("Get Plus · €3");
+    const sheet = html(h(PlusSheet, { pack: { credits: 20, eurCents: 300 }, plusActive: false, available: true }));
+    expect(sheet).toContain("Get Plus · €3.00");
     expect(html(h(TryOnBar, { skin: "paper" }))).toContain("Trying on <b>");
     expect(boardMetaLine({ people: 2, things: 1 })).toBe("2 people · 1 thing");
     expect(pickedCountLabel(1, 4)).toBe("1 of 4 picked");
@@ -47,8 +47,8 @@ describe("UI kit follows the language (PIN-194)", () => {
       "Remix de <b>Bureau</b> par Robin",
     );
     expect(inFrench(h(Pin, { src: "/a.webp", label: "Canard", state: "dropped", onToggle: () => {} }))).toContain('aria-label="Canard, laissé de côté"');
-    expect(inFrench(h(PlusSheet, { plan: "board", onPlanChange: () => {}, prices: { board: "3 €", host: "5 €" }, available: true }))).toContain(
-      "Obtenir Plus · 3 €",
+    expect(inFrench(h(PlusSheet, { pack: { credits: 20, eurCents: 300 }, plusActive: false, available: true })).replace(/[  ]/g, " ")).toContain(
+      "Obtenir Plus · 3,00 €",
     );
   });
 

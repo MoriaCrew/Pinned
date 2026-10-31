@@ -114,15 +114,12 @@ describe("UI kit components (PIN-97)", () => {
   });
 
   it("never offers a purchase when billing is off", () => {
-    const off = html(
-      h(PlusSheet, { plan: "board", onPlanChange: () => {}, prices: { board: "$3.99", host: "$4.99" }, available: false, layer: "none" }),
-    );
+    const pack = { credits: 20, eurCents: 299 };
+    const off = html(h(PlusSheet, { pack, plusActive: false, available: false, layer: "none" }));
     expect(off).toContain("Coming soon");
     expect(off).not.toContain("Get Plus");
-    const on = html(
-      h(PlusSheet, { plan: "host", onPlanChange: () => {}, prices: { board: "$3.99", host: "$4.99" }, available: true, layer: "none" }),
-    );
-    expect(on).toContain("Get Plus · $4.99");
+    const on = html(h(PlusSheet, { pack, plusActive: false, available: true, layer: "none" }));
+    expect(on).toContain("Get Plus · €2.99");
     // Perks that aren't built yet say so.
     expect((on.match(/pn-perk-soon/g) ?? []).length).toBe(2);
   });

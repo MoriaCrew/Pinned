@@ -40,7 +40,6 @@ export {
   TryOnBar,
   skinMood,
   skinName,
-  type PlusPlan,
-  type PlusPrices,
+  type PlusPack,
   type SkinOption,
 } from "./skin-picker";
