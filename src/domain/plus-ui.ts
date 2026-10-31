@@ -81,6 +81,42 @@ export function plusPurchasePath(mode: PlusState["mode"] | undefined): "stripe" 
   return mode === "stripe" ? "stripe" : mode === "mock" ? "mock" : "none";
 }
 
+/** What to do with the try-on stored before a Stripe checkout once the host is back. */
+export type ReturnSkinStep =
+  /** Not yet (the view has not caught up) or nothing was stored: do nothing. */
+  | { kind: "wait" }
+  /** Forget the stored look without applying it. */
+  | { kind: "clear" }
+  /** Save this look on the board, then forget it. */
+  | { kind: "apply"; skin: SkinId };
+
+/**
+ * After `?billing=` lands the host back on the board (PIN-182): the
+ * look they were trying on goes onto the board once the refetched view
+ * says Plus counts. The webhook grants Plus after the redirect, so it
+ * waits; a cancelled or failed return only forgets the look. Never
+ * applies a look the board already wears, or when the viewer is not
+ * the host (the first poll says who is).
+ */
+export function returnSkinStep({
+  flag,
+  stored,
+  isHost,
+  plusActive,
+  boardSkin,
+}: {
+  flag: "processing" | "cancelled" | "failed" | null;
+  stored: SkinId | null;
+  isHost: boolean;
+  plusActive: boolean;
+  boardSkin: SkinId;
+}): ReturnSkinStep {
+  if (flag === null || stored === null) return { kind: "wait" };
+  if (flag !== "processing") return { kind: "clear" };
+  if (!isHost || !plusActive) return { kind: "wait" };
+  return stored === boardSkin ? { kind: "clear" } : { kind: "apply", skin: stored };
+}
+
 /**
  * The pin that wears foil: the board's first pinned thing, only
  * while Plus counts (docs/14: keep foil rare). Cards come oldest

@@ -15,10 +15,12 @@ import {
 } from "../../../domain/makes-ui";
 import type { PlusMode } from "../../../domain/plus";
 import { plusPurchasePath } from "../../../domain/plus-ui";
+import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
 import { Button, IconButton } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
+import { writeReturnSkin } from "./return-skin";
 
 /** Refetches after a billing return before the banner stops waiting (display timing only). */
 const BILLING_REFETCH_ATTEMPTS = 5;
@@ -182,8 +184,8 @@ export interface MakesFlow {
   busy: boolean;
   error: CreditCheckoutErrorKind | null;
   unavailable: boolean;
-  /** Post the pack to the credits route and leave for hosted Checkout. */
-  buy: (lookupKey: string) => void;
+  /** Post the pack to the credits route and leave for hosted Checkout; `tryOn` is the look to bring back. */
+  buy: (lookupKey: string, tryOn?: SkinId | null) => void;
   banner: BillingBannerKind | null;
   dismissBanner: () => void;
 }
@@ -194,7 +196,9 @@ export interface MakesFlow {
  * banner. Buying posts the Policy pack to the PIN-149 route and
  * leaves for the hosted checkout URL it returns; the count at that
  * moment is kept (sessionStorage) so the return banner can tell a
- * real rise from a redirect that granted nothing.
+ * real rise from a redirect that granted nothing, and so is the
+ * Plus look the host was trying on, to put on the board once Plus
+ * has landed.
  */
 export function useMakesFlow({
   slug,
@@ -269,12 +273,13 @@ export function useMakesFlow({
     return () => window.clearTimeout(timer);
   }, [banner, slug]);
 
-  async function startCheckout(lookupKey: string) {
+  async function startCheckout(lookupKey: string, tryOn: SkinId | null) {
     if (buying.current || plusPurchasePath(plusMode) !== "stripe") return;
     buying.current = true;
     setBusy(true);
     setError(null);
     writeBaseline(slug, availableMakes);
+    writeReturnSkin(slug, tryOn);
     try {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/credits/checkout`, {
         method: "POST",
@@ -291,11 +296,13 @@ export function useMakesFlow({
       }
       buying.current = false;
       setBusy(false);
+      writeReturnSkin(slug, null);
       if (result.kind === "unavailable") setUnavailable(true);
       else setError(result.error);
     } catch {
       buying.current = false;
       setBusy(false);
+      writeReturnSkin(slug, null);
       setError("generic");
     }
   }
@@ -317,7 +324,7 @@ export function useMakesFlow({
     busy,
     error,
     unavailable,
-    buy: (lookupKey) => void startCheckout(lookupKey),
+    buy: (lookupKey, tryOn = null) => void startCheckout(lookupKey, tryOn),
     banner,
     dismissBanner: () => setDismissed(true),
   };

@@ -14,6 +14,7 @@ import {
   plusPurchasePath,
   readCheckoutResponse,
   readSkinResponse,
+  returnSkinStep,
   safeRedirectUrl,
   urlWithoutTryOn,
   type LookFlowEvent,
@@ -216,6 +217,30 @@ describe("look flow reducer", () => {
   it("answers a 402 by keeping the look on locally and offering Plus", () => {
     const state = run([{ type: "applyStart", skin: "postcard" }, { type: "plusRequired", skin: "postcard" }]);
     expect(state).toMatchObject({ applying: null, tryOn: "postcard", sheet: "plus" });
+  });
+});
+
+describe("look after a Stripe return (PIN-182)", () => {
+  const back = { flag: "processing" as const, stored: "darkroom" as const, isHost: true, plusActive: true, boardSkin: "paper" as const };
+
+  it("applies the stored try-on once Plus counts on the refetched view", () => {
+    expect(returnSkinStep(back)).toEqual({ kind: "apply", skin: "darkroom" });
+  });
+
+  it("waits while the webhook has not granted Plus yet, or the first poll has not said who is host", () => {
+    expect(returnSkinStep({ ...back, plusActive: false })).toEqual({ kind: "wait" });
+    expect(returnSkinStep({ ...back, isHost: false })).toEqual({ kind: "wait" });
+  });
+
+  it("does nothing without a return flag or a stored look", () => {
+    expect(returnSkinStep({ ...back, flag: null })).toEqual({ kind: "wait" });
+    expect(returnSkinStep({ ...back, stored: null })).toEqual({ kind: "wait" });
+  });
+
+  it("forgets the look on a cancelled or failed return, and when the board already wears it", () => {
+    expect(returnSkinStep({ ...back, flag: "cancelled", plusActive: false })).toEqual({ kind: "clear" });
+    expect(returnSkinStep({ ...back, flag: "failed" })).toEqual({ kind: "clear" });
+    expect(returnSkinStep({ ...back, boardSkin: "darkroom" })).toEqual({ kind: "clear" });
   });
 });
 

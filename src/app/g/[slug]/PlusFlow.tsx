@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { BillingFlag } from "../../../domain/makes-ui";
 import type { PlusView } from "../../../domain/plus";
 import {
   activeTryOn,
@@ -14,6 +15,7 @@ import {
   plusPurchasePath,
   readCheckoutResponse,
   readSkinResponse,
+  returnSkinStep,
   showTryOnBar,
   urlWithoutTryOn,
   type CheckoutResult,
@@ -28,6 +30,7 @@ import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
 import { ChangeLookSheet } from "./ChangeLookSheet";
 import { checkoutErrorLine, type MakesFlow } from "./MakesFlow";
+import { readReturnSkin, writeReturnSkin } from "./return-skin";
 import styles from "./board.module.css";
 
 /** How long a confirmation line stays above the dock (display timing only). */
@@ -75,6 +78,8 @@ export interface LookFlow {
  * honest about it: a free look shows at once and reverts on error,
  * a try-on is local until kept, Keep it asks for Plus only when
  * the board lacks it, and billing "off" never sells anything.
+ * Back from a Stripe checkout (PIN-182) it puts the look the host
+ * was trying on onto the board, once Plus has landed.
  */
 export function useLookFlow({
   slug,
@@ -82,6 +87,7 @@ export function useLookFlow({
   isHost,
   plus,
   tryOnParam,
+  billingFlag,
 }: {
   slug: string;
   boardSkin: SkinId;
@@ -89,6 +95,8 @@ export function useLookFlow({
   plus: PlusView | undefined;
   /** `?tryon=` from the link (validated again here). */
   tryOnParam: unknown;
+  /** `?billing=` from the billing return, validated by the caller. */
+  billingFlag: BillingFlag | null;
 }): LookFlow {
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(lookFlow, initialLookFlow);
@@ -106,6 +114,27 @@ export function useLookFlow({
     if (skin) dispatch({ type: "tryOn", skin });
     else clearTryOnParam();
   }, [isHost, tryOnParam, boardSkin]);
+
+  // Back from Stripe (PIN-182): the host's try-on goes onto the board
+  // once the refetched view says Plus counts (the webhook lands after
+  // the redirect), then the stored look is forgotten. Once only.
+  const returnHandled = useRef(false);
+  useEffect(() => {
+    if (returnHandled.current || billingFlag === null) return;
+    const step = returnSkinStep({
+      flag: billingFlag,
+      stored: readReturnSkin(slug),
+      isHost,
+      plusActive: plus?.active === true,
+      boardSkin,
+    });
+    if (step.kind === "wait") return;
+    returnHandled.current = true;
+    writeReturnSkin(slug, null);
+    if (step.kind === "apply") void applySkin(step.skin);
+    // applySkin only closes over the query client, the slug and dispatch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingFlag, slug, isHost, plus?.active, boardSkin]);
 
   // A confirmation fades; an error stays until dismissed or replaced.
   const notice = state.notice;
@@ -302,7 +331,7 @@ export function PlusFlow({
     makes.closeSheet();
   };
   const getPlus = () => {
-    if (stripe && pack) makes.buy(pack.lookupKey);
+    if (stripe && pack) makes.buy(pack.lookupKey, look.tryOn);
     else void look.getPlus().then((granted) => granted && makes.closeSheet());
   };
   return (

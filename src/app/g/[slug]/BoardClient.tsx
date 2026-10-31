@@ -73,7 +73,7 @@ import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { DeleteBoardSheet } from "./DeleteBoardSheet";
-import { isPoolEmptyCode, type MakesPack } from "../../../domain/makes-ui";
+import { isPoolEmptyCode, parseBillingFlag, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
@@ -328,7 +328,14 @@ function BoardBody({
   // free skin) and the host's Change look / try-on / Board Plus flow.
   const boardSkin = skinForTheme(view.board.themeId);
   const isHost = view.viewer?.isHost === true;
-  const look = useLookFlow({ slug, boardSkin, isHost, plus: view.plus, tryOnParam: tryOnSkin });
+  const look = useLookFlow({
+    slug,
+    boardSkin,
+    isHost,
+    plus: view.plus,
+    tryOnParam: tryOnSkin,
+    billingFlag: parseBillingFlag(initialBilling),
+  });
   // PIN-152/182: creations indicator, the Plus sheet's stripe buy and
   // the return banner. The indicator is inert while the view carries
   // no credits; the sheet buys by Plus mode (stripe here, mock in PlusFlow).
