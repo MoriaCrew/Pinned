@@ -2,18 +2,23 @@
 
 import { useEffect, useReducer, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { PlusPlan, PlusView } from "../../../domain/plus";
+import type { BillingFlag } from "../../../domain/makes-ui";
+import type { PlusView } from "../../../domain/plus";
 import {
   activeTryOn,
-  canBuyPlus,
   chooseLook,
   effectiveSkin,
   initialLookFlow,
   keepStep,
   lookFlow,
   parseTryOn,
+  plusPurchasePath,
+  plusSheetLocked,
+  closesPlusSheetAfterMock,
+  type MockGrantOutcome,
   readCheckoutResponse,
   readSkinResponse,
+  returnSkinStep,
   showTryOnBar,
   urlWithoutTryOn,
   type CheckoutResult,
@@ -24,10 +29,12 @@ import {
 import type { SkinId } from "../../../domain/skins";
 import { t, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
-import { IconButton, PlusSheet, TryOnBar, cx, skinName } from "../../../ui";
+import { IconButton, PlusSheet, TryOnBar, cx, skinName, type PlusPack } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
 import { ChangeLookSheet } from "./ChangeLookSheet";
+import { checkoutErrorLine, type MakesFlow } from "./MakesFlow";
+import { markReturnSkinReturned, readReturnSkin, writeReturnSkin } from "./return-skin";
 import styles from "./board.module.css";
 
 /** How long a confirmation line stays above the dock (display timing only). */
@@ -63,8 +70,8 @@ export interface LookFlow {
   pickLook: (skin: SkinId) => void;
   keep: () => void;
   undo: () => void;
-  choosePlan: (plan: PlusPlan) => void;
-  getPlus: (plan: PlusPlan) => void;
+  /** The mock checkout (POST plus, host only); resolves true once Plus was granted. */
+  getPlus: () => Promise<MockGrantOutcome>;
   dismissNotice: () => void;
 }
 
@@ -75,6 +82,8 @@ export interface LookFlow {
  * honest about it: a free look shows at once and reverts on error,
  * a try-on is local until kept, Keep it asks for Plus only when
  * the board lacks it, and billing "off" never sells anything.
+ * Back from a Stripe checkout (PIN-182) it puts the look the host
+ * was trying on onto the board, once Plus has landed.
  */
 export function useLookFlow({
   slug,
@@ -82,6 +91,7 @@ export function useLookFlow({
   isHost,
   plus,
   tryOnParam,
+  billingFlag,
 }: {
   slug: string;
   boardSkin: SkinId;
@@ -89,6 +99,8 @@ export function useLookFlow({
   plus: PlusView | undefined;
   /** `?tryon=` from the link (validated again here). */
   tryOnParam: unknown;
+  /** `?billing=` from the billing return, validated by the caller. */
+  billingFlag: BillingFlag | null;
 }): LookFlow {
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(lookFlow, initialLookFlow);
@@ -106,6 +118,42 @@ export function useLookFlow({
     if (skin) dispatch({ type: "tryOn", skin });
     else clearTryOnParam();
   }, [isHost, tryOnParam, boardSkin]);
+
+  // Back from Stripe (PIN-182): the host's try-on goes onto the board
+  // once the refetched view says Plus counts (the webhook lands after
+  // the redirect; the flag may already be gone). The stored look is
+  // forgotten only once the save has answered; a failed save hands the
+  // look back to the try-on bar so Keep it can retry. Once only.
+  const returnHandled = useRef(false);
+  // Landing with the processing flag marks the stored look as returned
+  // from Checkout, so a reload before the webhook lands still applies it.
+  useEffect(() => {
+    if (billingFlag === "processing") markReturnSkinReturned(slug);
+  }, [billingFlag, slug]);
+  useEffect(() => {
+    if (returnHandled.current) return;
+    const step = returnSkinStep({
+      flag: billingFlag,
+      stored: readReturnSkin(slug),
+      isHost,
+      plusActive: plus?.active === true,
+      boardSkin,
+    });
+    if (step.kind === "wait") return;
+    returnHandled.current = true;
+    if (step.kind === "clear") {
+      writeReturnSkin(slug, null);
+      return;
+    }
+    void applySkin(step.skin).then((outcome) => {
+      writeReturnSkin(slug, null);
+      // A failed save keeps its notice and hands the look back to the
+      // try-on bar; plusRequired already opened the Plus sheet with it.
+      if (outcome === "failed") dispatch({ type: "retryTryOn", skin: step.skin });
+    });
+    // applySkin only closes over the query client, the slug and dispatch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingFlag, slug, isHost, plus?.active, boardSkin]);
 
   // A confirmation fades; an error stays until dismissed or replaced.
   const notice = state.notice;
@@ -128,7 +176,7 @@ export function useLookFlow({
     }
   }
 
-  async function applySkin(skin: SkinId) {
+  async function applySkin(skin: SkinId): Promise<SkinResult["kind"]> {
     dispatch({ type: "applyStart", skin });
     const result = await patchSkin(skin);
     if (result.kind === "applied") {
@@ -146,14 +194,17 @@ export function useLookFlow({
       dispatch({ type: "applyFailed" });
     }
     void queryClient.invalidateQueries({ queryKey: key });
+    return result.kind;
   }
 
-  async function startCheckout(plan: PlusPlan): Promise<CheckoutResult> {
+  // The demo checkout: the host-only POST plus (PIN-103). A real
+  // purchase goes through the credits route (useMakesFlow.buy).
+  async function startCheckout(): Promise<CheckoutResult> {
     try {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/plus`, {
         ...JSON_REQUEST,
         method: "POST",
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan: "board" }),
       });
       return readCheckoutResponse(response.status, await readJson(response));
     } catch {
@@ -161,17 +212,17 @@ export function useLookFlow({
     }
   }
 
-  async function getPlus(plan: PlusPlan) {
-    if (state.checkingOut || !canBuyPlus(plus)) return;
+  async function getPlus(): Promise<MockGrantOutcome> {
+    if (state.checkingOut || plusPurchasePath(plus?.mode) !== "mock") return "skipped";
     const skin = state.tryOn;
     dispatch({ type: "checkoutStart" });
-    const result = await startCheckout(plan);
+    const result = await startCheckout();
     switch (result.kind) {
       case "granted":
         dispatch({ type: "checkoutGranted" });
         queryClient.setQueryData<BoardClientView>(key, (current) =>
           current
-            ? { ...current, plus: result.plus ?? (current.plus ? { ...current.plus, active: true, plan } : current.plus) }
+            ? { ...current, plus: result.plus ?? (current.plus ? { ...current.plus, active: true, plan: "board" } : current.plus) }
             : current,
         );
         if (skin) await applySkin(skin);
@@ -179,17 +230,18 @@ export function useLookFlow({
           dispatch({ type: "closeSheet" });
           void queryClient.invalidateQueries({ queryKey: key });
         }
-        return;
+        return "granted";
       case "unavailable":
         dispatch({ type: "checkoutUnavailable" });
-        return;
+        return "unavailable";
       case "redirect":
         // Stays busy while the browser leaves for checkout.
         window.location.href = result.url;
-        return;
+        return "redirect";
       case "failed":
+        // The dock notice carries the error; the sheet must not stay up looking idle.
         dispatch({ type: "checkoutFailed" });
-        return;
+        return "failed";
     }
   }
 
@@ -229,8 +281,7 @@ export function useLookFlow({
       dispatch({ type: "endTryOn" });
       clearTryOnParam();
     },
-    choosePlan: (plan) => dispatch({ type: "choosePlan", plan }),
-    getPlus: (plan) => void getPlus(plan),
+    getPlus,
     dismissNotice: () => dispatch({ type: "dismissNotice" }),
   };
 }
@@ -251,22 +302,34 @@ function noticeLine(locale: Locale, notice: LookNotice): string {
 }
 
 /**
- * What the flow puts on screen (host only): the Change look and
- * Plus sheets, the TryOnBar and one line above the dock, and, while
- * the mock checkout is open, a note that it is a demo.
+ * What the flow puts on screen: the Change look sheet, the TryOnBar
+ * and one line above the dock (host only: the look flow gives no
+ * try-on or notice to anyone else), and the one Plus sheet, which
+ * everyone on the board can open (PIN-182). The sheet is open when
+ * the creations indicator, a pool-empty button or the host's Keep it
+ * asks for it, and buys by mode: the credits checkout in stripe, the
+ * host-only demo grant in mock (with a note that it is a demo), and
+ * nothing in off.
  */
 export function PlusFlow({
   look,
+  makes,
   boardSkin,
   plus,
+  pack,
+  isHost,
   sample,
   foilSrc,
   aboveDock,
   picking = false,
 }: {
   look: LookFlow;
+  makes: MakesFlow;
   boardSkin: SkinId;
   plus: PlusView | undefined;
+  /** The one Policy pack (`credits.packs[0]`) the sheet sells; null when none is offered. */
+  pack: (PlusPack & { lookupKey: string }) | null;
+  isHost: boolean;
   sample: string[];
   /** A pinned cut-out to show the foil perk with. */
   foilSrc?: string;
@@ -281,7 +344,25 @@ export function PlusFlow({
   const showBar = showTryOnBar(look.tryOn, state.applying, picking);
   const failed =
     notice?.kind === "lookFailed" || notice?.kind === "grantedLookFailed" || notice?.kind === "plusFailed";
-  const available = canBuyPlus(plus) && !state.unavailable;
+  const path = plusPurchasePath(plus?.mode);
+  const stripe = path === "stripe";
+  const available = path !== "none" && !(stripe ? makes.unavailable : state.unavailable);
+  // The demo grant adds no creations, so with Plus on its button cannot pretend;
+  // before that it is the host's alone.
+  const demoLockedLine =
+    path !== "mock" ? null : plus?.active ? t(locale, "plus.demoNote") : isHost ? null : t(locale, "plus.hostOnly");
+  const sheetOpen = state.sheet === "plus" || makes.sheetOpen;
+  // One guard for both flows: neither close path alone knows about the
+  // other's in-flight request.
+  const closePlus = () => {
+    if (plusSheetLocked(makes.busy, state.checkingOut)) return;
+    if (state.sheet === "plus") look.closeSheet();
+    makes.closeSheet();
+  };
+  const getPlus = () => {
+    if (stripe && pack) makes.buy(pack.lookupKey, look.tryOn);
+    else void look.getPlus().then((kind) => closesPlusSheetAfterMock(kind) && makes.closeSheet());
+  };
   return (
     <>
       {notice || showBar ? (
@@ -312,17 +393,19 @@ export function PlusFlow({
         />
       ) : null}
 
-      {state.sheet === "plus" && plus ? (
+      {sheetOpen && plus ? (
         <>
           <PlusSheet
-            plan={state.plan}
-            onPlanChange={look.choosePlan}
-            prices={plus.priceLabels}
+            pack={pack}
+            plusActive={plus.active}
             available={available}
-            busy={state.checkingOut}
+            lockedLine={demoLockedLine}
+            paymentNote={stripe}
+            busy={stripe ? makes.busy : state.checkingOut}
+            error={stripe && makes.error ? checkoutErrorLine(makes.error, locale) : null}
             foilSrc={foilSrc}
-            onGet={look.getPlus}
-            onClose={look.closeSheet}
+            onGet={getPlus}
+            onClose={closePlus}
           />
           {available && plus.mode === "mock" ? (
             <p className={styles.demoNote} role="note">

@@ -74,8 +74,8 @@ import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { DeleteBoardSheet } from "./DeleteBoardSheet";
-import { isPoolEmptyCode, type MakesPack } from "../../../domain/makes-ui";
-import { BillingBanner, MakesBuySheet, MakesIndicator, useMakesFlow } from "./MakesFlow";
+import { isPoolEmptyCode, parseBillingFlag, type MakesPack } from "../../../domain/makes-ui";
+import { BillingBanner, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
@@ -86,7 +86,7 @@ export interface BoardClientView extends BoardViewLike {
   activity: ActivityLine[];
   /** PIN-103: false in the server render (the host cookie is API-path scoped); the first poll says. */
   viewer?: { isHost: boolean; /** PIN-181: host, or joined while the board has Plus. */ canChangeLook: boolean };
-  /** PIN-103: the board's Plus state, billing mode and Policy price labels. */
+  /** PIN-103: the board's Plus state and billing mode (the price comes from the Policy pack). */
   plus?: PlusView;
   /** PIN-151: present only while credits are enabled; PIN-152 renders it. */
   credits?: { availableMakes: number };
@@ -113,7 +113,7 @@ export interface BoardClientPolicy {
   /** Policy dictation (PIN-119): clip cap; enabled = caps + AI budget on. */
   dictationMaxSeconds: number;
   dictationEnabled: boolean;
-  /** Policy.credits offer for the makes UI (PIN-152): packs + the low-makes threshold. Rendered only while the board view carries credits. */
+  /** Policy.credits offer for the creations UI (PIN-152): packs (the Plus sheet sells the first, PIN-182) + the low threshold. The indicator renders only while the board view carries credits. */
   makes?: { packs: MakesPack[]; lowMakesWarning: number };
 }
 
@@ -330,9 +330,17 @@ function BoardBody({
   // free skin) and the host's Change look / try-on / Board Plus flow.
   const boardSkin = skinForTheme(view.board.themeId);
   const isHost = view.viewer?.isHost === true;
-  const look = useLookFlow({ slug, boardSkin, isHost, plus: view.plus, tryOnParam: tryOnSkin });
-  // PIN-152: makes indicator/buy/return banner. Inert while the
-  // view carries no credits; buying only in stripe mode.
+  const look = useLookFlow({
+    slug,
+    boardSkin,
+    isHost,
+    plus: view.plus,
+    tryOnParam: tryOnSkin,
+    billingFlag: parseBillingFlag(initialBilling),
+  });
+  // PIN-152/182: creations indicator, the Plus sheet's stripe buy and
+  // the return banner. The indicator is inert while the view carries
+  // no credits; the sheet buys by Plus mode (stripe here, mock in PlusFlow).
   const makes = useMakesFlow({
     slug,
     availableMakes: view.credits?.availableMakes ?? null,
@@ -1137,6 +1145,7 @@ function BoardBody({
             <BillingBanner
               kind={makes.banner}
               availableMakes={view.credits?.availableMakes ?? null}
+              plusActive={view.plus?.active === true}
               onDismiss={makes.dismissBanner}
               locale={locale}
             />
@@ -1372,19 +1381,6 @@ function BoardBody({
           />
         ) : null}
 
-        {makes.sheetOpen ? (
-          <MakesBuySheet
-            locale={locale}
-            packs={policy.makes?.packs ?? []}
-            canBuy={makes.canBuy}
-            busy={makes.busy}
-            error={makes.error}
-            unavailable={makes.unavailable}
-            onBuy={makes.buy}
-            onClose={makes.closeSheet}
-          />
-        ) : null}
-
         {isHost && deleteBoardOpen ? (
           <DeleteBoardSheet
             slug={slug}
@@ -1398,17 +1394,19 @@ function BoardBody({
           />
         ) : null}
 
-        {isHost ? (
-          <PlusFlow
-            look={look}
-            boardSkin={boardSkin}
-            plus={view.plus}
-            sample={lookSampleUrls}
-            foilSrc={lookSampleUrls[0]}
-            aboveDock={showDock}
-            picking={pickingNow}
-          />
-        ) : null}
+        {/* Everyone can open the Plus sheet; the try-on and Keep it stay host-only inside the look flow. */}
+        <PlusFlow
+          look={look}
+          makes={makes}
+          boardSkin={boardSkin}
+          plus={view.plus}
+          pack={policy.makes?.packs[0] ?? null}
+          isHost={isHost}
+          sample={lookSampleUrls}
+          foilSrc={lookSampleUrls[0]}
+          aboveDock={showDock}
+          picking={pickingNow}
+        />
       </main>
       {viewerSlot ? (
         <SceneViewer

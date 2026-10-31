@@ -70,11 +70,7 @@ describe("PLUS_MODE=off (PIN-103)", () => {
     expect(await repo().getBoard(slug)).toEqual(before);
     const view = await viewOf(slug, cookie);
     expect(view.viewer).toEqual({ isHost: true, canChangeLook: true });
-    expect(view.plus).toEqual({
-      active: false,
-      mode: "off",
-      priceLabels: { board: "$3.99", host: "$4.99/month" },
-    });
+    expect(view.plus).toEqual({ active: false, mode: "off" });
   });
 
   it("a leftover mock grant counts for nothing: inactive view, Plus skin 402", async () => {
