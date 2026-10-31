@@ -23,18 +23,6 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/app/g/[slug]/LibraryPins.tsx",
   "src/app/g/[slug]/PhotoPick.tsx",
 
-  // PIN-193 board page and sheets
-  "src/app/g/[slug]/BoardClient.tsx",
-  "src/app/g/[slug]/BoardScenes.tsx",
-  "src/app/g/[slug]/BoardThings.tsx",
-  "src/app/g/[slug]/ChangeLookSheet.tsx",
-  "src/app/g/[slug]/DeleteBoardSheet.tsx",
-  "src/app/g/[slug]/JoinSheet.tsx",
-  "src/app/g/[slug]/MakeSheet.tsx",
-  "src/app/g/[slug]/PlusFlow.tsx",
-  "src/app/g/[slug]/RenameSheet.tsx",
-  "src/app/g/[slug]/SceneViewer.tsx",
-  "src/app/g/[slug]/page.tsx",
 
   // PIN-194 UI kit
   "src/ui/board.tsx",

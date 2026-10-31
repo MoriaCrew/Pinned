@@ -55,6 +55,7 @@ import { foilPinId, lookSample } from "../../../domain/plus-ui";
 import { sceneIdInUrl, stepScene, urlWithScene, viewerSceneIds } from "../../../domain/scene-viewer";
 import { skinForTheme, type SkinId } from "../../../domain/skins";
 import { t, tCount, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import {
   shouldShowSignInNudge,
   SIGN_IN_NUDGE_STORAGE_KEY,
@@ -229,6 +230,7 @@ function BoardBody({
   initialSceneId: string | null;
   initialBilling: string | string[] | null;
 }) {
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   // PIN-122: "Pin them" reopens the Add sheet at this photo's review;
@@ -426,7 +428,7 @@ function BoardBody({
         error?: string;
       };
       if (!response.ok || !data.scene) {
-        throw new Error(data.error || t("en", "board.sceneFailed"));
+        throw new Error(data.error || t(locale, "board.sceneFailed"));
       }
       // PIN-152: a terminal pool-empty failure can arrive right
       // here; remember it for the problem card's copy.
@@ -453,7 +455,7 @@ function BoardBody({
       void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) });
     },
     onError: (cause) =>
-      setAttemptError(cause instanceof Error ? cause.message : t("en", "board.sceneFailed")),
+      setAttemptError(cause instanceof Error ? cause.message : t(locale, "board.sceneFailed")),
   });
 
   // PIN-77: delete my element (owner-only server-side; the
@@ -465,7 +467,7 @@ function BoardBody({
         `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}`,
         { method: "DELETE" },
       );
-      if (!response.ok) throw new Error(t("en", "board.deleteFailed"));
+      if (!response.ok) throw new Error(t(locale, "board.deleteFailed"));
       return elementId;
     },
     onSuccess: (_data, elementId) => {
@@ -500,7 +502,7 @@ function BoardBody({
       ).catch(() => null);
       const data = (await response?.json().catch(() => null)) as { element?: BoardViewElement; error?: string } | null;
       if (response?.status === 400 && data?.error) throw new Error(data.error);
-      if (!response?.ok || !data?.element) throw new Error(t("en", "board.renameFailed"));
+      if (!response?.ok || !data?.element) throw new Error(t(locale, "board.renameFailed"));
       return data.element;
     },
     onMutate: async ({ elementId, label }) => {
@@ -542,7 +544,7 @@ function BoardBody({
         { method: "DELETE" },
       ).catch(() => null);
       if (!response?.ok) {
-        throw new Error(t("en", response?.status === 409 ? "board.sceneDeleteDeveloping" : "board.deleteFailed"));
+        throw new Error(t(locale, response?.status === 409 ? "board.sceneDeleteDeveloping" : "board.deleteFailed"));
       }
       return sceneId;
     },
@@ -585,7 +587,7 @@ function BoardBody({
       );
       if (response.status === 404) return { scene: null, job: null };
       const data = (await response.json()) as { scene?: BoardViewScene; job?: { errorCode?: string } | null; error?: string };
-      if (!response.ok || !data.scene) throw new Error(data.error || t("en", "board.sceneFailed"));
+      if (!response.ok || !data.scene) throw new Error(data.error || t(locale, "board.sceneFailed"));
       return { scene: data.scene, job: data.job ?? null };
     },
     enabled:
@@ -956,8 +958,8 @@ function BoardBody({
     .map((p) => ({ id: p.id, name: p.displayName }));
   const latest = latestActivity(view.activity);
   const latestLine = latest
-    ? tf("en", `activity.${latest.kind}` as const, {
-        name: latest.name ?? t("en", "board.someone"),
+    ? tf(locale, `activity.${latest.kind}` as const, {
+        name: latest.name ?? t(locale, "board.someone"),
         thing: latest.thing ?? "",
       })
     : null;
@@ -1015,10 +1017,10 @@ function BoardBody({
         idea: scene.prompt,
         line:
           scene.id === attempt?.sceneId && sceneJobPoolEmpty
-            ? t("en", "makes.poolEmptyScene")
+            ? t(locale, "makes.poolEmptyScene")
             : refused
-              ? (scene.refusalReason ?? t("en", "ai.refused"))
-              : t("en", "board.sceneFailed"),
+              ? (scene.refusalReason ?? t(locale, "ai.refused"))
+              : t(locale, "board.sceneFailed"),
         onChangeIdea: changeIdea,
         // A refusal repeats for the same idea: only a new idea helps.
         onTryAgain: refused ? undefined : tryAgain,
@@ -1027,7 +1029,7 @@ function BoardBody({
       const credits = sceneCredits(scene, view.elements, view.participants, view.scenes);
       const things = credits
         .map((credit) =>
-          credit.owner ? tf("en", "ui.ownerThing", { owner: credit.owner.name, thing: credit.thing }) : credit.thing,
+          credit.owner ? tf(locale, "ui.ownerThing", { owner: credit.owner.name, thing: credit.thing }) : credit.thing,
         )
         .join(", ");
       slots.push({
@@ -1036,7 +1038,7 @@ function BoardBody({
         id: scene.id,
         src: scene.imageUrl,
         previewSrc: scene.previewUrl ?? scene.imageUrl,
-        alt: things ? tf("en", "board.sceneAlt", { idea: scene.prompt, things }) : scene.prompt,
+        alt: things ? tf(locale, "board.sceneAlt", { idea: scene.prompt, things }) : scene.prompt,
         idea: scene.prompt,
         credits,
         kind: sceneTag(scene),
@@ -1049,10 +1051,10 @@ function BoardBody({
         footer:
           shareErrorSceneId === scene.id ? (
             <p className={styles.error} role="alert">
-              {t("en", "share.failed")}
+              {t(locale, "share.failed")}
             </p>
           ) : explainsBudgetCollage(scene) ? (
-            <p className={styles.collageNote}>{t("en", "makes.collageBudget")}</p>
+            <p className={styles.collageNote}>{t(locale, "makes.collageBudget")}</p>
           ) : null,
       });
     }
@@ -1112,7 +1114,7 @@ function BoardBody({
         <BoardHeader
           title={view.board.title}
           people={people}
-          peopleLabel={tf("en", "you.alsoHere", { names: people.map((p) => p.name).join(", ") })}
+          peopleLabel={tf(locale, "you.alsoHere", { names: people.map((p) => p.name).join(", ") })}
           counts={counts}
           onShare={() => void shareBoard()}
           homeHref="/"
@@ -1136,9 +1138,11 @@ function BoardBody({
               kind={makes.banner}
               availableMakes={view.credits?.availableMakes ?? null}
               onDismiss={makes.dismissBanner}
+              locale={locale}
             />
           ) : null}
           <MakesIndicator
+            locale={locale}
             credits={view.credits}
             lowMakesWarning={policy.makes?.lowMakesWarning ?? 0}
             canBuy={makes.canBuy}
@@ -1146,33 +1150,33 @@ function BoardBody({
           />
           {latestLine && !pickingNow ? (
             <p className={cx("pn-board-meta", styles.latest)}>
-              <span className="pn-sr">{t("en", "board.activity")}: </span>
+              <span className="pn-sr">{t(locale, "board.activity")}: </span>
               {latestLine}
             </p>
           ) : null}
           {sceneMissing ? (
             <p className="pn-board-meta" role="status">
-              {t("en", "board.sceneMissing")}
+              {t(locale, "board.sceneMissing")}
             </p>
           ) : null}
           {shareNotice ? (
             <p className={shareNotice === "copied" ? styles.notice : styles.error} role="status">
-              {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
+              {shareNotice === "copied" ? t(locale, "share.copied") : t(locale, "share.copyFailed")}
             </p>
           ) : null}
           {boardQuery.isError && deletePhase === "idle" ? (
             <div className={styles.errorRow}>
               <p className={styles.error} role="alert">
-                {t("en", "board.loadError")}
+                {t(locale, "board.loadError")}
               </p>
               <Button size="sm" onClick={() => void boardQuery.refetch()}>
-                {t("en", "board.retry")}
+                {t(locale, "board.retry")}
               </Button>
             </div>
           ) : null}
           {showNudge ? (
             <div className={styles.nudge} role="status">
-              <p>{t("en", "auth.nudge")}</p>
+              <p>{t(locale, "auth.nudge")}</p>
               <div className={styles.nudgeActions}>
                 <Button
                   size="sm"
@@ -1181,10 +1185,10 @@ function BoardBody({
                     void auth.signIn();
                   }}
                 >
-                  {t("en", "auth.signIn")}
+                  {t(locale, "auth.signIn")}
                 </Button>
                 <Button variant="quiet" size="sm" onClick={dismissNudge}>
-                  {t("en", "auth.nudgeDismiss")}
+                  {t(locale, "auth.nudgeDismiss")}
                 </Button>
               </div>
             </div>
@@ -1194,16 +1198,16 @@ function BoardBody({
         {pickingNow ? (
           <div className={styles.hintRow}>
             {remixParent ? (
-              <Hint onDismiss={exitPicking} dismissLabel={t("en", "board.stop")} x={40}>
-                {tf("en", "board.remixing", { idea: remixParent.prompt })}
+              <Hint onDismiss={exitPicking} dismissLabel={t(locale, "board.stop")} x={40}>
+                {tf(locale, "board.remixing", { idea: remixParent.prompt })}
               </Hint>
             ) : !pickHintSeen ? (
               <Hint onDismiss={dismissPickHint} x={40}>
-                {tCount("en", "board.pickHint", policy.pinsPerScene.max)}
+                {tCount(locale, "board.pickHint", policy.pinsPerScene.max)}
               </Hint>
             ) : atMax ? (
               <p className="pn-board-meta" role="status">
-                {tf("en", "board.pickMax", { n: policy.pinsPerScene.max })}
+                {tf(locale, "board.pickMax", { n: policy.pinsPerScene.max })}
               </p>
             ) : null}
           </div>
@@ -1370,6 +1374,7 @@ function BoardBody({
 
         {makes.sheetOpen ? (
           <MakesBuySheet
+            locale={locale}
             packs={policy.makes?.packs ?? []}
             canBuy={makes.canBuy}
             busy={makes.busy}
@@ -1415,7 +1420,7 @@ function BoardBody({
             viewerCanDelete
               ? [
                   {
-                    label: t("en", "board.delete"),
+                    label: t(locale, "board.delete"),
                     danger: true,
                     onSelect: () => {
                       removeScene.reset();

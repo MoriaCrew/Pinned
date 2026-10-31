@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PinCard } from "../../../domain/board-view";
 import { appendDictation, applyChip, chipThumbs, scenePayload } from "../../../domain/make-sheet";
-import { t } from "../../../i18n";
+import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { Button, Chip, Hint, Pin, SceneCard, Sheet, Tag, TextField } from "../../../ui";
 import { DictateButton } from "./DictateButton";
 
@@ -39,6 +40,7 @@ export function MakeSheet({
   onMake: (payload: { elementIds: string[]; prompt: string; pinIds: string[]; parentSceneId?: string }) => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
   const [prompt, setPrompt] = useState(initialPrompt);
   // Generated chips can replace the fixed list mid-session
   // (PIN-75). Every chip ever shown stays "known" so a prompt
@@ -78,16 +80,16 @@ export function MakeSheet({
     <Sheet
       layer="fixed"
       className="pn-make-sheet"
-      title={remixParent ? t("en", "make.remixTitle") : t("en", "make.title")}
+      title={remixParent ? t(locale, "make.remixTitle") : t(locale, "make.title")}
       onClose={onClose}
       footer={
         <Button variant="primary" size="lg" block iconEnd="arrow" disabled={!valid} onClick={make}>
-          {t("en", "make.it")}
+          {t(locale, "make.it")}
         </Button>
       }
     >
       {remixParent ? (
-        <div className="pn-make-base" role="group" aria-label={t("en", "make.remixBase")}>
+        <div className="pn-make-base" role="group" aria-label={t(locale, "make.remixBase")}>
           <SceneCard
             className="pn-make-base-print"
             src={remixParent.imageUrl}
@@ -96,37 +98,37 @@ export function MakeSheet({
           />
           <div className="pn-make-base-text">
             <Tag tone="mark" icon="remix">
-              {t("en", "make.remixBase")}
+              {t(locale, "make.remixBase")}
             </Tag>
-            <p>{`“${remixParent.prompt}”`}</p>
+            <p>{tf(locale, "ui.quoted", { text: remixParent.prompt })}</p>
           </div>
         </div>
       ) : null}
 
       {cards.length > 0 ? (
-        <ul className="pn-make-picks" aria-label={t("en", "ui.pickedThings")}>
+        <ul className="pn-make-picks" aria-label={t(locale, "ui.pickedThings")}>
           {cards.map((card) => (
             <Pin
               key={card.pinId}
               as="li"
               src={card.element.imageUrl}
               label={card.element.label}
-              owner={{ id: card.ownerId, name: card.ownerName ?? t("en", "board.someone") }}
+              owner={{ id: card.ownerId, name: card.ownerName ?? t(locale, "board.someone") }}
               seed={card.element.id}
             />
           ))}
         </ul>
       ) : (
-        <Hint point="none">{t("en", "make.pickHint")}</Hint>
+        <Hint point="none">{t(locale, "make.pickHint")}</Hint>
       )}
 
       <div ref={fieldRef}>
         <TextField
           id="scene-prompt"
-          label={t("en", "make.idea")}
+          label={t(locale, "make.idea")}
           value={prompt}
           onChange={setPrompt}
-          placeholder={t("en", "make.ideaPlaceholder")}
+          placeholder={t(locale, "make.ideaPlaceholder")}
           multiline
           rows={3}
           maxLength={promptMaxChars}
@@ -143,7 +145,7 @@ export function MakeSheet({
       </div>
 
       {chips.length > 0 ? (
-        <div className="pn-chip-row pn-make-chips" role="group" aria-label={t("en", "make.ideasLabel")}>
+        <div className="pn-chip-row pn-make-chips" role="group" aria-label={t(locale, "make.ideasLabel")}>
           {chips.map((chip, index) => (
             <Chip
               key={chip}
@@ -155,7 +157,7 @@ export function MakeSheet({
             </Chip>
           ))}
           <Chip icon="plus" onClick={writeOwn}>
-            {t("en", "make.writeOwn")}
+            {t(locale, "make.writeOwn")}
           </Chip>
         </div>
       ) : null}

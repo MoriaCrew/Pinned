@@ -97,8 +97,8 @@ describe("pack prices (PIN-152)", () => {
   it("formats EUR prices and per-make amounts in EN and FR", () => {
     expect(formatEur(499, "en")).toBe("€4.99");
     expect(formatEur(1999, "en")).toBe("€19.99");
-    expect(formatEur(499, "fr")).toBe("4,99 €");
+    expect(formatEur(499, "fr")).toBe("4,99 €");
     expect(formatPerMake({ credits: 25, eurCents: 499 }, "en")).toBe("€0.20");
-    expect(formatPerMake({ credits: 150, eurCents: 1999 }, "fr")).toBe("0,13 €");
+    expect(formatPerMake({ credits: 150, eurCents: 1999 }, "fr")).toBe("0,13 €");
   });
 });

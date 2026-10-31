@@ -22,7 +22,8 @@ import {
   type SkinResult,
 } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
-import { t, tf } from "../../../i18n";
+import { t, tf, type Locale } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { IconButton, PlusSheet, TryOnBar, cx, skinName } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
@@ -234,18 +235,18 @@ export function useLookFlow({
   };
 }
 
-function noticeLine(notice: LookNotice): string {
+function noticeLine(locale: Locale, notice: LookNotice): string {
   switch (notice.kind) {
     case "applied":
-      return tf("en", "look.applied", { skin: skinName(notice.skin) });
+      return tf(locale, "look.applied", { skin: skinName(notice.skin) });
     case "granted":
-      return tf("en", "plus.granted", { skin: skinName(notice.skin) });
+      return tf(locale, "plus.granted", { skin: skinName(notice.skin) });
     case "lookFailed":
-      return t("en", "look.failed");
+      return t(locale, "look.failed");
     case "grantedLookFailed":
-      return t("en", "plus.grantedLookFailed");
+      return t(locale, "plus.grantedLookFailed");
     case "plusFailed":
-      return t("en", "plus.failed");
+      return t(locale, "plus.failed");
   }
 }
 
@@ -274,6 +275,7 @@ export function PlusFlow({
   /** Picking things: the tray owns the thumb zone, so the try-on bar steps aside. */
   picking?: boolean;
 }) {
+  const locale = useLocale();
   const { state } = look;
   const notice = state.notice;
   const showBar = showTryOnBar(look.tryOn, state.applying, picking);
@@ -287,11 +289,11 @@ export function PlusFlow({
           {notice ? (
             <div className={cx(styles.lookNotice, failed && styles.lookNoticeError)} role={failed ? "alert" : "status"}>
               <p>
-                {noticeLine(notice)}
-                {notice.kind === "granted" && plus?.mode === "mock" ? <small>{t("en", "plus.demoCharged")}</small> : null}
+                {noticeLine(locale, notice)}
+                {notice.kind === "granted" && plus?.mode === "mock" ? <small>{t(locale, "plus.demoCharged")}</small> : null}
               </p>
               {failed ? (
-                <IconButton icon="close" variant="ghost" size={18} label={t("en", "ui.close")} onClick={look.dismissNotice} />
+                <IconButton icon="close" variant="ghost" size={18} label={t(locale, "ui.close")} onClick={look.dismissNotice} />
               ) : null}
             </div>
           ) : null}
@@ -324,7 +326,7 @@ export function PlusFlow({
           />
           {available && plus.mode === "mock" ? (
             <p className={styles.demoNote} role="note">
-              {t("en", "plus.demoNote")}
+              {t(locale, "plus.demoNote")}
             </p>
           ) : null}
         </>

@@ -19,11 +19,11 @@ const packs: MakesPack[] = [
 
 describe("makes indicator (PIN-152)", () => {
   it("renders nothing at all while the board view carries no credits", () => {
-    expect(html(h(MakesIndicator, { credits: undefined, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }))).toBe("");
+    expect(html(h(MakesIndicator, { credits: undefined, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }))).toBe("");
   });
 
   it("shows the count left, announced politely, with no low line while healthy", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 12 }, lowMakesWarning: 5, canBuy: false, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 12 }, lowMakesWarning: 5, canBuy: false, onAddMakes: noop, locale: "en" }));
     expect(out).toContain("12 makes left");
     expect(out).toContain('aria-live="polite"');
     expect(out).toContain('data-state="ok"');
@@ -33,16 +33,16 @@ describe("makes indicator (PIN-152)", () => {
   });
 
   it("goes low at the Policy threshold and offers the buy sheet in stripe mode", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 5 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 5 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(out).toContain('data-state="low"');
     expect(out).toContain("Running low");
     expect(out).toContain("Add makes");
-    const one = html(h(MakesIndicator, { credits: { availableMakes: 1 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const one = html(h(MakesIndicator, { credits: { availableMakes: 1 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(one).toContain("1 make left");
   });
 
   it("at empty, says new scenes will be collages until someone adds more", () => {
-    const out = html(h(MakesIndicator, { credits: { availableMakes: 0 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop }));
+    const out = html(h(MakesIndicator, { credits: { availableMakes: 0 }, lowMakesWarning: 5, canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(out).toContain('data-state="empty"');
     expect(out).toContain("0 makes left");
     expect(out).toContain("New scenes will be collages");
@@ -59,7 +59,7 @@ describe("makes indicator (PIN-152)", () => {
 
 describe("makes buy sheet (PIN-152)", () => {
   const sheet = (over: Partial<Parameters<typeof MakesBuySheet>[0]> = {}) =>
-    html(h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop, ...over }));
+    html(h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop, locale: "en", ...over }));
 
   it("lists the Policy packs as radios with EUR tax-included prices and per-make lines", () => {
     const out = sheet();
@@ -103,7 +103,7 @@ describe("makes buy sheet (PIN-152)", () => {
   });
 
   it("never shares a pack radio name between two sheets", () => {
-    const out = html(h("div", null, h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop }), h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop })));
+    const out = html(h("div", null, h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop, locale: "en" }), h(MakesBuySheet, { packs, canBuy: true, onBuy: noop, onClose: noop, locale: "en" })));
     const names = [...new Set([...out.matchAll(/type="radio" name="([^"]+)"/g)].map((m) => m[1]))];
     expect(names).toHaveLength(2);
   });
@@ -112,10 +112,10 @@ describe("makes buy sheet (PIN-152)", () => {
     const out = sheet({ locale: "fr" });
     expect(out).toContain("Ajouter des créations");
     expect(out).toContain("25 créations");
-    expect(out).toContain("4,99 € TTC");
-    expect(out).toContain("Environ 0,20 € par création");
+    expect(out).toContain("4,99 € TTC");
+    expect(out).toContain("Environ 0,20 € par création");
     expect(out).toContain("Apparaît sous le nom PINNEDS");
-    expect(out).toContain("Ajouter 25 créations · 4,99 €");
+    expect(out).toContain("Ajouter 25 créations · 4,99 €");
   });
 });
 
@@ -142,11 +142,11 @@ describe("billing return banner (PIN-152)", () => {
 
 describe("pool-empty outcomes (PIN-152)", () => {
   it("give make-aware copy and a way into the buy sheet when buying works", () => {
-    const photo = html(h(MakesPoolEmpty, { kind: "photo", canBuy: true, onAddMakes: noop }));
+    const photo = html(h(MakesPoolEmpty, { kind: "photo", canBuy: true, onAddMakes: noop, locale: "en" }));
     expect(photo).toContain("out of makes, so photos can&#x27;t be cut out");
     expect(photo).toContain('role="alert"');
     expect(photo).toContain("Add makes");
-    const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop }));
+    const scene = html(h(MakesPoolEmpty, { kind: "scene", canBuy: false, onAddMakes: noop, locale: "en" }));
     expect(scene).toContain("ran out of makes, so that scene couldn&#x27;t be made");
     expect(scene).not.toContain("Add makes");
   });
