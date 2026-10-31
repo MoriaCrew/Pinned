@@ -14,13 +14,6 @@
  */
 export const EN_ONLY_FILES: readonly string[] = [
 
-  // PIN-192 add flow
-  "src/app/g/[slug]/AddSheet.tsx",
-  "src/app/g/[slug]/DictateButton.tsx",
-  "src/app/g/[slug]/Leftovers.tsx",
-  "src/app/g/[slug]/LibraryPins.tsx",
-  "src/app/g/[slug]/PhotoPick.tsx",
-
   // PIN-193 board page and sheets
   "src/app/g/[slug]/BoardClient.tsx",
   "src/app/g/[slug]/BoardScenes.tsx",
