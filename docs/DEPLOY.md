@@ -90,12 +90,20 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
    gcloud firestore indexes composite list --project "$P" --format="table(name.basename(),state)"   # all READY
    ```
 6. **Sign-in on pinneds.com.**
-   - Authorized domain and Google provider (read-only check):
+   - Authorized domain and Google provider (read-only check). Ask
+     only for the fields checked (`fields=`) and keep the `jq` filter
+     as a second guard: the full config also holds the password-hash
+     signer key, which must never reach a terminal or a transcript.
+     Run these exactly; never widen the query.
      ```sh
-     curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: $P" \
-       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/config" | jq '.authorizedDomains'
+     T=$(gcloud auth print-access-token)
+     curl -s -H "Authorization: Bearer $T" -H "x-goog-user-project: $P" \
+       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/config?fields=authorizedDomains" | jq '.authorizedDomains'
+     curl -s -H "Authorization: Bearer $T" -H "x-goog-user-project: $P" \
+       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/defaultSupportedIdpConfigs/google.com?fields=enabled" | jq '.enabled'
      ```
-     `pinneds.com` must be listed (docs/13: already enabled Oct 29).
+     `pinneds.com` must be listed (docs/13: already enabled Oct 29),
+     and the Google provider must print `true`.
    - **(console)** Google Cloud → APIs & Services → Credentials → the
      prod project's web OAuth client → add the authorized redirect URI
      `https://pinneds.com/__/auth/handler`.
