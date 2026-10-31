@@ -279,7 +279,10 @@ export function useMakesFlow({
     setBusy(true);
     setError(null);
     writeBaseline(slug, availableMakes);
-    writeReturnSkin(slug, tryOn);
+    // Only a look actually worn now is stored: a retry tap while the
+    // webhook is still landing (no local try-on after the remount) must
+    // not wipe the look the host already paid to keep.
+    if (tryOn) writeReturnSkin(slug, tryOn);
     try {
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}/credits/checkout`, {
         method: "POST",
