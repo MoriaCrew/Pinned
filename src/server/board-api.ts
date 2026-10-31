@@ -30,8 +30,11 @@ import { issueHostCredential, verifyHostToken } from "./host-session";
 import { isMessageKey, userMessage } from "../i18n/user-message";
 import {
   addTapElement,
+  decomposeBoundMs,
+  discardJobCandidates,
   startDecomposeJob,
   tapFallbackLabel,
+  STALE_JOB_ERROR,
   type DecomposeDeps,
   type DecomposeJobStore,
   type StartedDecomposeJob,
@@ -52,6 +55,7 @@ import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
 import {
   CREDITS_POOL_EMPTY,
+  creditsEnabled,
   ensureStarterMakes,
   readAvailableMakes,
 } from "./credit-pool";
@@ -413,6 +417,69 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
   };
 }
 
+/**
+ * Fail one pending/running job that outlived the summed Policy
+ * timeouts bound + Policy.staleJobMarginMs. The runner checks its
+ * own deadline at the bound before debiting, so by bound + margin
+ * a still-live job belongs to a dead request. The transition is
+ * CAS on the read status and never debits; a runner that debited
+ * just before losing this race sees its guarded finish fail and
+ * refunds (decompose-job). With credits on, landed-but-undebited
+ * candidates are discarded like every unpaid failure; off, the
+ * keep-what-landed rule stands.
+ */
+export async function failStaleJobIfNeeded(
+  job: DecomposeJob,
+  deps: BoardApiDeps,
+  now: number,
+): Promise<DecomposeJob> {
+  if (job.status !== "pending" && job.status !== "running") return job;
+  const boundMs = decomposeBoundMs(deps.policy) + deps.policy.staleJobMarginMs;
+  if (now - job.updatedAt <= boundMs) return job;
+  const failed: DecomposeJob = {
+    ...job,
+    status: "failed",
+    errorCode: STALE_JOB_ERROR,
+    updatedAt: now,
+  };
+  const written = await deps.jobs.update(failed, job.status);
+  if (!written) {
+    return (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
+  }
+  if (creditsEnabled(deps.policy) && job.pinIds.length > 0) {
+    const snapshot: DecomposeJob = {
+      ...failed,
+      elementIds: [...job.elementIds],
+      pinIds: [...job.pinIds],
+    };
+    await discardJobCandidates(decomposeDeps(deps), snapshot);
+    const cleared: DecomposeJob = {
+      ...failed,
+      elementIds: snapshot.elementIds,
+      pinIds: snapshot.pinIds,
+      updatedAt: now,
+    };
+    await deps.jobs.update(cleared, "failed").catch(() => false);
+    return cleared;
+  }
+  return failed;
+}
+
+/** Sweep every stale pending/running decompose job on one board. Returns failures written. */
+export async function sweepStaleDecomposeJobs(
+  boardId: string,
+  deps: BoardApiDeps,
+): Promise<number> {
+  const now = deps.now?.() ?? Date.now();
+  const jobs = await deps.jobs.listForBoard(boardId);
+  let failedCount = 0;
+  for (const job of jobs) {
+    const after = await failStaleJobIfNeeded(job, deps, now);
+    if (after.status === "failed" && job.status !== "failed") failedCount += 1;
+  }
+  return failedCount;
+}
+
 function startOfUtcDay(now: number): number {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -436,7 +503,7 @@ export async function sweepExpiredWorkingCopies(
     if (job.workingDeletedAt !== undefined) continue;
     if (now - job.createdAt < ttlMs) continue;
     await deps.store.delete(job.workingRef);
-    await deps.jobs.update({ ...job, workingDeletedAt: now, updatedAt: now });
+    await deps.jobs.update({ ...job, workingDeletedAt: now, updatedAt: now }, job.status);
     deleted += 1;
   }
   return deleted;
@@ -458,13 +525,20 @@ async function deleteWorkingCopy(job: DecomposeJob, deps: BoardApiDeps): Promise
   const latest = (await deps.jobs.get(job.id)) ?? job;
   if (latest.workingDeletedAt !== undefined) return latest;
   const updated: DecomposeJob = { ...latest, workingDeletedAt: now, updatedAt: now };
-  await deps.jobs.update(updated);
+  await deps.jobs.update(updated, latest.status);
   return updated;
 }
 
 const UPLOAD_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * In-process running-decompose count (Policy.maxConcurrentDecomposeJobs):
+ * the memory brake in front of sharp + base64 working images. Busy
+ * answers a code-less 429, the shape the batch client backs off on;
+ * the App Hosting runConfig concurrency is the second line.
+ */
+let runningDecomposeJobs = 0;
 
 /**
  * Upload one photo and run its DecomposeJob in-request (A4: the
@@ -532,9 +606,16 @@ export async function uploadPhoto(
     }
   }
 
-  // Opportunistic A6a sweep; never blocks the upload itself.
+  // Opportunistic A6a + stale-job sweeps; never block the upload.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
+  await sweepStaleDecomposeJobs(slug, deps).catch(() => undefined);
 
+  if (runningDecomposeJobs >= deps.policy.maxConcurrentDecomposeJobs) {
+    // Deliberately NO code: transient busy is the client's backoff
+    // signal, distinct from the coded pool-empty/per-day stops.
+    throw new BoardApiError(userMessage("error.cuttingBusy"), 429);
+  }
+  runningDecomposeJobs += 1;
   let job: StartedDecomposeJob;
   try {
     job = await startDecomposeJob(
@@ -553,6 +634,8 @@ export async function uploadPhoto(
       throw new BoardApiError("Board not found.", 404);
     }
     throw error;
+  } finally {
+    runningDecomposeJobs -= 1;
   }
   // PIN-167: a board deleted while the job ran answers like an unknown board.
   if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
@@ -573,8 +656,10 @@ export async function getJobView(
   deps: BoardApiDeps,
 ) {
   if (!viewer) return null;
-  const job = await deps.jobs.get(jobId);
-  if (!job || job.boardId !== slug || job.participantId !== viewer.id) return null;
+  const found = await deps.jobs.get(jobId);
+  if (!found || found.boardId !== slug || found.participantId !== viewer.id) return null;
+  // A poller of a dead run sees the stale failure, not `running` forever.
+  const job = await failStaleJobIfNeeded(found, deps, deps.now?.() ?? Date.now());
   const pins: Pin[] = [];
   const elements: Element[] = [];
   for (const pinId of job.pinIds) {

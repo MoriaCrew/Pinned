@@ -29,6 +29,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.retryBackoffMs).toBe(500);
     expect(resolvePolicy({ retryBackoffMs: 0 }).retryBackoffMs).toBe(0);
     expect(DEFAULT_POLICY.elementsPerPhoto).toEqual({ min: 1, max: 6 });
+    // Decompose braking + global budget defaults (all Policy-owned).
+    expect(DEFAULT_POLICY.maxConcurrentDecomposeJobs).toBe(2);
+    expect(DEFAULT_POLICY.dailyBudgetUsd).toBe(5);
+    expect(DEFAULT_POLICY.dailyCallLimit).toBe(500);
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
     expect(DEFAULT_POLICY.boardPollIntervalMs).toBe(5_000);
     expect(DEFAULT_POLICY.activityStripMax).toBe(5);

@@ -29,6 +29,37 @@
   lifecycle rule covers it. Longer-lived reveal/poster assets (later
   slices) must use a different prefix with its own policy.
 
+## Multi-photo batches and idempotent uploads
+
+- A batch is not a new upload shape: the client queues up to
+  `Policy.photosPerBatch` picked files and sends each as its own
+  single-photo `POST /photos`, serially (`Policy.batchUploadConcurrency`,
+  default 1), each with a client-minted `uploadId` form field that
+  becomes the DecomposeJob id. Every file goes through the same
+  intake above; there is no multipart batch and originals are still
+  never written anywhere.
+- The deterministic id makes the POST idempotent: the job create is
+  the atomic anchor (the `tmp/` working copy is written only after
+  it lands), and a replayed POST for an existing own job returns it
+  with 200 before caps, credit preflight, intake or any AI call —
+  so a lost response can be retried with byte-identical content
+  without a second job or a second PIN-151 debit. The client knows
+  the job id before the POST returns and polls `GET /jobs/[jobId]`
+  during it (404 until intake creates the job).
+- Job-store updates are compare-and-set on the expected status:
+  blind progress/finish writes can no longer resurrect a terminal
+  job. A runner checks its own deadline (the summed Policy
+  timeouts) before the PIN-151 debit and fails without debiting
+  past it; a sweep at bound + `Policy.staleJobMarginMs` fails
+  still-pending/running jobs as `stale_running` (never debits; a
+  debited runner that loses its guarded finish is refunded under
+  `refund:photo:{jobId}` — see docs/15).
+- `Policy.maxConcurrentDecomposeJobs` caps simultaneously running
+  decomposes per instance (busy = a code-less 429 the client backs
+  off on; coded `credits_pool_empty` / `photos_per_day` stops stop
+  the queue). The App Hosting `runConfig` concurrency in
+  `apphosting.yaml` is the second line.
+
 ## Lifecycle runbook
 
 Dev bucket `moriacrew-pinned-dev.firebasestorage.app` expires

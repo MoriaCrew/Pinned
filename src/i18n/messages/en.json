@@ -75,6 +75,7 @@
   "error.keepMissing": "Choose which pins to keep.",
   "error.tooManyPinsPhoto": "Too many pins for one photo.",
   "error.stillCutting": "Still cutting this photo. Try again in a moment.",
+  "error.cuttingBusy": "Busy cutting photos. Try again in a moment.",
   "error.pinNotInPhoto": "That pin is not part of this photo.",
   "error.sceneInputMissing": "Pick some pins and describe your scene.",
   "error.scenePinsMissing": "Pick at least one pin for your scene.",

@@ -13,6 +13,7 @@ import {
   parseConfirmPinsInput,
   resolveElementImage,
   sweepExpiredWorkingCopies,
+  sweepStaleDecomposeJobs,
   uploadPhoto,
   type BoardApiDeps,
 } from "./board-api";
@@ -771,7 +772,7 @@ describe("uploadPhoto racing a board delete (PIN-167)", () => {
   });
 });
 
-describe("idempotent upload", () => {
+describe("idempotent upload + stale-job sweep", () => {
   const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
 
   it("replay with the same uploadId returns the existing job without re-running it", async () => {
@@ -801,5 +802,38 @@ describe("idempotent upload", () => {
     await expect(
       uploadPhoto(board.slug, other, await photoBytes(), h.deps, UPLOAD_ID),
     ).rejects.toMatchObject({ status: 409, code: "upload_conflict" });
+  });
+
+  it("sweep fails pending and running jobs past bound + margin, and getJobView shows it", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const stale = (id: string, status: "pending" | "running") => ({
+      id,
+      boardId: board.slug,
+      participantId: owner.id,
+      status,
+      workingRef: `tmp/boards/${board.slug}/jobs/${id}/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: [],
+      pinIds: [],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await h.jobs.create(stale("stale-pending", "pending"));
+    await h.jobs.create(stale("stale-running", "running"));
+
+    // Not yet stale at T0; stale once past the default bound (141.5s) + margin (60s).
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(0);
+    h.setNow(T0 + 300_000);
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(2);
+    for (const id of ["stale-pending", "stale-running"]) {
+      const job = await h.jobs.get(id);
+      expect(job?.status).toBe("failed");
+      expect(job?.errorCode).toBe("stale_running");
+    }
+    const view = await getJobView(board.slug, "stale-running", owner, h.deps);
+    expect(view?.job.status).toBe("failed");
   });
 });

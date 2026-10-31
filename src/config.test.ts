@@ -168,12 +168,12 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
   });
 
   it("defaults and overrides AI daily guardrails safely", () => {
-    expect(parseConfig({}).aiDailyBudgetUsd).toBe(2);
-    expect(parseConfig({}).aiDailyCallLimit).toBe(200);
+    expect(parseConfig({}).aiDailyBudgetUsd).toBe(5);
+    expect(parseConfig({}).aiDailyCallLimit).toBe(500);
     const cfg = parseConfig({ AI_DAILY_BUDGET_USD: "0.5", AI_DAILY_CALL_LIMIT: "25.9" });
     expect(cfg.aiDailyBudgetUsd).toBe(0.5);
     expect(cfg.aiDailyCallLimit).toBe(25);
-    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1", AI_DAILY_CALL_LIMIT: "no" }).aiDailyCallLimit).toBe(200);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1", AI_DAILY_CALL_LIMIT: "no" }).aiDailyCallLimit).toBe(500);
     expect(parseConfig({}).sessionSecret).toBeNull();
     expect(parseConfig({ SESSION_SECRET: " x " }).sessionSecret).toBe("x");
     expect(parseConfig({}).storageBucket).toBeNull();
@@ -190,8 +190,8 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
   it("treats AI_DAILY_BUDGET_USD=0 as off, junk as fallback (PIN-59)", () => {
     expect(parseConfig({ AI_DAILY_BUDGET_USD: "0" }).aiDailyBudgetUsd).toBe(0);
     expect(parseConfig({ AI_DAILY_BUDGET_USD: "0.0" }).aiDailyBudgetUsd).toBe(0);
-    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1" }).aiDailyBudgetUsd).toBe(2);
-    expect(parseConfig({ AI_DAILY_BUDGET_USD: "no" }).aiDailyBudgetUsd).toBe(2);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "-1" }).aiDailyBudgetUsd).toBe(5);
+    expect(parseConfig({ AI_DAILY_BUDGET_USD: "no" }).aiDailyBudgetUsd).toBe(5);
     expect(parseConfig({}).policyOverridesJson).toBeNull();
     expect(parseConfig({ POLICY_OVERRIDES_JSON: " {} " }).policyOverridesJson).toBe("{}");
   });

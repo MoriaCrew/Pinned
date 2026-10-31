@@ -27,6 +27,7 @@ import {
   CREDITS_POOL_EMPTY,
   ensureStarterMakes,
   photoDebitEventId,
+  photoRefundEventId,
   sceneDebitEventId,
   starterEventId,
 } from "./credit-pool";
@@ -680,12 +681,12 @@ describe("kill flag off mid-life (PIN-151)", () => {
 describe("paid make survives a failed terminal write (PIN-151)", () => {
   class FlakyReadyPhotoStore extends InMemoryDecomposeJobStore {
     private thrown = false;
-    async update(job: DecomposeJob): Promise<void> {
+    async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
       if (job.status === "ready" && !this.thrown) {
         this.thrown = true;
         throw new Error("transient write failure");
       }
-      return super.update(job);
+      return super.update(job, expectedStatus);
     }
   }
 
@@ -710,6 +711,36 @@ describe("paid make survives a failed terminal write (PIN-151)", () => {
     expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
     expect((await h.ledger.getBalance(slug)).available).toBe(1);
     expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
+  it("photo: losing the guarded finish after debiting refunds the make and drops candidates", async () => {
+    // Simulates the stale sweep winning between the debit and the
+    // ready write: the first ready update finds the stored job
+    // already failed, so its CAS on `running` must lose.
+    class SweptPhotoStore extends InMemoryDecomposeJobStore {
+      private swept = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "ready" && !this.swept) {
+          this.swept = true;
+          await super.update({ ...job, status: "failed", errorCode: "stale_running" });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(2));
+    const { slug, owner } = await boardWithOwner(h);
+    const api: BoardApiDeps = { ...h.api, jobs: new SweptPhotoStore() };
+    const job = await uploadPhoto(slug, owner, await photoBytes(), api);
+    expect(job.status).toBe("failed");
+    // Candidates were discarded with the make: nothing confirmable stays.
+    expect(await h.boards.listElements(slug)).toHaveLength(0);
+    // The make came back: debit + debit_refund, pool whole again.
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    const entries = await entriesOf(h, slug);
+    expect(entries.filter((e) => e.type === "debit")).toHaveLength(1);
+    expect(entries.filter((e) => e.type === "debit_refund").map((e) => e.id)).toEqual([
+      photoRefundEventId(job.id),
+    ]);
   });
 
   it("scene: the ready write retries, the paid AI scene stays ready", async () => {

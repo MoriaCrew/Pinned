@@ -50,6 +50,12 @@ export function photoDebitEventId(jobId: string): string {
   return `debit:photo:${jobId}`;
 }
 
+/** Refund event for a photo debit (below); the scene debit id follows. */
+/** Refund of a photo debit whose result could not be exposed (one per job). */
+export function photoRefundEventId(jobId: string): string {
+  return `refund:photo:${jobId}`;
+}
+
 /** One debit per ready AI scene job, however often it replays. */
 export function sceneDebitEventId(jobId: string): string {
   return `debit:scene:${jobId}`;
@@ -126,6 +132,34 @@ function isInsufficientMakes(error: unknown): boolean {
  * (the make was paid for). Any other ledger failure throws, so
  * callers can fail closed without claiming the pool was empty.
  */
+export type RefundMakeResult = "refunded" | "disabled";
+
+/**
+ * Give back the 1 make spent under `debitEventId`, under the
+ * deterministic refund event id. Idempotent by event id and per
+ * debit (ledger rules), so a runner retrying its guarded finish can
+ * never double-refund. Disabled = no ledger call, exactly like the
+ * debit. Enabled-but-unwired throws (fail closed): the debit could
+ * not have landed without a store either.
+ */
+export async function tryRefundMake(
+  boardId: string,
+  refundEventId: string,
+  debitEventId: string,
+  deps: CreditPoolDeps,
+): Promise<RefundMakeResult> {
+  if (!creditsEnabled(deps.policy)) return "disabled";
+  if (!deps.credits) {
+    throw new RangeError("Credits enabled without a ledger store; cannot refund a make.");
+  }
+  await deps.credits.refundDebit(boardId, {
+    eventId: refundEventId,
+    debitEventId,
+    at: (deps.now ?? Date.now)(),
+  });
+  return "refunded";
+}
+
 export async function tryDebitMake(
   boardId: string,
   eventId: string,

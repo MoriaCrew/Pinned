@@ -44,7 +44,9 @@ import {
   CREDITS_POOL_EMPTY,
   creditsEnabled,
   photoDebitEventId,
+  photoRefundEventId,
   tryDebitMake,
+  tryRefundMake,
 } from "./credit-pool";
 import {
   assertDerivativeRef,
@@ -70,8 +72,8 @@ export interface DecomposeJobStore {
    * claimed/finished) — the claim-before-call gate.
    */
   claim(jobId: string, now: number): Promise<DecomposeJob | null>;
-  /** Replace the stored job (progress + terminal states). */
-  update(job: DecomposeJob): Promise<void>;
+  /** Replace the stored job. With `expectedStatus` the write is compare-and-set: it lands only while the stored job is still in that status and resolves false otherwise (a swept terminal job is never resurrected by a blind progress/finish write). Without it, replaces unconditionally and resolves true. Missing job throws RangeError. */
+  update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean>;
   /**
    * Start cleanup when the working-copy write fails after create:
    * remove the job ONLY if it is still exactly as created (pending,
@@ -121,11 +123,16 @@ export class InMemoryDecomposeJobStore implements DecomposeJobStore {
     return cloneJob(claimed);
   }
 
-  async update(job: DecomposeJob): Promise<void> {
+  async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
     if (!this.jobs.has(job.id)) {
       throw new RangeError(`DecomposeJob ${job.id} not found`);
     }
+    // No awaits between check and write: CAS is atomic in-process.
+    if (expectedStatus !== undefined && this.jobs.get(job.id)?.status !== expectedStatus) {
+      return false;
+    }
     this.jobs.set(job.id, cloneJob(job));
+    return true;
   }
 
   async deleteIfUntouched(jobId: string, createdAt: number): Promise<boolean> {
@@ -321,7 +328,7 @@ export async function startDecomposeJob(
  * per object, like deleteMyElement: once the records are gone an
  * orphaned object is unreachable through any route.
  */
-async function discardJobCandidates(deps: DecomposeDeps, job: DecomposeJob): Promise<void> {
+export async function discardJobCandidates(deps: DecomposeDeps, job: DecomposeJob): Promise<void> {
   for (const elementId of job.elementIds) {
     const element = await deps.boards.getElement(elementId).catch(() => null);
     await deps.boards.deleteElement(elementId).catch(() => undefined);
@@ -333,6 +340,26 @@ async function discardJobCandidates(deps: DecomposeDeps, job: DecomposeJob): Pro
   }
   job.elementIds = [];
   job.pinIds = [];
+}
+
+/** Typed errorCode for a job that outlived its Policy timeout bound. */
+export const STALE_JOB_ERROR = "stale_running";
+
+/**
+ * The longest a claimed decompose run may legitimately take, summed
+ * from Policy alone: every port attempt at its Policy timeout
+ * (timeouts are per attempt in the decorator chain), the retry
+ * backoffs, and SAM's sequential waves at Policy concurrency. The
+ * runner refuses to debit past this bound; the board-api sweep
+ * fails still-pending/running jobs only past bound + margin.
+ */
+export function decomposeBoundMs(policy: Policy): number {
+  const attempts = policy.retries + 1;
+  const backoffs = policy.retries * policy.retryBackoffMs;
+  const namer = attempts * policy.timeoutsMs.spark + backoffs;
+  const waves = Math.ceil(policy.elementsPerPhoto.max / policy.samConcurrency);
+  const sam = waves * (attempts * policy.timeoutsMs.sam + backoffs);
+  return namer + sam;
 }
 
 async function finish(
@@ -347,11 +374,17 @@ async function finish(
     ...(errorCode ? { errorCode } : {}),
     updatedAt: (deps.now ?? Date.now)(),
   };
-  await deps.jobs.update(done);
+  // Guarded finish: CAS on `running`, so a job the stale sweep
+  // already failed is never resurrected by this write. Losing the
+  // CAS returns the stored (terminal) job; the debit seam checks
+  // for that and refunds a make it already spent.
+  const written = await deps.jobs.update(done, "running");
   // PIN-169: on a board deleted mid-run the records were refused, but
   // objects may have landed after the delete's sweep. A live board: no-op.
   await sweepDeletedBoardStorage(done.boardId, deps);
-  return cloneJob(done);
+  if (written) return cloneJob(done);
+  const stored = await deps.jobs.get(job.id).catch(() => null);
+  return stored ?? cloneJob(done);
 }
 
 /**
@@ -375,6 +408,26 @@ export async function runDecomposeJob(
   // PIN-151: set the moment this job's make is spent, so a later
   // terminal-write failure never discards a paid result.
   let makeDebited = false;
+  // Own-deadline + sweep defence: claim stamped updatedAt, and the
+  // summed Policy timeouts bound how long this run may take. Past
+  // the bound the runner fails WITHOUT debiting (the board-api
+  // sweep only fires at bound + margin). `aborted` flips when a
+  // guarded progress write loses its CAS — the sweep already
+  // failed this job, so no further spend or candidates.
+  const claimedAt = job.updatedAt;
+  const boundMs = decomposeBoundMs(policy);
+  const pastDeadline = (): boolean => now() - claimedAt > boundMs;
+  let aborted = false;
+  const refundIfDebited = async (): Promise<void> => {
+    if (!makeDebited) return;
+    makeDebited = false;
+    await tryRefundMake(
+      job.boardId,
+      photoRefundEventId(job.id),
+      photoDebitEventId(job.id),
+      deps,
+    ).catch(() => undefined);
+  };
 
   try {
     const working = await deps.store.get(job.workingRef);
@@ -423,18 +476,29 @@ export async function runDecomposeJob(
     if (kept.length === 0) {
       return finish(deps, job, "failed", "no_elements");
     }
-    await deps.jobs.update({ ...job, updatedAt: now() });
+    const stillMine = await deps.jobs.update({ ...job, updatedAt: now() }, "running");
+    if (!stillMine) {
+      // Swept while naming: terminal already; spend nothing more.
+      const stored = await deps.jobs.get(job.id).catch(() => null);
+      if (stored) return stored;
+      aborted = true;
+    }
 
     let refusedCount = 0;
     // PIN-180: the first cutter call the AI budget / call limit / switch denied.
     let budgetDeniedCode: string | undefined;
     // Serialize progress writes so parallel landings cannot
-    // overwrite each other's elementIds/pinIds snapshots.
-    let persistChain: Promise<void> = Promise.resolve();
-    const persistProgress = (): Promise<void> => {
-      persistChain = persistChain.then(() =>
-        deps.jobs.update({ ...cloneJob(job), updatedAt: now() }),
-      );
+    // overwrite each other's elementIds/pinIds snapshots. Every
+    // write is CAS on `running`: a false means the sweep failed
+    // this job, the chain sticks at false, and the candidate that
+    // just landed is cleaned up by its runConcept instead of
+    // orphaning a confirmable pin.
+    let persistChain: Promise<boolean> = Promise.resolve(true);
+    const persistProgress = (): Promise<boolean> => {
+      persistChain = persistChain.then(async (ok) => {
+        if (!ok) return false;
+        return deps.jobs.update({ ...cloneJob(job), updatedAt: now() }, "running");
+      });
       return persistChain;
     };
 
@@ -518,14 +582,25 @@ export async function runDecomposeJob(
       }
       if (!job.elementIds.includes(elementId)) job.elementIds.push(elementId);
       if (!job.pinIds.includes(pinId)) job.pinIds.push(pinId);
-      await persistProgress(); // pop-in: visible to pollers now
+      const persisted = await persistProgress(); // pop-in: visible to pollers now
+      if (!persisted) {
+        // Swept mid-run: this candidate is not on the stored job,
+        // so remove it (element delete cascades its pin) instead
+        // of orphaning a confirmable leftover, and stop the run.
+        aborted = true;
+        job.elementIds = job.elementIds.filter((id) => id !== elementId);
+        job.pinIds = job.pinIds.filter((id) => id !== pinId);
+        await deps.boards.deleteElement(elementId).catch(() => undefined);
+        await deps.store.delete(cutoutRef).catch(() => undefined);
+        await deps.store.delete(flattenedRef).catch(() => undefined);
+      }
     };
 
     let nextIndex = 0;
     const workers = Array.from(
       { length: Math.min(policy.samConcurrency, kept.length) },
       async () => {
-        while (nextIndex < kept.length) {
+        while (!aborted && nextIndex < kept.length) {
           const index = nextIndex;
           nextIndex += 1;
           try {
@@ -541,6 +616,17 @@ export async function runDecomposeJob(
     await persistChain.catch(() => undefined);
 
     if (job.pinIds.length > 0) {
+      // Own deadline FIRST: past the summed Policy timeouts (or
+      // already swept) this run fails WITHOUT debiting — guarding
+      // the finish alone could not stop a late debit. Candidates
+      // follow the PIN-151 unpaid rule (discarded while credits
+      // are on; kept while off).
+      if (aborted || pastDeadline()) {
+        if (creditsEnabled(policy)) {
+          await discardJobCandidates(deps, job);
+        }
+        return finish(deps, job, "failed", STALE_JOB_ERROR);
+      }
       // PIN-151 debit seam (exact): the one make for this photo is
       // debited here — after at least one candidate pin landed,
       // before the job may finish `ready`, under the job's
@@ -564,8 +650,16 @@ export async function runDecomposeJob(
         return finish(deps, job, "failed", CREDITS_POOL_EMPTY);
       }
       // awaited (not bare return) so a terminal-write failure
-      // reaches the paid-make retry in the catch below.
-      return await finish(deps, job, "ready");
+      // reaches the paid-make retry in the catch below. Losing
+      // the guarded finish (the sweep failed this job between the
+      // debit and here) refunds the make under its deterministic
+      // refund id and discards the unexposed candidates.
+      const finishedJob = await finish(deps, job, "ready");
+      if (finishedJob.status !== "ready" && makeDebited) {
+        await discardJobCandidates(deps, job);
+        await refundIfDebited();
+      }
+      return finishedJob;
     }
     if (refusedCount > 0 && refusedCount === kept.length) {
       return finish(deps, job, "refused", "segment_refused");
@@ -578,7 +672,14 @@ export async function runDecomposeJob(
     // PIN-151: a paid make is never discarded — if the ready
     // write itself threw, retry it once here; a second throw
     // propagates with the job and its pins still stored.
-    if (makeDebited) return finish(deps, job, "ready");
+    if (makeDebited) {
+      const retried = await finish(deps, job, "ready");
+      if (retried.status !== "ready") {
+        await discardJobCandidates(deps, job);
+        await refundIfDebited();
+      }
+      return retried;
+    }
     // PIN-151: while credits are on, candidates from a job that
     // never reached the debit seam are not left confirmable for
     // free; while off, the PIN-64 keep-what-landed rule stands.
@@ -666,7 +767,7 @@ export async function addTapElement(
   if (at - job.createdAt >= policy.workingCopyTtlHours * 60 * 60 * 1000) {
     await deps.store.delete(job.workingRef).catch(() => undefined);
     await deps.jobs
-      .update({ ...job, workingDeletedAt: at, updatedAt: at })
+      .update({ ...job, workingDeletedAt: at, updatedAt: at }, "ready")
       .catch(() => undefined);
     return { status: "working_copy_gone" };
   }
@@ -835,6 +936,9 @@ export async function addTapElement(
       : [...fresh.pinIds, pin.id],
     updatedAt: now(),
   };
-  await deps.jobs.update(updated);
+  // CAS on `ready`: tap-adds only ever append to a ready job; if
+  // the stored job left that state, clean up like any lost race.
+  const appended = await deps.jobs.update(updated, "ready");
+  if (!appended) return cleanup({ status: "job_not_ready" });
   return { status: "ready", job: cloneJob(updated), element, pin };
 }
