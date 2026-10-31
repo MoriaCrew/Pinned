@@ -166,6 +166,14 @@ describe("makes flow wiring guards (PIN-152, PIN-182)", () => {
     expect(source).toMatch(/useEffect\(\(\) => \{\s*const stored = readBaseline\(slug, null\)/);
   });
 
+  it("a failed buy forgets the return look only when this tap stored it (PIN-233 F10)", () => {
+    const source = read("MakesFlow.tsx");
+    // Every write goes through the tap's own decision, never a bare clear.
+    expect(source).not.toMatch(/writeReturnSkin\(/);
+    expect(source).toContain('applyBuyReturnSkinWrite(slug, buyReturnSkinWrite(tryOn, "leaving"))');
+    expect(source.match(/applyBuyReturnSkinWrite\(slug, buyReturnSkinWrite\(tryOn, "failed"\)\)/g)).toHaveLength(2);
+  });
+
   it("takes scene pool-empty from the scene POST job too, not only the disabled-on-terminal poll", () => {
     const source = read("BoardClient.tsx");
     expect(source).toContain("isPoolEmptyCode(data.job?.errorCode)");
