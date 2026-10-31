@@ -104,6 +104,18 @@ export function SkinPicker({
   );
 }
 
+/** "Trying on <b>skin</b>" as one sentence; split around the placeholder to keep the name bold. */
+function tryingOnLine(locale: Locale, skin: string) {
+  const [before = "", after = ""] = t(locale, "ui.tryingOnSkin").split("{skin}");
+  return (
+    <>
+      {before}
+      <b>{skin}</b>
+      {after}
+    </>
+  );
+}
+
 /** Shown while someone tries a Plus skin on their real board. */
 export function TryOnBar({
   skin,
@@ -123,7 +135,7 @@ export function TryOnBar({
         {t(locale, "ui.plus")}
       </Tag>
       <p>
-        {t(locale, "ui.tryingOn")} <b>{skinName(skin, locale)}</b>
+        {tryingOnLine(locale, skinName(skin, locale))}
       </p>
       <Button variant="quiet" onClick={onUndo}>
         {t(locale, "ui.undo")}

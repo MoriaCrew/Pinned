@@ -358,7 +358,7 @@
   "ui.forYou": "For you",
   "ui.plus": "Plus",
   "ui.plusSkin": "Plus skin",
-  "ui.tryingOn": "Trying on",
+  "ui.tryingOnSkin": "Trying on {skin}",
   "ui.undo": "Undo",
   "ui.keepIt": "Keep it",
   "ui.plusTitle": "Board Plus",

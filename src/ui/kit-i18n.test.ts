@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fr from "../i18n/messages/fr.json";
 import { LocaleProvider } from "../i18n/client";
 import { t, tf } from "../i18n";
-import { AvatarStack, CreditLine, Developing, Pin, PlusSheet, SceneCard, boardMetaLine, compactCreditsName, pickedCountLabel } from "./index";
+import { AvatarStack, CreditLine, Developing, Pin, PlusSheet, SceneCard, TryOnBar, boardMetaLine, compactCreditsName, pickedCountLabel } from "./index";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const inFrench = (child: Parameters<typeof h>[2]) =>
@@ -35,6 +35,7 @@ describe("UI kit sentences (PIN-194), English unchanged", () => {
     expect(html(h(AvatarStack, { people }))).toContain('aria-label="2 people: Ana, Bo"');
     const sheet = html(h(PlusSheet, { plan: "board", onPlanChange: () => {}, prices: { board: "€3", host: "€5" }, available: true }));
     expect(sheet).toContain("Get Plus · €3");
+    expect(html(h(TryOnBar, { skin: "paper" }))).toContain("Trying on <b>");
     expect(boardMetaLine({ people: 2, things: 1 })).toBe("2 people · 1 thing");
     expect(pickedCountLabel(1, 4)).toBe("1 of 4 picked");
   });
