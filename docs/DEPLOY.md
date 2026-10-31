@@ -199,10 +199,20 @@ element; delete the throwaway board.
    { "dailyBudgetUsd": 80, "dailyCallLimit": 16000,
      "participantsPerBoard": 500, "joinMaxNewPerIp": 200,
      "scenesPerBoardPerDay": 300, "scenesPerParticipantPerDay": 30,
-     "photosPerParticipantPerDay": 40 }
+     "photosPerParticipantPerDay": 40,
+     "credits": { "starterMakes": 1000 } }
    ```
    The board's own budget is checked against the same daily counter,
    so the demo board keeps working after the global cap is hit.
+   `credits.starterMakes` matters from promotion #2, when live billing
+   turns the creations pool on with 5 free creations per board
+   (PIN-210). Every judge shares the demo board's pool, so it must be
+   in the override **before** promotion #2: the pool is granted once,
+   on the board's first touch after credits turn on, from the board's
+   own Policy. 1,000 creations is at most about $20 of AI at today's
+   prices (`eval/studio-findings.md`) and the daily caps above still
+   apply. Check after promotion #2: the demo board shows 1,000
+   creations, a new board shows 5.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
    `apphosting.prod.yaml` (it ships with promotion #2).
