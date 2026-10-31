@@ -4,7 +4,7 @@
  * the address bar through these and steps through the strip's
  * prints the same way the tests do.
  */
-import type { StripItem } from "./board-ui";
+import type { sceneTag, StripItem } from "./board-ui";
 
 export const SCENE_PARAM = "scene";
 
@@ -42,4 +42,15 @@ export function stepScene(ids: readonly string[], current: string, step: 1 | -1)
 export function viewerEscapeTarget(state: { menuOpen: boolean; confirming: boolean }): "menu" | "confirm" | "viewer" {
   if (state.menuOpen) return "menu";
   return state.confirming ? "confirm" : "viewer";
+}
+
+/**
+ * Whether the viewer credits Muse Image (PIN-222): any print that is
+ * not a collage. A collage (whatever the reason) is not AI output and
+ * says so on its own print, so it gets no credit; the viewer only ever
+ * opens ready prints, so nothing still developing or refused gets one.
+ * `tag` is the print's `sceneTag` (a remix of an AI scene is still one).
+ */
+export function isAiScene(tag: ReturnType<typeof sceneTag>): boolean {
+  return tag !== "collage";
 }

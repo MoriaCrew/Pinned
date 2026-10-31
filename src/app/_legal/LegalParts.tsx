@@ -21,10 +21,19 @@ export function plural(n: number, unit: string): string {
   return `${n} ${n === 1 ? unit : `${unit}s`}`;
 }
 
-/** Privacy, Terms and the source link: the landing footer and both legal pages. */
-export function SiteLinks({ locale, current }: { locale: Locale; current?: "privacy" | "terms" }) {
+/** Privacy, Terms and the source link (after any page-specific `children`): the landing footer and both legal pages. */
+export function SiteLinks({
+  locale,
+  current,
+  children,
+}: {
+  locale: Locale;
+  current?: "privacy" | "terms";
+  children?: ReactNode;
+}) {
   return (
     <nav className="pn-foot-links" aria-label={t(locale, "footer.label")}>
+      {children}
       <a href="/privacy" aria-current={current === "privacy" ? "page" : undefined}>
         {t(locale, "footer.privacy")}
       </a>
