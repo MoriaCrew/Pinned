@@ -5,6 +5,7 @@ import { clipClock } from "../../../domain/make-sheet";
 import { t, tf } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { blobToDictationWav } from "./dictate-audio";
+import { startRecorder } from "./dictate-recorder";
 
 export type DictateState = "idle" | "recording" | "working";
 
@@ -117,17 +118,25 @@ export function useDictation({
       return;
     }
     const chunks: Blob[] = [];
-    const recorder = new MediaRecorder(stream);
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    };
-    recorder.onstop = () => {
-      const wasLive = liveRef.current;
-      stopSession();
-      if (wasLive) {
-        void upload(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
-      }
-    };
+    // Building or starting the recorder can throw. startRecorder then
+    // stops the mic tracks (no session exists yet to do it later), so
+    // the mic goes off and the next press can try again (PIN-232).
+    const recorder = startRecorder(stream, (next) => {
+      next.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      next.onstop = () => {
+        const wasLive = liveRef.current;
+        stopSession();
+        if (wasLive) {
+          void upload(new Blob(chunks, { type: next.mimeType || "audio/webm" }));
+        }
+      };
+    });
+    if (!recorder) {
+      setError(t(locale, "make.dictateNoMic"));
+      return;
+    }
     // Stop a beat early: MediaRecorder framing can run a little
     // past the timer, and the WAV conversion also caps frames.
     const timer = window.setTimeout(() => {
@@ -139,7 +148,6 @@ export function useDictation({
     }, 1000);
     sessionRef.current = { recorder, stream, timer, clock };
     setElapsed(0);
-    recorder.start();
     setState("recording");
   }
 
