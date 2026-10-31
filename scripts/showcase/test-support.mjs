@@ -95,7 +95,7 @@ export async function startFakeApp(plan = {}) {
         return json(201, {}, { "set-cookie": [`pinned_session=${cookieFor(name)}; Path=/; HttpOnly`] });
       }
       if (route === "POST /api/boards/:slug/photos") {
-        if (plan.uploadError) return json(500, { error: `Could not store the photo for board ${SLUG}` });
+        if (plan.uploadError) return json(500, { error: typeof plan.uploadError === "string" ? plan.uploadError : `Could not store the photo for board ${SLUG}` });
         photoCalls[friend] = (photoCalls[friend] ?? 0) + 1;
         const id = `job-${friend}-${photoCalls[friend]}`;
         jobs.set(id, { friend, status: (plan.photo?.[friend] ?? ["ready"])[photoCalls[friend] - 1] ?? "ready" });

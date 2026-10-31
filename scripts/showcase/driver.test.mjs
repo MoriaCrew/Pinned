@@ -117,6 +117,14 @@ describe("runSet against a fake app", () => {
     expect(record.failures.join("\n")).toContain("[redacted]");
   });
 
+  it("shows at most a short line of the app's error, never a whole body", async () => {
+    app = await startFakeApp({ uploadError: "x".repeat(5000) });
+    const { failures } = await run();
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("upload Aye: HTTP 500");
+    expect(failures[0].length).toBeLessThan(300);
+  });
+
   it("retries a failed photo once and records the error code", async () => {
     app = await startFakeApp({ photo: { Ben: ["failed", "ready"] } });
     const { run: record, failures } = await run();

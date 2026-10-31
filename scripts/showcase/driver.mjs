@@ -127,7 +127,8 @@ export async function runSet(spec, ctx) {
     }
     return { res, body };
   }
-  const httpError = (step, r) => new Error(redact(`${step}: HTTP ${r.res.status} ${typeof r.body?.error === "string" ? r.body.error : ""}`.trim()));
+  // The app's friendly error line only, capped: never a whole body.
+  const httpError = (step, r) => new Error(redact(`${step}: HTTP ${r.res.status} ${typeof r.body?.error === "string" ? r.body.error.slice(0, 200) : ""}`.trim()));
 
   async function pollUntil(label, step) {
     const deadline = Date.now() + timeoutMs;
