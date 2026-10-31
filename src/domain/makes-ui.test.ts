@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { FREE_PHOTOS_USED } from "./free-photos";
 import {
   CREDITS_POOL_EMPTY_CODE,
+  addPickView,
   billingBannerKind,
   creditCheckoutBody,
   formatEur,
+  freePhotosState,
+  freePhotosUsedCopy,
+  isFreePhotosUsedCode,
   isPoolEmptyCode,
   makesState,
   parseBillingFlag,
@@ -52,6 +57,73 @@ describe("the way into the Plus sheet (PIN-183)", () => {
   it("keeps the plain fact and no button with billing off", () => {
     expect(poolEmptyCopy("photo", { canBuy: false, plusActive: false })).toEqual({ line: "makes.poolEmptyPhoto", action: null });
     expect(poolEmptyCopy("scene", { canBuy: false, plusActive: true })).toEqual({ line: "makes.poolEmptyScene", action: null });
+  });
+});
+
+describe("free photos in the Add sheet (PIN-231)", () => {
+  it("reads only the PIN-230 code, the same constant the server and the queue use", () => {
+    expect(isFreePhotosUsedCode(FREE_PHOTOS_USED)).toBe(true);
+    expect(isFreePhotosUsedCode("free_photos_used")).toBe(true);
+    expect(isFreePhotosUsedCode(CREDITS_POOL_EMPTY_CODE)).toBe(false);
+    expect(isFreePhotosUsedCode("photos_per_day")).toBe(false);
+    expect(isFreePhotosUsedCode(undefined)).toBe(false);
+    // And the pool code stays its own outcome.
+    expect(isPoolEmptyCode(FREE_PHOTOS_USED)).toBe(false);
+  });
+
+  it("says nothing with plenty left or no limit, goes low at the threshold, used at 0", () => {
+    // Absent: Plus or credits off, no photo limit at all.
+    expect(freePhotosState(undefined, 3)).toBe("ok");
+    expect(freePhotosState(15, 3)).toBe("ok");
+    expect(freePhotosState(4, 3)).toBe("ok");
+    expect(freePhotosState(3, 3)).toBe("low");
+    expect(freePhotosState(1, 3)).toBe("low");
+    expect(freePhotosState(0, 3)).toBe("used");
+    expect(freePhotosState(-1, 3)).toBe("used");
+    // 0 turns the low line off; used still speaks.
+    expect(freePhotosState(1, 0)).toBe("ok");
+    expect(freePhotosState(0, 0)).toBe("used");
+  });
+
+  it("invites to Plus where buying works, keeps the plain fact with billing off", () => {
+    expect(freePhotosUsedCopy({ canBuy: true, plusActive: false })).toEqual({ line: "makes.freePhotosUsed", action: "makes.add" });
+    expect(freePhotosUsedCopy({ canBuy: false, plusActive: false })).toEqual({ line: "makes.freePhotosUsedOff", action: null });
+  });
+
+  it("once the board has Plus, says the limit is gone, with no button (billing on or off)", () => {
+    expect(freePhotosUsedCopy({ canBuy: true, plusActive: true })).toEqual({ line: "makes.freePhotosPlusOn", action: null });
+    expect(freePhotosUsedCopy({ canBuy: false, plusActive: true })).toEqual({ line: "makes.freePhotosPlusOn", action: null });
+  });
+
+  it("shows the picker, with the low count only at the threshold", () => {
+    const view = (freePhotosLeft: number | undefined, over: Partial<Parameters<typeof addPickView>[0]> = {}) =>
+      addPickView({ freePhotosLeft, lowWarning: 3, uploadHitLimit: false, plusActive: false, ...over });
+    expect(view(undefined)).toEqual({ kind: "picker", lowLeft: null });
+    expect(view(10)).toEqual({ kind: "picker", lowLeft: null });
+    expect(view(3)).toEqual({ kind: "picker", lowLeft: 3 });
+    expect(view(1)).toEqual({ kind: "picker", lowLeft: 1 });
+    expect(view(2, { lowWarning: 0 })).toEqual({ kind: "picker", lowLeft: null });
+  });
+
+  it("swaps the picker for the invitation at 0 left, or when an upload just hit the limit", () => {
+    const view = (freePhotosLeft: number | undefined, over: Partial<Parameters<typeof addPickView>[0]> = {}) =>
+      addPickView({ freePhotosLeft, lowWarning: 3, uploadHitLimit: false, plusActive: false, ...over });
+    expect(view(0)).toEqual({ kind: "freePhotosUsed" });
+    expect(view(0, { lowWarning: 0 })).toEqual({ kind: "freePhotosUsed" });
+    // The 429 came back before the board poll caught up.
+    expect(view(2, { uploadHitLimit: true })).toEqual({ kind: "freePhotosUsed" });
+    expect(view(undefined, { uploadHitLimit: true })).toEqual({ kind: "freePhotosUsed" });
+  });
+
+  it("always brings the picker back once the board has Plus", () => {
+    expect(addPickView({ freePhotosLeft: 0, lowWarning: 3, uploadHitLimit: true, plusActive: true })).toEqual({
+      kind: "picker",
+      lowLeft: null,
+    });
+    expect(addPickView({ freePhotosLeft: 2, lowWarning: 3, uploadHitLimit: false, plusActive: true })).toEqual({
+      kind: "picker",
+      lowLeft: null,
+    });
   });
 });
 
