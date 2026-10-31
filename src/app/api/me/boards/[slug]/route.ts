@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import { getPolicy } from "../../../../../policy/server";
 import { getBoardRepository } from "../../../../../server/board-repository";
 import { removeMyBoard } from "../../../../../server/my-boards";
@@ -23,20 +25,21 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const gated = authDisabledGate();
   if (gated) return gated;
   const { slug } = await context.params;
   const badSlug = slugGate(slug);
   if (badSlug) return badSlug;
   const refused =
-    rejectCrossSite(request) ??
-    rateLimit(request, "me-board-remove", getPolicy().myBoardsRemovePerIp);
+    rejectCrossSite(request, locale) ??
+    rateLimit(request, "me-board-remove", getPolicy().myBoardsRemovePerIp, locale);
   if (refused) return refused;
   try {
     const user = await currentUser(request);
     if (!user) {
       return NextResponse.json(
-        { error: "Not signed in." },
+        { error: t(locale, "request.notSignedIn") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
@@ -46,6 +49,6 @@ export async function DELETE(
     });
     return new NextResponse(null, { status: 204, headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "Could not remove this board. Please try again.");
+    return errorResponse(error, t(locale, "request.removeBoardFailed"));
   }
 }

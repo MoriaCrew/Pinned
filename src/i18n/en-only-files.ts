@@ -65,8 +65,6 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/server/scene-job.ts",
 
   // PIN-197 route errors
-  "src/app/api/boards/[slug]/transcribe/route.ts",
-  "src/app/api/boards/request-guards.ts",
 
   // Stays English: link-preview images are fetched by crawlers, which send no language
   "src/app/g/[slug]/opengraph-image.tsx",

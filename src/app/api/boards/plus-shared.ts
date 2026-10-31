@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../config";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import type { Policy } from "../../../policy/policy";
 import { BoardPlusError, hostOnlyError, type HostRouteDeps } from "../../../server/board-plus";
@@ -23,15 +24,16 @@ export type HostRouteGate =
  * yet); the service then verifies the token against the board.
  */
 export async function hostRouteGate(request: Request, slug: string): Promise<HostRouteGate> {
+  const locale = await getLocale();
   const policy = getPolicy();
   const refused =
-    rejectCrossSite(request) ??
-    requireJson(request) ??
-    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp);
+    rejectCrossSite(request, locale) ??
+    requireJson(request, locale) ??
+    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp, locale);
   if (refused) return { ok: false, response: refused };
   const hostToken = hostTokenFrom(request, slug);
   if (!hostToken) return { ok: false, response: plusErrorResponse(hostOnlyError(), "") };
-  const body = await readJsonCapped(request, policy.plus.requestMaxBytes);
+  const body = await readJsonCapped(request, policy.plus.requestMaxBytes, locale);
   if (!body.ok) return { ok: false, response: body.response };
   return { ok: true, hostToken, body: body.value };
 }

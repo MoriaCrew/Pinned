@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { t, type MessageKey } from "../../../i18n";
+import { t, type Locale, type MessageKey } from "../../../i18n";
 import { checkRateLimit, clientKey } from "../../../server/rate-limit";
 import { JSON_HEADERS } from "./shared";
 
@@ -10,8 +10,13 @@ import { JSON_HEADERS } from "./shared";
  * routes use them; other routes can adopt them one by one.
  * Bodies are `{ error, code }` like the rest of the board API.
  */
-function refuse(status: number, key: MessageKey, code: string): NextResponse {
-  return NextResponse.json({ error: t("en", key), code }, { status, headers: JSON_HEADERS });
+function refuse(
+  locale: Locale,
+  status: number,
+  key: MessageKey,
+  code: string,
+): NextResponse {
+  return NextResponse.json({ error: t(locale, key), code }, { status, headers: JSON_HEADERS });
 }
 
 /**
@@ -26,8 +31,8 @@ export function isCrossSite(request: Request): boolean {
 }
 
 /** Fetch-metadata CSRF check: a cross-site request is refused (403). */
-export function rejectCrossSite(request: Request): NextResponse | null {
-  return isCrossSite(request) ? refuse(403, "request.crossSite", "cross_site") : null;
+export function rejectCrossSite(request: Request, locale: Locale): NextResponse | null {
+  return isCrossSite(request) ? refuse(locale, 403, "request.crossSite", "cross_site") : null;
 }
 
 /**
@@ -35,9 +40,9 @@ export function rejectCrossSite(request: Request): NextResponse | null {
  * cannot send application/json, and a cross-site fetch that does
  * needs a CORS preflight this API never grants.
  */
-export function requireJson(request: Request): NextResponse | null {
+export function requireJson(request: Request, locale: Locale): NextResponse | null {
   const type = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-  return type === "application/json" ? null : refuse(415, "request.json", "unsupported_media_type");
+  return type === "application/json" ? null : refuse(locale, 415, "request.json", "unsupported_media_type");
 }
 
 /** Per-IP brake through the shared in-process rate limiter (429). */
@@ -45,10 +50,11 @@ export function rateLimit(
   request: Request,
   scope: string,
   budget: { limit: number; windowMs: number },
+  locale: Locale,
 ): NextResponse | null {
   return checkRateLimit(clientKey(request, scope), budget.limit, budget.windowMs)
     ? null
-    : refuse(429, "request.rateLimited", "rate_limited");
+    : refuse(locale, 429, "request.rateLimited", "rate_limited");
 }
 
 export type CappedJson = { ok: true; value: unknown } | { ok: false; response: NextResponse };
@@ -59,10 +65,14 @@ export type CappedJson = { ok: true; value: unknown } | { ok: false; response: N
  * Unparseable or empty JSON is `value: null`: the service then
  * answers its own 400 for missing input.
  */
-export async function readJsonCapped(request: Request, maxBytes: number): Promise<CappedJson> {
+export async function readJsonCapped(
+  request: Request,
+  maxBytes: number,
+  locale: Locale,
+): Promise<CappedJson> {
   const tooLarge = (): CappedJson => ({
     ok: false,
-    response: refuse(413, "request.tooLarge", "body_too_large"),
+    response: refuse(locale, 413, "request.tooLarge", "body_too_large"),
   });
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) return tooLarge();

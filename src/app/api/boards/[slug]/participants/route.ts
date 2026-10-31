@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import {
   buildParticipantCookieHeader,
   joinBoard,
@@ -35,6 +37,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -46,7 +49,7 @@ export async function GET(
       { headers: JSON_HEADERS },
     );
   } catch (error) {
-    return errorResponse(error, "Could not check your session. Please try again.");
+    return errorResponse(error, t(locale, "request.checkSessionFailed"));
   }
 }
 
@@ -61,15 +64,16 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
-  const refused = rejectCrossSite(request) ?? requireJson(request);
+  const refused = rejectCrossSite(request, locale) ?? requireJson(request, locale);
   if (refused) return refused;
   const gate = RATE_LIMITS.playersPerIpGame;
   if (!checkRateLimit(`${clientKey(request, "participants")}:${slug}`, gate.limit, gate.windowMs)) {
     return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
+      { error: t(locale, "request.tooManyAttempts") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -78,7 +82,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Send your display name." },
+      { error: t(locale, "request.sendDisplayName") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -128,6 +132,6 @@ export async function POST(
       },
     );
   } catch (error) {
-    return errorResponse(error, "Could not join this board. Please try again.");
+    return errorResponse(error, t(locale, "request.joinBoardFailed"));
   }
 }
