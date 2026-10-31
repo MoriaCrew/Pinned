@@ -5,6 +5,8 @@ const state = (over: Partial<YouState> = {}): YouState => ({
   onBoard: true,
   joined: false,
   isHost: false,
+  canChangeLook: false,
+  hasCredits: false,
   authEnabled: false,
   authStatus: "signedOut",
   languageCount: 1,
@@ -66,6 +68,50 @@ describe("you menu entries (PIN-120)", () => {
 
   it("ignores a stale signed-in status when sign-in is off", () => {
     expect(youMenuEntries(state({ authEnabled: false, authStatus: "signedIn" }))).toEqual(["join"]);
+  });
+});
+
+describe("Board Plus and Change look entries (PIN-183)", () => {
+  const withCredits = { joined: true, hasCredits: true };
+
+  it("shows Board Plus to everyone on a board with creations, a guest included", () => {
+    expect(youMenuEntries(state({ hasCredits: true }))).toEqual(["join", "boardPlus"]);
+    expect(youMenuEntries(state(withCredits))).toEqual(["joinedAs", "editName", "boardPlus"]);
+  });
+
+  it("leaves Board Plus out without creations, and off a board", () => {
+    expect(youMenuEntries(state({ joined: true }))).not.toContain("boardPlus");
+    expect(youMenuEntries(state({ onBoard: false, hasCredits: true }))).not.toContain("boardPlus");
+  });
+
+  it("puts Board Plus after the library and before Change look", () => {
+    expect(
+      youMenuEntries(
+        state({ ...withCredits, isHost: true, canChangeLook: true, authEnabled: true, authStatus: "signedIn", languageCount: 2 }),
+      ),
+    ).toEqual(["joinedAs", "editName", "myBoards", "myPins", "boardPlus", "changeLook", "deleteBoard", "language", "signOut"]);
+  });
+
+  it("gives a member Change look once the board has Plus, but never Delete board", () => {
+    const member = youMenuEntries(state({ ...withCredits, canChangeLook: true }));
+    expect(member).toEqual(["joinedAs", "editName", "boardPlus", "changeLook"]);
+    expect(member).not.toContain("deleteBoard");
+    // A member on a board without Plus has no Change look.
+    expect(youMenuEntries(state(withCredits))).not.toContain("changeLook");
+  });
+
+  it("keeps the host's Change look and Delete board whatever the view says about Plus", () => {
+    expect(youMenuEntries(state({ joined: true, isHost: true }))).toEqual(["joinedAs", "editName", "changeLook", "deleteBoard"]);
+    expect(youMenuEntries(state({ joined: true, isHost: true, canChangeLook: true }))).toEqual([
+      "joinedAs",
+      "editName",
+      "changeLook",
+      "deleteBoard",
+    ]);
+  });
+
+  it("keeps Change look off other pages", () => {
+    expect(youMenuEntries(state({ canChangeLook: true, onBoard: false }))).not.toContain("changeLook");
   });
 });
 

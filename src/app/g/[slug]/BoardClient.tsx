@@ -76,7 +76,7 @@ import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { DeleteBoardSheet } from "./DeleteBoardSheet";
-import { isPoolEmptyCode, parseBillingFlag, type MakesPack } from "../../../domain/makes-ui";
+import { isPoolEmptyCode, parseBillingFlag, poolEmptyCopy, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
@@ -370,10 +370,13 @@ function BoardBody({
   // free skin) and the host's Change look / try-on / Board Plus flow.
   const boardSkin = skinForTheme(view.board.themeId);
   const isHost = view.viewer?.isHost === true;
+  // PIN-183: the host, or a joined member while the board has Plus.
+  const canChangeLook = view.viewer?.canChangeLook === true;
   const look = useLookFlow({
     slug,
     boardSkin,
     isHost,
+    canChangeLook,
     plus: view.plus,
     tryOnParam: tryOnSkin,
     billingFlag: parseBillingFlag(initialBilling),
@@ -1089,17 +1092,25 @@ function BoardBody({
       });
     } else if (item.mode === "problem") {
       const refused = scene.status === "refused";
+      // PIN-183: the last-creation race loser gets an invitation, not an error.
+      const poolEmpty =
+        scene.id === attempt?.sceneId && sceneJobPoolEmpty
+          ? poolEmptyCopy("scene", {
+              canBuy: makes.canBuy && Boolean(view.credits),
+              plusActive: view.plus?.active === true,
+            })
+          : null;
       slots.push({
         type: "problem",
         ratio: slotRatio,
         id: scene.id,
         idea: scene.prompt,
-        line:
-          scene.id === attempt?.sceneId && sceneJobPoolEmpty
-            ? t(locale, "makes.poolEmptyScene")
-            : refused
-              ? (scene.refusalReason ?? t(locale, "ai.refused"))
-              : t(locale, "board.sceneFailed"),
+        line: poolEmpty
+          ? t(locale, poolEmpty.line)
+          : refused
+            ? (scene.refusalReason ?? t(locale, "ai.refused"))
+            : t(locale, "board.sceneFailed"),
+        action: poolEmpty?.action ? { label: t(locale, poolEmpty.action), onSelect: openBuyMakes } : undefined,
         onChangeIdea: changeIdea,
         // A refusal repeats for the same idea: only a new idea helps.
         onTryAgain: refused ? undefined : tryAgain,
@@ -1202,9 +1213,14 @@ function BoardBody({
               board={{
                 me: view.me,
                 isHost,
+                canChangeLook,
+                plus: view.credits
+                  ? { active: view.plus?.active === true, availableMakes: view.credits.availableMakes }
+                  : null,
                 onJoin: () => setJoinIntent({ kind: "join" }),
                 onEditName: () => setJoinIntent({ kind: "edit" }),
                 onChangeLook: look.openLook,
+                onBoardPlus: openBuyMakes,
                 onDeleteBoard: () => setDeleteBoardOpen(true),
               }}
             />
@@ -1225,6 +1241,7 @@ function BoardBody({
             locale={locale}
             credits={view.credits}
             lowMakesWarning={policy.makes?.lowMakesWarning ?? 0}
+            plusActive={view.plus?.active === true}
             canBuy={makes.canBuy}
             onAddMakes={openBuyMakes}
           />

@@ -17,6 +17,7 @@ const board = (over: Partial<MyBoardCard>): MyBoardCard => ({
   themeId: null,
   themeLabel: null,
   themeMotif: null,
+  plus: false,
   myPinCount: 3,
   latestSceneImageUrl: null,
   lastActivityAt: Date.UTC(2026, 9, 29, 12),
@@ -39,6 +40,12 @@ describe("My boards cards (PIN-104)", () => {
     expect(markup).toContain('data-theme="cork"');
     expect(markup).toContain('data-theme="paper"');
     expect(markup).toContain('href="/g/a"');
+  });
+
+  it("tags a board that has Plus, and only that one (PIN-183)", () => {
+    const out = html(h(BoardCards, { locale: "en", boards: [board({ slug: "a", plus: true }), board({ slug: "b" })] }));
+    expect(out.match(/pn-lib-board-plus/g)).toHaveLength(1);
+    expect(out).toMatch(/pn-tag pn-tag-outline pn-lib-board-plus">Plus</);
   });
 
   it("shows the latest scene as a print, or ghost outlines when there is none", () => {

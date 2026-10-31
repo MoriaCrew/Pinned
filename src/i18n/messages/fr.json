@@ -443,8 +443,6 @@
   "skin.marigold.mood": "Día de Muertos, fiestas",
   "makes.left.one": "{n} création restante",
   "makes.left.other": "{n} créations restantes",
-  "makes.lowLine": "Tu n'en as presque plus. Ajoutes-en pour continuer à créer des photos et des scènes.",
-  "makes.collageNote": "Les prochaines scènes seront des collages jusqu'à ce que quelqu'un ajoute des créations.",
   "makes.collageBudget": "L'IA était très sollicitée, cette scène est donc un collage. Aucune création n'a été utilisée.",
   "makes.add": "Obtenir Plus",
   "makes.lead": "Tout le monde sur ce tableau peut ajouter des créations. Elles vont à ce tableau, pour toutes les personnes ici.",
@@ -460,5 +458,11 @@
   "makes.failedReturn": "Ce paiement ne s'est pas terminé. Aucune création ajoutée.",
   "makes.checkLater": "Toujours en attente de tes créations. Si ton paiement est passé, elles vont bientôt apparaître ici.",
   "makes.poolEmptyPhoto": "Ce tableau n'a plus de créations, les photos ne peuvent donc pas être détourées pour le moment.",
-  "makes.poolEmptyScene": "Ce tableau n'a plus de créations, cette scène n'a donc pas pu être faite."
+  "makes.poolEmptyScene": "Ce tableau n'a plus de créations, cette scène n'a donc pas pu être faite.",
+  "you.plusOnLeft.one": "Plus est activé · {n} création restante",
+  "you.plusOnLeft.other": "Plus est activé · {n} créations restantes",
+  "makes.emptyLine": "Plus de créations. Les prochaines scènes seront des collages.",
+  "makes.addMore": "Ajouter des créations",
+  "makes.poolEmpty": "Ce tableau n'a plus de créations. Obtenez Plus pour continuer.",
+  "makes.poolEmptyPlus": "Ce tableau n'a plus de créations. Ajoutez-en pour continuer."
 }

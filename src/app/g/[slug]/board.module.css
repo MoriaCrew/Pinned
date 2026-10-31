@@ -439,41 +439,14 @@
 
 /* ---------- Makes (PIN-152) ---------- */
 
-/* Makes left for the whole board, under the header. Low/empty
-   states come from data-state (Policy.credits.lowMakesWarning):
-   the count stays --ink, the frame and note carry the warning. */
-.makes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-}
-
-.makes[data-state="low"],
-.makes[data-state="empty"] {
-  border-color: var(--danger);
-}
-
-.makesCount {
-  margin: 0;
-  color: var(--ink);
-  font: 700 16px/22px var(--font-ui);
-}
-
-.makesNote {
-  flex: 1 1 16ch;
-  margin: 0;
-  color: var(--danger);
-  font: 650 14px/19px var(--font-ui);
-}
-
-.makes > button {
-  margin-left: auto;
+/* Creations left (PIN-183): one quiet line under the title, shown only at or
+   under Policy.credits.lowMakesWarning. The text is the kit's board-meta and
+   the quiet button sits inline after it. It keeps its 44px tap target, but the
+   negative margin keeps it from stretching the 18px line it sits on. */
+.makes > :global(.pn-btn-quiet) {
+  vertical-align: middle;
+  margin-block: calc((var(--tap) - 18px) / -2);
+  padding-inline: var(--space-1) var(--space-2);
 }
 
 /* Billing-return banner: one transient line, same card shape. */
@@ -492,21 +465,6 @@
   flex: 1;
   margin: 0;
   color: var(--ink);
-  font: 650 15px/20px var(--font-ui);
-}
-
-/* Out-of-creations outcome (photo/scene): the line and the way in. */
-.makesPoolEmpty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-}
-
-.makesPoolEmpty p {
-  flex: 1 1 20ch;
-  margin: 0;
-  color: var(--danger);
   font: 650 15px/20px var(--font-ui);
 }
 

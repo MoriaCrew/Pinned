@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
 import type { PlusView } from "../../../domain/plus";
-import { initialLookFlow, type LookFlowState } from "../../../domain/plus-ui";
+import { chooseLook, initialLookFlow, type LookFlowState } from "../../../domain/plus-ui";
 import { LocaleProvider } from "../../../i18n/client";
 import { PlusSheet } from "../../../ui";
 import { BoardThings, type DeleteControls } from "./BoardThings";
@@ -182,6 +182,29 @@ describe("Plus flow overlays (PIN-111)", () => {
   it("opens the Change look sheet", () => {
     const out = html(h(PlusFlow, { look: flow({ sheet: "look" }), plus: plusView(), ...flowProps }));
     expect(out).toContain("Pick a look");
+  });
+});
+
+describe("a member who changes the look (PIN-183)", () => {
+  const member = { ...flowProps, isHost: false };
+  const plusOn = plusView({ active: true, plan: "board", mode: "stripe" });
+
+  it("opens Change look with nothing locked once the board has Plus, and no try-on bar", () => {
+    const out = html(h(PlusFlow, { look: flow({ sheet: "look" }), plus: plusOn, ...member }));
+    expect(out).toContain("Pick a look");
+    expect(out.match(/type="radio"/g)).toHaveLength(7);
+    expect(out.match(LOCK_ICON)).toBeNull();
+    expect(out).not.toContain("Trying on");
+  });
+
+  it("confirms a saved look to the member who changed it", () => {
+    const out = html(h(PlusFlow, { look: flow({ notice: { kind: "applied", skin: "zine" } }), plus: plusOn, ...member }));
+    expect(out).toContain("Look changed to Zine.");
+    expect(out).not.toContain("Trying on");
+  });
+
+  it("applies a member's pick directly, even a Plus skin", () => {
+    expect(chooseLook("marigold", { boardSkin: "paper", tryOn: null, plus: plusOn })).toEqual({ kind: "apply", skin: "marigold" });
   });
 });
 

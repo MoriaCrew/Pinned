@@ -11,6 +11,7 @@ import type { BoardRepository } from "../domain/board-repository";
 import { getBoardTheme } from "../domain/board-themes";
 import { pickLatestPreviewScene } from "../domain/board-preview";
 import { sortMyBoards, type MyBoardCard } from "../domain/my-boards";
+import { hasPlus, type PlusMode } from "../domain/plus";
 import { isValidSlug } from "../domain/tokens";
 import type { UserProfile } from "../domain/user";
 import type { UserRepository } from "../domain/user-repository";
@@ -19,6 +20,8 @@ import { isSafeUid } from "./user-session";
 export interface MyBoardsDeps {
   boards: BoardRepository;
   users: UserRepository;
+  /** PLUS_MODE: whether a stored grant counts (a mock grant does not outside `mock`). Default `off`. */
+  plusMode?: PlusMode;
 }
 
 export async function listMyBoards(
@@ -59,6 +62,7 @@ export async function listMyBoards(
       themeId: board.themeId ?? null,
       themeLabel: theme?.label ?? null,
       themeMotif: theme?.motif ?? null,
+      plus: hasPlus(board, deps.plusMode ?? "off"),
       myPinCount,
       latestSceneImageUrl: latestScene
         ? `/api/boards/${encodeURIComponent(board.slug)}/scenes/${encodeURIComponent(latestScene.id)}/image?size=preview`

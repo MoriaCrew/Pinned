@@ -7,6 +7,7 @@ import {
   creditCheckoutBody,
   makesState,
   parseBillingFlag,
+  plusActionKey,
   readCreditCheckoutResponse,
   urlWithoutBilling,
   type BillingBannerKind,
@@ -17,7 +18,7 @@ import type { PlusMode } from "../../../domain/plus";
 import { plusPurchasePath } from "../../../domain/plus-ui";
 import type { SkinId } from "../../../domain/skins";
 import { t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
-import { Button, IconButton } from "../../../ui";
+import { Button, IconButton, cx } from "../../../ui";
 import { boardQueryKey } from "./AddSheet";
 import styles from "./board.module.css";
 import { writeReturnSkin } from "./return-skin";
@@ -56,40 +57,49 @@ function clearBillingParam() {
 }
 
 /**
- * The creations indicator (PIN-152; "creations" is the UI word for
- * makes): how many this board has left, for everyone on it. Renders
- * nothing at all while the board view carries no credits (disabled =
- * the shipped default), so a credits-off board looks exactly as
- * before. The count rides the board poll, so spends and grants show
- * up without a reload; changes are announced politely. Its button
- * opens the Plus sheet.
+ * The creations indicator (PIN-152, PIN-183; "creations" is the UI
+ * word for makes). It speaks only when it matters: nothing while the
+ * board view carries no credits (disabled = the shipped default) and
+ * nothing while the board has more than `lowMakesWarning` left, so a
+ * board with plenty looks like a credits-off board. At or under the
+ * threshold it is one quiet line under the title ("N creations left
+ * · Get Plus"); at zero it says new scenes will be collages. The
+ * count rides the board poll, so spends and grants show up without a
+ * reload, and a change is announced politely. The text button opens
+ * the Plus sheet ("Add creations" once the board has Plus). The count
+ * is always findable in the you menu.
  */
 export function MakesIndicator({
   credits,
   lowMakesWarning,
+  plusActive,
   canBuy,
   onAddMakes,
   locale,
 }: {
   credits: { availableMakes: number } | undefined;
   lowMakesWarning: number;
+  plusActive: boolean;
   canBuy: boolean;
   onAddMakes: () => void;
   locale: Locale;
 }) {
   if (!credits) return null;
   const state = makesState(credits.availableMakes, lowMakesWarning);
+  if (state === "ok") return null;
   return (
-    <div className={styles.makes} data-state={state} aria-live="polite">
-      <p className={styles.makesCount}>{tCount(locale, "makes.left", credits.availableMakes)}</p>
-      {state === "low" ? <p className={styles.makesNote}>{t(locale, "makes.lowLine")}</p> : null}
-      {state === "empty" ? <p className={styles.makesNote}>{t(locale, "makes.collageNote")}</p> : null}
+    <p className={cx("pn-board-meta", styles.makes)} data-state={state} role="status" aria-live="polite">
+      {state === "low" ? tCount(locale, "makes.left", credits.availableMakes) : t(locale, "makes.emptyLine")}
       {canBuy ? (
-        <Button size="sm" variant={state === "ok" ? "secondary" : "primary"} onClick={onAddMakes}>
-          {t(locale, "makes.add")}
-        </Button>
+        <>
+          {/* The dot stays with the sentence's last word when the line wraps. */}
+          <span aria-hidden="true">&nbsp;·</span>{" "}
+          <Button variant="quiet" size="sm" onClick={onAddMakes}>
+            {t(locale, plusActionKey(plusActive))}
+          </Button>
+        </>
       ) : null}
-    </div>
+    </p>
   );
 }
 
@@ -145,34 +155,6 @@ const CHECKOUT_ERROR_KEYS: Record<CreditCheckoutErrorKind, MessageKey> = {
 /** The Plus sheet's inline line for a failed checkout call. */
 export function checkoutErrorLine(error: CreditCheckoutErrorKind, locale: Locale = "en"): string {
   return t(locale, CHECKOUT_ERROR_KEYS[error]);
-}
-
-/**
- * Out-of-creations outcome line (PIN-152): creation-aware copy where
- * a photo or scene stopped at the empty pool, with the way
- * into the Plus sheet when buying can actually work.
- */
-export function MakesPoolEmpty({
-  kind,
-  canBuy,
-  onAddMakes,
-  locale,
-}: {
-  kind: "photo" | "scene";
-  canBuy: boolean;
-  onAddMakes: () => void;
-  locale: Locale;
-}) {
-  return (
-    <div className={styles.makesPoolEmpty} role="alert">
-      <p>{t(locale, kind === "photo" ? "makes.poolEmptyPhoto" : "makes.poolEmptyScene")}</p>
-      {canBuy ? (
-        <Button size="sm" variant="primary" onClick={onAddMakes}>
-          {t(locale, "makes.add")}
-        </Button>
-      ) : null}
-    </div>
-  );
 }
 
 export interface MakesFlow {

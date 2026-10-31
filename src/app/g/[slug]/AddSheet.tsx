@@ -30,7 +30,7 @@ import {
 import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
-import { isPoolEmptyCode } from "../../../domain/makes-ui";
+import { isPoolEmptyCode, poolEmptyCopy } from "../../../domain/makes-ui";
 import { formatList, t, tCount, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import type { UploadItemStatus } from "../../../domain/upload-queue";
@@ -316,7 +316,7 @@ export function AddSheet({
   /** Open at this photo job's review (PIN-122 leftovers). */
   resumeJobId?: string | null;
   photoMemory?: PhotoMemory;
-  /** PIN-152: out of makes — open the buy sheet (only passed while buying can work). */
+  /** PIN-152, PIN-183: out of creations — open the Plus sheet (only passed while buying can work). */
   onAddMakes?: () => void;
   /** Batch pick: several files go to the BoardClient queue instead of the legacy single upload. */
   onPickFiles?: (files: File[]) => void;
@@ -839,6 +839,8 @@ export function AddSheet({
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
   const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  // PIN-183: where buying works this is an invitation, not an error.
+  const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive: boardView.plus?.active === true });
   const batchPoolEmpty = isPoolEmptyCode(batch?.errorCode);
   const batchCounts = batch
     ? {
@@ -859,10 +861,10 @@ export function AddSheet({
     : "";
   const outOfMakes = (
     <>
-      <SheetLine tone="error">{t(locale, "makes.poolEmptyPhoto")}</SheetLine>
-      {onAddMakes ? (
+      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t(locale, poolEmpty.line)}</SheetLine>
+      {onAddMakes && poolEmpty.action ? (
         <Button variant="primary" onClick={onAddMakes}>
-          {t(locale, "makes.add")}
+          {t(locale, poolEmpty.action)}
         </Button>
       ) : null}
     </>
