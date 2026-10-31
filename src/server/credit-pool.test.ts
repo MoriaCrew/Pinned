@@ -490,6 +490,57 @@ describe("photo debit (PIN-151)", () => {
     expect(await h.boards.getElement("el-unpaid")).toBeNull();
   });
 
+  it("an unpaid stale job left half-swept is cleaned on confirm, never pinned (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    // The sweep's fail write landed, then the request died before
+    // discarding: failed/stale_running with candidates attached
+    // and no debit in the ledger.
+    await h.boards.createElement({
+      id: "el-half",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Half swept",
+      description: "sweep died mid-cleanup",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-half/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-half/flattened.png`,
+      sourcePhotoId: "job-half",
+      faceFlag: false,
+      createdAt: T0,
+    });
+    await h.boards.createPin({
+      id: "pin-half",
+      boardId: slug,
+      elementId: "el-half",
+      pinnedBy: owner.id,
+      status: "candidate",
+      createdAt: T0,
+    });
+    await h.jobs.create({
+      id: "job-half",
+      boardId: slug,
+      participantId: owner.id,
+      status: "failed",
+      errorCode: "stale_running",
+      workingRef: `tmp/boards/${slug}/jobs/job-half/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-half"],
+      pinIds: ["pin-half"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await expect(
+      confirmPins(slug, owner, { jobId: "job-half", pinIds: ["pin-half"] }, h.api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    // The confirm retried the cleanup instead of pinning for free.
+    expect(await h.boards.getElement("el-half")).toBeNull();
+    expect((await h.jobs.get("job-half"))?.pinIds).toEqual([]);
+    expect((await h.boards.getPin("pin-half"))?.status).not.toBe("pinned");
+  });
+
   it("never debits a failed photo", async () => {
     const h = makeHarness(ENABLED(3));
     h.setNamer({
