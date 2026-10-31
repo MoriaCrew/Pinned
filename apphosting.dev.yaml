@@ -62,3 +62,10 @@ env:
   # credits default-off; prod keeps the default until promotion).
   - variable: POLICY_OVERRIDES_JSON
     value: '{"credits":{"enabled":true}}'
+  # PIN-199: dev turns on the translated UI (fr, es, pt-BR, de, it,
+  # id) next to English. Prod stays English until Robin signs off the
+  # French (docs/18-i18n.md, "Turning prod on"). Read at BUILD (a
+  # page prerendered with English only stays English) and RUNTIME:
+  # a plain value is both.
+  - variable: UI_LOCALES
+    value: en,fr,es,pt-BR,de,it,id
