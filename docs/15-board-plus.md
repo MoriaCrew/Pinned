@@ -110,9 +110,10 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   (`source: "mock"`) grant only while `PLUS_MODE=mock` (as for
 >   skins).
 - **One purchase (PIN-181).** €2.99 once for this board buys
-  Board Plus (every look, foil stickers) plus 20 creations. Any
-  joined member, or the host, can buy it for the board; it is a
-  gift to the board, not to the buyer. No host plan is sold.
+  Board Plus (every look, foil stickers, unlimited photos) plus 20
+  creations (AI scenes). Any joined member, or the host, can buy it
+  for the board; it is a gift to the board, not to the buyer. No
+  host plan is sold.
 - **Look control.** The host can always change the look (free
   skins; Plus skins once the board has Plus). Once the board has
   Plus, any joined member can change it too.
@@ -394,7 +395,10 @@ object ids from config.
 
 "Creations" is the customer-facing word for makes; code keeps
 `credits`/`makes`. The Checkout page shows the item's name
-"Board Plus · 20 creations" and its description. The lookup key
+"Board Plus · 20 creations" and its description ("…every look,
+foil stickers, unlimited photos and 20 creations (AI scenes)…";
+re-run the seed after changing it, which updates the product in
+place and keeps the price). The lookup key
 (`pinneds_plus_20`, item `plus_20`) names the product; the pack's
 `credits` say what it holds.
 
