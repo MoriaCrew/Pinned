@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "Ese id de subida no es válido.",
   "error.uploadIdConflict": "Esa subida ya está en uso.",
   "error.makesPoolEmpty": "Este tablero se quedó sin creaciones.",
+  "error.freePhotosUsed": "Este tablero usó sus fotos gratis.",
   "error.tapMissing": "Toca un punto en la foto.",
   "error.keepMissing": "Elige qué pines conservar.",
   "error.tooManyPinsPhoto": "Demasiados pines para una foto.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "Cualquiera en el tablero puede obtener Plus. Todos aquí lo tienen.",
   "ui.plusPerkCreations.one": "+{n} creación",
   "ui.plusPerkCreations.other": "+{n} creaciones",
-  "ui.plusPerkCreationsBody": "Para todos en este tablero. Fotos y escenas.",
+  "ui.plusPerkCreationsBody": "Para todos en este tablero. Una por escena con IA.",
+  "ui.plusPerkPhotos": "Fotos ilimitadas",
+  "ui.plusPerkPhotosBody": "Agrega todas las fotos que quieras a este tablero",
   "ui.plusPerkSkins": "Todos los estilos",
   "ui.plusPerkSkinsBody": "Cuarto oscuro, Postal y colecciones de temporada como Cempasúchil",
   "ui.plusPerkFoil": "Stickers foil",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Este tablero se quedó sin creaciones. Consigue Plus para seguir.",
   "makes.poolEmptyPlus": "Este tablero se quedó sin creaciones. Agrega más para seguir.",
   "makes.poolEmptyPhoto": "Este tablero se quedó sin creaciones, así que no se pueden recortar fotos por ahora.",
-  "makes.poolEmptyScene": "Este tablero se quedó sin creaciones, así que no se pudo crear esa escena."
+  "makes.poolEmptyScene": "Este tablero se quedó sin creaciones, así que no se pudo crear esa escena.",
+  "makes.freePhotosLeft.one": "Queda {n} foto gratis en este tablero",
+  "makes.freePhotosLeft.other": "Quedan {n} fotos gratis en este tablero",
+  "makes.freePhotosUsed": "Este tablero usó sus fotos gratis. Hazte Plus para fotos ilimitadas.",
+  "makes.freePhotosUsedOff": "Este tablero usó sus fotos gratis, así que no se pueden agregar fotos nuevas por ahora.",
+  "makes.freePhotosPlusOn": "Este tablero ya tiene Plus, así que las fotos son ilimitadas. Intenta de nuevo."
 }

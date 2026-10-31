@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "Esse ID de upload não é válido.",
   "error.uploadIdConflict": "Esse upload já está em uso.",
   "error.makesPoolEmpty": "Este quadro ficou sem criações.",
+  "error.freePhotosUsed": "Este quadro usou suas fotos grátis.",
   "error.tapMissing": "Toque em um ponto da foto.",
   "error.keepMissing": "Escolha quais pins manter.",
   "error.tooManyPinsPhoto": "Pins demais para uma foto só.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "Qualquer pessoa do quadro pode assinar o Plus. Todo mundo aqui ganha.",
   "ui.plusPerkCreations.one": "+{n} criação",
   "ui.plusPerkCreations.other": "+{n} criações",
-  "ui.plusPerkCreationsBody": "Para todo mundo deste quadro. Fotos e cenas.",
+  "ui.plusPerkCreationsBody": "Para todo mundo neste quadro. Uma por cena com IA.",
+  "ui.plusPerkPhotos": "Fotos ilimitadas",
+  "ui.plusPerkPhotosBody": "Adicione quantas fotos quiser neste quadro",
   "ui.plusPerkSkins": "Todos os visuais",
   "ui.plusPerkSkinsBody": "Câmara escura, Postal e novidades sazonais como Marigold",
   "ui.plusPerkFoil": "Figurinhas metalizadas",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Este quadro ficou sem criações. Assine Plus para continuar.",
   "makes.poolEmptyPlus": "Este quadro ficou sem criações. Adicione mais para continuar.",
   "makes.poolEmptyPhoto": "Este quadro ficou sem criações, então não dá para recortar fotos agora.",
-  "makes.poolEmptyScene": "Este quadro ficou sem criações, então não deu para criar essa cena."
+  "makes.poolEmptyScene": "Este quadro ficou sem criações, então não deu para criar essa cena.",
+  "makes.freePhotosLeft.one": "{n} foto grátis restante neste quadro",
+  "makes.freePhotosLeft.other": "{n} fotos grátis restantes neste quadro",
+  "makes.freePhotosUsed": "Este quadro usou suas fotos grátis. Garanta o Plus para fotos ilimitadas.",
+  "makes.freePhotosUsedOff": "Este quadro usou suas fotos grátis, então não dá para adicionar fotos novas agora.",
+  "makes.freePhotosPlusOn": "Este quadro agora tem Plus, então as fotos são ilimitadas. Tente de novo."
 }

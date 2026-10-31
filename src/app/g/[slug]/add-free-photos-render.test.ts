@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FREE_PHOTOS_USED } from "../../../domain/free-photos";
 import type { MyPinCard } from "../../../domain/my-pins";
 import { LocaleProvider } from "../../../i18n/client";
+import fr from "../../../i18n/messages/fr.json";
 import type { AuthContextValue } from "../../auth/AuthProvider";
 import { AddSheet, type AddBatchStep } from "./AddSheet";
 import type { BoardClientView } from "./BoardClient";
@@ -206,12 +207,17 @@ describe("free photos in the Add sheet (PIN-231)", () => {
     expect(daily).not.toContain(INVITE);
   });
 
-  it("falls back to English in a language that has not translated it yet (docs/18)", () => {
+  it("speaks the visitor's language: the French catalog's lines, not the English ones (docs/18)", () => {
+    // Read from the catalog so a retranslation never breaks the test;
+    // the English fallback itself is covered by the i18n tests.
+    const escape = (text: string) => text.replace(/'/g, "&#x27;");
     const low = render(view({ availableMakes: 5, freePhotosLeft: 2 }), { locale: "fr" });
-    expect(low).toContain("2 free photos left on this board");
+    expect(low).toContain(escape(fr["makes.freePhotosLeft.other"].replace("{n}", "2")));
+    expect(low).not.toContain("2 free photos left on this board");
     const used = render(view({ availableMakes: 5, freePhotosLeft: 0 }), { locale: "fr" });
-    expect(used).toContain(INVITE);
-    expect(used).toContain("Prendre Plus");
+    expect(used).toContain(escape(fr["makes.freePhotosUsed"]));
+    expect(used).not.toContain(INVITE);
+    expect(used).toContain(fr["makes.add"]);
   });
 });
 

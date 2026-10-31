@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "Cet identifiant d'import n'est pas valide.",
   "error.uploadIdConflict": "Cet import est déjà utilisé.",
   "error.makesPoolEmpty": "Ce tableau n'a plus de créations.",
+  "error.freePhotosUsed": "Ce tableau a utilisé ses photos gratuites.",
   "error.tapMissing": "Touche un endroit sur la photo.",
   "error.keepMissing": "Choisis les épingles à garder.",
   "error.tooManyPinsPhoto": "Trop d'épingles pour une seule photo.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "N'importe qui sur le tableau peut prendre Plus. Tout le monde en profite.",
   "ui.plusPerkCreations.one": "+{n} création",
   "ui.plusPerkCreations.other": "+{n} créations",
-  "ui.plusPerkCreationsBody": "Pour tout le monde sur ce tableau. Photos et scènes.",
+  "ui.plusPerkCreationsBody": "Pour tout le monde sur ce tableau. Une par scène IA.",
+  "ui.plusPerkPhotos": "Photos illimitées",
+  "ui.plusPerkPhotosBody": "Ajoute autant de photos que tu veux à ce tableau",
   "ui.plusPerkSkins": "Tous les looks",
   "ui.plusPerkSkinsBody": "Chambre noire, Carte postale et les looks de saison comme Marigold",
   "ui.plusPerkFoil": "Stickers foil",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Ce tableau n'a plus de créations. Prends Plus pour continuer.",
   "makes.poolEmptyPlus": "Ce tableau n'a plus de créations. Ajoutes-en pour continuer.",
   "makes.poolEmptyPhoto": "Ce tableau n'a plus de créations, les photos ne peuvent pas être détourées pour l'instant.",
-  "makes.poolEmptyScene": "Ce tableau n'a plus de créations, cette scène n'a pas pu être créée."
+  "makes.poolEmptyScene": "Ce tableau n'a plus de créations, cette scène n'a pas pu être créée.",
+  "makes.freePhotosLeft.one": "{n} photo gratuite restante sur ce tableau",
+  "makes.freePhotosLeft.other": "{n} photos gratuites restantes sur ce tableau",
+  "makes.freePhotosUsed": "Ce tableau a utilisé ses photos gratuites. Passe à Plus pour des photos illimitées.",
+  "makes.freePhotosUsedOff": "Ce tableau a utilisé ses photos gratuites, tu ne peux plus ajouter de photos pour le moment.",
+  "makes.freePhotosPlusOn": "Ce tableau est passé à Plus, les photos sont illimitées maintenant. Réessaie."
 }

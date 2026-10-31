@@ -84,6 +84,7 @@
   "error.uploadIdInvalid": "Diese Upload-ID ist ungültig.",
   "error.uploadIdConflict": "Dieser Upload wird schon verwendet.",
   "error.makesPoolEmpty": "Für diese Pinnwand gibt es keine Kreationen mehr.",
+  "error.freePhotosUsed": "Diese Pinnwand hat ihre Gratis-Fotos aufgebraucht.",
   "error.tapMissing": "Tippe auf eine Stelle im Foto.",
   "error.keepMissing": "Wähl aus, welche Pins du behalten willst.",
   "error.tooManyPinsPhoto": "Zu viele Pins für ein Foto.",
@@ -446,7 +447,9 @@
   "ui.plusLead": "Jede Person auf der Pinnwand kann Plus holen. Alle hier bekommen es.",
   "ui.plusPerkCreations.one": "+{n} Kreation",
   "ui.plusPerkCreations.other": "+{n} Kreationen",
-  "ui.plusPerkCreationsBody": "Für alle auf dieser Pinnwand. Fotos und Szenen.",
+  "ui.plusPerkCreationsBody": "Für alle auf dieser Pinnwand. Eine pro KI-Szene.",
+  "ui.plusPerkPhotos": "Unbegrenzte Fotos",
+  "ui.plusPerkPhotosBody": "Füge so viele Fotos zu dieser Pinnwand hinzu, wie du magst",
   "ui.plusPerkSkins": "Jeder Look",
   "ui.plusPerkSkinsBody": "Dunkelkammer, Postkarte und saisonale Drops wie Marigold",
   "ui.plusPerkFoil": "Foil-Sticker",
@@ -511,5 +514,10 @@
   "makes.poolEmpty": "Diese Pinnwand hat keine Kreationen mehr. Hol dir Plus, um weiterzumachen.",
   "makes.poolEmptyPlus": "Diese Pinnwand hat keine Kreationen mehr. Füge mehr hinzu, um weiterzumachen.",
   "makes.poolEmptyPhoto": "Diese Pinnwand hat keine Kreationen mehr, deshalb können Fotos gerade nicht freigestellt werden.",
-  "makes.poolEmptyScene": "Diese Pinnwand hat keine Kreationen mehr, deshalb konnte diese Szene nicht erstellt werden."
+  "makes.poolEmptyScene": "Diese Pinnwand hat keine Kreationen mehr, deshalb konnte diese Szene nicht erstellt werden.",
+  "makes.freePhotosLeft.one": "{n} Gratis-Foto übrig auf dieser Pinnwand",
+  "makes.freePhotosLeft.other": "{n} Gratis-Fotos übrig auf dieser Pinnwand",
+  "makes.freePhotosUsed": "Diese Pinnwand hat ihre Gratis-Fotos aufgebraucht. Hol dir Plus für unbegrenzte Fotos.",
+  "makes.freePhotosUsedOff": "Diese Pinnwand hat ihre Gratis-Fotos aufgebraucht, deshalb können gerade keine neuen Fotos hinzugefügt werden.",
+  "makes.freePhotosPlusOn": "Diese Pinnwand hat jetzt Plus, Fotos sind also unbegrenzt. Versuch es nochmal."
 }
