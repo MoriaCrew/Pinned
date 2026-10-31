@@ -70,6 +70,7 @@ import { createPhotoMemory } from "./photo-memory";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type PrintSlot, type SceneSlot } from "./BoardScenes";
 import { BoardThings } from "./BoardThings";
+import { usePinFilter } from "./usePinFilter";
 import { BoardLeftovers } from "./Leftovers";
 import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
@@ -446,6 +447,8 @@ function BoardBody({
 
   const cards = pinCards(view);
   const selectableIds = selectableCards(cards).map((card) => card.pinId);
+  // PIN-218: narrows the grid only; picks, pruning and the tray use every card.
+  const pinFilter = usePinFilter(slug, cards, view.me?.id ?? null);
 
   useEffect(() => {
     setSelected((current) => {
@@ -1349,6 +1352,7 @@ function BoardBody({
             pickNumbers={pickNumbers(cards, selected)}
             foilPinId={foilPinId(cards, view.plus)}
             showHead={!pickingNow}
+            filter={pinFilter}
             onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
             onRename={(elementId) => {
               renameElement.reset();

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
-import { t, tCount } from "../i18n";
+import { t, tCount, tf } from "../i18n";
 import { useLocale } from "../i18n/client";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
-import { AvatarStack, Button, IconButton, Wordmark, cx, pickedCountLabel, type Person } from "./primitives";
+import { Avatar, AvatarStack, Button, IconButton, Wordmark, cx, pickedCountLabel, type Person } from "./primitives";
 
 export interface BoardCounts {
   people?: number;
@@ -74,15 +74,78 @@ export function BoardHeader({
   );
 }
 
-/** Section head on the board ("Scenes", "Things") with an optional mono count. */
+/** Section head on the board ("Scenes", "Things") with an optional mono count ("117", or "6 of 117"). */
 /** `focusable`: the heading can take focus from script (tabIndex -1), e.g. after its last item goes. */
-export function SectionHead({ title, count, id, focusable }: { title: string; count?: number; id?: string; focusable?: boolean }) {
+export function SectionHead({ title, count, id, focusable }: { title: string; count?: number | string; id?: string; focusable?: boolean }) {
   return (
     <div className="pn-section-head">
       <h2 className="pn-section-title" id={id} tabIndex={focusable ? -1 : undefined}>
         {title}
       </h2>
       {count !== undefined ? <span className="pn-board-meta">{count}</span> : null}
+    </div>
+  );
+}
+
+export interface FilterChipItem {
+  id: string;
+  /** Visible word or name; CSS cuts a long name short, the full one is spoken. */
+  label: string;
+  count: number;
+  /** A person's chip leads with their colour dot. */
+  person?: Person;
+  /** "new": the count wears the mark colour. */
+  tone?: "new";
+}
+
+/**
+ * A sticky, sideways-scrolling row of toggle chips that narrows a
+ * grid (PIN-218: New / All / Mine / people above the board's pins).
+ * Each chip says its count and is spoken as "{name}, {n} pins".
+ */
+export function FilterChips({
+  label,
+  items,
+  selectedId,
+  onSelect,
+  className,
+}: {
+  label: string;
+  items: FilterChipItem[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  className?: string;
+}) {
+  const locale = useLocale();
+  const ref = useRef<HTMLDivElement>(null);
+  // Keep the pressed chip in view (a restored choice can sit off to the side).
+  useEffect(() => {
+    const row = ref.current;
+    const chip = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !chip) return;
+    const start = chip.offsetLeft;
+    const end = start + chip.offsetWidth;
+    if (start < row.scrollLeft || end > row.scrollLeft + row.clientWidth) {
+      row.scrollLeft = Math.max(0, start - (row.clientWidth - chip.offsetWidth) / 2);
+    }
+  }, [selectedId]);
+  return (
+    <div ref={ref} className={cx("pn-filter-row", className)} role="group" aria-label={label}>
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className="pn-chip pn-filter-chip"
+          aria-pressed={item.id === selectedId}
+          aria-label={tf(locale, "board.filterChip", { name: item.label, count: tCount(locale, "meta.things", item.count) })}
+          data-tone={item.tone}
+          onClick={() => onSelect(item.id)}
+        >
+          {item.person ? <Avatar id={item.person.id} name={item.person.name} size="dot" /> : null}
+          <span className="pn-filter-name">{item.label}</span>
+          <span className="pn-filter-count">{item.count}</span>
+        </button>
+      ))}
     </div>
   );
 }
