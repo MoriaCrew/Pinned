@@ -29,15 +29,25 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >
 > - **Who is a maker:** the signed-in user when sign-in is on and
 >   the request carries a session, else the client address the
->   rate limiter uses (`SECURITY.md`) — IPv4 as is, IPv6 grouped
->   by its /64, anything unreadable in one shared bucket. Stored
->   only as a versioned sha256 key in `starterAllowances/{key}`
->   with `expireAtTs` for a TTL policy; never a raw address or uid.
+>   rate limiter uses (`clientIp` in `src/server/rate-limit.ts`,
+>   PIN-112) — IPv4 as is, IPv6 grouped by its /64, anything
+>   unreadable in one shared bucket. People behind one shared
+>   IPv4 (office, school or event Wi-Fi, some mobile carriers)
+>   share one allowance while signed out; signing in gives each
+>   person their own. Signed-in and signed-out counts are kept
+>   apart.
+> - **What is stored:** a versioned sha256 of that source in
+>   `starterAllowances/{key}`, never the raw address or uid. A
+>   plain hash of an IPv4 address can be reversed by brute force,
+>   so the counter must not outlive its window: enable the TTL
+>   policy on `starterAllowances.expireAtTs` (operator console
+>   step, docs/16). A keyed hash is tracked in PIN-207.
 > - **When it counts:** once per board creation, before the board
 >   is written. The decided amount is stored on the board
 >   (`Board.starterMakes`, server-only), and the lazy starter
 >   grant uses it, so a failed grant at creation never becomes a
->   full pool. A counter failure gives 0 (fail closed).
+>   full pool. A counter failure gives 0, and so does a lazy grant
+>   for an unknown or deleted board (fail closed).
 > - **Credits off:** nothing is counted or stored; creation is
 >   unchanged.
 > - **The hard wall** stays the site-wide daily AI budget

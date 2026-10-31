@@ -6,7 +6,7 @@ import { InMemoryStarterAllowanceStore, type StarterAllowanceStore } from "../do
 import { mockElementNamer, mockSegmenter } from "../gateway/mock-ports";
 import { resolvePolicy, type PolicyOverrides } from "../policy/policy";
 import { createBoardWithHost, getBoardView, type BoardApiDeps, type CreateBoardContext } from "./board-api";
-import { starterEventId } from "./credit-pool";
+import { readAvailableMakes, starterEventId } from "./credit-pool";
 import { InMemoryDecomposeJobStore } from "./decompose-job";
 import { InMemoryDerivativeStore } from "./derivative-store";
 import { requestMakerKey } from "./maker-context";
@@ -126,6 +126,12 @@ describe("free creations per maker (PIN-205)", () => {
     expect((await h.ledger.listEntries(slug)).map((e) => [e.id, e.amount])).toEqual([
       [starterEventId(slug), 0],
     ]);
+  });
+
+  it("the lazy grant gives an unknown or deleted board nothing (fail closed)", async () => {
+    const h = harness(ON);
+    expect(await readAvailableMakes("ghost-board-ghost-boar", h.deps)).toBe(0);
+    expect((await h.ledger.listEntries("ghost-board-ghost-boar")).map((e) => e.amount)).toEqual([0]);
   });
 
   it("a slug retry claims one maker slot, not two", async () => {

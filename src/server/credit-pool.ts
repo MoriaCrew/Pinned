@@ -34,7 +34,7 @@ export interface CreditPoolDeps {
   /** Ledger store (PIN-148 selection); absent = fail-closed empty pool while enabled. */
   credits?: CreditLedgerStore;
   /** Board reads for the lazy starter grant (PIN-205): it grants the amount the board stored at creation. */
-  boards?: Pick<BoardRepository, "getBoard">;
+  boards: Pick<BoardRepository, "getBoard">;
   policy: Policy;
   now?: () => number;
 }
@@ -87,10 +87,15 @@ export async function ensureStarterMakes(
   });
 }
 
-/** The free pool a board was given at creation, or the Policy default when it stored none. */
+/**
+ * The free pool a board was given at creation; the Policy default
+ * only for a board that stored none (made before PIN-205). An
+ * unknown or deleted board gets 0: fail closed, never gift a pool.
+ */
 async function storedStarterMakes(boardId: string, deps: CreditPoolDeps): Promise<number> {
-  const board = deps.boards ? await deps.boards.getBoard(boardId) : null;
-  return board?.starterMakes ?? deps.policy.credits.starterMakes;
+  const board = await deps.boards.getBoard(boardId);
+  if (!board) return 0;
+  return board.starterMakes ?? deps.policy.credits.starterMakes;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Firestore } from "@google-cloud/firestore";
 import { describe, expect, it } from "vitest";
+import { emptyBoardCounters } from "../domain/board";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import { resolvePolicy } from "../policy/policy";
 import {
@@ -307,6 +308,10 @@ function poolDeps(
 ): CreditPoolDeps {
   return {
     credits: store,
+    // A board made before PIN-205 (no stored starterMakes): the lazy grant uses the Policy pool.
+    boards: {
+      getBoard: async (slug) => ({ slug, title: "Board", counters: emptyBoardCounters(), createdAt: 1, version: 1 }),
+    },
     policy: resolvePolicy({ credits: { enabled, starterMakes: 25 } }),
     now: () => 1_000,
   };
