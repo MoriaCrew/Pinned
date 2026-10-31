@@ -12,6 +12,7 @@ const card = (pinId: string, label: string): PinCard => ({
   status: "pinned",
   ownerName: "Robin",
   ownerId: "me",
+  createdAt: 0,
 });
 
 const FIXED = ["on a sunny picnic blanket", "in a tiny museum"];

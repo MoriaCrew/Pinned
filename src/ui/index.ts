@@ -33,7 +33,18 @@ export {
   type StickerState,
 } from "./stickers";
 export { Developing, SceneCard, type SceneKind } from "./scenes";
-export { BoardHeader, Dock, EmptyState, Menu, SectionHead, Sheet, boardMetaLine, type BoardCounts } from "./board";
+export {
+  BoardHeader,
+  Dock,
+  EmptyState,
+  FilterChips,
+  Menu,
+  SectionHead,
+  Sheet,
+  boardMetaLine,
+  type BoardCounts,
+  type FilterChipItem,
+} from "./board";
 export { Composer, isSubmitKey } from "./composer";
 export {
   PlusSheet,

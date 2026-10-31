@@ -203,6 +203,15 @@
 .pn-chip-thumb { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(1px 0 0 var(--keyline)) drop-shadow(-1px 0 0 var(--keyline)) drop-shadow(0 1px 0 var(--keyline)) drop-shadow(0 -1px 0 var(--keyline)) drop-shadow(0 2px 2px var(--shade)); }
 .pn-chip[aria-pressed="true"] { background: var(--ink); color: var(--surface-raised); border-color: var(--ink); }
 .pn-chip-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+/* Filter row (PIN-218): sticks to the top while its grid scrolls by, scrolls sideways, no bar. */
+.pn-filter-row { position: sticky; top: 0; z-index: 10; display: flex; gap: var(--space-2); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); background: var(--surface); box-shadow: 0 8px 8px -8px var(--shade); }
+.pn-filter-row::-webkit-scrollbar { display: none; }
+.pn-filter-row .pn-chip.pn-filter-chip { flex: none; gap: 6px; padding: 0 var(--space-3); }
+.pn-filter-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; }
+.pn-filter-count { font: 500 13px/18px var(--font-mono); color: var(--ink-muted); }
+.pn-chip[aria-pressed="true"] .pn-filter-count { color: inherit; }
+.pn-filter-chip[data-tone="new"] .pn-filter-count { padding: 0 6px; border-radius: var(--radius-pill); background: var(--mark); color: var(--on-mark); font-weight: 700; }
+.pn-pins-solo .pn-pin-owner { display: none; }
 
 /* ---------- Tag ---------- */
 .pn-tag { display: inline-flex; align-items: center; gap: var(--space-1); padding: 3px 7px; border-radius: var(--radius-xs); font: 650 11px/14px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }

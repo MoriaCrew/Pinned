@@ -43,8 +43,22 @@ Principles:
 - `src/ui/` holds the components (`import { … } from "../ui"`):
   Icon (23 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
-  CreditLine, SceneCard, Developing, BoardHeader, SectionHead, Dock,
-  Sheet, EmptyState, Menu, SkinPicker, TryOnBar, PlusSheet, Composer.
+  CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
+  FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,
+  PlusSheet, Composer.
+- `FilterChips` (PIN-218) is the board's pin filter row under the
+  Pins head: New (pins from others since your last visit) · All ·
+  Mine · one chip per person with pins, most recently active first.
+  It sticks to the top while the grid scrolls, scrolls sideways,
+  and each chip is a 44px `aria-pressed` toggle with its count; a
+  person chip is their colour dot and their name cut at 14ch (the
+  full name is spoken). The row is left out when no chip would
+  narrow the grid; one person's pins hide the owner line. It only
+  filters the grid: picks, the tray and pruning use every pin. The
+  choice lasts for the tab (sessionStorage); "last visit" is the
+  newest pin time seen, saved to localStorage when the page is
+  hidden or left (`src/domain/pin-filter.ts`,
+  `src/app/g/[slug]/usePinFilter.ts`).
 - `Composer` (PIN-216) is the Make sheet's foot, shaped like a chat
   box: a field that grows from one line to four (then scrolls), the
   mic inside it on the right, and the labelled "Make it" beside it
@@ -250,4 +264,5 @@ No pins yet: three dashed ghost outlines.
 | Oct 31 | One Board Plus sheet is the only screen that asks for money: the perks plus one €2.99 purchase (Plus + 20 creations) for the board, through the credits checkout; no plan cards, no Host plan, no separate "Add makes" sheet; makes are called "creations" in the UI (PIN-182) | One clear thing to buy and one word for what it buys; any member can give it to the board, and nobody sees a price list |
 | Oct 31 | The Make sheet is a chat-style composer: mic and Stop are icon buttons inside the field (the chat convention, an exception to "icon-only for close, share, more"), "Make it" stays labelled; ideas are one scrolling row; tapping a pressed chip takes it back out (PIN-216) | Robin: the mic below the field felt awkward; the old sheet overflowed a 390x844 phone and wiped typed text |
 | Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |
+| Oct 31 | Busy boards get a sticky filter row above the pins (New / All / Mine / people) instead of reordering or paging the grid; the grid stays oldest first (PIN-218) | 100+ pins from 18 people is 40 rows; finding your own or a friend's pins, or what is new, should take one tap, and polling must never reshuffle the grid |
 | Oct 31 | When a page throws, visitors get the Paper dead end "Something came unpinned." with Try again and Go home, never the error, its message or digest; `global-error` carries the same screen when the root layout itself fails (PIN-212) | Judges and first-time visitors never see Next's bare "Application error"; same quiet look as not-found, one primary action |
