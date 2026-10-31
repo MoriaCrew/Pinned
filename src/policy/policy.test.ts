@@ -238,6 +238,8 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       starterMakes: 5,
       // PIN-229: a creation is an AI scene; photos use no make.
       photosUseMakes: false,
+      // PIN-230: free photos per free board; Plus lifts the limit.
+      freePhotosPerBoard: 15,
       starterBoardsPerMaker: 3,
       starterMakerWindowMs: 604_800_000,
       lowMakesWarning: 2,
@@ -286,6 +288,12 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       credits: { photosUseMakes: true },
     });
     expect(() => resolvePolicy({ credits: { photosUseMakes: 1 } } as never)).toThrow();
+    // PIN-230: free photos per board, deep-overridable, 0 allowed, never negative.
+    expect(resolvePolicy({ credits: { freePhotosPerBoard: 30 } }, { credits: { freePhotosPerBoard: 0 } }).credits.freePhotosPerBoard).toBe(0);
+    expect(parsePolicyOverridesJson('{"credits":{"freePhotosPerBoard":20}}')).toEqual({
+      credits: { freePhotosPerBoard: 20 },
+    });
+    expect(() => resolvePolicy({ credits: { freePhotosPerBoard: -1 } })).toThrow();
     // PIN-204 free creations per maker: deep-overridable, 0 boards allowed, window at least 1 ms.
     expect(
       resolvePolicy({ credits: { starterBoardsPerMaker: 10 } }, { credits: { starterMakerWindowMs: 60_000 } })

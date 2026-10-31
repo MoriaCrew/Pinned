@@ -70,6 +70,13 @@ export interface Board {
    * default (boards made before the rule). Server-only.
    */
   starterMakes?: number;
+  /**
+   * Free photos this board was given at creation (PIN-230): the
+   * Policy `credits.freePhotosPerBoard`, or 0 once its maker used
+   * up their free boards (decided with starterMakes). Absent = the
+   * Policy value. Ignored while the board has Plus. Server-only.
+   */
+  freePhotos?: number;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter

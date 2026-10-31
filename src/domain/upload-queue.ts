@@ -7,6 +7,7 @@
  * bounds arrive from Policy (photosPerBatch, batchUploadConcurrency,
  * uploadRetry*) — no literals here.
  */
+import { FREE_PHOTOS_USED } from "./free-photos";
 
 export type UploadItemStatus =
   | "queued"
@@ -68,8 +69,9 @@ export function createQueueItems(
 
 /**
  * What one failed upload attempt means for the queue:
- * - "stop": coded pool-empty / per-day (and not-joined) — the queue
- *   stops; queued items become `stopped`, never retried blindly.
+ * - "stop": coded pool-empty / per-day / free photos used (PIN-230)
+ *   (and not-joined) — the queue stops; queued items become
+ *   `stopped`, never retried blindly.
  * - "backoff": code-less 429 (per-IP brakes, in-process busy) and
  *   503 — wait and retry the same file under the same upload id.
  * - "check-job": network loss or an uncoded 5xx — the POST may have
@@ -79,13 +81,16 @@ export function createQueueItems(
  */
 export type UploadFailureAction = "stop" | "backoff" | "check-job" | "terminal";
 
+/** Coded 429s that no retry can fix (PIN-151 pool, daily cap, PIN-230 free photos). */
+const STOP_CODES: ReadonlySet<string> = new Set(["credits_pool_empty", "photos_per_day", FREE_PHOTOS_USED]);
+
 export function classifyUploadFailure(input: {
   httpStatus?: number;
   code?: string;
   network?: boolean;
 }): UploadFailureAction {
   if (input.network) return "check-job";
-  if (input.code === "credits_pool_empty" || input.code === "photos_per_day") return "stop";
+  if (input.code && STOP_CODES.has(input.code)) return "stop";
   if (input.httpStatus === 401) return "stop";
   if (input.httpStatus === 429) return "backoff";
   if (input.httpStatus === 503) return "backoff";
