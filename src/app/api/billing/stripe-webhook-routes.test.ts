@@ -25,6 +25,7 @@ let webhookRoute: (request: Request) => Promise<Response>;
 let intentId: string;
 let slug: string;
 let ledgerBalance: () => Promise<{ balance: number }>;
+let boardPlus: () => Promise<unknown>;
 
 beforeAll(async () => {
   ({ POST: webhookRoute } = await import("./stripe/webhook/route"));
@@ -55,6 +56,7 @@ beforeAll(async () => {
     credits: 20,
   });
   ledgerBalance = () => getCreditLedgerStore().getBalance(slug);
+  boardPlus = async () => (await getBoardRepository().getBoard(slug))?.plus ?? null;
 });
 
 function signedPost(event: unknown, secret = SECRET): Promise<Response> {
@@ -114,6 +116,8 @@ describe("POST /api/billing/stripe/webhook (stripe mode, PIN-150)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
     expect(await ledgerBalance()).toMatchObject({ balance: 20 });
+    // PIN-181: the purchase also gave the board paid Plus.
+    expect(await boardPlus()).toMatchObject({ plan: "board", source: "stripe" });
     const replay = await signedPost(event);
     expect(replay.status).toBe(200);
     expect(await ledgerBalance()).toMatchObject({ balance: 20 });

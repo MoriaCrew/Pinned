@@ -1,14 +1,15 @@
 /**
  * Board Plus (PIN-103, docs/15-board-plus.md). Pure and
  * client-safe: entitlement shape, plan + mode ids and the skin
- * gate. The core loop is always free and guests never pay; Plus
- * is bought by the board's host and only unlocks extra skins.
+ * gate. The core loop is free and guests never have to pay.
+ * Since PIN-181 Plus comes with the one credits purchase, which
+ * any joined member can make for the board; it unlocks the Plus
+ * skins, and lets any joined member change the look.
  *
  * Which skins need Plus is owned by the skins catalogue
  * (`./skins`, `Skin.plus`) — this module derives from it and
- * never keeps its own list. Prices are Policy display labels
- * (Policy.plus.priceLabels), never literals here. Billing lives
- * behind the Checkout port in src/billing.
+ * never keeps its own list. Prices live in Policy, never here.
+ * Billing lives behind the ports in src/billing.
  */
 import type { Board } from "./board";
 import { SKINS, isPlusSkinId, type SkinId } from "./skins";
@@ -109,6 +110,22 @@ export function decideMockGrant(
     if (current.source === "stripe") return { kind: "blocked" };
   }
   return { kind: "grant", plus: grantPlus(plan, "mock", now) };
+}
+
+/**
+ * The paid-purchase grant (PIN-181), run inside the repository
+ * write by the Stripe webhook: null (no write) when the board
+ * already holds a stripe grant of any plan, so a paid host plan
+ * is never downgraded and a replay writes nothing; otherwise a
+ * paid `board` grant, which also replaces a demo mock grant.
+ */
+export function decidePurchasePlusGrant(
+  board: Pick<Board, "plus">,
+  at: number,
+): { plus: BoardPlus } | null {
+  const current = board.plus;
+  if (current != null && isPlusPlan(current.plan) && current.source === "stripe") return null;
+  return { plus: grantPlus("board", "stripe", at) };
 }
 
 /**

@@ -5,6 +5,7 @@ import { CONTRACT_SLUG as SLUG, seedBoard } from "../billing/mock-checkout.contr
 import { STRIPE_API_VERSION } from "../config";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
+import { hasPlus, type BoardPlus } from "../domain/plus";
 import { resolvePolicy, DEFAULT_POLICY } from "../policy/policy";
 import { InMemoryCheckoutIntentStore, type CheckoutIntent } from "./checkout-intent";
 import { resolveBillingReturn } from "./credit-checkout";
@@ -987,5 +988,98 @@ describe("stored purchase terms (PIN-181)", () => {
     ).toBe("dead_letter");
     expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["pack_mismatch"]);
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 13 });
+  });
+});
+
+describe("Plus on purchase (PIN-181)", () => {
+  const AT = NOW + 60_000; // evt()'s default event time, the ledger `at`
+  const PAID_BOARD: BoardPlus = { plan: "board", source: "stripe", grantedAt: AT };
+
+  async function setPlus(h: Awaited<ReturnType<typeof harness>>, plus: BoardPlus) {
+    await h.boards.updateBoardSettings(SLUG, () => ({ plus }));
+  }
+
+  it("the grant writes paid board Plus once; replays and the second session event leave it", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const before = (await h.boards.getBoard(SLUG))!.version;
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(paid)).outcome).toBe("granted");
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus).toEqual(PAID_BOARD);
+    expect(board.version).toBe(before + 1);
+    expect(["off", "mock", "stripe"].map((m) => hasPlus(board, m as "off"))).toEqual([true, true, true]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+
+    expect(await h.deliver(paid)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    expect(
+      (await h.deliver(evt("evt_async", "checkout.session.async_payment_succeeded", session(intent.id), AT + 5_000)))
+        .outcome,
+    ).toBe("duplicate_grant");
+    expect(await h.boards.getBoard(SLUG)).toMatchObject({ plus: PAID_BOARD, version: before + 1 });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("a Plus write that failed after the makes grant is repaired by Stripe's retry", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const realUpdate = h.boards.updateBoardSettings.bind(h.boards);
+    h.boards.updateBoardSettings = async () => {
+      throw new Error("board store unavailable");
+    };
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    await expect(h.deliver(paid)).rejects.toThrow("board store unavailable");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect((await h.boards.getBoard(SLUG))!.plus ?? null).toBeNull();
+    expect(await h.records.getProcessed("evt_paid")).toBeNull();
+
+    h.boards.updateBoardSettings = realUpdate;
+    expect((await h.deliver(paid)).outcome).toBe("duplicate_grant");
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+  });
+
+  it("a paid host grant is never downgraded; a mock grant is replaced", async () => {
+    const host: BoardPlus = { plan: "host", source: "stripe", grantedAt: 1_000 };
+    const h = await harness();
+    await setPlus(h, host);
+    const intent = await h.createIntent();
+    expect((await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome).toBe(
+      "granted",
+    );
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(host);
+
+    const m = await harness();
+    await setPlus(m, { plan: "host", source: "mock", grantedAt: 1_000 });
+    const second = await m.createIntent();
+    await m.deliver(evt("evt_paid", "checkout.session.completed", session(second.id)));
+    expect((await m.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+  });
+
+  it("plusOnPurchase off grants the makes and writes no Plus", async () => {
+    const h = await harness();
+    h.deps.policy = resolvePolicy({ credits: { packs: [TEST_PACK], plusOnPurchase: false } });
+    const intent = await h.createIntent();
+    const before = (await h.boards.getBoard(SLUG))!;
+    expect((await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome).toBe(
+      "granted",
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(await h.boards.getBoard(SLUG)).toMatchObject({ version: before.version });
+    expect((await h.boards.getBoard(SLUG))!.plus ?? null).toBeNull();
+  });
+
+  it("no board repository: the makes land and plus_grant_unavailable flags an operator", async () => {
+    const h = await harness();
+    h.deps.boards = null;
+    const intent = await h.createIntent();
+    const paid = evt("evt_paid", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(paid)).outcome).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["plus_grant_unavailable"]);
+    // Re-runnable (no processed record): a resend once boards are wired grants Plus.
+    h.deps.boards = h.boards;
+    expect((await h.deliver(paid)).outcome).toBe("duplicate_grant");
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
   });
 });

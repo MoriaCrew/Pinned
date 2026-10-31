@@ -81,7 +81,7 @@ import {
   type CreditLedgerStore,
   type CreditPurchase,
 } from "../domain/credit-ledger";
-import type { PlusMode } from "../domain/plus";
+import { decidePurchasePlusGrant, type PlusMode } from "../domain/plus";
 import type { Policy, PolicyCreditPack } from "../policy/policy";
 import type {
   CheckoutIntent,
@@ -160,7 +160,7 @@ export interface StripeWebhookDeps {
   intents: CheckoutIntentStore;
   ledger: CreditLedgerStore;
   records: StripeWebhookRecordStore;
-  /** Board existence for the dead-board grant refusal; null skips the check (unit fakes). */
+  /** Board existence for the dead-board grant refusal, and the Plus write on a grant (PIN-181); null skips the check (unit fakes) and dead-letters the Plus write. */
   boards: BoardRepository | null;
   policy: Policy;
   /** Per-board policy (the buy path packs came from it); falls back to `policy`. */
@@ -424,6 +424,36 @@ async function persistSessionMapping(
 }
 
 /**
+ * PIN-181: a granted purchase also gives the board Plus while the
+ * board's `credits.plusOnPurchase` is on. Runs after the makes
+ * grant AND on the duplicate path, so when this write throws (it
+ * propagates: 500, Stripe retries) or the process dies after the
+ * grant, the next delivery repairs it. The decision runs inside
+ * the board write and never replaces a stripe grant, so a replay
+ * writes nothing. No board repository: the makes still stand and
+ * an operator flag records the missing Plus.
+ */
+async function grantPurchasePlus(
+  deps: StripeWebhookDeps,
+  ctx: HandlerContext,
+  intent: CheckoutIntent,
+  sessionId: string | null,
+): Promise<void> {
+  if (!(await policyFor(deps, intent.boardId)).credits.plusOnPurchase) return;
+  if (!deps.boards) {
+    await deadLetter(deps, ctx, "plus_grant_unavailable", {
+      intentId: intent.id,
+      boardId: intent.boardId,
+      stripeObjectId: sessionId ?? undefined,
+    });
+    return;
+  }
+  await deps.boards.updateBoardSettings(intent.boardId, (board) =>
+    decidePurchasePlusGrant(board, ctx.at),
+  );
+}
+
+/**
  * The one fulfil path for `checkout.session.completed` and
  * `checkout.session.async_payment_succeeded`. Grants only a
  * `paid` session whose amount/currency + pack cross-check
@@ -477,6 +507,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
   if (purchase.grantedCredits > 0) {
     // The other event (completed / async success) landed first.
     await persistSessionMapping(deps, ctx, intent, mapping, intent.grantedAt ?? ctx.at);
+    await grantPurchasePlus(deps, ctx, intent, str(session.id));
     await deps.intents.close(intent.id, ctx.at);
     return "duplicate_grant";
   }
@@ -570,6 +601,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     }
     throw error;
   }
+  await grantPurchasePlus(deps, ctx, intent, str(session.id));
   await deps.intents.close(intent.id, ctx.at);
   return "granted";
 }
