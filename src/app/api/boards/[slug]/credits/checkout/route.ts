@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t, type Locale } from "../../../../../../i18n";
+import { getLocale } from "../../../../../../i18n/server";
 import { getCreditCheckout } from "../../../../../../billing/server";
 import { getConfig } from "../../../../../../config";
 import { getPolicy } from "../../../../../../policy/server";
@@ -31,7 +33,7 @@ export const dynamic = "force-dynamic";
 
 const CHECKOUT_SCOPE = "board-credits-checkout";
 
-function creditErrorResponse(error: unknown): NextResponse {
+function creditErrorResponse(error: unknown, locale: Locale): NextResponse {
   if (error instanceof CreditCheckoutError) {
     if (error.status === 404) return notFound();
     return NextResponse.json(
@@ -39,7 +41,7 @@ function creditErrorResponse(error: unknown): NextResponse {
       { status: error.status, headers: JSON_HEADERS },
     );
   }
-  return errorResponse(error, "Checkout is not available right now. Please try again.");
+  return errorResponse(error, t(locale, "request.checkoutUnavailable"));
 }
 
 /**
@@ -57,16 +59,17 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
   const envPolicy = getPolicy();
   const refused =
-    rejectCrossSite(request) ??
-    requireJson(request) ??
-    rateLimit(request, CHECKOUT_SCOPE, envPolicy.credits.checkoutPerIp);
+    rejectCrossSite(request, locale) ??
+    requireJson(request, locale) ??
+    rateLimit(request, CHECKOUT_SCOPE, envPolicy.credits.checkoutPerIp, locale);
   if (refused) return refused;
-  const body = await readJsonCapped(request, envPolicy.plus.requestMaxBytes);
+  const body = await readJsonCapped(request, envPolicy.plus.requestMaxBytes, locale);
   if (!body.ok) return body.response;
   try {
     const policy = await policyForBoard(slug);
@@ -78,7 +81,7 @@ export async function POST(
         verifyHostToken(board, hostTokenFrom(request, slug), policy, Date.now());
       if (!isHost) {
         return NextResponse.json(
-          { error: "Join this board before buying makes.", code: "participant_required" },
+          { error: t(locale, "request.joinBeforeBuying"), code: "participant_required" },
           { status: 401, headers: JSON_HEADERS },
         );
       }
@@ -94,6 +97,6 @@ export async function POST(
     });
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return creditErrorResponse(error);
+    return creditErrorResponse(error, locale);
   }
 }

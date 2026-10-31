@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../config";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import type { Policy } from "../../../policy/policy";
 import { BoardPlusError, hostOnlyError, type HostRouteDeps } from "../../../server/board-plus";
@@ -30,13 +31,14 @@ export async function hostRouteGate(
   slug: string,
   options: { allowMember?: boolean } = {},
 ): Promise<HostRouteGate> {
+  const locale = await getLocale();
   const policy = getPolicy();
   const refused =
-    rejectCrossSite(request) ??
-    requireJson(request) ??
-    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp);
+    rejectCrossSite(request, locale) ??
+    requireJson(request, locale) ??
+    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp, locale);
   if (refused) return { ok: false, response: refused };
-  const body = await readJsonCapped(request, policy.plus.requestMaxBytes);
+  const body = await readJsonCapped(request, policy.plus.requestMaxBytes, locale);
   if (!body.ok) return { ok: false, response: body.response };
   const hostToken = hostTokenFrom(request, slug);
   const memberCookie = options.allowMember

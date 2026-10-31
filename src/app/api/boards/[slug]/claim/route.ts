@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import { publicParticipant } from "../../../../../server/board-session";
 import { getBoardRepository } from "../../../../../server/board-repository";
 import {
@@ -39,6 +41,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -49,7 +52,7 @@ export async function POST(
     !checkRateLimit(`${clientKey(request, "claim")}:${slug}`, gate.limit, gate.windowMs)
   ) {
     return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
+      { error: t(locale, "request.tooManyAttempts") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -60,7 +63,7 @@ export async function POST(
     const user = session?.user ?? null;
     if (!user) {
       return NextResponse.json(
-        { error: "Sign in to link this board." },
+        { error: t(locale, "request.signInToLink") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
@@ -68,7 +71,7 @@ export async function POST(
     const participant = await viewerFor(request, slug, policy);
     if (!participant) {
       return NextResponse.json(
-        { error: "Join this board first." },
+        { error: t(locale, "request.joinFirst") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
@@ -86,6 +89,6 @@ export async function POST(
       { headers: JSON_HEADERS },
     );
   } catch (error) {
-    return errorResponse(error, "Could not link this board. Please try again.");
+    return errorResponse(error, t(locale, "request.linkBoardFailed"));
   }
 }

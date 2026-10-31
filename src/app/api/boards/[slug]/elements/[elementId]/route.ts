@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../../i18n";
+import { getLocale } from "../../../../../../i18n/server";
 import { getPolicy } from "../../../../../../policy/server";
 import { deleteMyElement, renameMyElement } from "../../../../../../server/board-api";
 import { readJsonCapped, rejectCrossSite, requireJson } from "../../../request-guards";
@@ -26,6 +28,7 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ slug: string; elementId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, elementId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -35,7 +38,7 @@ export async function DELETE(
     const result = await deleteMyElement(slug, viewer, elementId, boardApiDeps(policy));
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "That pin could not be deleted. Please try again.");
+    return errorResponse(error, t(locale, "request.deletePinFailed"));
   }
 }
 
@@ -52,19 +55,20 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ slug: string; elementId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, elementId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
   try {
-    const refused = rejectCrossSite(request) ?? requireJson(request);
+    const refused = rejectCrossSite(request, locale) ?? requireJson(request, locale);
     if (refused) return refused;
-    const body = await readJsonCapped(request, getPolicy().elementRenameMaxBytes);
+    const body = await readJsonCapped(request, getPolicy().elementRenameMaxBytes, locale);
     if (!body.ok) return body.response;
     const policy = await policyForBoard(slug);
     const viewer = await viewerFor(request, slug, policy);
     const result = await renameMyElement(slug, viewer, elementId, body.value, boardApiDeps(policy));
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "That thing could not be renamed. Please try again.");
+    return errorResponse(error, t(locale, "request.renameThingFailed"));
   }
 }
