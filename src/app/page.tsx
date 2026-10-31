@@ -1,51 +1,41 @@
 import type { CSSProperties } from "react";
 import { getConfig } from "../config";
 import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../domain/board-delete-ui";
+import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
 import { t, tf } from "../i18n";
 import { ButtonLink, Sticker, Tag, Wordmark } from "../ui";
 import { You } from "./auth/You";
+import { LANDING_SETS, landingSetById } from "./landing-sets.data";
 import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
 
-// DEMO_BOARD_SLUG is a runtime env value (PIN-73); render per
-// request so setting it needs no rebuild.
+// DEMO_BOARD_SLUG is a runtime env value (PIN-73) and the showcase set
+// is drawn per request (PIN-175); render per request so neither needs
+// a rebuild.
 export const dynamic = "force-dynamic";
-
-const IMG = "/landing";
-
-/**
- * The hero pile: six die-cut stickers, tilted and overlapping a
- * little, dropped in one after another. Positions are percentages
- * of the pile's box; the duck is the foil one. Synthetic images
- * (public/landing/README.md).
- */
-const PILE: {
-  id: string;
-  left: number;
-  top: number;
-  size: number;
-  tilt: number;
-  foil?: boolean;
-}[] = [
-  { id: "red-alarm-clock", left: 0, top: 12, size: 40, tilt: -0.85 },
-  { id: "teal-mug", left: 31, top: -2, size: 44, tilt: 0.55 },
-  { id: "orange-tabby-cat", left: 51, top: 25, size: 46, tilt: 0.7 },
-  { id: "straw-hat", left: 3, top: 48, size: 38, tilt: -0.45 },
-  { id: "red-sneakers", left: 26, top: 58, size: 48, tilt: 0.9 },
-  { id: "rubber-duck", left: 30, top: 30, size: 28, tilt: -0.6, foil: true },
-];
 
 // Landing. Board creation is live (PIN-66): Start goes to /new.
 // The demo action points at the seeded judge board only when
 // DEMO_BOARD_SLUG is set (PIN-73, scripts/seed-demo-board.mjs);
 // unset or invalid shows nothing: no fake functionality.
+//
+// The sticker pile and the three "How it works" pictures come from one
+// showcase set (src/app/landing-sets.data.ts), a random one per visit;
+// `?set=<id>` pins one, and "Show another" links to a different one.
+// The art is synthetic (public/landing/README.md).
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const demoSlug = getConfig().demoBoardSlug;
+  const query = await searchParams;
   // PIN-168: the host lands here after deleting a board while signed out.
-  const boardDeleted = isBoardDeletedFlag((await searchParams)[BOARD_DELETED_PARAM]);
+  const boardDeleted = isBoardDeletedFlag(query[BOARD_DELETED_PARAM]);
+  const requested = query.set;
+  const ids = LANDING_SETS.map((entry) => entry.id);
+  const set = landingSetById(pickLandingSet(ids, { requested, random: Math.random }));
+  const anotherHref = `/?set=${anotherLandingSet(ids, set.id, Math.random)}`;
+  const { photo, scene } = set;
   return (
     <main className="pn-skin-root pn-lib-page pn-landing" data-theme="paper">
       <div className="pn-landing-inner">
@@ -56,27 +46,40 @@ export default async function HomePage({
           <BoardDeletedNotice show={boardDeleted} />
         </div>
 
-        <div className="pn-landing-pile" aria-hidden="true">
-          {PILE.map((item, index) => (
-            <Sticker
-              key={item.id}
-              src={`${IMG}/cutout-${item.id}.webp`}
-              seed={item.id}
-              tilt={item.tilt}
-              size={`${item.size}%`}
-              foil={item.foil}
-              state="arriving"
-              loading="eager"
-              style={
-                {
-                  position: "absolute",
-                  left: `${item.left}%`,
-                  top: `${item.top}%`,
-                  animationDelay: `${0.15 + index * 0.12}s`,
-                } as CSSProperties
-              }
-            />
-          ))}
+        {/* The pile drops in one sticker after another; its link sits right under it, outside the hidden art. */}
+        <div className="pn-landing-show">
+          <div className="pn-landing-pile" aria-hidden="true">
+            {set.pile.map((slot, index) => (
+              <Sticker
+                key={slot.sticker}
+                src={set.stickers[slot.sticker].src}
+                seed={slot.sticker}
+                tilt={slot.tilt}
+                size={`${slot.size}%`}
+                foil={slot.foil}
+                state="arriving"
+                loading="eager"
+                style={
+                  {
+                    position: "absolute",
+                    left: `${slot.left}%`,
+                    top: `${slot.top}%`,
+                    animationDelay: `${0.15 + index * 0.12}s`,
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
+          <ButtonLink
+            variant="quiet"
+            size="sm"
+            icon="remix"
+            href={anotherHref}
+            aria-label={t("en", "landing.anotherLabel")}
+            className="pn-landing-another"
+          >
+            {t("en", "landing.another")}
+          </ButtonLink>
         </div>
 
         <div className="pn-landing-copy">
@@ -106,24 +109,43 @@ export default async function HomePage({
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
-                      <img src={`${IMG}/photo-desk-mug-duck.webp`} alt="" loading="lazy" style={{ objectPosition: "72% 50%", scale: "1.7", transformOrigin: "70% 82%" }} />
+                      <img
+                        src={photo.src}
+                        alt=""
+                        loading="lazy"
+                        style={{
+                          objectPosition: photo.objectPosition,
+                          scale: photo.scale?.toString(),
+                          transformOrigin: photo.transformOrigin,
+                        }}
+                      />
                     </span>
                   </span>
                 </span>
-                <Tag tone="ink" className="pn-landing-tag pn-landing-tag-a">
-                  {t("en", "landing.sampleMug")}
-                </Tag>
-                <Tag tone="ink" className="pn-landing-tag pn-landing-tag-b">
-                  {t("en", "landing.sampleDuck")}
-                </Tag>
+                {photo.chips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="pn-landing-chip"
+                    style={{ left: `${chip.left}%`, top: `${chip.top}%`, rotate: `${chip.rotate ?? 0}deg` }}
+                  >
+                    <Tag tone="ink">{t("en", chip.label)}</Tag>
+                  </span>
+                ))}
               </div>
               <StepText n={1} title={t("en", "landing.step1")} body={t("en", "landing.step1Body")} />
             </li>
             <li className="pn-landing-step">
               <div className="pn-landing-art pn-landing-art-stickers" aria-hidden="true">
-                <Sticker src={`${IMG}/cutout-teal-mug.webp`} seed="step-mug" tilt={-0.7} size="58%" style={{ left: "2%", top: "14%" }} />
-                <Sticker src={`${IMG}/cutout-rubber-duck.webp`} seed="step-duck" tilt={0.8} size="38%" style={{ left: "46%", top: "8%" }} />
-                <Sticker src={`${IMG}/cutout-potted-succulent.webp`} seed="step-succulent" tilt={0.5} size="42%" style={{ left: "52%", top: "46%" }} />
+                {set.trio.map((slot) => (
+                  <Sticker
+                    key={slot.sticker}
+                    src={set.stickers[slot.sticker].src}
+                    seed={`step-${slot.sticker}`}
+                    tilt={slot.tilt}
+                    size={`${slot.size}%`}
+                    style={{ left: `${slot.left}%`, top: `${slot.top}%` }}
+                  />
+                ))}
               </div>
               <StepText n={2} title={t("en", "landing.step2")} body={t("en", "landing.step2Body")} />
             </li>
@@ -133,7 +155,7 @@ export default async function HomePage({
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
-                      <img src={`${IMG}/scene-picnic-mug-duck.webp`} alt="" loading="lazy" style={{ objectPosition: "50% 62%" }} />
+                      <img src={scene.src} alt="" loading="lazy" style={{ objectPosition: scene.objectPosition }} />
                     </span>
                     <span className="pn-print-meta">
                       <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: "01" })}</span>
