@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { t, tCount } from "../i18n";
+import { useLocale } from "../i18n/client";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
 import { AvatarStack, Button, IconButton, Wordmark, cx, pickedCountLabel, type Person } from "./primitives";
 
 export interface BoardCounts {
@@ -12,11 +14,11 @@ export interface BoardCounts {
 }
 
 /** "6 people · 14 things · 6 scenes" (only the counts given). */
-export function boardMetaLine(counts: BoardCounts): string {
+export function boardMetaLine(counts: BoardCounts, locale: Locale = DEFAULT_LOCALE): string {
   const parts: string[] = [];
-  if (counts.people !== undefined) parts.push(tCount("en", "meta.people", counts.people));
-  if (counts.things !== undefined) parts.push(tCount("en", "meta.things", counts.things));
-  if (counts.scenes !== undefined) parts.push(tCount("en", "meta.scenes", counts.scenes));
+  if (counts.people !== undefined) parts.push(tCount(locale, "meta.people", counts.people));
+  if (counts.things !== undefined) parts.push(tCount(locale, "meta.things", counts.things));
+  if (counts.scenes !== undefined) parts.push(tCount(locale, "meta.scenes", counts.scenes));
   return parts.join(" · ");
 }
 
@@ -31,7 +33,7 @@ export function BoardHeader({
   peopleLabel,
   counts,
   onShare,
-  shareLabel = t("en", "ui.shareBoard"),
+  shareLabel,
   homeHref,
   you,
   className,
@@ -49,14 +51,15 @@ export function BoardHeader({
   you?: ReactNode;
   className?: string;
 }) {
-  const meta = counts ? boardMetaLine(counts) : "";
+  const locale = useLocale();
+  const meta = counts ? boardMetaLine(counts, locale) : "";
   const stack = people && people.length > 0 ? <AvatarStack people={people} max={3} size="sm" label={peopleLabel} /> : null;
   return (
     <header className={cx("pn-head", className)}>
       <div className="pn-head-row">
         <Wordmark size={22} href={homeHref} />
         <div className="pn-head-right">
-          {onShare ? <IconButton icon="share" label={shareLabel} onClick={onShare} /> : null}
+          {onShare ? <IconButton icon="share" label={shareLabel ?? t(locale, "ui.shareBoard")} onClick={onShare} /> : null}
           {you}
         </div>
       </div>
@@ -113,13 +116,14 @@ export function Dock(
         className?: string;
       },
 ) {
+  const locale = useLocale();
   const cls = cx("pn-dock", props.fixed && "pn-dock-fixed", props.className);
   if (props.mode === "picking") {
     const slots = Array.from({ length: props.max }, (_, i) => props.picked[i] ?? null);
     return (
-      <nav className={cls} aria-label={t("en", "ui.pickedThings")}>
-        <IconButton icon="close" label={props.cancelLabel ?? t("en", "ui.stopPicking")} variant="ghost" onClick={props.onCancel} />
-        <ol className="pn-tray" aria-label={t("en", "ui.pickedThings")}>
+      <nav className={cls} aria-label={t(locale, "ui.pickedThings")}>
+        <IconButton icon="close" label={props.cancelLabel ?? t(locale, "ui.stopPicking")} variant="ghost" onClick={props.onCancel} />
+        <ol className="pn-tray" aria-label={t(locale, "ui.pickedThings")}>
           {slots.map((slot, i) => (
             <li key={i} className={cx("pn-tray-slot", slot && "is-filled")}>
               {slot ? (
@@ -130,7 +134,7 @@ export function Dock(
           ))}
         </ol>
         <span className="pn-sr" aria-live="polite">
-          {pickedCountLabel(props.picked.length, props.max)}
+          {pickedCountLabel(props.picked.length, props.max, locale)}
         </span>
         <Button
           variant="primary"
@@ -140,18 +144,18 @@ export function Dock(
           onClick={props.onNext}
           style={{ flex: "0 0 auto" }}
         >
-          {props.nextLabel ?? t("en", "ui.next")}
+          {props.nextLabel ?? t(locale, "ui.next")}
         </Button>
       </nav>
     );
   }
   return (
-    <nav className={cls} aria-label={t("en", "ui.boardActions")}>
+    <nav className={cls} aria-label={t(locale, "ui.boardActions")}>
       <Button variant="primary" size="lg" icon="camera" onClick={props.onAdd}>
-        {props.addLabel ?? t("en", "ui.addPhoto")}
+        {props.addLabel ?? t(locale, "ui.addPhoto")}
       </Button>
       <Button variant="secondary" size="lg" icon="scene" onClick={props.onMake} disabled={props.makeDisabled}>
-        {props.makeLabel ?? t("en", "ui.makeScene")}
+        {props.makeLabel ?? t(locale, "ui.makeScene")}
       </Button>
     </nav>
   );
@@ -165,7 +169,7 @@ export function Dock(
 export function Sheet({
   title,
   onClose,
-  closeLabel = t("en", "ui.close"),
+  closeLabel,
   footer,
   layer = "fixed",
   children,
@@ -185,6 +189,7 @@ export function Sheet({
   /** Id of the field to put the caret in when the sheet opens (else the sheet itself). */
   initialFocusId?: string;
 }) {
+  const locale = useLocale();
   const autoId = useId();
   const titleId = labelledBy ?? `${autoId}-title`;
   const ref = useRef<HTMLElement>(null);
@@ -229,7 +234,7 @@ export function Sheet({
         <h2 className="pn-sheet-title" id={titleId}>
           {title}
         </h2>
-        {onClose ? <IconButton icon="close" label={closeLabel} variant="ghost" onClick={onClose} /> : null}
+        {onClose ? <IconButton icon="close" label={closeLabel ?? t(locale, "ui.close")} variant="ghost" onClick={onClose} /> : null}
       </div>
       <div className="pn-sheet-body">{children}</div>
       {footer ? <div className="pn-sheet-foot">{footer}</div> : null}
@@ -246,10 +251,10 @@ export function Sheet({
 
 /** A brand-new board: ghost outlines, one line, the two first actions. */
 export function EmptyState({
-  title = t("en", "ui.emptyTitle"),
-  body = t("en", "ui.emptyBody"),
-  actionLabel = t("en", "ui.emptyAction"),
-  shareLabel = t("en", "ui.emptyShare"),
+  title,
+  body,
+  actionLabel,
+  shareLabel,
   onAction,
   onShare,
   className,
@@ -262,6 +267,7 @@ export function EmptyState({
   onShare?: () => void;
   className?: string;
 }) {
+  const locale = useLocale();
   return (
     <section className={cx("pn-empty", className)}>
       <div className="pn-empty-ghosts" aria-hidden="true">
@@ -269,17 +275,17 @@ export function EmptyState({
         <span className="pn-ghost pn-ghost-tall" style={{ "--t": 0.6 } as CSSProperties} />
         <span className="pn-ghost pn-ghost-wide" style={{ "--t": -0.3 } as CSSProperties} />
       </div>
-      <h2 className="pn-section-title">{title}</h2>
-      <p className="pn-empty-body">{body}</p>
+      <h2 className="pn-section-title">{title ?? t(locale, "ui.emptyTitle")}</h2>
+      <p className="pn-empty-body">{body ?? t(locale, "ui.emptyBody")}</p>
       <div className="pn-empty-actions">
         {onAction ? (
           <Button variant="primary" size="lg" icon="camera" onClick={onAction}>
-            {actionLabel}
+            {actionLabel ?? t(locale, "ui.emptyAction")}
           </Button>
         ) : null}
         {onShare ? (
           <Button variant="secondary" size="lg" icon="share" onClick={onShare}>
-            {shareLabel}
+            {shareLabel ?? t(locale, "ui.emptyShare")}
           </Button>
         ) : null}
       </div>

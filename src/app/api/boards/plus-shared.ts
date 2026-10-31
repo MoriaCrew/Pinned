@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "../../../config";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import type { Policy } from "../../../policy/policy";
 import { BoardPlusError, hostOnlyError, type HostRouteDeps } from "../../../server/board-plus";
@@ -7,7 +8,7 @@ import { playerCookieName, readCookieValue } from "../../../server/board-session
 import { getBoardRepository } from "../../../server/board-repository";
 import { hostTokenFrom } from "../../../server/host-session";
 import { readJsonCapped, rateLimit, rejectCrossSite, requireJson } from "./request-guards";
-import { JSON_HEADERS, errorResponse, notFound } from "./shared";
+import { errorResponse, localizedErrorJson, notFound } from "./shared";
 
 /** One per-IP budget shared by the skin and plus routes. */
 const HOST_ROUTES_SCOPE = "board-host";
@@ -30,13 +31,14 @@ export async function hostRouteGate(
   slug: string,
   options: { allowMember?: boolean } = {},
 ): Promise<HostRouteGate> {
+  const locale = await getLocale();
   const policy = getPolicy();
   const refused =
-    rejectCrossSite(request) ??
-    requireJson(request) ??
-    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp);
+    rejectCrossSite(request, locale) ??
+    requireJson(request, locale) ??
+    rateLimit(request, HOST_ROUTES_SCOPE, policy.plus.hostRoutesPerIp, locale);
   if (refused) return { ok: false, response: refused };
-  const body = await readJsonCapped(request, policy.plus.requestMaxBytes);
+  const body = await readJsonCapped(request, policy.plus.requestMaxBytes, locale);
   if (!body.ok) return { ok: false, response: body.response };
   const hostToken = hostTokenFrom(request, slug);
   const memberCookie = options.allowMember
@@ -60,10 +62,7 @@ export function hostRouteDeps(policy: Policy): HostRouteDeps {
 export function plusErrorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof BoardPlusError) {
     if (error.status === 404) return notFound();
-    return NextResponse.json(
-      { error: error.message, ...(error.code ? { code: error.code } : {}) },
-      { status: error.status, headers: JSON_HEADERS },
-    );
+    return localizedErrorJson(error, error.status, error.code ? { code: error.code } : {});
   }
   return errorResponse(error, fallback);
 }

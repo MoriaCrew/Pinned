@@ -36,7 +36,8 @@ import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
 import { MUSE_IMAGE_USD_PER_IMAGE } from "../gateway/costs";
 import type { ComposeSceneElement, SceneComposer } from "../gateway/ports";
-import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { englishText, userMessage, type UserMessage } from "../i18n/user-message";
 import type { Policy } from "../policy/policy";
 import {
   assertDerivativeRef,
@@ -53,10 +54,15 @@ import {
   tryDebitMake,
 } from "./credit-pool";
 
+/** Stored as `refusalReason` on refused scenes (PIN-196). */
+export const SCENE_REFUSED_KEY: MessageKey = "ai.refused";
+
 /** Request-time denial, mapped to an HTTP status by board-api. */
 export class SceneJobRequestError extends Error {
+  readonly userMessage?: UserMessage;
+
   constructor(
-    message: string,
+    message: UserMessage | string,
     public readonly code:
       | "bad_prompt"
       | "pins_per_scene"
@@ -66,8 +72,9 @@ export class SceneJobRequestError extends Error {
       | "scene_id_conflict"
       | "parent_not_found",
   ) {
-    super(message);
+    super(englishText(message));
     this.name = "SceneJobRequestError";
+    this.userMessage = typeof message === "string" ? undefined : message;
   }
 }
 
@@ -410,7 +417,7 @@ export async function startSceneJob(
   const prompt = input.prompt.trim().replace(/\s+/g, " ");
   if (!prompt || [...prompt].length > policy.scenePromptMaxChars) {
     throw new SceneJobRequestError(
-      `Describe your scene in up to ${policy.scenePromptMaxChars} characters.`,
+      userMessage("error.scenePromptTooLong", { max: policy.scenePromptMaxChars }),
       "bad_prompt",
     );
   }
@@ -420,7 +427,10 @@ export async function startSceneJob(
     elementIds.length > policy.pinsPerScene.max
   ) {
     throw new SceneJobRequestError(
-      `Pick between ${policy.pinsPerScene.min} and ${policy.pinsPerScene.max} pins for a scene.`,
+      userMessage("error.scenePinsRange", {
+        min: policy.pinsPerScene.min,
+        max: policy.pinsPerScene.max,
+      }),
       "pins_per_scene",
     );
   }
@@ -463,7 +473,7 @@ export async function startSceneJob(
   const sceneId = input.sceneId?.trim();
   if (sceneId) {
     if (!SCENE_ID.test(sceneId)) {
-      throw new SceneJobRequestError("That scene id is not valid.", "bad_prompt");
+      throw new SceneJobRequestError(userMessage("error.sceneIdInvalid"), "bad_prompt");
     }
     const existing = await deps.jobs.get(input.boardId, sceneId);
     if (existing) {
@@ -474,7 +484,7 @@ export async function startSceneJob(
         !sameStringList(existing.elementIds, elementIds)
       ) {
         throw new SceneJobRequestError(
-          "That scene id was already used for a different scene.",
+          userMessage("error.sceneIdConflict"),
           "scene_id_conflict",
         );
       }
@@ -484,7 +494,7 @@ export async function startSceneJob(
     // by a Scene on any board (with no matching job here) conflicts.
     if (await deps.boards.getScene(sceneId)) {
       throw new SceneJobRequestError(
-        "That scene id was already used for a different scene.",
+        userMessage("error.sceneIdConflict"),
         "scene_id_conflict",
       );
     }
@@ -519,7 +529,7 @@ export async function startSceneJob(
   );
   if (todays.length >= policy.scenesPerBoardPerDay) {
     throw new SceneJobRequestError(
-      t("en", "ai.boardCap"),
+      userMessage("ai.boardCap"),
       "scenes_per_board_day",
     );
   }
@@ -528,7 +538,7 @@ export async function startSceneJob(
     policy.scenesPerParticipantPerDay
   ) {
     throw new SceneJobRequestError(
-      t("en", "ai.participantCap"),
+      userMessage("ai.participantCap"),
       "scenes_per_participant_day",
     );
   }
@@ -565,7 +575,7 @@ export async function startSceneJob(
       }
       if (raced) {
         throw new SceneJobRequestError(
-          "That scene id was already used for a different scene.",
+          userMessage("error.sceneIdConflict"),
           "scene_id_conflict",
         );
       }
@@ -814,7 +824,8 @@ export async function runSceneJob(
     if (outcome.status === "refused") {
       job.status = "refused";
       job.errorCode = outcome.errorCode ?? "refused";
-      job.refusalReason = t("en", "ai.refused");
+      // PIN-196: the catalog key, never English; readers translate it.
+      job.refusalReason = SCENE_REFUSED_KEY;
       return finish(deps, job);
     }
     if (outcome.status !== "ready") {

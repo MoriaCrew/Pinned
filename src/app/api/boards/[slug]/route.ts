@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../i18n";
+import { getLocale } from "../../../../i18n/server";
 import { getConfig } from "../../../../config";
 import type { Participant } from "../../../../domain/board";
 import { getBoardView } from "../../../../server/board-api";
@@ -63,6 +65,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -111,7 +114,7 @@ export async function GET(
         : JSON_HEADERS,
     });
   } catch (error) {
-    return errorResponse(error, "Could not load this board. Please try again.");
+    return errorResponse(error, t(locale, "request.loadBoardFailed"));
   }
 }
 
@@ -128,12 +131,13 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
   const refused =
-    rejectCrossSite(request) ??
-    rateLimit(request, "board-delete", getPolicy().boardDeletePerIp);
+    rejectCrossSite(request, locale) ??
+    rateLimit(request, "board-delete", getPolicy().boardDeletePerIp, locale);
   if (refused) return refused;
   const hostToken = hostTokenFrom(request, slug);
   if (!hostToken) return notFound();
@@ -152,7 +156,7 @@ export async function DELETE(
       error: error instanceof Error ? error.name : "unknown",
     });
     return NextResponse.json(
-      { error: "Could not delete this board. Please try again." },
+      { error: t(locale, "request.deleteBoardFailed") },
       { status: 500, headers: JSON_HEADERS },
     );
   }

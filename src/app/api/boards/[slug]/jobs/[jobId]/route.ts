@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../../i18n";
+import { getLocale } from "../../../../../../i18n/server";
 import { getJobView } from "../../../../../../server/board-api";
 import {
   JSON_HEADERS,
@@ -21,6 +23,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string; jobId: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug, jobId } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -31,6 +34,6 @@ export async function GET(
     if (!view) return notFound();
     return NextResponse.json(view, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "Could not load this job. Please try again.");
+    return errorResponse(error, t(locale, "request.loadJobFailed"));
   }
 }

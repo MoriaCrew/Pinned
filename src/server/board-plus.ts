@@ -28,27 +28,30 @@ import {
   type PlusPlan,
   type PlusView,
 } from "../domain/plus";
-import { t } from "../i18n";
+import { englishText, userMessage, type UserMessage } from "../i18n/user-message";
 import type { Policy } from "../policy/policy";
 import { verifyHostToken } from "./host-session";
 
 export class BoardPlusError extends Error {
+  readonly userMessage?: UserMessage;
+
   constructor(
-    message: string,
+    message: UserMessage | string,
     public readonly status: 400 | 402 | 403 | 404,
     public readonly code?: string,
   ) {
-    super(message);
+    super(englishText(message));
     this.name = "BoardPlusError";
+    this.userMessage = typeof message === "string" ? undefined : message;
   }
 }
 
 export function plusRequiredError(): BoardPlusError {
-  return new BoardPlusError(t("en", "plus.skinNeedsPlus"), 402, "plus_required");
+  return new BoardPlusError(userMessage("plus.skinNeedsPlus"), 402, "plus_required");
 }
 
 export function hostOnlyError(): BoardPlusError {
-  return new BoardPlusError(t("en", "plus.hostOnly"), 403, "host_only");
+  return new BoardPlusError(userMessage("plus.hostOnly"), 403, "host_only");
 }
 
 function notFoundError(): BoardPlusError {
@@ -64,7 +67,7 @@ function field(value: unknown, key: string): unknown {
 export function parseSkinInput(value: unknown): string {
   const skinId = field(value, "skinId");
   if (!isBoardThemeId(skinId)) {
-    throw new BoardPlusError(t("en", "plus.skinUnknown"), 400, "skin_unknown");
+    throw new BoardPlusError(userMessage("plus.skinUnknown"), 400, "skin_unknown");
   }
   return skinId;
 }
@@ -73,7 +76,7 @@ export function parseSkinInput(value: unknown): string {
 export function parsePlusInput(value: unknown): PlusPlan {
   const plan = field(value, "plan");
   if (!isPlusPlan(plan)) {
-    throw new BoardPlusError(t("en", "plus.planUnknown"), 400, "plan_unknown");
+    throw new BoardPlusError(userMessage("plus.planUnknown"), 400, "plan_unknown");
   }
   return plan;
 }

@@ -46,6 +46,7 @@ import {
   verifyPlayerCookie,
   verifyToken,
 } from "../domain/tokens";
+import { englishText, userMessage, type UserMessage } from "../i18n/user-message";
 import type { Policy } from "../policy/policy";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -70,23 +71,27 @@ export function readCookieValue(cookieHeader: string | null, name: string): stri
   return null;
 }
 
-export function normalizeDisplayName(value: unknown): string {
-  if (typeof value !== "string") throw new BoardApiError("Choose a display name.");
+export function normalizeDisplayName(value: unknown, maxChars: number): string {
+  if (typeof value !== "string") throw new BoardApiError(userMessage("error.displayNameMissing"));
   const name = value.trim().replace(/\s+/g, " ");
-  if (!name || [...name].length > 30 || /[\u0000-\u001f\u007f]/.test(name)) {
-    throw new BoardApiError("Choose a display name up to 30 characters.");
+  if (!name || [...name].length > maxChars || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new BoardApiError(userMessage("error.displayNameInvalid", { max: maxChars }));
   }
   return name;
 }
 
+/** User-facing board API error; `userMessage` is translated per request (PIN-196). */
 export class BoardApiError extends Error {
+  readonly userMessage?: UserMessage;
+
   constructor(
-    message: string,
+    message: UserMessage | string,
     public readonly status: 400 | 401 | 404 | 409 | 413 | 415 | 429 | 503 = 400,
     public readonly code?: string,
   ) {
-    super(message);
+    super(englishText(message));
     this.name = "BoardApiError";
+    this.userMessage = typeof message === "string" ? undefined : message;
   }
 }
 
@@ -112,7 +117,7 @@ export interface JoinBoardContext {
 
 function requireSessionSecret(secret: string | null): string {
   if (!secret || secret.length < 32) {
-    throw new BoardApiError("Board sessions are not configured on this server.", 503);
+    throw new BoardApiError(userMessage("error.sessionsOff"), 503);
   }
   return secret;
 }
@@ -124,7 +129,7 @@ function reclaimPinHash(slug: string, pin: string): string {
 /** The one reclaim-failure error: same status/body for every cause. */
 function reclaimFailedError(): BoardApiError {
   return new BoardApiError(
-    "That name and secret number didn't match. Check both and try again.",
+    userMessage("error.reclaimFailed"),
     401,
     "reclaim_failed",
   );
@@ -168,19 +173,19 @@ export interface JoinBoardInput {
   reclaimPin?: string;
 }
 
-export function parseJoinBoardInput(value: unknown): JoinBoardInput {
+export function parseJoinBoardInput(value: unknown, policy: Policy): JoinBoardInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BoardApiError("Send your display name.");
+    throw new BoardApiError(userMessage("error.joinBodyMissing"));
   }
   const body = value as Record<string, unknown>;
   let reclaimPin: string | undefined;
   if (body.reclaimPin !== undefined && body.reclaimPin !== "") {
     if (typeof body.reclaimPin !== "string" || !/^\d{4}$/.test(body.reclaimPin)) {
-      throw new BoardApiError("Reclaim PIN must be exactly four digits.");
+      throw new BoardApiError(userMessage("error.reclaimPinShape"));
     }
     reclaimPin = body.reclaimPin;
   }
-  return { displayName: normalizeDisplayName(body.displayName), reclaimPin };
+  return { displayName: normalizeDisplayName(body.displayName, policy.displayNameMaxChars), reclaimPin };
 }
 
 /** Sign a fresh cookie and bind its hash into the record (pure). */
@@ -368,7 +373,7 @@ export async function joinBoard(
   context?: JoinBoardContext,
 ): Promise<JoinBoardResult> {
   requireSessionSecret(deps.sessionSecret);
-  const input = parseJoinBoardInput(rawInput);
+  const input = parseJoinBoardInput(rawInput, deps.policy);
   const now = deps.now?.() ?? Date.now();
   const board = await deps.boards.getBoard(slug);
   if (!board) throw new BoardApiError("Board not found.", 404);
@@ -408,7 +413,7 @@ export async function joinBoard(
   // NOT the cap enforcement — the atomic create below is, so two
   // joins racing past this line cannot both land (PIN-91).
   if (board.counters.participantCount >= deps.policy.participantsPerBoard) {
-    throw new BoardApiError("This board is full.", 409);
+    throw new BoardApiError(userMessage("error.boardFull"), 409);
   }
 
   // Roster-fill brake: only fresh creations consume the per-IP
@@ -426,7 +431,7 @@ export async function joinBoard(
     );
     if (!allowed) {
       throw new BoardApiError(
-        "Too many new joins from this connection. Please try again later.",
+        userMessage("error.joinRateLimited"),
         429,
         "join_rate_limited",
       );
@@ -444,7 +449,7 @@ export async function joinBoard(
     createdAt: now,
   };
   const created = await issueNewSession(participant, deps, now);
-  if (!created) throw new BoardApiError("This board is full.", 409);
+  if (!created) throw new BoardApiError(userMessage("error.boardFull"), 409);
   return created;
 }
 

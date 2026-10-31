@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import {
   getScenesView,
   publicScene,
@@ -28,6 +30,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -37,7 +40,7 @@ export async function GET(
     if (!view) return notFound();
     return NextResponse.json(view, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "Could not load scenes. Please try again.");
+    return errorResponse(error, t(locale, "request.loadScenesFailed"));
   }
 }
 
@@ -51,6 +54,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -60,7 +64,7 @@ export async function POST(
     !checkRateLimit(`${clientKey(request, "scenes")}:${slug}`, gate.limit, gate.windowMs)
   ) {
     return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
+      { error: t(locale, "request.tooManyAttempts") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -70,7 +74,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Pick some pins and describe your scene." },
+      { error: t(locale, "request.pickPinsDescribe") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -80,7 +84,7 @@ export async function POST(
     const viewer = await viewerFor(request, slug, policy);
     if (!viewer) {
       return NextResponse.json(
-        { error: "Join this board before making a scene." },
+        { error: t(locale, "request.joinBeforeScene") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
@@ -95,6 +99,6 @@ export async function POST(
       { status: 201, headers: JSON_HEADERS },
     );
   } catch (error) {
-    return errorResponse(error, "That scene could not be made. Please try again.");
+    return errorResponse(error, t(locale, "request.makeSceneFailed"));
   }
 }

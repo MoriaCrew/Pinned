@@ -34,25 +34,13 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/app/g/[slug]/SceneViewer.tsx",
   "src/app/g/[slug]/page.tsx",
 
-  // PIN-194 UI kit
-  "src/ui/board.tsx",
-  "src/ui/primitives.tsx",
-  "src/ui/scenes.tsx",
-  "src/ui/skin-picker.tsx",
-  "src/ui/stickers.tsx",
 
 
-  // PIN-196 server errors
+  // PIN-196 server errors (rest: PIN-201)
   "src/gateway/decorators.ts",
-  "src/server/board-api.ts",
-  "src/server/board-plus.ts",
-  "src/server/decompose-job.ts",
   "src/server/dictation.ts",
-  "src/server/scene-job.ts",
 
   // PIN-197 route errors
-  "src/app/api/boards/[slug]/transcribe/route.ts",
-  "src/app/api/boards/request-guards.ts",
 
   // Stays English: link-preview images are fetched by crawlers, which send no language
   "src/app/g/[slug]/opengraph-image.tsx",

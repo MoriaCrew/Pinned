@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { RemixSource } from "../domain/board-ui";
 import { stickerTilt } from "../domain/skins";
 import { t, tf } from "../i18n";
+import { useLocale } from "../i18n/client";
 import { Button, IconButton, Tag, cx } from "./primitives";
 import { CreditLine, type Credit } from "./stickers";
 
@@ -34,7 +35,7 @@ export function SceneCard({
   onShare,
   onMore,
   onOpen,
-  remixLabel = t("en", "ui.remix"),
+  remixLabel,
   sharing,
   footer,
   className,
@@ -60,17 +61,18 @@ export function SceneCard({
   footer?: ReactNode;
   className?: string;
 }) {
+  const locale = useLocale();
   const style = { "--t": tilt ?? stickerTilt(seed ?? idea ?? src) } as CSSProperties;
   const tag =
     kind === "collage" ? (
-      <Tag tone="ink">{t("en", "ui.collage")}</Tag>
+      <Tag tone="ink">{t(locale, "ui.collage")}</Tag>
     ) : kind === "remix" ? (
       <Tag tone="mark" icon="remix">
-        {t("en", "ui.remixTag")}
+        {t(locale, "ui.remixTag")}
       </Tag>
     ) : null;
   const no =
-    number !== undefined ? <span className="pn-print-no">{tf("en", "ui.sceneNumber", { n: String(number).padStart(2, "0") })}</span> : null;
+    number !== undefined ? <span className="pn-print-no">{tf(locale, "ui.sceneNumber", { n: String(number).padStart(2, "0") })}</span> : null;
   const hasActions = Boolean(onRemix || onShare || onMore);
   const hasCredits = Boolean(credits && credits.length > 0);
   const hasBody = Boolean(idea || hasCredits || hasActions || footer);
@@ -84,11 +86,11 @@ export function SceneCard({
     <article
       className={cx("pn-print-wrap", className)}
       style={style}
-      aria-label={idea ? `${t("en", "ui.scene")}: ${idea}` : t("en", "ui.scene")}
+      aria-label={idea ? tf(locale, "ui.sceneLabel", { idea }) : t(locale, "ui.scene")}
     >
       <div className="pn-print">
         {onOpen ? (
-          <button type="button" className="pn-print-open" aria-label={idea || t("en", "ui.scene")} aria-haspopup="dialog" onClick={onOpen}>
+          <button type="button" className="pn-print-open" aria-label={idea || t(locale, "ui.scene")} aria-haspopup="dialog" onClick={onOpen}>
             {frame}
           </button>
         ) : (
@@ -108,12 +110,12 @@ export function SceneCard({
               <div className="pn-print-actions">
                 {onRemix ? (
                   <Button variant="secondary" size="sm" icon="remix" onClick={onRemix}>
-                    {remixLabel}
+                    {remixLabel ?? t(locale, "ui.remix")}
                   </Button>
                 ) : null}
                 <span className="pn-spacer" />
-                {onShare ? <IconButton icon="share" label={t("en", "ui.shareScene")} variant="ghost" onClick={onShare} disabled={sharing} /> : null}
-                {onMore ? <IconButton icon="more" label={t("en", "ui.more")} variant="ghost" onClick={onMore} /> : null}
+                {onShare ? <IconButton icon="share" label={t(locale, "ui.shareScene")} variant="ghost" onClick={onShare} disabled={sharing} /> : null}
+                {onMore ? <IconButton icon="more" label={t(locale, "ui.more")} variant="ghost" onClick={onMore} /> : null}
               </div>
             ) : null}
             {footer}
@@ -140,8 +142,8 @@ export function Developing({
   stickers,
   idea,
   elapsed,
-  line = t("en", "ui.developingLine"),
-  statusLabel = t("en", "ui.developing"),
+  line,
+  statusLabel,
   ratio = "3 / 2",
   footer,
   className,
@@ -155,6 +157,7 @@ export function Developing({
   footer?: ReactNode;
   className?: string;
 }) {
+  const locale = useLocale();
   const cuts = stickers.slice(0, 4);
   const spots = ROUGH_CUT[Math.max(0, cuts.length - 1)] ?? ROUGH_CUT[0];
   return (
@@ -163,7 +166,7 @@ export function Developing({
       style={{ "--t": 0 } as CSSProperties}
       role="status"
       aria-live="polite"
-      aria-label={idea ? `${t("en", "ui.makingScene")}: ${idea}` : t("en", "ui.makingScene")}
+      aria-label={idea ? tf(locale, "ui.makingSceneLabel", { idea }) : t(locale, "ui.makingScene")}
     >
       <div className="pn-print">
         <div className="pn-develop-frame pn-print-frame" style={{ aspectRatio: ratio }}>
@@ -187,11 +190,11 @@ export function Developing({
         </div>
         <div className="pn-print-body">
           <div className="pn-develop-status">
-            <Tag tone="ink">{statusLabel}</Tag>
+            <Tag tone="ink">{statusLabel ?? t(locale, "ui.developing")}</Tag>
             {elapsed ? <span className="pn-board-meta">{elapsed}</span> : null}
           </div>
           {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
-          <p className="pn-develop-line">{line}</p>
+          <p className="pn-develop-line">{line ?? t(locale, "ui.developingLine")}</p>
           {footer}
         </div>
       </div>

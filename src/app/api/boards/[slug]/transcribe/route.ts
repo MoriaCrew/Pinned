@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import { getAiPorts } from "../../../../../server/ai-ports";
 import { transcribeDictation } from "../../../../../server/dictation";
 import {
@@ -29,6 +30,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -38,7 +40,7 @@ export async function POST(
     !checkRateLimit(`${clientKey(request, "transcribe")}:${slug}`, gate.limit, gate.windowMs)
   ) {
     return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
+      { error: t(locale, "request.tooManyAttempts") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -48,7 +50,7 @@ export async function POST(
     const viewer = await viewerFor(request, slug, policy);
     if (!viewer) {
       return NextResponse.json(
-        { error: "Join this board before making a scene." },
+        { error: t(locale, "request.joinBeforeScene") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
@@ -60,13 +62,13 @@ export async function POST(
     const contentLength = Number(lengthHeader ?? NaN);
     if (!lengthHeader || !Number.isFinite(contentLength) || contentLength <= 0) {
       return NextResponse.json(
-        { error: t("en", "dictate.badAudio") },
+        { error: t(locale, "dictate.badAudio") },
         { status: 411, headers: JSON_HEADERS },
       );
     }
     if (contentLength > policy.dictationMaxBytes + 65_536) {
       return NextResponse.json(
-        { error: t("en", "dictate.tooLong") },
+        { error: t(locale, "dictate.tooLong") },
         { status: 413, headers: JSON_HEADERS },
       );
     }
@@ -76,20 +78,20 @@ export async function POST(
       form = await request.formData();
     } catch {
       return NextResponse.json(
-        { error: t("en", "dictate.badAudio") },
+        { error: t(locale, "dictate.badAudio") },
         { status: 400, headers: JSON_HEADERS },
       );
     }
     const file = form.get("audio");
     if (!(file instanceof File)) {
       return NextResponse.json(
-        { error: t("en", "dictate.badAudio") },
+        { error: t(locale, "dictate.badAudio") },
         { status: 400, headers: JSON_HEADERS },
       );
     }
     if (file.size > policy.dictationMaxBytes) {
       return NextResponse.json(
-        { error: t("en", "dictate.tooLong") },
+        { error: t(locale, "dictate.tooLong") },
         { status: 413, headers: JSON_HEADERS },
       );
     }
@@ -103,6 +105,6 @@ export async function POST(
     );
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, t("en", "make.dictateFailed"));
+    return errorResponse(error, t(locale, "make.dictateFailed"));
   }
 }

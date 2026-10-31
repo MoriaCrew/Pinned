@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getConfig } from "../../../config";
 import type { Participant } from "../../../domain/board";
 import { isValidSlug } from "../../../domain/tokens";
+import { DEFAULT_LOCALE } from "../../../i18n";
+import { getLocale } from "../../../i18n/server";
+import { localizedErrorText, type LocalizableError } from "../../../i18n/user-message";
 import { getPolicy } from "../../../policy/server";
 import type { Policy } from "../../../policy/policy";
 import { getAiPorts } from "../../../server/ai-ports";
@@ -94,14 +97,46 @@ export async function viewerFor(
   return resolveParticipantSession(slug, cookie, sessionDeps(policy));
 }
 
+/**
+ * `{ error, ...extra }` with the error's line in the request's
+ * language (PIN-196). Sync on purpose, so no call site changes
+ * (some helpers are typed `NextResponse`). With English only (the
+ * default) the body is built right away, as before. Otherwise the
+ * body is a one-chunk stream that waits for getLocale(): the
+ * stream's start() runs inside this call, so getLocale() reads this
+ * request's cookie and headers. If that fails, the English text.
+ */
+export function localizedErrorJson(
+  error: LocalizableError,
+  status: number,
+  extra: Readonly<Record<string, string>> = {},
+): NextResponse {
+  if (!error.userMessage || getConfig().uiLocales.length <= 1) {
+    return NextResponse.json({ error: error.message, ...extra }, { status, headers: JSON_HEADERS });
+  }
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let text = localizedErrorText(error, DEFAULT_LOCALE);
+      try {
+        text = localizedErrorText(error, await getLocale());
+      } catch {
+        // Keep English: a language lookup must never turn a 4xx into a 500.
+      }
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({ error: text, ...extra })));
+      controller.close();
+    },
+  });
+  return new NextResponse(body, {
+    status,
+    headers: { ...JSON_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
 /** Map service errors to responses; unknown errors become a generic 500. */
 export function errorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof BoardApiError || error instanceof PhotoIntakeError) {
     if (error.status === 404) return notFound();
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.status, headers: JSON_HEADERS },
-    );
+    return localizedErrorJson(error, error.status);
   }
   logServerError(fallback, error);
   return NextResponse.json(

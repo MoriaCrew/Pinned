@@ -12,6 +12,7 @@ import {
   lookFlow,
   parseTryOn,
   plusPurchasePath,
+  plusSheetLocked,
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
@@ -336,7 +337,10 @@ export function PlusFlow({
   const demoLockedLine =
     path !== "mock" ? null : plus?.active ? t("en", "plus.demoNote") : isHost ? null : t("en", "plus.hostOnly");
   const sheetOpen = state.sheet === "plus" || makes.sheetOpen;
+  // One guard for both flows: neither close path alone knows about the
+  // other's in-flight request.
   const closePlus = () => {
+    if (plusSheetLocked(makes.busy, state.checkingOut)) return;
     if (state.sheet === "plus") look.closeSheet();
     makes.closeSheet();
   };

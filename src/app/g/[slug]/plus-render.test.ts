@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
 import type { PlusView } from "../../../domain/plus";
 import { chooseLook, initialLookFlow, type LookFlowState } from "../../../domain/plus-ui";
+import { LocaleProvider } from "../../../i18n/client";
 import { PlusSheet } from "../../../ui";
 import { BoardThings, type DeleteControls } from "./BoardThings";
 import { ChangeLookSheet } from "./ChangeLookSheet";
@@ -208,8 +209,10 @@ describe("a member who changes the look (PIN-183)", () => {
 });
 
 describe("the one Plus sheet (PIN-182)", () => {
-  const sheet = (over: Partial<Parameters<typeof PlusSheet>[0]> = {}) =>
-    html(h(PlusSheet, { pack: PACK, plusActive: false, available: true, layer: "none", ...over }));
+  const sheet = (over: Partial<Parameters<typeof PlusSheet>[0]> = {}) => html(h(PlusSheet, { pack: PACK, plusActive: false, available: true, layer: "none", ...over }));
+  // The kit reads the language from the provider (PIN-194).
+  const sheetFr = (over: Partial<Parameters<typeof PlusSheet>[0]> = {}) =>
+    html(h(LocaleProvider, { locale: "fr", enabled: ["en", "fr"], cookieMaxAgeSeconds: 1, children: h(PlusSheet, { pack: PACK, plusActive: false, available: true, layer: "none", ...over }) }));
   const at = (out: string, text: string) => {
     const index = out.indexOf(text);
     expect(index, text).toBeGreaterThanOrEqual(0);
@@ -282,19 +285,19 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(sheet({ paymentNote: true }).match(/local currency/g)).toHaveLength(1);
     expect(sheet()).not.toContain("local currency");
     expect(sheet({ paymentNote: true, available: false })).not.toContain("local currency");
-    const fr = sheet({ paymentNote: true, locale: "fr" });
+    const fr = sheetFr({ paymentNote: true });
     expect(fr).toContain("Le paiement peut se faire dans votre devise locale. Apparaît sous le nom PINNEDS sur votre relevé.");
   });
 
   it("renders in French with French prices", () => {
-    const out = sheet({ locale: "fr" });
+    const out = sheetFr();
     expect(out).toContain("Board Plus");
     expect(out).toContain("Obtenir Plus · 2,99 €");
     expect(out).toContain("+20 créations");
     expect(out).toContain("Une seule fois, pour ce tableau.");
     expect(out).toContain("Bientôt");
-    expect(sheet({ locale: "fr", plusActive: true })).toContain("Ajouter 20 créations · 2,99 €");
-    expect(sheet({ locale: "fr", available: false })).toContain("Bientôt disponible");
+    expect(sheetFr({ plusActive: true })).toContain("Ajouter 20 créations · 2,99 €");
+    expect(sheetFr({ available: false })).toContain("Bientôt disponible");
   });
 });
 
