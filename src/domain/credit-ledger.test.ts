@@ -38,8 +38,23 @@ describe("credit ledger (PIN-147)", () => {
     expect(replay.applied).toBe(false);
     const second = await store.grantStarter(BOARD, { eventId: ev(), amount: 25, at: at() });
     expect(second.applied).toBe(false);
-    expect(await store.getBalance(BOARD)).toEqual({ boardId: BOARD, balance: 25, frozen: 0, pendingClawback: 0, available: 25 });
+    expect(await store.getBalance(BOARD)).toEqual({ boardId: BOARD, balance: 25, frozen: 0, pendingClawback: 0, starterGranted: true, available: 25 });
     expect(await store.listEntries(BOARD)).toHaveLength(1);
+  });
+
+  it("getBalance is the head read: the starter flag plus the derived available, never conjuring an account (PIN-179)", async () => {
+    const store = new InMemoryCreditLedgerStore();
+    // A purchase landing before any credit touch: head exists, starter not yet granted.
+    await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 60 });
+    await store.grantPurchase(BOARD, { eventId: ev(), purchaseId: "p1", at: at() });
+    expect(await store.getBalance(BOARD)).toMatchObject({ starterGranted: false, available: 60 });
+    await store.grantStarter(BOARD, { eventId: "starter-evt", amount: 25, at: at() });
+    await store.freeze(BOARD, { eventId: ev(), purchaseId: "p1", disputeId: "dp-1", amount: 10, at: at() });
+    const view = await store.getBalance(BOARD);
+    expect(view).toEqual({ boardId: BOARD, balance: 85, frozen: 10, pendingClawback: 0, starterGranted: true, available: 75 });
+    expect(view.available).toBe(availableCredits(view));
+    await store.getBalance("ghost");
+    expect(await store.getAccount("ghost")).toBeNull();
   });
 
   it("purchase grant is idempotent by purchase id, and by event id", async () => {
@@ -221,7 +236,7 @@ describe("credit ledger (PIN-147)", () => {
 
     const store = new InMemoryCreditLedgerStore();
     expect(await store.getAccount("ghost")).toBeNull();
-    expect(await store.getBalance("ghost")).toEqual({ boardId: "ghost", balance: 0, frozen: 0, pendingClawback: 0, available: 0 });
+    expect(await store.getBalance("ghost")).toEqual({ boardId: "ghost", balance: 0, frozen: 0, pendingClawback: 0, starterGranted: false, available: 0 });
     expect(await store.listEntries("ghost")).toEqual([]);
     await store.grantStarter(BOARD, { eventId: ev(), amount: 25, at: at() });
     await store.grantStarter("board-2", { eventId: ev(), amount: 25, at: at() });

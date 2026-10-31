@@ -22,7 +22,9 @@ import "server-only";
  * sort in code, so no composite index is needed. Reconstructing
  * the full account per mutation is what the port's pure-op shape
  * requires (duplicate detection reads the applied event ids);
- * that adapter cost stays inside this store.
+ * that adapter cost stays inside this store. getBalance is the
+ * exception that keeps polls cheap (PIN-179): it reads the head
+ * doc alone, outside any transaction.
  */
 import {
   Firestore,
@@ -32,9 +34,9 @@ import {
   type QuerySnapshot,
 } from "@google-cloud/firestore";
 import {
-  availableCredits,
   clawbackCredits,
   closePurchase as closePurchaseOp,
+  creditBalanceView,
   debitCredits,
   emptyCreditAccount,
   freezeCredits,
@@ -217,19 +219,14 @@ export class FirestoreCreditLedgerStore implements CreditLedgerStore {
     );
   }
 
+  /** The port's cheap read: one head-doc get, no transaction, no subcollections. */
   async getBalance(boardId: string): Promise<CreditBalanceView> {
     assertBoardId(boardId);
     const headSnap = await this.accountRef(boardId).get();
     const head = headSnap.exists
       ? headFrom(boardId, headSnap.data() as DocumentData)
       : emptyCreditAccount(boardId);
-    return {
-      boardId,
-      balance: head.balance,
-      frozen: head.frozen,
-      pendingClawback: head.pendingClawback,
-      available: availableCredits(head),
-    };
+    return creditBalanceView(head);
   }
 
   async listEntries(boardId: string): Promise<CreditLedgerEntry[]> {
