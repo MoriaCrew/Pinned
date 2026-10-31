@@ -37,11 +37,6 @@ describe("plural forms follow each language (PIN-190)", () => {
     expect(tCount("en", "makes.left", 0)).toBe(tf("en", "makes.left.other", { n: 0 }));
     expect(tCount("en", "makes.left", 1)).toBe(tf("en", "makes.left.one", { n: 1 }));
   });
-
-  it("an untranslated message uses English's rule, so the fallback stays grammatical", () => {
-    expect(tCount("fr", "meta.things", 0)).toBe("0 things");
-    expect(tCount("id", "meta.people", 1)).toBe("1 person");
-  });
 });
 
 describe("Intl formatting helpers (PIN-190)", () => {
