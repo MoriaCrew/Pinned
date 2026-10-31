@@ -187,6 +187,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       pendingIntentCapPerBoard: 3,
       intentTtlSeconds: 1_800,
       checkoutPerIp: { limit: 20, windowMs: 600_000 },
+      webhookMaxBytes: 1_048_576,
     });
     // Parity with the catalog manifest: Policy can never offer a pack Stripe does not sell.
     const catalogPacks = CATALOG_ITEMS.filter(

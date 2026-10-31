@@ -118,6 +118,44 @@ describe("POST /api/billing/stripe/webhook (stripe mode, PIN-150)", () => {
     expect(await ledgerBalance()).toMatchObject({ balance: 25 });
   });
 
+  it("refuses a declared body over 1 MiB with 413 before reading it (PIN-178)", async () => {
+    const res = await webhookRoute(
+      new Request("http://t/api/billing/stripe/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "t=1,v1=fake", "content-length": String(1_048_577) },
+        body: "{}",
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "body_too_large" });
+  });
+
+  it("logs an unexpected failure slug-redacted and answers 500 (PIN-178)", async () => {
+    const { getCreditLedgerStore } = await import("../../../server/credit-ledger-store");
+    const ledger = getCreditLedgerStore();
+    const realGetAccount = ledger.getAccount.bind(ledger);
+    ledger.getAccount = async () => {
+      throw new Error(`Board ${slug} store unavailable`);
+    };
+    const logged: unknown[][] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args);
+    };
+    try {
+      const res = await signedPost(paidSessionEvent("evt_route_store_down"));
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: "webhook_failed" });
+    } finally {
+      console.error = realError;
+      ledger.getAccount = realGetAccount;
+    }
+    const text = JSON.stringify(logged);
+    expect(text).toContain("Stripe webhook handling failed");
+    expect(text).toContain("<slug>");
+    expect(text).not.toContain(slug);
+  });
+
   it("acks an unhandled event type with 200", async () => {
     const res = await signedPost({
       id: "evt_route_other",
