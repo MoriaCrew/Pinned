@@ -21,7 +21,11 @@ export const dynamic = "force-dynamic";
  * DecomposeJob in-request. Client contract (docs/11 section 5.8):
  * downscale on the client before upload; the server still bounds
  * and re-encodes everything through photo-intake, and the original
- * bytes are never stored. Poll GET /jobs/[jobId] for pop-in.
+ * bytes are never stored. Poll GET /jobs/[jobId] for pop-in. An
+ * optional "uploadId" field (the client's per-file UUID) makes the
+ * POST idempotent: it becomes the job id, so the client can poll
+ * during the POST and a lost response retries into the same job
+ * (200 replay, never a second make).
  */
 export async function POST(
   request: Request,
@@ -64,10 +68,13 @@ export async function POST(
   }
 
   let photo: File | null = null;
+  let uploadId: string | undefined;
   try {
     const form = await request.formData();
     const value = form.get("photo");
     if (value instanceof File) photo = value;
+    const rawUploadId = form.get("uploadId");
+    if (typeof rawUploadId === "string" && rawUploadId) uploadId = rawUploadId;
   } catch {
     return NextResponse.json(
       { error: t(locale, "request.photoFormUpload") },
@@ -97,10 +104,10 @@ export async function POST(
       );
     }
     const bytes = new Uint8Array(await photo.arrayBuffer());
-    const job = await uploadPhoto(slug, viewer, bytes, boardApiDeps(policy));
+    const job = await uploadPhoto(slug, viewer, bytes, boardApiDeps(policy), uploadId);
     return NextResponse.json(
       { job: publicJob(job) },
-      { status: 201, headers: JSON_HEADERS },
+      { status: job.replayed ? 200 : 201, headers: JSON_HEADERS },
     );
   } catch (error) {
     return errorResponse(error, t(locale, "request.addPhotoFailed"));

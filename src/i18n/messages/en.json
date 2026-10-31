@@ -68,6 +68,8 @@
   "error.photoUnreadable": "That photo could not be read. Try a different image.",
   "error.photoUnsafe": "That photo could not be processed safely. Try a different image.",
   "error.photosPerDay": "Daily photo limit reached for this board.",
+  "error.uploadIdInvalid": "That upload id is not valid.",
+  "error.uploadIdConflict": "That upload is already in use.",
   "error.makesPoolEmpty": "This board is out of makes.",
   "error.tapMissing": "Tap a spot in the photo.",
   "error.keepMissing": "Choose which pins to keep.",

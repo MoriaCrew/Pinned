@@ -422,6 +422,21 @@ describe("photo debit (PIN-151)", () => {
     expect((await h.ledger.getBalance("old-board")).available).toBe(1);
   });
 
+  it("a lost-response replay with the same uploadId never double-debits", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+    const first = await uploadPhoto(slug, owner, await photoBytes(), h.api, UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+
+    const replay = await uploadPhoto(slug, owner, await photoBytes(), h.api, UPLOAD_ID);
+    expect(replay.replayed).toBe(true);
+    expect(replay.id).toBe(UPLOAD_ID);
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
   it("never debits a failed photo", async () => {
     const h = makeHarness(ENABLED(3));
     h.setNamer({
