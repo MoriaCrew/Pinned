@@ -8,8 +8,8 @@ describe("i18n catalog (FR9)", () => {
     expect(t("en", "landing.start")).toBe("Start a board");
   });
 
-  it("falls back to English while fr is an empty stub", () => {
-    expect(t("fr", "landing.start")).toBe(t("en", "landing.start"));
+  it("resolves French strings in the informal register (PIN-198)", () => {
+    expect(t("fr", "landing.start")).toBe("Créer un tableau");
     expect(t("fr", "landing.tagline").length).toBeGreaterThan(0);
   });
 
