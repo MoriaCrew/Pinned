@@ -8,7 +8,7 @@ measured. Spec: `docs/11-studio.md` §3 and §5.2; decisions:
 
 | Model | Runtime ID (env) | Port or entry point | Prompt | Billing unit (estimate) |
 | --- | --- | --- | --- | --- |
-| Muse Spark | `muse-spark-1.3` (`META_MODEL_SPARK`) | `ElementNamer`, `TapNamer`, `ChipSuggester` | `elements.v1`, `tap-name.v1`, `chips.v1` | $1.25 in / $4.25 out per 1M tokens |
+| Muse Spark | `muse-spark-1.3` (`META_MODEL_SPARK`) | `ElementNamer`, `TapNamer`, `ChipSuggester` | `elements.v1`, `tap-name.v1`, `chips.v2` | $1.25 in / $4.25 out per 1M tokens |
 | SAM 3.1 | `sam-3.1` (`META_MODEL_SAM`) | `Segmenter` | none: the concept is the prompt | $2.50 per 1,000 images |
 | Muse Image | `muse-image-1.0` (`META_MODEL_IMAGE`) | `SceneComposer` | `scene.v1` | flat $0.01 per generated image |
 | Muse Voice Transcribe | `muse-voice-transcribe-1.0` (`META_MODEL_VOICE`) | `SpeechTranscriber` | none: speech to text | $3 per 1,000 audio-minutes |
@@ -68,15 +68,21 @@ JSON-only reply.
 - Failure: any non-ready outcome keeps the generic label ("My find") with
   `faceFlag: false`; naming never fails the tap. Live cost about $0.003 (PR #100).
 
-**Suggest scene ideas (`ChipSuggester`).** Prompt `prompts/chips.v1.md`, service
-`src/server/scene-chips.ts`.
+**Suggest scene ideas (`ChipSuggester`).** Prompt `prompts/chips.v2.md`, service
+`src/server/scene-chips.ts`. Since PIN-214 the chips follow the viewer's UI language:
+the route passes `getLocale()` down, and the prompt names the language
+(`LOCALE_ENGLISH_NAMES` in `src/i18n/locales.ts`) and keeps pin labels as given.
+`chips.v1` (English only) is kept for history.
 
 - Policy: `chipsMax` (4), `chipsCacheTtlHours` (24), `maxTokens.sparkChips` (1,200),
-  `timeoutsMs.spark`, `sceneChips` (the fixed fallback list).
-- Sent: the picked pins' labels as JSON text. No images, no display names.
-- Failure: the fixed `sceneChips` show at once and stay if generation fails, is refused
-  or is over budget. Results are cached per label set. Mock and fixture build chips from
-  the labels (`templateChips`).
+  `timeoutsMs.spark`, `sceneChipsCount` (4, how many fixed chips show; their text is
+  the `make.chip.*` catalog keys).
+- Sent: the picked pins' labels as JSON text and the UI language code. No images, no
+  display names.
+- Failure: the fixed chips show at once in the viewer's language and stay if generation
+  fails, is refused or is over budget. Results are cached per prompt version, language
+  and label set. The mock answers with the fixed chips in the request's language; the
+  fixture builds English chips from the labels (`templateChips`).
 
 ## SAM 3.1 (`sam-3.1`, `Segmenter`)
 
@@ -159,7 +165,7 @@ JSON-only reply.
 | --- | --- | --- |
 | Name things | stripped working copy | the original upload, EXIF |
 | Tap name | one flattened cut-out | the rest of the photo |
-| Chips | pin labels | images, display names |
+| Chips | pin labels, the UI language code | images, display names |
 | SAM cut | working copy + concept or point | the original upload, EXIF |
 | Compose | flattened cut-outs (plus the parent scene for a remix), labels with owners' display names, the idea; `store: false` | original photos, board links |
 | Dictation | the WAV clip, held in memory only | anything stored afterwards |
