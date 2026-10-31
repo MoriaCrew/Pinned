@@ -81,7 +81,7 @@ export function applyChip(
   const fits = (next: string) => (charCount(next) <= maxChars ? next : prompt);
   if (!current) return fits(chip);
   if (lower(current) === lower(chip)) return "";
-  if (chips.includes(current)) return fits(chip);
+  if (chips.some((known) => lower(known) === lower(current))) return fits(chip);
   if (chipInPrompt(current, chip)) {
     const parts = current.split(/\s*,\s*/);
     const kept = parts.filter((part) => lower(part) !== lower(chip));

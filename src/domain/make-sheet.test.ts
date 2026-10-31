@@ -134,6 +134,8 @@ describe("make sheet logic (PIN-70)", () => {
     // A fixed chip and a generated chip are both "known": tapping one after the other swaps.
     const known = ideaChips(["at a birthday party"], ["floating in space"]);
     expect(applyChip("at a birthday party", "floating in space", known, 500)).toBe("floating in space");
+    // Same rule in any case, like the pressed state: a dictated "On a sunny picnic blanket" still swaps.
+    expect(applyChip("On a Sunny Picnic Blanket", CHIPS[1], CHIPS, 500)).toBe(CHIPS[1]);
     // PIN-75 swap: with fixed + generated chips both known, a
     // prompt that is just a fixed chip still swaps, not appends.
     expect(
