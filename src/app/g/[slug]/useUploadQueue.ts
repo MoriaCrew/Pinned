@@ -215,6 +215,20 @@ export function useUploadQueue(options: UploadQueueOptions) {
         }
         const action = classifyUploadFailure({ httpStatus: response.status, code: data.code });
         if (action === "stop") {
+          // A late coded response must not poison a queue this item
+          // no longer belongs to: it may have been skipped (which
+          // can settle the batch) or the queue replaced by a fresh
+          // pick while the POST was in flight. Re-check the live
+          // item before stopping anything (Bugbot #148).
+          const liveNow = itemsRef.current.find((i) => i.key === item.key);
+          if (
+            !liveNow ||
+            liveNow.uploadId !== item.uploadId ||
+            liveNow.status === "skipped" ||
+            liveNow.status === "done"
+          ) {
+            return;
+          }
           setItems((current) =>
             current.map((candidate) =>
               (candidate.key === item.key || candidate.status === "queued") &&
