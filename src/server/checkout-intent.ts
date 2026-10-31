@@ -42,6 +42,15 @@ export interface CheckoutIntent {
   packLookupKey: string;
   /** Pack size recorded at intent time; the later grant credits exactly this. */
   credits: number;
+  /**
+   * Pack price (EUR cents) recorded at intent time (PIN-181): the
+   * webhook prices the amount check, refunds and disputes from
+   * these stored terms, so a later Policy price change never
+   * reprices an old purchase. Absent on intents created before
+   * PIN-181; those fall back to the Policy pack by lookup key.
+   * Server-only, never in the public shape.
+   */
+  eurCents?: number;
   /** Ledger purchase identity (equals `id`; see the module note). */
   purchaseId: string;
   status: CheckoutIntentStatus;
@@ -104,6 +113,8 @@ export interface CreateCheckoutIntentInput {
   boardId: string;
   packLookupKey: string;
   credits: number;
+  /** The pack's Policy price in EUR cents at the caller (PIN-181). */
+  eurCents: number;
   at: number;
   /** Policy.credits.intentTtlSeconds at the caller. */
   intentTtlSeconds: number;
@@ -225,6 +236,7 @@ export function assertCreateCheckoutIntentInput(input: CreateCheckoutIntentInput
   assertId(input.boardId, "boardId");
   assertId(input.packLookupKey, "packLookupKey");
   assertPositiveInt(input.credits, "credits");
+  assertPositiveInt(input.eurCents, "eurCents");
   assertAt(input.at);
   assertPositiveInt(input.intentTtlSeconds, "intentTtlSeconds");
   assertPositiveInt(input.pendingIntentCapPerBoard, "pendingIntentCapPerBoard");
@@ -240,6 +252,7 @@ export function buildCheckoutIntent(
     boardId: input.boardId,
     packLookupKey: input.packLookupKey,
     credits: input.credits,
+    eurCents: input.eurCents,
     purchaseId: id,
     status: "pending",
     createdAt: input.at,

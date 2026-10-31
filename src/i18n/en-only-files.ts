@@ -43,18 +43,6 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/ui/skin-picker.tsx",
   "src/ui/stickers.tsx",
 
-  // PIN-195 landing, start, My boards/pins, not-found, sign-in
-  "src/app/auth/SignInButton.tsx",
-  "src/app/me/BoardDeletedNotice.tsx",
-  "src/app/me/LibraryParts.tsx",
-  "src/app/me/boards/MyBoardItem.tsx",
-  "src/app/me/boards/page.tsx",
-  "src/app/me/library-format.ts",
-  "src/app/me/pins/page.tsx",
-  "src/app/new/StartFlow.tsx",
-  "src/app/new/page.tsx",
-  "src/app/not-found.tsx",
-  "src/app/page.tsx",
 
   // PIN-196 server errors
   "src/gateway/decorators.ts",

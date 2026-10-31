@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getConfig } from "../../../config";
 import { resolveAuthUi } from "../../../domain/auth-ui";
 import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../../../domain/board-delete-ui";
-import { t, tCount } from "../../../i18n";
+import { t, tCount, type Locale } from "../../../i18n";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import { getBoardRepository } from "../../../server/board-repository";
 import { listMyBoards } from "../../../server/my-boards";
@@ -33,6 +34,7 @@ export default async function MyBoardsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const locale = await getLocale();
   const cfg = getConfig();
   if (cfg.authMode !== "optional") notFound();
   const ui = resolveAuthUi({
@@ -54,9 +56,10 @@ export default async function MyBoardsPage({
   return (
     <main className="pn-skin-root pn-lib-page" data-theme="paper">
       {!user ? (
-        <SignedOut enabled={ui.enabled} />
+        <SignedOut locale={locale} enabled={ui.enabled} />
       ) : (
         <MyBoardsList
+          locale={locale}
           uid={user.uid}
           signInEnabled={ui.enabled}
           boardDeleted={isBoardDeletedFlag((await searchParams)[BOARD_DELETED_PARAM])}
@@ -66,18 +69,18 @@ export default async function MyBoardsPage({
   );
 }
 
-function SignedOut({ enabled }: { enabled: boolean }) {
+function SignedOut({ locale, enabled }: { locale: Locale; enabled: boolean }) {
   return (
     <>
-      <LibraryHeader title={t("en", "myBoards.title")} offerSignIn={false} />
+      <LibraryHeader title={t(locale, "myBoards.title")} offerSignIn={false} />
       {enabled ? (
-        <LibraryEmpty title={t("en", "myBoards.signInPrompt")}>
+        <LibraryEmpty title={t(locale, "myBoards.signInPrompt")}>
           <SignInButton variant="primary" size="lg" stacked />
         </LibraryEmpty>
       ) : (
-        <LibraryEmpty title={t("en", "auth.notConfigured")}>
+        <LibraryEmpty title={t(locale, "auth.notConfigured")}>
           <ButtonLink variant="secondary" size="lg" href="/">
-            {t("en", "notFound.home")}
+            {t(locale, "notFound.home")}
           </ButtonLink>
         </LibraryEmpty>
       )}
@@ -86,10 +89,12 @@ function SignedOut({ enabled }: { enabled: boolean }) {
 }
 
 async function MyBoardsList({
+  locale,
   uid,
   signInEnabled,
   boardDeleted,
 }: {
+  locale: Locale;
   uid: string;
   signInEnabled: boolean;
   /** PIN-168: `?deleted=1`, the host just deleted a board. */
@@ -97,7 +102,7 @@ async function MyBoardsList({
 }) {
   const users = getUserRepository();
   const profile = await users.getUser(uid);
-  if (!profile) return <SignedOut enabled={signInEnabled} />;
+  if (!profile) return <SignedOut locale={locale} enabled={signInEnabled} />;
   const boards = await listMyBoards(profile, {
     boards: getBoardRepository(),
     users,
@@ -105,18 +110,18 @@ async function MyBoardsList({
   return (
     <>
       <LibraryHeader
-        title={t("en", "myBoards.title")}
-        meta={boards.length > 0 ? tCount("en", "myBoards.count", boards.length) : undefined}
+        title={t(locale, "myBoards.title")}
+        meta={boards.length > 0 ? tCount(locale, "myBoards.count", boards.length) : undefined}
       />
       <BoardDeletedNotice show={boardDeleted} />
       {boards.length === 0 ? (
-        <LibraryEmpty title={t("en", "myBoards.empty")} body={t("en", "myBoards.emptyBody")}>
+        <LibraryEmpty title={t(locale, "myBoards.empty")} body={t(locale, "myBoards.emptyBody")}>
           <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
-            {t("en", "myBoards.emptyAction")}
+            {t(locale, "myBoards.emptyAction")}
           </ButtonLink>
         </LibraryEmpty>
       ) : (
-        <BoardCards boards={boards} />
+        <BoardCards locale={locale} boards={boards} />
       )}
     </>
   );

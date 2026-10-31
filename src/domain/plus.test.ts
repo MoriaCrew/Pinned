@@ -3,6 +3,7 @@ import {
   PLUS_SKIN_IDS,
   canUseSkin,
   decideMockGrant,
+  decidePurchasePlusGrant,
   grantPlus,
   hasPlus,
   isPlusMode,
@@ -80,6 +81,21 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(decideMockGrant(MOCK, "host", 5)).toEqual({ kind: "grant", plus: grantPlus("host", "mock", 5) });
     expect(decideMockGrant(PAID, "board", 5)).toEqual({ kind: "keep" });
     expect(decideMockGrant(PAID, "host", 5)).toEqual({ kind: "blocked" });
+  });
+
+  it("purchase grant (PIN-181): paid board Plus once, replaces mock, never touches a stripe grant", () => {
+    const paidBoard = { plus: grantPlus("board", "stripe", 7) };
+    expect(decidePurchasePlusGrant({}, 7)).toEqual(paidBoard);
+    expect(decidePurchasePlusGrant({ plus: null }, 7)).toEqual(paidBoard);
+    expect(decidePurchasePlusGrant({ plus: MOCK }, 7)).toEqual(paidBoard);
+    expect(decidePurchasePlusGrant({ plus: { ...MOCK, plan: "host" } }, 7)).toEqual(paidBoard);
+    // Any stripe grant stays as it is: a replay or a paid host plan.
+    expect(decidePurchasePlusGrant({ plus: PAID }, 7)).toBeNull();
+    expect(decidePurchasePlusGrant({ plus: { ...PAID, plan: "host" } }, 7)).toBeNull();
+    // The grant counts in every mode, including off.
+    for (const mode of ["off", "mock", "stripe"] as const) {
+      expect(hasPlus(paidBoard, mode)).toBe(true);
+    }
   });
 
   it("view exposes state, mode and labels — never source or grant time", () => {

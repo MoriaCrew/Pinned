@@ -177,13 +177,13 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
   it("credits: packs mirror the PIN-146 catalog, starter/intent defaults, deep-overridable (PIN-147)", () => {
     expect(DEFAULT_POLICY.credits).toEqual({
       enabled: false,
+      // PIN-181: exactly one purchase, Board Plus + 20 creations.
       packs: [
-        { lookupKey: "pinneds_credits_25", credits: 25, eurCents: 499, label: "25 makes · €4.99" },
-        { lookupKey: "pinneds_credits_60", credits: 60, eurCents: 999, label: "60 makes · €9.99" },
-        { lookupKey: "pinneds_credits_150", credits: 150, eurCents: 1999, label: "150 makes · €19.99" },
+        { lookupKey: "pinneds_plus_20", credits: 20, eurCents: 299, label: "20 creations · €2.99" },
       ],
-      starterMakes: 25,
-      lowMakesWarning: 5,
+      starterMakes: 5,
+      lowMakesWarning: 2,
+      plusOnPurchase: true,
       pendingIntentCapPerBoard: 3,
       intentTtlSeconds: 1_800,
       checkoutPerIp: { limit: 20, windowMs: 600_000 },
@@ -204,15 +204,25 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
         eurCents,
       })),
     ).toEqual(catalogPacks);
+    // PIN-181 plusOnPurchase: on by default, both layers can turn it off, kept by the overrides parser.
+    expect(resolvePolicy({ credits: { plusOnPurchase: false } }).credits.plusOnPurchase).toBe(false);
+    expect(
+      resolvePolicy({ credits: { plusOnPurchase: false } }, { credits: { plusOnPurchase: true } }).credits
+        .plusOnPurchase,
+    ).toBe(true);
+    expect(parsePolicyOverridesJson('{"credits":{"plusOnPurchase":false}}')).toEqual({
+      credits: { plusOnPurchase: false },
+    });
+    expect(() => resolvePolicy({ credits: { plusOnPurchase: "yes" } } as never)).toThrow();
     const p = resolvePolicy(
-      { credits: { starterMakes: 5, intentTtlSeconds: 900 } },
+      { credits: { starterMakes: 8, intentTtlSeconds: 900 } },
       { credits: { pendingIntentCapPerBoard: 1 } },
     );
-    expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([5, 900, 1]);
+    expect([p.credits.starterMakes, p.credits.intentTtlSeconds, p.credits.pendingIntentCapPerBoard]).toEqual([8, 900, 1]);
     expect(p.credits.packs).toEqual(DEFAULT_POLICY.credits.packs);
     expect(resolvePolicy({ credits: { starterMakes: 0 } }).credits.starterMakes).toBe(0);
     // PIN-152 low-makes threshold: deep-overridable like the rest, 0 disables it.
-    expect(resolvePolicy({ credits: { lowMakesWarning: 2 } }).credits.lowMakesWarning).toBe(2);
+    expect(resolvePolicy({ credits: { lowMakesWarning: 4 } }).credits.lowMakesWarning).toBe(4);
     expect(resolvePolicy(null, { credits: { lowMakesWarning: 0 } }).credits.lowMakesWarning).toBe(0);
     expect(parsePolicyOverridesJson('{"credits":{"lowMakesWarning":3}}')).toEqual({
       credits: { lowMakesWarning: 3 },

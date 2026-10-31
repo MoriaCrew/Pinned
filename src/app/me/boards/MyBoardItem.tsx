@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { t, tf } from "../../../i18n";
+import { useLocale } from "../../../i18n/client";
 import { IconButton, Menu } from "../../../ui";
 
 /**
@@ -23,6 +24,7 @@ export function MyBoardItem({
   theme: string;
   children: ReactNode;
 }) {
+  const locale = useLocale();
   const router = useRouter();
   const [step, setStep] = useState<"closed" | "menu" | "confirm">("closed");
   const [removed, setRemoved] = useState(false);
@@ -98,7 +100,7 @@ export function MyBoardItem({
           icon="more"
           variant="ghost"
           size={20}
-          label={tf("en", "myBoards.boardActions", { board: title })}
+          label={tf(locale, "myBoards.boardActions", { board: title })}
           aria-expanded={open}
           aria-haspopup="menu"
           onClick={() => {
@@ -115,27 +117,27 @@ export function MyBoardItem({
           {step === "confirm" ? (
             <div className={`pn-menu ${menuClass}`} role="group" aria-label={title}>
               <p className="pn-lib-board-confirm" role="status">
-                {t("en", "myBoards.removeConfirm")}
+                {t(locale, "myBoards.removeConfirm")}
               </p>
               <button type="button" className="pn-menu-item" data-danger="" onClick={() => void remove()}>
-                {t("en", "myBoards.removeYes")}
+                {t(locale, "myBoards.removeYes")}
               </button>
               <button type="button" className="pn-menu-item" onClick={() => close(true)}>
-                {t("en", "myBoards.removeKeep")}
+                {t(locale, "myBoards.removeKeep")}
               </button>
             </div>
           ) : (
             <Menu
-              label={tf("en", "myBoards.boardActions", { board: title })}
+              label={tf(locale, "myBoards.boardActions", { board: title })}
               className={menuClass}
-              items={[{ label: t("en", "myBoards.remove"), onSelect: () => setStep("confirm") }]}
+              items={[{ label: t(locale, "myBoards.remove"), onSelect: () => setStep("confirm") }]}
             />
           )}
         </div>
       ) : null}
       {failed ? (
         <p className="pn-lib-board-error" role="alert">
-          {t("en", "myBoards.removeFailed")}
+          {t(locale, "myBoards.removeFailed")}
         </p>
       ) : null}
     </li>

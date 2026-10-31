@@ -25,6 +25,7 @@ let webhookRoute: (request: Request) => Promise<Response>;
 let intentId: string;
 let slug: string;
 let ledgerBalance: () => Promise<{ balance: number }>;
+let boardPlus: () => Promise<unknown>;
 
 beforeAll(async () => {
   ({ POST: webhookRoute } = await import("./stripe/webhook/route"));
@@ -42,8 +43,9 @@ beforeAll(async () => {
   );
   const intent = await getCheckoutIntentStore().create({
     boardId: slug,
-    packLookupKey: "pinneds_credits_25",
-    credits: 25,
+    packLookupKey: "pinneds_plus_20",
+    credits: 20,
+    eurCents: 299,
     at: Date.now(),
     intentTtlSeconds: 1_800,
     pendingIntentCapPerBoard: 3,
@@ -51,9 +53,10 @@ beforeAll(async () => {
   intentId = intent.id;
   await getCreditLedgerStore().recordPurchase(slug, {
     purchaseId: intent.purchaseId,
-    credits: 25,
+    credits: 20,
   });
   ledgerBalance = () => getCreditLedgerStore().getBalance(slug);
+  boardPlus = async () => (await getBoardRepository().getBoard(slug))?.plus ?? null;
 });
 
 function signedPost(event: unknown, secret = SECRET): Promise<Response> {
@@ -81,13 +84,13 @@ function paidSessionEvent(eventId: string) {
         mode: "payment",
         status: "complete",
         payment_status: "paid",
-        amount_total: 499,
+        amount_total: 299,
         currency: "eur",
         client_reference_id: intentId,
         metadata: {
           checkout_intent_id: intentId,
-          pack_lookup_key: "pinneds_credits_25",
-          credits: "25",
+          pack_lookup_key: "pinneds_plus_20",
+          credits: "20",
         },
         payment_intent: { id: "pi_test_fake_route", latest_charge: "ch_test_fake_route" },
       },
@@ -112,10 +115,12 @@ describe("POST /api/billing/stripe/webhook (stripe mode, PIN-150)", () => {
     const res = await signedPost(event);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
-    expect(await ledgerBalance()).toMatchObject({ balance: 25 });
+    expect(await ledgerBalance()).toMatchObject({ balance: 20 });
+    // PIN-181: the purchase also gave the board paid Plus.
+    expect(await boardPlus()).toMatchObject({ plan: "board", source: "stripe" });
     const replay = await signedPost(event);
     expect(replay.status).toBe(200);
-    expect(await ledgerBalance()).toMatchObject({ balance: 25 });
+    expect(await ledgerBalance()).toMatchObject({ balance: 20 });
   });
 
   it("refuses a declared body over 1 MiB with 413 before reading it (PIN-178)", async () => {

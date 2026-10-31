@@ -69,7 +69,7 @@ describe("PLUS_MODE=off (PIN-103)", () => {
     }
     expect(await repo().getBoard(slug)).toEqual(before);
     const view = await viewOf(slug, cookie);
-    expect(view.viewer).toEqual({ isHost: true });
+    expect(view.viewer).toEqual({ isHost: true, canChangeLook: true });
     expect(view.plus).toEqual({
       active: false,
       mode: "off",

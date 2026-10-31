@@ -19,7 +19,7 @@ import { activityLines } from "../domain/board-activity";
 import { normalizeElementLabel } from "../domain/element-label";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
-import { isPlusSkin, plusView, type PlusMode } from "../domain/plus";
+import { hasPlus, isPlusSkin, plusView, type PlusMode } from "../domain/plus";
 import { validSceneSize } from "../domain/scene-ratio";
 import { generateSlug } from "../domain/tokens";
 import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "../gateway/ports";
@@ -313,6 +313,8 @@ export interface BoardViewAccess {
  * deps.plusMode, mode, Policy price labels — no billing source,
  * time or secret; the host hash never leaves the server). PIN-122:
  * the viewer's own candidate pins carry `jobId` (ownCandidateJobId).
+ * PIN-181: `viewer.canChangeLook` = host, or joined while Plus
+ * counts (the skin route's rule; the route re-checks).
  */
 export async function getBoardView(
   slug: string,
@@ -377,7 +379,7 @@ export async function getBoardView(
     // Activity strip (PIN-74): board-visible BoardEvent lines,
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
-    viewer: { isHost },
+    viewer: { isHost, canChangeLook: isHost || (viewer !== null && hasPlus(board, deps.plusMode ?? "off")) },
     ...(availableMakes !== null ? { credits: { availableMakes } } : {}),
     plus: plusView(board, {
       mode: deps.plusMode ?? "off",

@@ -26,8 +26,10 @@ import "server-only";
  * that ledger idempotency makes the re-run safe.
  *
  * MONEY -> MAKES (the one documented formula). For a pack of
- * `credits` makes sold for `eurCents` (Policy.credits.packs),
- * a settled-EUR amount of `c` cents is worth, cumulatively:
+ * `credits` makes sold for `eurCents` (the terms the intent
+ * stored at buy time, PIN-181; legacy intents read
+ * Policy.credits.packs), a settled-EUR amount of `c` cents is
+ * worth, cumulatively:
  *
  *     makesFloor(c)  = min(credits, floor(c * credits / eurCents))
  *     makesFreeze(c) = min(credits, ceil (c * credits / eurCents))
@@ -79,7 +81,7 @@ import {
   type CreditLedgerStore,
   type CreditPurchase,
 } from "../domain/credit-ledger";
-import type { PlusMode } from "../domain/plus";
+import { decidePurchasePlusGrant, type PlusMode } from "../domain/plus";
 import type { Policy, PolicyCreditPack } from "../policy/policy";
 import type {
   CheckoutIntent,
@@ -107,14 +109,32 @@ export const STRIPE_WEBHOOK_EVENT_TYPES = [
   "charge.dispute.closed",
 ] as const;
 
+/**
+ * Stripe's zero-decimal and three-decimal currencies, from
+ * docs.stripe.com/currencies ("Zero-decimal currencies" and
+ * "Three-decimal currencies"). UGX stays listed although the
+ * page's special cases now take it as two-decimal: an extra
+ * dead letter is safe, a wrong conversion is not.
+ */
+export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga",
+  "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+]);
+export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "bhd", "jod", "kwd", "omr", "tnd",
+]);
+
+/** The price terms one purchase is held to (PIN-181): its stored intent terms, or the Policy pack for a legacy intent. */
+export type PackTerms = Pick<PolicyCreditPack, "credits" | "eurCents">;
+
 /** `min(credits, floor(cents * credits / eurCents))` - refund + final-clawback conversion (see module note). */
-export function makesFloorForCents(cents: number, pack: PolicyCreditPack): number {
+export function makesFloorForCents(cents: number, pack: PackTerms): number {
   if (!Number.isInteger(cents) || cents <= 0) return 0;
   return Math.min(pack.credits, Math.floor((cents * pack.credits) / pack.eurCents));
 }
 
 /** `min(credits, ceil(cents * credits / eurCents))` - dispute freezes round up to protect the pool. */
-export function makesFreezeForCents(cents: number, pack: PolicyCreditPack): number {
+export function makesFreezeForCents(cents: number, pack: PackTerms): number {
   if (!Number.isInteger(cents) || cents <= 0) return 0;
   return Math.min(pack.credits, Math.ceil((cents * pack.credits) / pack.eurCents));
 }
@@ -140,7 +160,7 @@ export interface StripeWebhookDeps {
   intents: CheckoutIntentStore;
   ledger: CreditLedgerStore;
   records: StripeWebhookRecordStore;
-  /** Board existence for the dead-board grant refusal; null skips the check (unit fakes). */
+  /** Board existence for the dead-board grant refusal, and the Plus write on a grant (PIN-181); null skips the check (unit fakes) and dead-letters the Plus write. */
   boards: BoardRepository | null;
   policy: Policy;
   /** Per-board policy (the buy path packs came from it); falls back to `policy`. */
@@ -212,10 +232,20 @@ async function policyFor(deps: StripeWebhookDeps, boardId: string): Promise<Poli
   return deps.resolvePolicyForBoard ? deps.resolvePolicyForBoard(boardId) : deps.policy;
 }
 
-function packFor(
-  policy: Policy,
-  intent: CheckoutIntent,
-): PolicyCreditPack | null {
+/**
+ * The terms a purchase is priced against (PIN-181): the
+ * `{ credits, eurCents }` its intent stored at buy time, so a
+ * later Policy price change (or a retired pack) never reprices
+ * an old purchase. Only a legacy intent without `eurCents` falls
+ * back to the board's Policy pack by lookup key; null when that
+ * pack is gone (the callers dead-letter `pack_mismatch`).
+ */
+async function packFor(deps: StripeWebhookDeps, intent: CheckoutIntent): Promise<PackTerms | null> {
+  const stored = intent.eurCents;
+  if (typeof stored === "number" && Number.isInteger(stored) && stored > 0) {
+    return { credits: intent.credits, eurCents: stored };
+  }
+  const policy = await policyFor(deps, intent.boardId);
   return policy.credits.packs.find((pack) => pack.lookupKey === intent.packLookupKey) ?? null;
 }
 
@@ -280,13 +310,22 @@ async function balanceTransactionEurCents(
  * transactions yet (`charge.dispute.created` usually has none),
  * where the freeze is provisional and the final clawback still
  * prefers the dispute's own BalanceTransaction when it lands.
+ * The rate converts major units, so multiplying minor units is
+ * only right between two 2-decimal currencies (PIN-181): a
+ * zero- or three-decimal presentment currency, or none at all,
+ * returns null (the caller dead-letters `fx_unverifiable`).
  */
 async function eurCentsViaChargeExchangeRate(
   deps: StripeWebhookDeps,
   chargeId: string | null,
   presentmentCents: number | null,
+  presentmentCurrency: string | null,
 ): Promise<number | null> {
   if (!chargeId || presentmentCents === null || presentmentCents < 0 || !deps.client) return null;
+  const currency = presentmentCurrency?.toLowerCase();
+  if (!currency || ZERO_DECIMAL_CURRENCIES.has(currency) || THREE_DECIMAL_CURRENCIES.has(currency)) {
+    return null;
+  }
   const charge = obj(await deps.client.retrieveCharge(chargeId));
   if (!charge) return null;
   const txn = await balanceTransactionObject(deps, charge.balance_transaction);
@@ -385,6 +424,36 @@ async function persistSessionMapping(
 }
 
 /**
+ * PIN-181: a granted purchase also gives the board Plus while the
+ * board's `credits.plusOnPurchase` is on. Runs after the makes
+ * grant AND on the duplicate path, so when this write throws (it
+ * propagates: 500, Stripe retries) or the process dies after the
+ * grant, the next delivery repairs it. The decision runs inside
+ * the board write and never replaces a stripe grant, so a replay
+ * writes nothing. No board repository: the makes still stand and
+ * an operator flag records the missing Plus.
+ */
+async function grantPurchasePlus(
+  deps: StripeWebhookDeps,
+  ctx: HandlerContext,
+  intent: CheckoutIntent,
+  sessionId: string | null,
+): Promise<void> {
+  if (!(await policyFor(deps, intent.boardId)).credits.plusOnPurchase) return;
+  if (!deps.boards) {
+    await deadLetter(deps, ctx, "plus_grant_unavailable", {
+      intentId: intent.id,
+      boardId: intent.boardId,
+      stripeObjectId: sessionId ?? undefined,
+    });
+    return;
+  }
+  await deps.boards.updateBoardSettings(intent.boardId, (board) =>
+    decidePurchasePlusGrant(board, ctx.at),
+  );
+}
+
+/**
  * The one fulfil path for `checkout.session.completed` and
  * `checkout.session.async_payment_succeeded`. Grants only a
  * `paid` session whose amount/currency + pack cross-check
@@ -438,6 +507,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
   if (purchase.grantedCredits > 0) {
     // The other event (completed / async success) landed first.
     await persistSessionMapping(deps, ctx, intent, mapping, intent.grantedAt ?? ctx.at);
+    await grantPurchasePlus(deps, ctx, intent, str(session.id));
     await deps.intents.close(intent.id, ctx.at);
     return "duplicate_grant";
   }
@@ -451,7 +521,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     });
   }
 
-  const pack = packFor(await policyFor(deps, intent.boardId), intent);
+  const pack = await packFor(deps, intent);
   const metadata = obj(session.metadata);
   const metadataPack = str(metadata?.pack_lookup_key);
   const metadataCredits = str(metadata?.credits);
@@ -531,6 +601,7 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     }
     throw error;
   }
+  await grantPurchasePlus(deps, ctx, intent, str(session.id));
   await deps.intents.close(intent.id, ctx.at);
   return "granted";
 }
@@ -589,7 +660,7 @@ interface ResolvedPurchase {
   intent: CheckoutIntent;
   account: BoardCreditAccount;
   purchase: CreditPurchase;
-  pack: PolicyCreditPack;
+  pack: PackTerms;
 }
 
 /** Resolve a refund/dispute's charge/payment_intent to intent + purchase + pack, dead-lettering each miss. */
@@ -635,7 +706,7 @@ async function resolveStripePurchase(
       boardId: intent.boardId,
     });
   }
-  const pack = packFor(await policyFor(deps, intent.boardId), intent);
+  const pack = await packFor(deps, intent);
   if (!pack || pack.credits !== intent.credits) {
     return deadLetter(deps, ctx, "pack_mismatch", {
       ...ids,
@@ -748,7 +819,12 @@ async function disputeSettledEurCents(
     const cents = await balanceTransactionEurCents(deps, txn);
     if (cents !== null) return cents;
   }
-  return eurCentsViaChargeExchangeRate(deps, idOf(dispute.charge), int(dispute.amount));
+  return eurCentsViaChargeExchangeRate(
+    deps,
+    idOf(dispute.charge),
+    int(dispute.amount),
+    str(dispute.currency),
+  );
 }
 
 async function freezeDispute(
