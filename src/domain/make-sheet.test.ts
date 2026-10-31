@@ -3,10 +3,14 @@ import {
   appendDictation,
   applyChip,
   attemptPollInterval,
-  chipThumbs,
+  chipInPrompt,
+  chipThumb,
   chipsForSelection,
   chipsSelectionKey,
+  clipClock,
+  ideaChips,
   isTerminalScene,
+  promptCountVisible,
   pruneSelection,
   canRemixScene,
   sceneCreditElementIds,
@@ -51,27 +55,52 @@ describe("generated chips selection guard (PIN-75)", () => {
   });
 });
 
-describe("chip thumbnails (PIN-100)", () => {
-  const chips = ["a", "b", "c", "d", "e"];
-
-  it("gives chip i the i-th picked sticker, wrapping round", () => {
-    const cards = [card("p1", "e1"), card("p2", "e2"), card("p3", "e3")];
-    expect(chipThumbs(chips, cards)).toEqual(["/e1", "/e2", "/e3", "/e1", "/e2"]);
+describe("idea chips (PIN-216)", () => {
+  const named = (pinId: string, label: string): PinCard => ({
+    ...card(pinId, pinId),
+    element: { id: pinId, ownerId: "me", label, faceFlag: false, imageUrl: `/${pinId}` },
   });
 
-  it("counts picks that share an image once", () => {
-    const cards = [card("p1", "e1"), card("p9", "e1"), card("p2", "e2")];
-    expect(chipThumbs(chips.slice(0, 3), cards)).toEqual(["/e1", "/e2", "/e1"]);
-  });
-
-  it("leaves chips bare when fewer than two distinct stickers are picked", () => {
-    expect(chipThumbs(chips.slice(0, 2), [])).toEqual([undefined, undefined]);
-    expect(chipThumbs(chips.slice(0, 2), [card("p1", "e1")])).toEqual([undefined, undefined]);
-    expect(chipThumbs(chips.slice(0, 2), [card("p1", "e1"), card("p9", "e1")])).toEqual([
-      undefined,
-      undefined,
+  it("keeps the fixed chips first and adds generated ones after them, never in their place", () => {
+    const fixed = ["on a sunny picnic blanket", "in a tiny museum"];
+    expect(ideaChips(fixed, fixed)).toEqual(fixed);
+    expect(ideaChips(fixed, ["napping in a sunbeam", "in a tiny museum"])).toEqual([
+      "on a sunny picnic blanket",
+      "in a tiny museum",
+      "napping in a sunbeam",
     ]);
-    expect(chipThumbs([], [card("p1", "e1"), card("p2", "e2")])).toEqual([]);
+  });
+
+  it("gives a chip a thumbnail only when it names a pick as whole words, in any case", () => {
+    const cards = [named("p1", "Teal Mug"), named("p2", "Rubber Duck"), named("p3", "cat")];
+    expect(chipThumb("a tiny parade starring the rubber duck", cards)).toBe("/p2");
+    expect(chipThumb("the TEAL MUG on the moon", cards)).toBe("/p1");
+    expect(chipThumb("the cat, judging", cards)).toBe("/p3");
+    // "cat" inside "catching" is not the cat; a chip naming nothing stays bare.
+    expect(chipThumb("catching the sunset", cards)).toBeUndefined();
+    expect(chipThumb("on a sunny picnic blanket", cards)).toBeUndefined();
+    expect(chipThumb("anything", [named("p9", "  ")])).toBeUndefined();
+  });
+
+  it("shows a chip pressed while the idea holds its words", () => {
+    expect(chipInPrompt("A tiny picnic, Floating in space", "floating in space")).toBe(true);
+    expect(chipInPrompt("a tiny picnic", "floating in space")).toBe(false);
+    expect(chipInPrompt("anything", "   ")).toBe(false);
+  });
+
+  it("shows the count only near the Policy cap", () => {
+    expect(promptCountVisible("", 500)).toBe(false);
+    expect(promptCountVisible("x".repeat(399), 500)).toBe(false);
+    expect(promptCountVisible("x".repeat(400), 500)).toBe(true);
+    expect(promptCountVisible("é".repeat(8), 10)).toBe(true);
+  });
+
+  it("writes the recording clock as m:ss", () => {
+    expect(clipClock(0)).toBe("0:00");
+    expect(clipClock(7.9)).toBe("0:07");
+    expect(clipClock(30)).toBe("0:30");
+    expect(clipClock(75)).toBe("1:15");
+    expect(clipClock(-2)).toBe("0:00");
   });
 });
 
@@ -99,7 +128,7 @@ describe("make sheet logic (PIN-70)", () => {
     expect([...pruneSelection(new Set(["p1", "gone"]), ["p1", "p2"])]).toEqual(["p1"]);
   });
 
-  it("chips fill, swap, extend, and never duplicate or bust the cap", () => {
+  it("chips fill, swap, extend after a comma, and never duplicate or bust the cap", () => {
     expect(applyChip("", CHIPS[0], CHIPS, 500)).toBe("on a sunny picnic blanket");
     expect(applyChip("on a sunny picnic blanket", CHIPS[1], CHIPS, 500)).toBe("floating in space");
     // PIN-75 swap: with fixed + generated chips both known, a
@@ -107,18 +136,33 @@ describe("make sheet logic (PIN-70)", () => {
     expect(
       applyChip("on a sunny picnic blanket", "napping in a sunbeam", [...CHIPS, "napping in a sunbeam"], 500),
     ).toBe("napping in a sunbeam");
-    expect(applyChip("a tiny picnic", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic floating in space");
+    // PIN-216: typed words get ", " (not a bare space); a sentence end gets a space.
+    expect(applyChip("a tiny picnic", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic, floating in space");
+    expect(applyChip("a tiny picnic, ", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic, floating in space");
+    expect(applyChip("A tiny picnic.", CHIPS[1], CHIPS, 500)).toBe("A tiny picnic. floating in space");
     expect(applyChip("a tiny picnic floating in space", CHIPS[1], CHIPS, 500)).toBe(
       "a tiny picnic floating in space",
     );
     expect(applyChip("1234567890", CHIPS[1], CHIPS, 12)).toBe("1234567890");
   });
 
-  it("appendDictation fills, appends, trims the stop and caps (PIN-119)", () => {
+  it("a pressed chip taps back out, leaving typed words alone (PIN-216)", () => {
+    expect(applyChip("floating in space", CHIPS[1], CHIPS, 500)).toBe("");
+    expect(applyChip("a tiny picnic, Floating in space", CHIPS[1], CHIPS, 500)).toBe("a tiny picnic");
+    expect(applyChip("floating in space, with grandma", CHIPS[1], CHIPS, 500)).toBe("with grandma");
+    // Inside a typed sentence it is not the chip's own part: nothing changes.
+    expect(applyChip("a duck floating in space today", CHIPS[1], CHIPS, 500)).toBe(
+      "a duck floating in space today",
+    );
+  });
+
+  it("appendDictation fills, appends like a chip, trims the stop and caps (PIN-119, PIN-216)", () => {
     expect(appendDictation("", "A tiny picnic on the lawn.", 500)).toBe("A tiny picnic on the lawn");
-    expect(appendDictation("a tiny picnic", "floating in space", 500)).toBe("a tiny picnic floating in space");
+    expect(appendDictation("a tiny picnic", "floating in space", 500)).toBe("a tiny picnic, floating in space");
+    expect(appendDictation("A tiny picnic!", "In space", 500)).toBe("A tiny picnic! In space");
     expect(appendDictation("a tiny picnic", "   ", 500)).toBe("a tiny picnic");
-    expect(appendDictation("abcdefghij", "klmnopqrst", 12)).toBe("abcdefghij k");
+    expect(appendDictation("abcdefghij", "klmnopqrst", 13)).toBe("abcdefghij, k");
+    expect(appendDictation("abcdefghij", "klmnopqrst", 12)).toBe("abcdefghij");
     expect(appendDictation("", "one   two\nthree!", 500)).toBe("one two three");
   });
 
