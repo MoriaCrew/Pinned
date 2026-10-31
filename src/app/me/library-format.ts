@@ -1,9 +1,9 @@
-import { t, tCount } from "../../i18n";
+import { formatDate, t, tCount, type Locale } from "../../i18n";
 import type { IconName } from "../../ui";
 
 /** "Oct 29": the day of a board's latest activity (UTC, so server and tests agree). */
-export function formatShortDate(epochMs: number): string {
-  return new Date(epochMs).toLocaleDateString("en-US", {
+export function formatShortDate(locale: Locale, epochMs: number): string {
+  return formatDate(locale, epochMs, {
     month: "short",
     day: "numeric",
     timeZone: "UTC",
@@ -12,12 +12,13 @@ export function formatShortDate(epochMs: number): string {
 
 /** The two mono lines on a My boards card: "3 things of yours" and the last active day ("Oct 29"). */
 export function boardCardMeta(
+  locale: Locale,
   myPinCount: number,
   lastActivityAt: number,
 ): { mine: string; last: string } {
   return {
-    mine: tCount("en", "myBoards.mine", myPinCount),
-    last: formatShortDate(lastActivityAt),
+    mine: tCount(locale, "myBoards.mine", myPinCount),
+    last: formatShortDate(locale, lastActivityAt),
   };
 }
 
@@ -37,17 +38,17 @@ export interface PinButtonView {
  * state (no emoji); a failed pin stays clickable so the label
  * "Try again" is also the action.
  */
-export function pinButtonView(state: PinButtonState): PinButtonView {
+export function pinButtonView(locale: Locale, state: PinButtonState): PinButtonView {
   switch (state) {
     case "pinning":
-      return { label: t("en", "myPins.pinning"), icon: undefined, inert: true, done: false };
+      return { label: t(locale, "myPins.pinning"), icon: undefined, inert: true, done: false };
     case "pinned":
-      return { label: t("en", "myPins.pinned"), icon: "check", inert: true, done: true };
+      return { label: t(locale, "myPins.pinned"), icon: "check", inert: true, done: true };
     case "already":
-      return { label: t("en", "myPins.alreadyPinned"), icon: "check", inert: true, done: true };
+      return { label: t(locale, "myPins.alreadyPinned"), icon: "check", inert: true, done: true };
     case "failed":
-      return { label: t("en", "myPins.failed"), icon: "undo", inert: false, done: false };
+      return { label: t(locale, "myPins.failed"), icon: "undo", inert: false, done: false };
     default:
-      return { label: t("en", "myPins.pinToBoard"), icon: "pin", inert: false, done: false };
+      return { label: t(locale, "myPins.pinToBoard"), icon: "pin", inert: false, done: false };
   }
 }

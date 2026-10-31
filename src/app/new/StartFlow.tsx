@@ -6,6 +6,7 @@ import { createBoardPayload } from "../../domain/board-view";
 import { newBoardHref, startChoice, suggestSkin, type SkinSuggestion } from "../../domain/skin-suggest";
 import { DEFAULT_SKIN, SKINS, type SkinId } from "../../domain/skins";
 import { t, tf, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/client";
 import { Button, Icon, Sheet, SkinPicker, TextField, Wordmark, skinName } from "../../ui";
 import "./start-flow.css";
 
@@ -26,6 +27,7 @@ type Step = "name" | "look";
  * Step 3 (send the link) is the board itself.
  */
 export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
+  const locale = useLocale();
   const router = useRouter();
   const [step, setStep] = useState<Step>("name");
   const [title, setTitle] = useState("");
@@ -64,7 +66,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
     const result = createBoardPayload(title, null, titleMaxChars);
     if (!result.ok) {
       setNameError(
-        result.reason === "tooLong" ? t("en", "create.titleTooLong") : t("en", "create.titleRequired"),
+        result.reason === "tooLong" ? t(locale, "create.titleTooLong") : t(locale, "create.titleRequired"),
       );
       return;
     }
@@ -90,7 +92,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
     const result = createBoardPayload(cleanTitle, themeId, titleMaxChars);
     if (!result.ok) {
       setStep("name");
-      setNameError(t("en", "create.titleRequired"));
+      setNameError(t(locale, "create.titleRequired"));
       return;
     }
     busyRef.current = true;
@@ -108,13 +110,13 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
       };
       const slug = data.board?.slug;
       if (!response.ok || !slug) {
-        throw new Error(typeof data.error === "string" && data.error ? data.error : t("en", "create.error"));
+        throw new Error(typeof data.error === "string" && data.error ? data.error : t(locale, "create.error"));
       }
       router.push(newBoardHref(slug, tryOn));
     } catch (cause) {
       // Server messages are one plain line; a dropped connection is not.
       const known = cause instanceof Error && !(cause instanceof TypeError);
-      setError(known ? cause.message : t("en", "create.error"));
+      setError(known ? cause.message : t(locale, "create.error"));
       busyRef.current = false;
       setBusy(false);
     }
@@ -122,7 +124,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
 
   const choice = startChoice(skin, suggestion.skin);
   const reason = suggestion.reason;
-  const [fitsBefore, fitsAfter] = t("en", reason ? "create.fits" : "create.noSuggestion").split("{skin}");
+  const [fitsBefore, fitsAfter] = t(locale, reason ? "create.fits" : "create.noSuggestion").split("{skin}");
 
   return (
     <>
@@ -130,13 +132,13 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
         <Wordmark size={26} href="/" />
         {step === "name" ? (
           <form className="pn-start-form" onSubmit={onNext} noValidate>
-            <h1 className="pn-board-title pn-start-title">{t("en", "create.title")}</h1>
+            <h1 className="pn-board-title pn-start-title">{t(locale, "create.title")}</h1>
             <TextField
               id={NAME_FIELD_ID}
               name="title"
-              label={t("en", "create.nameLabel")}
-              placeholder={t("en", "create.namePlaceholder")}
-              help={t("en", "create.nameHelp")}
+              label={t(locale, "create.nameLabel")}
+              placeholder={t(locale, "create.namePlaceholder")}
+              help={t(locale, "create.nameHelp")}
               maxLength={titleMaxChars}
               enterKeyHint="next"
               value={title}
@@ -147,7 +149,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
               }}
             />
             <Button type="submit" variant="primary" size="lg" block iconEnd="arrow">
-              {t("en", "create.next")}
+              {t(locale, "create.next")}
             </Button>
           </form>
         ) : (
@@ -158,8 +160,8 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
       {step === "look" ? (
         <Sheet
           className="pn-start-sheet"
-          title={t("en", "create.lookTitle")}
-          closeLabel={t("en", "create.back")}
+          title={t(locale, "create.lookTitle")}
+          closeLabel={t(locale, "create.back")}
           onClose={backToName}
           footer={
             <>
@@ -169,17 +171,17 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
                   {error}
                 </p>
               ) : choice.tryOn ? (
-                <p className="pn-start-note">{t("en", "create.plusNote")}</p>
+                <p className="pn-start-note">{t(locale, "create.plusNote")}</p>
               ) : null}
               <Button variant="primary" size="lg" block disabled={busy} onClick={create}>
                 {busy
-                  ? t("en", "create.creating")
+                  ? t(locale, "create.creating")
                   : error
-                    ? t("en", "create.retry")
-                    : tf("en", "create.use", { skin: skinName(skin) })}
+                    ? t(locale, "create.retry")
+                    : tf(locale, "create.use", { skin: skinName(skin) })}
               </Button>
               <span className="pn-sr" role="status">
-                {busy ? t("en", "create.creating") : ""}
+                {busy ? t(locale, "create.creating") : ""}
               </span>
             </>
           }
@@ -187,7 +189,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
           <p className="pn-start-spark">
             <Icon name="skin" size={20} />
             <span>
-              {reason ? `${t("en", `create.reason.${reason}` as MessageKey)} ` : null}
+              {reason ? `${t(locale, `create.reason.${reason}` as MessageKey)} ` : null}
               {fitsBefore}
               <b>{skinName(suggestion.skin)}</b>
               {fitsAfter}
@@ -208,7 +210,7 @@ export function StartFlow({ titleMaxChars }: { titleMaxChars: number }) {
                 setError("");
               }}
               sample={SAMPLE}
-              legend={t("en", "ui.look")}
+              legend={t(locale, "ui.look")}
             />
           </div>
         </Sheet>
