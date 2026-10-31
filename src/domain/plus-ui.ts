@@ -81,6 +81,17 @@ export function plusPurchasePath(mode: PlusState["mode"] | undefined): "stripe" 
   return mode === "stripe" ? "stripe" : mode === "mock" ? "mock" : "none";
 }
 
+/**
+ * The Plus sheet stays up while either purchase request is in flight
+ * (the credits checkout call or the mock grant), so Escape, the scrim
+ * and "Not now" cannot unmount it mid-request: a cancelled host would
+ * otherwise still be sent to Checkout, and a failed answer would land
+ * nowhere.
+ */
+export function plusSheetLocked(makesBusy: boolean, checkingOut: boolean): boolean {
+  return makesBusy || checkingOut;
+}
+
 /** What to do with the try-on stored before a Stripe checkout once the host is back. */
 export type ReturnSkinStep =
   /** Not yet (the view has not caught up) or nothing was stored: do nothing. */

@@ -12,6 +12,7 @@ import {
   lookSample,
   parseTryOn,
   plusPurchasePath,
+  plusSheetLocked,
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
@@ -250,5 +251,14 @@ describe("try-on bar (PIN-115)", () => {
     expect(showTryOnBar(null, null, false)).toBe(false);
     expect(showTryOnBar("marigold", "marigold", false)).toBe(false);
     expect(showTryOnBar("marigold", null, true)).toBe(false);
+  });
+});
+
+describe("plusSheetLocked (PIN-182)", () => {
+  it("keeps the sheet up while either purchase request is in flight", () => {
+    expect(plusSheetLocked(false, false)).toBe(false);
+    expect(plusSheetLocked(true, false)).toBe(true);
+    expect(plusSheetLocked(false, true)).toBe(true);
+    expect(plusSheetLocked(true, true)).toBe(true);
   });
 });
