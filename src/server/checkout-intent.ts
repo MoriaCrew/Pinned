@@ -13,10 +13,17 @@ import "server-only";
  * the whole purchase. Creating an intent writes nothing to the
  * credit ledger — the caller drives the ledger's `recordPurchase`
  * flow with `{ purchaseId: intent.purchaseId, credits }` when it
- * starts checkout (and `closePurchase` when an intent closes or
- * expires unpaid). Amounts, the per-board pending cap and the TTL
- * come from `Policy.credits` at the caller, mirroring the credit
- * ledger's no-Policy-import rule.
+ * starts checkout (and `closePurchase` only on a terminal outcome:
+ * the session was never created, or Stripe reported it expired or
+ * its async payment failed). Amounts, the per-board pending cap
+ * and the TTL come from `Policy.credits` at the caller, mirroring
+ * the credit ledger's no-Policy-import rule.
+ *
+ * Status (PIN-178): `pending` holds a per-board cap slot;
+ * `expired` means the TTL passed and the slot was freed lazily,
+ * while the ledger purchase stays pending so a late paid session
+ * still grants; `closed` is final (granted, or a terminal outcome
+ * above). The TTL never decides whether a paid session grants.
  *
  * No routes and no Stripe calls live here; this is the store port
  * plus its in-memory contract implementation.
@@ -41,7 +48,7 @@ export interface CheckoutIntent {
   createdAt: number;
   /** `createdAt + Policy.credits.intentTtlSeconds * 1000` at the caller. */
   expiresAt: number;
-  /** Set when the intent leaves `pending` (closed or expired). */
+  /** Set when the intent leaves `pending` (closed or expired), and again when an expired intent closes. */
   closedAt?: number;
   /**
    * Stripe object mapping persisted by the webhook (PIN-150) at
@@ -93,11 +100,6 @@ export function toPublicCheckoutIntent(intent: CheckoutIntent): PublicCheckoutIn
   };
 }
 
-/** Payable right now: still pending and strictly before its expiry instant. */
-export function isCheckoutIntentResolvable(intent: CheckoutIntent, at: number): boolean {
-  return intent.status === "pending" && at < intent.expiresAt;
-}
-
 export interface CreateCheckoutIntentInput {
   boardId: string;
   packLookupKey: string;
@@ -109,15 +111,6 @@ export interface CreateCheckoutIntentInput {
   pendingIntentCapPerBoard: number;
 }
 
-/**
- * Intent store port. `create` enforces the per-board pending cap
- * atomically (concurrent creates for one board cannot both pass
- * the cap) and lazily expires that board's stale pending intents
- * first, so an abandoned tab cannot block the board forever.
- * `resolvePending` is the webhook-side question "is this intent
- * still payable": it lazily expires a stale pending intent and
- * answers `null` for anything not resolvable.
- */
 /** Stripe ids the webhook may learn for one purchase (PIN-150). Any subset; set fields never change to a different value. */
 export interface StripeIntentMapping {
   sessionId?: string;
@@ -132,11 +125,21 @@ export interface StripeIntentLookup {
   sessionId?: string;
 }
 
+/**
+ * Intent store port. `create` enforces the per-board pending cap
+ * atomically (concurrent creates for one board cannot both pass
+ * the cap) and lazily expires that board's stale pending intents
+ * first, so an abandoned tab cannot block the board forever.
+ * Lazy expiry only frees the cap slot (status `expired`); it never
+ * touches the ledger, and the webhook resolves an intent by id
+ * whatever its status (PIN-178).
+ */
 export interface CheckoutIntentStore {
   create(input: CreateCheckoutIntentInput): Promise<CheckoutIntent>;
   get(intentId: string): Promise<CheckoutIntent | null>;
-  resolvePending(intentId: string, at: number): Promise<CheckoutIntent | null>;
+  /** Final state for a pending or lazily expired intent (granted, or a terminal outcome); a closed intent stays as is. */
   close(intentId: string, at: number): Promise<CheckoutIntent | null>;
+  /** Free a pending intent's cap slot once `at` reaches its expiry; anything else is returned unchanged. */
   expire(intentId: string, at: number): Promise<CheckoutIntent | null>;
   /**
    * Persist Stripe ids on the intent (PIN-150), idempotently:
@@ -401,24 +404,12 @@ export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
     return intent ? structuredClone(intent) : null;
   }
 
-  async resolvePending(intentId: string, at: number): Promise<CheckoutIntent | null> {
-    assertId(intentId, "intentId");
-    assertAt(at);
-    const intent = this.intents.get(intentId);
-    if (!intent) return null;
-    if (intent.status === "pending" && at >= intent.expiresAt) {
-      this.intents.set(intentId, { ...intent, status: "expired", closedAt: at });
-      return null;
-    }
-    return isCheckoutIntentResolvable(intent, at) ? structuredClone(intent) : null;
-  }
-
   async close(intentId: string, at: number): Promise<CheckoutIntent | null> {
     assertId(intentId, "intentId");
     assertAt(at);
     const intent = this.intents.get(intentId);
     if (!intent) return null;
-    if (intent.status !== "pending") return structuredClone(intent);
+    if (intent.status === "closed") return structuredClone(intent);
     const next: CheckoutIntent = { ...intent, status: "closed", closedAt: at };
     this.intents.set(intentId, next);
     return structuredClone(next);

@@ -151,16 +151,13 @@ function describeCheckoutIntentStore(
       expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(RangeError);
     });
 
-    it("an expired intent is not resolvable as pending and is lazily marked expired", async () => {
+    it("an intent past its TTL stays pending until a cap check or expire moves it (PIN-178)", async () => {
       const { store } = make();
       const intent = await store.create(createInput());
-      expect(await store.resolvePending(intent.id, intent.expiresAt - 1)).toEqual(intent);
-      expect(await store.resolvePending(intent.id, intent.expiresAt)).toBeNull();
-      expect(await store.get(intent.id)).toMatchObject({
-        status: "expired",
-        closedAt: intent.expiresAt,
-      });
-      expect(await store.resolvePending(intent.id, intent.expiresAt + 1)).toBeNull();
+      // No read path expires it (the webhook and the return
+      // redirect only `get`), however late the read.
+      expect(await store.get(intent.id)).toEqual(intent);
+      expect((await store.expire(intent.id, intent.expiresAt + 86_400_000))?.status).toBe("expired");
     });
 
     it("stale pending intents stop counting against the cap and are expired by the next create", async () => {
@@ -173,22 +170,41 @@ function describeCheckoutIntentStore(
       );
       expect(fresh.status).toBe("pending");
       expect((await store.get(stale.id))?.status).toBe("expired");
+      // A late grant can still finalize the lazily expired intent,
+      // and doing so does not take the freed slot back (PIN-178).
+      expect((await store.close(stale.id, stale.expiresAt + 30_000))?.status).toBe("closed");
+      await expect(
+        store.create(createInput({ pendingIntentCapPerBoard: 1, at: stale.expiresAt + 1 })),
+      ).rejects.toThrow(RangeError);
+      expect((await store.close(fresh.id, stale.expiresAt + 2))?.status).toBe("closed");
+      expect(
+        (await store.create(createInput({ pendingIntentCapPerBoard: 1, at: stale.expiresAt + 3 })))
+          .status,
+      ).toBe("pending");
     });
 
-    it("expire only fires at/after expiry and is idempotent; close frees and blocks resolution", async () => {
+    it("expire only fires on a pending intent at/after expiry and is idempotent; close is final", async () => {
       const { store } = make();
       const a = await store.create(createInput());
       expect((await store.expire(a.id, a.expiresAt - 1))?.status).toBe("pending");
       expect((await store.expire(a.id, a.expiresAt))?.status).toBe("expired");
-      expect((await store.expire(a.id, a.expiresAt + 5))?.status).toBe("expired");
+      expect((await store.expire(a.id, a.expiresAt + 5))).toMatchObject({
+        status: "expired",
+        closedAt: a.expiresAt,
+      });
       expect(await store.expire("nope", AT)).toBeNull();
+      // An expired intent closes (late grant or terminal event).
+      expect(await store.close(a.id, a.expiresAt + 10)).toMatchObject({
+        status: "closed",
+        closedAt: a.expiresAt + 10,
+      });
+      expect((await store.expire(a.id, a.expiresAt + 20))?.status).toBe("closed");
 
       const b = await store.create(createInput());
       expect((await store.close(b.id, AT + 10))?.status).toBe("closed");
-      expect((await store.close(b.id, AT + 11))?.status).toBe("closed");
-      expect(await store.resolvePending(b.id, AT + 12)).toBeNull();
+      expect(await store.close(b.id, AT + 11)).toMatchObject({ status: "closed", closedAt: AT + 10 });
+      expect((await store.expire(b.id, b.expiresAt))?.status).toBe("closed");
       expect(await store.close("nope", AT)).toBeNull();
-      expect(await store.resolvePending("nope", AT)).toBeNull();
     });
 
     it("records the Stripe mapping idempotently, refuses a conflicting remap, and resolves by Stripe ids (PIN-150)", async () => {

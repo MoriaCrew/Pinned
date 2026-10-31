@@ -7,6 +7,7 @@ import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import { resolvePolicy, DEFAULT_POLICY } from "../policy/policy";
 import { InMemoryCheckoutIntentStore, type CheckoutIntent } from "./checkout-intent";
+import { resolveBillingReturn } from "./credit-checkout";
 import {
   StripeWebhookConfigError,
   StripeWebhookSignatureError,
@@ -345,19 +346,6 @@ describe("checkout fulfilment (PIN-150)", () => {
     ).toBe("granted");
   });
 
-  it("a paid session for an intent past its TTL dead-letters as dead_intent", async () => {
-    const h = await harness();
-    const intent = await h.createIntent();
-    const late = evt(
-      "evt_late",
-      "checkout.session.completed",
-      session(intent.id),
-      NOW + 1_800_000,
-    );
-    expect((await h.deliver(late)).outcome).toBe("dead_letter");
-    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["dead_intent"]);
-    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
-  });
 
   it("async_payment_failed and expired close the intent and purchase without granting", async () => {
     const h = await harness();
@@ -382,6 +370,115 @@ describe("checkout fulfilment (PIN-150)", () => {
     expect(account?.purchases[expired.id]).toMatchObject({ state: "closed" });
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
     expect(await h.ledger.listEntries(SLUG)).toEqual([]);
+  });
+});
+
+describe("paid sessions past the intent TTL (PIN-178)", () => {
+  const TTL_MS = 1_800_000;
+
+  it("a paid completed at 30:30 after the intent was created grants", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    h.setNow(NOW + TTL_MS + 30_000);
+    const late = evt("evt_late", "checkout.session.completed", session(intent.id), NOW + TTL_MS + 30_000);
+    expect((await h.deliver(late)).outcome).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, available: 25 });
+    expect(await h.intents.get(intent.id)).toMatchObject({ status: "closed" });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("the return redirect landing first changes nothing, then the paid webhook grants", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    const returnAt = NOW + TTL_MS + 20_000;
+    // Past the TTL the redirect answers generically, and writes nothing.
+    expect(
+      await resolveBillingReturn(intent.id, "success", { intents: h.intents, now: () => returnAt }),
+    ).toEqual({ kind: "generic", location: "/" });
+    expect(await h.intents.get(intent.id)).toEqual(intent);
+    expect(
+      (await h.deliver(
+        evt("evt_after_return", "checkout.session.completed", session(intent.id), NOW + TTL_MS + 30_000),
+      )).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    // Granted (closed) intents return to their board again.
+    expect(
+      await resolveBillingReturn(intent.id, "success", { intents: h.intents, now: () => returnAt }),
+    ).toEqual({ kind: "board", location: `/g/${SLUG}?billing=processing` });
+  });
+
+  it("a cap check that lazily expired the intent frees its slot, and the paid webhook still grants", async () => {
+    const h = await harness();
+    const capInput = {
+      boardId: SLUG,
+      packLookupKey: PACK,
+      credits: 25,
+      intentTtlSeconds: 1_800,
+      pendingIntentCapPerBoard: 1,
+    };
+    const first = await h.intents.create({ ...capInput, at: NOW });
+    await h.ledger.recordPurchase(SLUG, { purchaseId: first.purchaseId, credits: 25 });
+    // A second buy on the same board after the TTL: the cap check
+    // expires `first` and the board gets its one slot back.
+    const second = await h.intents.create({ ...capInput, at: NOW + TTL_MS + 10_000 });
+    expect(second.status).toBe("pending");
+    expect(await h.intents.get(first.id)).toMatchObject({ status: "expired" });
+    const account = await h.ledger.getAccount(SLUG);
+    expect(account?.purchases[first.id]).toMatchObject({ state: "pending" });
+
+    expect(
+      (await h.deliver(
+        evt("evt_after_cap", "checkout.session.completed", session(first.id), NOW + TTL_MS + 30_000),
+      )).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(await h.intents.get(first.id)).toMatchObject({ status: "closed" });
+    // The freed slot stays with `second`: the cap is still full.
+    await expect(
+      h.intents.create({ ...capInput, at: NOW + TTL_MS + 40_000 }),
+    ).rejects.toThrow(RangeError);
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("async_payment_succeeded two days after creation grants", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    expect(
+      (await h.deliver(
+        evt("evt_async_pending", "checkout.session.completed", session(intent.id, { payment_status: "unpaid" })),
+      )).outcome,
+    ).toBe("ignored_unpaid");
+    const twoDays = NOW + 2 * 86_400_000;
+    h.setNow(twoDays);
+    expect(
+      (await h.deliver(
+        evt("evt_async_paid", "checkout.session.async_payment_succeeded", session(intent.id), twoDays),
+      )).outcome,
+    ).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+    expect(await h.intents.get(intent.id)).toMatchObject({ status: "closed", grantedAt: twoDays });
+  });
+
+  it("a paid event after Stripe expired the session dead-letters dead_intent and grants nothing", async () => {
+    // Stripe cannot report one session both expired and paid; if it
+    // ever did, the terminal `expired` already closed the purchase.
+    const h = await harness();
+    const intent = await h.createIntent();
+    expect(
+      (await h.deliver(
+        evt("evt_expired", "checkout.session.expired", session(intent.id, { payment_status: "unpaid", status: "expired" }), NOW + TTL_MS + 60_000),
+      )).outcome,
+    ).toBe("closed");
+    expect(
+      (await h.deliver(
+        evt("evt_paid_after_expired", "checkout.session.completed", session(intent.id), NOW + TTL_MS + 90_000),
+      )).outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["dead_intent"]);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    const account = await h.ledger.getAccount(SLUG);
+    expect(account?.purchases[intent.id]).toMatchObject({ state: "closed", grantedCredits: 0 });
   });
 });
 

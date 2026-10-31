@@ -378,7 +378,9 @@ async function persistSessionMapping(
  * The one fulfil path for `checkout.session.completed` and
  * `checkout.session.async_payment_succeeded`. Grants only a
  * `paid` session whose amount/currency + pack cross-check
- * against the intent the session itself names.
+ * against the intent the session itself names, whatever the
+ * intent's status or age, while its ledger purchase is still
+ * pending and the board exists.
  */
 async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Promise<string> {
   let session = ctx.event.object;
@@ -456,8 +458,8 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     });
   }
 
-  // Amount cross-check before the intent liveness check, so a
-  // mismatched amount dead-letters as itself even on a stale intent.
+  // Amount cross-check before the closed-purchase check, so a
+  // mismatched amount dead-letters as itself even on a dead intent.
   const amountTotal = int(session.amount_total);
   if (str(session.currency)?.toLowerCase() === "eur" && amountTotal !== null) {
     if (amountTotal !== pack.eurCents) {
@@ -485,8 +487,12 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     }
   }
 
-  const resolvable = await deps.intents.resolvePending(intent.id, ctx.at);
-  if (!resolvable) {
+  // PIN-178: the intent TTL never refuses a paid session. Lazy
+  // expiry (cap check) only freed the board's cap slot; the ledger
+  // purchase stays pending until a terminal outcome closes it -
+  // Stripe's `expired` / `async_payment_failed`, or a session that
+  // was never created. Only then is the intent dead.
+  if (purchase.state === "closed") {
     return deadLetter(deps, ctx, "dead_intent", {
       intentId: intent.id,
       boardId: intent.boardId,
@@ -1046,6 +1052,3 @@ async function dispatch(deps: StripeWebhookDeps, ctx: HandlerContext): Promise<s
       return "unhandled";
   }
 }
-
-
-

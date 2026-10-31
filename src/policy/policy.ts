@@ -163,9 +163,11 @@ export const PolicySchema = z
      * is granted once; paid makes never expire (no TTL knob on
      * purpose). `pendingIntentCapPerBoard` bounds concurrent
      * not-yet-paid purchase intents one board may hold, and
-     * `intentTtlSeconds` is how long such an intent stays payable
-     * before it is closed (30 min, matching a hosted checkout
-     * sitting open in a tab).
+     * `intentTtlSeconds` is how long such an intent holds one of
+     * those cap slots (30 min, matching a hosted checkout sitting
+     * open in a tab). Since PIN-178 it no longer decides whether a
+     * paid session grants: only a terminal Stripe event closes the
+     * purchase.
      */
     credits: z
       .object({
