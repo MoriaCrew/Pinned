@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatDate, formatList, formatMoney, LOCALES, t, tCount, tf } from "./index";
+import { countRuleLocale, formatDate, formatList, formatMoney, LOCALES, t, tCount, tf } from "./index";
 
 describe("i18n catalog (FR9)", () => {
   it("resolves English strings", () => {
@@ -36,6 +36,15 @@ describe("plural forms follow each language (PIN-190)", () => {
   it("English keeps 0 plural", () => {
     expect(tCount("en", "makes.left", 0)).toBe(tf("en", "makes.left.other", { n: 0 }));
     expect(tCount("en", "makes.left", 1)).toBe(tf("en", "makes.left.one", { n: 1 }));
+  });
+});
+
+describe("count rule falls back to English (PIN-199)", () => {
+  it("uses the language's own rule only when its catalog has the message", () => {
+    expect(countRuleLocale("fr", { "x.other": "autres", "x.one": "un" }, "x")).toBe("fr");
+    expect(countRuleLocale("fr", {}, "x")).toBe("en");
+    expect(countRuleLocale("id", { "x.one": "satu" }, "x")).toBe("en");
+    expect(countRuleLocale("en", {}, "x")).toBe("en");
   });
 });
 

@@ -13,15 +13,9 @@
  * on the server.
  */
 export const EN_ONLY_FILES: readonly string[] = [
-
-
-
-
   // PIN-196 server errors (rest: PIN-201)
   "src/gateway/decorators.ts",
   "src/server/dictation.ts",
-
-  // PIN-197 route errors
 
   // Stays English: link-preview images are fetched by crawlers, which send no language
   "src/app/g/[slug]/opengraph-image.tsx",

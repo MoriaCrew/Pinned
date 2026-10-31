@@ -71,7 +71,7 @@ describe("billing return banner (PIN-152, PIN-182)", () => {
     expect(banner("cancelled")).toContain("No creations were added and nothing was charged.");
     expect(banner("failed")).toContain("That checkout didn&#x27;t finish.");
     expect(banner("checkLater")).toContain("Still waiting for your creations.");
-    expect(banner("added", 28, "fr")).toContain("Vos créations sont arrivées — 28 créations restantes.");
+    expect(banner("added", 28, "fr")).toContain("Tes créations sont arrivées — 28 créations restantes.");
   });
 
   it("adds that Plus is on only once the refetched view says so", () => {
