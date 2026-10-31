@@ -138,6 +138,13 @@ export const PolicySchema = z
         windowMs: z.number().int().min(1).default(600_000),
       })
       .default({ limit: 60, windowMs: 600_000 }),
+    /** Board create per-IP brake (PIN-61; moved from RATE_LIMITS in PIN-205, in-process like boardDeletePerIp). The per-maker free creations rule (credits.starterBoardsPerMaker) is the shared, durable limit. */
+    boardCreatePerIp: z
+      .object({
+        limit: z.number().int().min(1).default(10),
+        windowMs: z.number().int().min(1).default(3_600_000),
+      })
+      .default({ limit: 10, windowMs: 3_600_000 }),
     /**
      * Board Plus (PIN-103, docs/15-board-plus.md). Since PIN-181
      * Plus is sold only inside the credits pack (any joined member
@@ -424,6 +431,12 @@ export const PolicyOverridesSchema = z.object({
     })
     .optional(),
   boardDeletePerIp: z
+    .object({
+      limit: z.number().int().min(1).optional(),
+      windowMs: z.number().int().min(1).optional(),
+    })
+    .optional(),
+  boardCreatePerIp: z
     .object({
       limit: z.number().int().min(1).optional(),
       windowMs: z.number().int().min(1).optional(),

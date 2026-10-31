@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_POLICY } from "../policy/policy";
 import { RATE_LIMITS, checkRateLimit, clientKey } from "./rate-limit";
 
 describe("checkRateLimit", () => {
@@ -19,13 +20,13 @@ describe("checkRateLimit", () => {
     expect(clientKey(bare, "create")).toBe("create:unknown");
   });
 
-  it("board-create and global upload per-IP limits exist (PIN-61)", () => {
-    expect(RATE_LIMITS.boardCreatePerIp.limit).toBeGreaterThan(0);
+  it("board-create and global upload per-IP limits exist (PIN-61; board-create in Policy since PIN-205)", () => {
+    expect(DEFAULT_POLICY.boardCreatePerIp.limit).toBeGreaterThan(0);
     expect(RATE_LIMITS.uploadsPerIp.limit).toBeGreaterThan(
       RATE_LIMITS.submissionsPerIpGame.limit,
     );
     const key = `create-${Math.random()}`;
-    const gate = RATE_LIMITS.boardCreatePerIp;
+    const gate = DEFAULT_POLICY.boardCreatePerIp;
     for (let i = 0; i < gate.limit; i += 1) {
       expect(checkRateLimit(key, gate.limit, gate.windowMs, 1_000 + i)).toBe(true);
     }

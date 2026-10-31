@@ -47,6 +47,12 @@ export function claimDeps(authTimeMs?: number): ClaimDeps {
   };
 }
 
+/** Signed-in uid while sign-in is on (AUTH_MODE=optional); null when off or signed out (PIN-205 maker key). */
+export async function signedInUserId(request: Request): Promise<string | null> {
+  if (getConfig().authMode !== "optional") return null;
+  return (await currentUserSession(request))?.user.uid ?? null;
+}
+
 /** Signed-in user for this request; null when signed out. */
 export async function currentUser(request: Request): Promise<UserProfile | null> {
   const cookie = readCookieValue(request.headers.get("cookie"), USER_COOKIE_NAME);
