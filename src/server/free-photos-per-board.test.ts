@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
+import { emptyBoardCounters } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import { FREE_PHOTOS_USED } from "../domain/free-photos";
@@ -211,6 +212,29 @@ describe("free photos per board (PIN-230)", () => {
     const legacy = await h.board();
     expect(await h.boards.getBoard(legacy.slug)).not.toHaveProperty("freePhotos");
     expect(await freePhotosLeftOf(h, legacy.slug)).toBe(2);
+  });
+
+  it("a per-board override beats the amount creation stored", async () => {
+    const h = harness(ON(1));
+    const slug = "override-board-override1";
+    await h.boards.createBoard({
+      slug,
+      title: "Override board",
+      freePhotos: 0,
+      policyOverrides: { credits: { freePhotosPerBoard: 3 } },
+      counters: emptyBoardCounters(),
+      createdAt: T0,
+      version: 1,
+    });
+    const member = await joinBoard(slug, { displayName: "Sam" }, null, {
+      boards: h.boards,
+      sessionSecret: SECRET,
+      policy: h.policy,
+      now: () => T0,
+    });
+    expect(await freePhotosLeftOf(h, slug)).toBe(3);
+    expect((await uploadPhoto(slug, member.participant, await photoBytes(), h.deps)).status).toBe("ready");
+    expect(await freePhotosLeftOf(h, slug)).toBe(2);
   });
 
   it("credits off: no gate, no field, nothing stored", async () => {

@@ -90,12 +90,20 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
    gcloud firestore indexes composite list --project "$P" --format="table(name.basename(),state)"   # all READY
    ```
 6. **Sign-in on pinneds.com.**
-   - Authorized domain and Google provider (read-only check):
+   - Authorized domain and Google provider (read-only check). Ask
+     only for the fields checked (`fields=`) and keep the `jq` filter
+     as a second guard: the full config also holds the password-hash
+     signer key, which must never reach a terminal or a transcript.
+     Run these exactly; never widen the query.
      ```sh
-     curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: $P" \
-       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/config" | jq '.authorizedDomains'
+     T=$(gcloud auth print-access-token)
+     curl -s -H "Authorization: Bearer $T" -H "x-goog-user-project: $P" \
+       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/config?fields=authorizedDomains" | jq '.authorizedDomains'
+     curl -s -H "Authorization: Bearer $T" -H "x-goog-user-project: $P" \
+       "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/defaultSupportedIdpConfigs/google.com?fields=enabled" | jq '.enabled'
      ```
-     `pinneds.com` must be listed (docs/13: already enabled Oct 29).
+     `pinneds.com` must be listed (docs/13: already enabled Oct 29),
+     and the Google provider must print `true`.
    - **(console)** Google Cloud → APIs & Services → Credentials → the
      prod project's web OAuth client → add the authorized redirect URI
      `https://pinneds.com/__/auth/handler`.
@@ -194,15 +202,22 @@ element; delete the throwaway board.
 4. **Demo-board overrides** (no deploy; Firestore console →
    `boards/<slug>` → field `policyOverrides`, a map). Try it on a
    throwaway board first: an invalid value makes that board answer
-   500.
+   500. Robin (Oct 31): the demo board is a **normal board**. It
+   gets the free tier like any other board; only the caps that would
+   lock judges out of joining are raised:
    ```json
-   { "dailyBudgetUsd": 80, "dailyCallLimit": 16000,
-     "participantsPerBoard": 500, "joinMaxNewPerIp": 200,
-     "scenesPerBoardPerDay": 300, "scenesPerParticipantPerDay": 30,
-     "photosPerParticipantPerDay": 40 }
+   { "participantsPerBoard": 500, "joinMaxNewPerIp": 200 }
    ```
-   The board's own budget is checked against the same daily counter,
-   so the demo board keeps working after the global cap is hit.
+   Once live billing is on (§7), Robin buys Board Plus on the demo
+   board with a real card and keeps it. That purchase is the live
+   go-live check (`docs/15-board-plus.md`, "Going live on prod"), and
+   it makes the demo board a paying customer's board: every skin,
+   foil stickers, no photo limit and 5 + 20 AI scenes. Each judge's
+   own new board shows the free tier (5 AI scenes) and the Plus
+   offer. Spend stays bounded by the global daily budget. If the
+   demo board needs headroom during judging, raise its daily caps
+   here (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`); do
+   not give it a free pool.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
    `apphosting.prod.yaml` (it ships with promotion #2).
@@ -221,13 +236,23 @@ element; delete the throwaway board.
 
 ## 7. Live billing
 
-Turned on by PIN-210 with promotion #2, after Stripe live activation,
-the tax decision (PIN-154) and the legal pages (PIN-26). Steps and
-smoke: `docs/15-board-plus.md`, "Going live on prod".
+PIN-210 comes in two pieces (Robin, Oct 31). The operator scripts and
+runbook land on `dev` before the freeze and change nothing on prod.
+The prod switch, a config-only PR to `apphosting.prod.yaml`, merges
+once Stripe live activation and the tax decision (PIN-154) are done
+and both live secrets exist. The legal pages (PIN-26) are already on
+`dev`. If the switch is ready by the Nov 3 freeze it rides promotion
+#2; otherwise a config-only promotion turns it on as soon as it is
+ready, even during judging week (§8). The live purchase is made on
+the demo board and kept (§6.4). Steps, smoke and rollback:
+`docs/15-board-plus.md`, "Going live on prod".
 
 ## 8. Judging week (Nov 4–8)
 
 - **Freeze** `main` and `dev` (dev.pinneds.com is the fallback demo).
+  One planned exception: if the live-billing switch (§7) wasn't
+  ready by the freeze, it goes out as a config-only promotion once it
+  is. Run the §5 smoke and the billing smoke in `docs/15` right after.
 - **Twice a day:** health, the demo board, `usage:costs`.
 - **Meta slow or down:** set the demo board's `dailyBudgetUsd` to 0.
   Scenes become honest collages, uploads say AI is switched off,

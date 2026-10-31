@@ -7,6 +7,7 @@ import {
   CATALOG_VERSION,
   assertValidCatalog,
   buildCatalogPlan,
+  catalogItemsForMode,
   catalogMetadata,
   catalogValidationErrors,
   findCatalogItem,
@@ -250,6 +251,21 @@ describe("catalog convergence plan (PIN-146)", () => {
     ]);
   });
 
+  it("live mode (PIN-210) skips drafts but keeps live and retired items; sandbox takes all", () => {
+    expect(catalogItemsForMode(CATALOG_ITEMS, "sandbox")).toEqual([...CATALOG_ITEMS]);
+    const live = catalogItemsForMode(CATALOG_ITEMS, "live");
+    expect(live.map((i) => i.itemKey)).toEqual(["plus_20", "credits_25", "credits_60", "credits_150"]);
+    // A fresh live account: create the pack, nothing to archive, no host plan.
+    expect(
+      buildCatalogPlan(live, [], []).map((e) => [e.item.itemKey, e.product.kind, e.price.kind]),
+    ).toEqual([
+      ["plus_20", "create", "create"],
+      ["credits_25", "retired", "retired"],
+      ["credits_60", "retired", "retired"],
+      ["credits_150", "retired", "retired"],
+    ]);
+  });
+
   it("buildCatalogPlan refuses an invalid manifest", () => {
     expect(() => buildCatalogPlan([item(), item()], [], [])).toThrow(
       /duplicate lookupKey/,
@@ -271,5 +287,9 @@ describe("seed script mirror (PIN-146)", () => {
     const mirror: unknown = new Function(`return ${literal};`)();
     expect(mirror).toEqual(CATALOG_ITEMS);
     expect(script).toContain('item.status === "retired"');
+    // PIN-210: the same live filter as catalogItemsForMode.
+    expect(script).toContain(
+      'mode === "live" ? items.filter((item) => item.status !== "draft") : [...items]',
+    );
   });
 });

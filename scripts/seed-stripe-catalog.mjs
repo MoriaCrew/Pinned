@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * PIN-146 Stripe catalog seeder (operator-run, sandbox only,
- * never CI). Converges a Stripe test sandbox onto the committed
- * catalog manifest: `src/billing/catalog.ts` is the source of
- * truth and the CATALOG_ITEMS mirror below must stay in sync
- * (pinned by src/billing/catalog.test.ts).
+ * PIN-146 Stripe catalog seeder (operator-run, never CI).
+ * Converges a Stripe test sandbox (default) or, since PIN-210, the
+ * live account onto the committed catalog manifest:
+ * `src/billing/catalog.ts` is the source of truth and the
+ * CATALOG_ITEMS mirror below must stay in sync (pinned by
+ * src/billing/catalog.test.ts).
  *
  *   node --env-file=.env.local scripts/seed-stripe-catalog.mjs \
  *     --env-var STRIPE_PINNED_LOCAL_AGENT_KEY            # dry-run
@@ -14,8 +15,10 @@
  * Plain fetch against api.stripe.com — no SDK dependency. The
  * secret is read from the env var NAMED by --env-var (default
  * STRIPE_SECRET_KEY) and is never printed; output carries item
- * keys, actions and Stripe object ids only. Live keys are
- * refused. Convergence rules:
+ * keys, actions and Stripe object ids only. A live key is refused
+ * unless --live AND --i-understand-live are passed (PIN-210,
+ * scripts/stripe/operator-mode.mjs); live runs skip draft items
+ * (sandbox-only test objects). Convergence rules:
  * - product matched by metadata catalog + item_key (paginated);
  *   created when missing, updated in place on copy/metadata drift.
  * - price matched by lookup_key; reused on an exact match of
@@ -27,6 +30,8 @@
  *   is ever created for it.
  * Re-running a converged sandbox is a no-op (zero duplicates).
  */
+
+import { LIVE_CONFIRM_FLAG, LIVE_FLAG, resolveStripeMode } from "./stripe/operator-mode.mjs";
 
 // --- Manifest mirror of src/billing/catalog.ts — keep in sync. ---
 const CATALOG_ID = "pinneds";
@@ -93,6 +98,11 @@ const CATALOG_ITEMS = [
     status: "draft",
   },
 ];
+
+// Mirror of catalogItemsForMode in src/billing/catalog.ts (PIN-210).
+function catalogItemsForMode(items, mode) {
+  return mode === "live" ? items.filter((item) => item.status !== "draft") : [...items];
+}
 
 function catalogMetadata(item) {
   return {
@@ -242,10 +252,10 @@ async function listAll(path, params = {}) {
   }
 }
 
-async function fetchState() {
+async function fetchState(items) {
   const products = await listAll("/products");
   const prices = await listAll("/prices", {
-    lookup_keys: CATALOG_ITEMS.map((i) => i.lookupKey),
+    lookup_keys: items.map((i) => i.lookupKey),
   });
   return { products, prices };
 }
@@ -364,8 +374,8 @@ async function applyItem(item, state) {
   return { itemKey: item.itemKey, productId, priceId: created.id };
 }
 
-function describePlan(state) {
-  for (const item of CATALOG_ITEMS) {
+function describePlan(items, state) {
+  for (const item of items) {
     const product = planProduct(item, state.products);
     const productId = product.productId ?? "";
     const price = planPrice(item, productId, state.prices);
@@ -408,16 +418,29 @@ async function main() {
     console.error(`Env var ${envName} is not set; refusing to run.`);
     process.exit(2);
   }
-  if (apiKey.includes("_live_")) {
-    console.error(`Env var ${envName} holds a LIVE key; this seeder is sandbox-only.`);
+  const gate = resolveStripeMode({
+    key: apiKey,
+    envName,
+    live: args.includes(LIVE_FLAG),
+    confirmed: args.includes(LIVE_CONFIRM_FLAG),
+  });
+  if (!gate.ok) {
+    console.error(gate.error);
     process.exit(2);
   }
+  const items = catalogItemsForMode(CATALOG_ITEMS, gate.mode);
   console.log(
-    `catalog=${CATALOG_ID} version=${CATALOG_VERSION} mode=${apply ? "apply" : "dry-run"} keyEnv=${envName}`,
+    `catalog=${CATALOG_ID} version=${CATALOG_VERSION} mode=${apply ? "apply" : "dry-run"} stripe=${gate.mode} keyEnv=${envName}`,
   );
+  if (gate.mode === "live") {
+    const skipped = CATALOG_ITEMS.filter((item) => !items.includes(item));
+    console.log(
+      `LIVE Stripe account: real products and prices. Draft items skipped: ${skipped.map((i) => i.itemKey).join(",") || "none"}`,
+    );
+  }
 
-  const state = await fetchState();
-  for (const item of CATALOG_ITEMS) {
+  const state = await fetchState(items);
+  for (const item of items) {
     const dupes = matchingProducts(item, state.products);
     if (dupes.length > 1) {
       throw new Error(
@@ -427,17 +450,17 @@ async function main() {
   }
 
   if (!apply) {
-    describePlan(state);
+    describePlan(items, state);
     console.log("dry-run only; pass --apply to mutate.");
     return;
   }
 
-  for (const item of CATALOG_ITEMS) await applyItem(item, state);
+  for (const item of items) await applyItem(item, state);
 
-  // Self-check: a converged sandbox plans as pure reuse (retired: nothing active).
-  const after = await fetchState();
+  // Self-check: a converged account plans as pure reuse (retired: nothing active).
+  const after = await fetchState(items);
   const ids = {};
-  for (const item of CATALOG_ITEMS) {
+  for (const item of items) {
     const product = planProduct(item, after.products);
     const productId = product.productId ?? "";
     const price = planPrice(item, productId, after.prices);
