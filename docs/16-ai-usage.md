@@ -37,6 +37,17 @@ attribution but never move the price. The scene job's own
 `costUsd` is the same $0.01 for an AI scene and $0 for a
 collage.
 
+## SAM `store` flag (PIN-213)
+
+SAM store flag: PIN-213, default off until probed. `Policy.samStore`
+unset (the default) sends no `store` field on SAM `/v1/responses`
+calls, exactly as before; `false` sends `store: false` on every
+concept and tap (point) cut. Set it per board
+(`policyOverrides.samStore`) for the one live probe, then globally
+via `POLICY_OVERRIDES_JSON`. Muse Image compose already sends
+`store: false` (`Policy.sceneStore`). The SAM lab route does not use
+the flag.
+
 ## Collage reason
 
 A scene that comes out as a collage records why, in
