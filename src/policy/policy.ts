@@ -64,6 +64,8 @@ export const PolicySchema = z
     /** Board API caps (PIN-65): join roster, title length, cookie life. */
     participantsPerBoard: z.number().int().min(1).default(50),
     boardTitleMaxChars: z.number().int().min(1).default(80),
+    /** Join display-name cap in code points (PIN-196: was a literal 30 in board-session). */
+    displayNameMaxChars: z.number().int().min(1).default(30),
     /** Thing label cap in code points (PIN-155): the gateway normalizers and (PIN-156) rename read this one value. */
     elementLabelMaxChars: z.number().int().min(1).default(60),
     /** JSON body cap of the element rename PATCH (PIN-156); read from the env-level Policy before any board read. */
@@ -361,6 +363,7 @@ export const PolicyOverridesSchema = z.object({
   chipsCacheTtlHours: z.number().positive().optional(),
   chipsMax: z.number().int().min(0).optional(),
   boardTitleMaxChars: z.number().int().min(1).optional(),
+  displayNameMaxChars: z.number().int().min(1).optional(),
   elementLabelMaxChars: z.number().int().min(1).optional(),
   elementRenameMaxBytes: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),

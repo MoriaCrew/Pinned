@@ -487,12 +487,18 @@ describe("refused and failed paths are friendly terminal states", () => {
     );
     expect(job.status).toBe("refused");
     expect(job.errorCode).toBe("no_image");
-    expect(job.refusalReason).toContain("couldn't make that one");
+    // PIN-196: the catalog key is stored, never English text.
+    expect(job.refusalReason).toBe("ai.refused");
     expect(job.imageRef).toBeUndefined();
     const scene = await h.boards.getScene(job.id);
     expect(scene?.status).toBe("refused");
     expect(scene?.refusalReason).toBe(job.refusalReason);
     expect(publicScene("board-1", scene as never).imageUrl).toBeNull();
+    // The view leaves the key out; the client shows ai.refused in the reader's language.
+    expect(publicScene("board-1", scene as never)).not.toHaveProperty("refusalReason");
+    // Pre-PIN-196 docs keep their stored English (no migration).
+    const legacy = { ...(scene as object), refusalReason: "Old English line." };
+    expect(publicScene("board-1", legacy as never).refusalReason).toBe("Old English line.");
     expect(await h.store.get(buildSceneImageRef("board-1", job.id, "png"))).toBeNull();
     const types = (await h.boards.listEvents("board-1"))
       .filter((e) => e.sceneId === job.id)

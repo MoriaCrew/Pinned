@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../i18n";
+import { getLocale } from "../../../../i18n/server";
 import {
   checkRateLimit,
   clientKey,
@@ -25,14 +27,15 @@ export const dynamic = "force-dynamic";
  * its own session in a visitor's browser.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  const locale = await getLocale();
   const gated = authDisabledGate();
   if (gated) return gated;
-  const refused = rejectCrossSite(request) ?? requireJson(request);
+  const refused = rejectCrossSite(request, locale) ?? requireJson(request, locale);
   if (refused) return refused;
   const gate = RATE_LIMITS.authSessionPerIp;
   if (!checkRateLimit(clientKey(request, "auth-session"), gate.limit, gate.windowMs)) {
     return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
+      { error: t(locale, "request.tooManyAttempts") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -41,7 +44,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Send your sign-in token." },
+      { error: t(locale, "request.sendSignInToken") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -61,12 +64,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
     );
   } catch (error) {
-    return errorResponse(error, "Sign-in failed. Please try again.");
+    return errorResponse(error, t(locale, "request.signInFailed"));
   }
 }
 
 /** Sign out: clear the user cookie (idempotent). */
 export async function DELETE(request: Request): Promise<NextResponse> {
+  const locale = await getLocale();
   const gated = authDisabledGate();
   if (gated) return gated;
   return NextResponse.json(

@@ -3,18 +3,20 @@
 import type { CSSProperties } from "react";
 import { formatEur } from "../domain/makes-ui";
 import { getSkin, type SkinId } from "../domain/skins";
-import { t, tCount, type Locale, type MessageKey } from "../i18n";
+import { t, tCount, tf, type Locale, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/client";
+import { DEFAULT_LOCALE } from "../i18n/locales";
 import { Icon, type IconName } from "./icons";
 import { Button, Tag, cx } from "./primitives";
 import { Sticker } from "./stickers";
 import { Sheet } from "./board";
 
-export function skinName(id: SkinId): string {
-  return t("en", `skin.${id}` as MessageKey);
+export function skinName(id: SkinId, locale: Locale = DEFAULT_LOCALE): string {
+  return t(locale, `skin.${id}` as MessageKey);
 }
 
-export function skinMood(id: SkinId): string {
-  return t("en", `skin.${id}.mood` as MessageKey);
+export function skinMood(id: SkinId, locale: Locale = DEFAULT_LOCALE): string {
+  return t(locale, `skin.${id}.mood` as MessageKey);
 }
 
 export interface SkinOption {
@@ -41,7 +43,7 @@ export function SkinPicker({
   onChange,
   sample = [],
   name = "skin",
-  legend = t("en", "ui.look"),
+  legend,
   className,
 }: {
   skins: SkinOption[];
@@ -53,9 +55,10 @@ export function SkinPicker({
   legend?: string;
   className?: string;
 }) {
+  const locale = useLocale();
   return (
     <fieldset className={cx("pn-skins", className)}>
-      <legend className="pn-sr">{legend}</legend>
+      <legend className="pn-sr">{legend ?? t(locale, "ui.look")}</legend>
       {skins.map((option) => {
         const plus = getSkin(option.id).plus;
         return (
@@ -86,19 +89,31 @@ export function SkinPicker({
               </span>
             </span>
             <span className="pn-skin-name">
-              {skinName(option.id)}
+              {skinName(option.id, locale)}
               {plus ? (
                 <Tag tone="outline" icon={option.locked ? "lock" : undefined}>
-                  {t("en", "ui.plus")}
+                  {t(locale, "ui.plus")}
                 </Tag>
               ) : null}
-              {option.suggested ? <Tag tone="mark">{t("en", "ui.forYou")}</Tag> : null}
+              {option.suggested ? <Tag tone="mark">{t(locale, "ui.forYou")}</Tag> : null}
             </span>
-            <span className="pn-skin-mood">{skinMood(option.id)}</span>
+            <span className="pn-skin-mood">{skinMood(option.id, locale)}</span>
           </label>
         );
       })}
     </fieldset>
+  );
+}
+
+/** "Trying on <b>skin</b>" as one sentence; split around the placeholder to keep the name bold. */
+function tryingOnLine(locale: Locale, skin: string) {
+  const [before = "", after = ""] = t(locale, "ui.tryingOnSkin").split("{skin}");
+  return (
+    <>
+      {before}
+      <b>{skin}</b>
+      {after}
+    </>
   );
 }
 
@@ -114,19 +129,20 @@ export function TryOnBar({
   onKeep?: () => void;
   className?: string;
 }) {
+  const locale = useLocale();
   return (
     <div className={cx("pn-tryon", className)} role="status">
       <Tag tone="outline" icon="lock">
-        {t("en", "ui.plus")}
+        {t(locale, "ui.plus")}
       </Tag>
       <p>
-        {t("en", "ui.tryingOn")} <b>{skinName(skin)}</b>
+        {tryingOnLine(locale, skinName(skin, locale))}
       </p>
       <Button variant="quiet" onClick={onUndo}>
-        {t("en", "ui.undo")}
+        {t(locale, "ui.undo")}
       </Button>
       <Button variant="primary" size="sm" onClick={onKeep}>
-        {t("en", "ui.keepIt")}
+        {t(locale, "ui.keepIt")}
       </Button>
     </div>
   );
@@ -166,7 +182,6 @@ export function PlusSheet({
   onGet,
   onClose,
   layer = "fixed",
-  locale = "en",
 }: {
   pack: PlusPack | null;
   /** The board already has Plus: the sheet only adds creations. */
@@ -184,8 +199,8 @@ export function PlusSheet({
   onGet?: () => void;
   onClose?: () => void;
   layer?: "fixed" | "absolute" | "none";
-  locale?: Locale;
 }) {
+  const locale = useLocale();
   const offer = available ? pack : null;
   // `soon`: planned, not built yet. The sheet says so instead of
   // promising it (docs/15: the demo stays honest).
@@ -207,10 +222,17 @@ export function PlusSheet({
       { icon: "download", soon: true, title: t(locale, "ui.plusPerkDownloads"), body: t(locale, "ui.plusPerkDownloadsBody") },
     );
   }
+  // Whole sentences with placeholders (PIN-194), never glued fragments.
+  const price = offer ? formatEur(offer.eurCents, locale) : "";
+  const addKey = offer
+    ? (`ui.plusAddPrice.${new Intl.PluralRules(locale).select(offer.credits) === "one" ? "one" : "other"}` as MessageKey)
+    : null;
   const cta = busy
     ? t(locale, "makes.buying")
     : offer
-      ? `${plusActive ? tCount(locale, "ui.plusAdd", offer.credits) : t(locale, "ui.plusGet")} · ${formatEur(offer.eurCents, locale)}`
+      ? plusActive && addKey
+        ? tf(locale, addKey, { n: offer.credits, price })
+        : tf(locale, "ui.plusGetPrice", { price })
       : t(locale, "ui.plusSoon");
   const line = !offer ? t(locale, "ui.plusSoonLine") : lockedLine ?? (plusActive ? null : t(locale, "ui.plusOnce"));
   return (

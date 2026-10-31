@@ -3,6 +3,8 @@
 import { useId, useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import { personColorIndex } from "../domain/skins";
 import { t, tCount, tf } from "../i18n";
+import { useLocale } from "../i18n/client";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
 import { Icon, type IconName } from "./icons";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
@@ -13,6 +15,7 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 
 /** Lowercase "pinneds", the i dotted with the skin's pin colour. */
 export function Wordmark({ size = 28, href, className }: { size?: number | string; href?: string; className?: string }) {
+  const locale = useLocale();
   const style = { fontSize: typeof size === "number" ? `${size}px` : size };
   const letters = (
     <span aria-hidden="true">
@@ -26,7 +29,7 @@ export function Wordmark({ size = 28, href, className }: { size?: number | strin
   );
   if (href) {
     return (
-      <a className={cx("pn-wordmark", className)} href={href} style={style} aria-label={t("en", "ui.home")}>
+      <a className={cx("pn-wordmark", className)} href={href} style={style} aria-label={t(locale, "ui.home")}>
         {letters}
       </a>
     );
@@ -247,7 +250,13 @@ export function AvatarStack({
 }) {
   const shown = people.slice(0, max);
   const extra = people.length - shown.length;
-  const spoken = label ?? `${tCount("en", "meta.people", people.length)}: ${people.map((p) => p.name).join(", ")}`;
+  const locale = useLocale();
+  const spoken =
+    label ??
+    tf(locale, "ui.peopleNamed", {
+      count: tCount(locale, "meta.people", people.length),
+      names: people.map((p) => p.name).join(", "),
+    });
   return (
     <span className={cx("pn-avatars", size === "sm" && "pn-avatars-sm", className)} role="img" aria-label={spoken}>
       {shown.map((p) => (
@@ -368,7 +377,7 @@ export function TextField({
 export function Hint({
   children,
   onDismiss,
-  dismissLabel = t("en", "ui.gotIt"),
+  dismissLabel,
   point = "down",
   x,
   className,
@@ -380,13 +389,14 @@ export function Hint({
   x?: number | string;
   className?: string;
 }) {
+  const locale = useLocale();
   const style = x === undefined ? undefined : ({ "--hint-x": typeof x === "number" ? `${x}px` : x } as CSSProperties);
   return (
     <div className={cx("pn-hint", className)} role="status" data-point={point} style={style}>
       <p>{children}</p>
       {onDismiss ? (
         <Button variant="quiet" onClick={onDismiss}>
-          {dismissLabel}
+          {dismissLabel ?? t(locale, "ui.gotIt")}
         </Button>
       ) : null}
     </div>
@@ -394,6 +404,6 @@ export function Hint({
 }
 
 /** "2 of 4 picked" etc. — kept here so screens share one formatter. */
-export function pickedCountLabel(n: number, max: number): string {
-  return tf("en", "ui.pickedCount", { n, max });
+export function pickedCountLabel(n: number, max: number, locale: Locale = DEFAULT_LOCALE): string {
+  return tf(locale, "ui.pickedCount", { n, max });
 }

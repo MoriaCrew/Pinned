@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../i18n";
+import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import { createBoardWithHost, publicBoard } from "../../../server/board-api";
 import { buildHostCookieHeader, hostCookieMaxAgeSeconds } from "../../../server/host-session";
@@ -16,10 +18,11 @@ export const dynamic = "force-dynamic";
  * token's hash. A Plus skin as the initial theme is a 402.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  const locale = await getLocale();
   const gate = RATE_LIMITS.boardCreatePerIp;
   if (!checkRateLimit(clientKey(request, "board-create"), gate.limit, gate.windowMs)) {
     return NextResponse.json(
-      { error: "Too many boards. Try again later." },
+      { error: t(locale, "request.tooManyBoards") },
       { status: 429, headers: JSON_HEADERS },
     );
   }
@@ -28,7 +31,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Give your board a title." },
+      { error: t(locale, "request.giveTitle") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -46,6 +49,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 201, headers: { ...JSON_HEADERS, "Set-Cookie": hostCookie } },
     );
   } catch (error) {
-    return plusErrorResponse(error, "Could not create a board. Please try again.");
+    return plusErrorResponse(error, t(locale, "request.createBoardFailed"));
   }
 }

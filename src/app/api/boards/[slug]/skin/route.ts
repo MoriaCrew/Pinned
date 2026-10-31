@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import { publicBoard } from "../../../../../server/board-api";
 import { changeBoardSkin, resolveSkinActor } from "../../../../../server/board-plus";
 import { hostRouteDeps, hostRouteGate, plusErrorResponse } from "../../plus-shared";
@@ -22,6 +24,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -35,6 +38,6 @@ export async function PATCH(
     const board = await changeBoardSkin(slug, actor, gate.body, deps);
     return NextResponse.json({ board: publicBoard(board) }, { headers: JSON_HEADERS });
   } catch (error) {
-    return plusErrorResponse(error, "Could not change the skin. Please try again.");
+    return plusErrorResponse(error, t(locale, "request.changeSkinFailed"));
   }
 }

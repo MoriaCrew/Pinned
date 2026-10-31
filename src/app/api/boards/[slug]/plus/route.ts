@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../i18n";
+import { getLocale } from "../../../../../i18n/server";
 import { getCheckout } from "../../../../../billing/server";
 import { startBoardPlus } from "../../../../../server/board-plus";
 import { hostRouteDeps, hostRouteGate, plusErrorResponse } from "../../plus-shared";
@@ -20,6 +22,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -33,6 +36,6 @@ export async function POST(
     });
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return plusErrorResponse(error, "Board Plus is not available right now. Please try again.");
+    return plusErrorResponse(error, t(locale, "request.plusUnavailable"));
   }
 }

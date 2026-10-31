@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { t } from "../../../../../../i18n";
+import { getLocale } from "../../../../../../i18n/server";
 import { confirmPins } from "../../../../../../server/board-api";
 import {
   JSON_HEADERS,
@@ -20,6 +22,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
+  const locale = await getLocale();
   const { slug } = await context.params;
   const gated = slugGate(slug);
   if (gated) return gated;
@@ -28,7 +31,7 @@ export async function POST(
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Choose which pins to keep." },
+      { error: t(locale, "request.choosePins") },
       { status: 400, headers: JSON_HEADERS },
     );
   }
@@ -37,13 +40,13 @@ export async function POST(
     const viewer = await viewerFor(request, slug, policy);
     if (!viewer) {
       return NextResponse.json(
-        { error: "Join this board before pinning." },
+        { error: t(locale, "request.joinBeforePinning") },
         { status: 401, headers: JSON_HEADERS },
       );
     }
     const result = await confirmPins(slug, viewer, body, boardApiDeps(policy));
     return NextResponse.json(result, { headers: JSON_HEADERS });
   } catch (error) {
-    return errorResponse(error, "Those pins could not be saved. Please try again.");
+    return errorResponse(error, t(locale, "request.savePinsFailed"));
   }
 }
