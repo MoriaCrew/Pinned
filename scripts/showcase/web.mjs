@@ -7,7 +7,7 @@
  */
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { compileMatch } from "./spec.mjs";
+import { compileMatch, findByPattern } from "./spec.mjs";
 
 export const IPTC_AI_SOURCE = "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia";
 
@@ -146,9 +146,8 @@ export async function buildWeb(spec, run, { outDir, destDir, quality }) {
     const dest = path.join(destDir, webFileName(item));
     let src = null;
     if (item.type === "cutout") {
-      const re = compileMatch(item.match);
-      const element = run.friends.find((f) => f.name === item.friend)?.elements.find((e) => re.test(e.label) || re.test(e.description ?? ""));
-      src = element?.files.cutout;
+      // The same pick `run` makes for a scene: a label match beats a description match.
+      src = findByPattern(run.friends.find((f) => f.name === item.friend)?.elements ?? [], item.match)?.files.cutout;
     } else if (item.type === "photo") {
       src = run.friends.find((f) => f.name === item.friend)?.photoFile;
     } else {

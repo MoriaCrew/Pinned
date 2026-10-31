@@ -3,6 +3,7 @@ import {
   BudgetError,
   JobBudget,
   compileMatch,
+  findByPattern,
   isRelativePhotoName,
   listSetIds,
   parseSpec,
@@ -140,6 +141,13 @@ describe("pickElement", () => {
     // "hat" is in the description of the sunglasses too, but the label of a1 matches first.
     expect(pickElement([elements[1], elements[0]], "Ben", "hat")?.id).toBe("a1");
     expect(pickElement(elements, "Ben", "stand")?.id).toBe("a2");
+  });
+
+  it("shares its rule with findByPattern, which web uses for cut-outs", () => {
+    const list = [elements[1], elements[0]];
+    expect(findByPattern(list, "hat")?.id).toBe("a1");
+    expect(findByPattern(list, "stand")?.id).toBe("a2");
+    expect(findByPattern(list, "zebra")).toBeNull();
   });
 
   it("only looks at that friend's things, and skips the ones already used", () => {

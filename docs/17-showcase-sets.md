@@ -147,7 +147,9 @@ node scripts/showcase-build.mjs photos items.json --env-file <env file> --live
 - It counts every generated image in `photos-state.json` in the work
   folder, against `--image-cap` (40 by default, PIN-172's cap), and
   stops before a call that would pass the cap. Start the count from the
-  images made elsewhere with `--baseline N` on the first run.
+  images made elsewhere with `--baseline N` on the first run. A call
+  whose picture cannot be fetched or is not an image still counts (it
+  was paid for), is reported as failed, and the next photo carries on.
 - The state file also keeps each image's model, size, request id and
   time, for the provenance table.
 - Without `--live` it only prints the plan. The log shows status,

@@ -164,6 +164,31 @@ describe("buildWeb", () => {
     expect(result.folderBytes).toBe(result.written.reduce((sum, f) => sum + statSync(f).size, 0));
   });
 
+  it("picks a cut-out the way run does: a label match beats a description match", async () => {
+    const outDir = tmp();
+    // The sunglasses come first and their description mentions a hat stand; the hat is the second element.
+    await makePicture(path.join(outDir, "sunglasses.png"), 100, 100, { alpha: true });
+    await makePicture(path.join(outDir, "hat.png"), 200, 300, { alpha: true });
+    const run = {
+      friends: [
+        {
+          name: "Ben",
+          photoFile: "photos/ben.png",
+          elements: [
+            { label: "Red Heart Sunglasses", description: "on a hat stand", files: { cutout: "sunglasses.png" } },
+            { label: "Knitted Hat", description: "", files: { cutout: "hat.png" } },
+          ],
+        },
+      ],
+      scenes: [],
+    };
+    const destDir = path.join(tmp(), "x");
+    const result = await buildWeb({ set: "x", items: [{ type: "cutout", id: "hat", friend: "Ben", match: "hat" }] }, run, { outDir, destDir });
+    expect(result.problems).toEqual([]);
+    const meta = await sharp(path.join(destDir, "cutout-hat.webp")).metadata();
+    expect([meta.width, meta.height]).toEqual([200, 300]); // hat.png, not sunglasses.png (100x100)
+  });
+
   it("refuses a run record that points out of its folder", async () => {
     const outDir = tmp();
     const outside = tmp();

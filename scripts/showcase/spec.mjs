@@ -156,9 +156,13 @@ export function listSetIds(text) {
  * already used by another pick is skipped.
  */
 export function pickElement(elements, friend, pattern, used = new Set()) {
+  return findByPattern(elements.filter((e) => e.friend === friend && !used.has(e.id)), pattern);
+}
+
+/** The first of `candidates` whose label matches, else the first whose description does. `run` and `web` both pick this way. */
+export function findByPattern(candidates, pattern) {
   const re = compileMatch(pattern);
-  const free = elements.filter((e) => e.friend === friend && !used.has(e.id));
-  return free.find((e) => re.test(e.label ?? "")) ?? free.find((e) => re.test(e.description ?? "")) ?? null;
+  return candidates.find((e) => re.test(e.label ?? "")) ?? candidates.find((e) => re.test(e.description ?? "")) ?? null;
 }
 
 /**

@@ -105,26 +105,35 @@ export async function generatePhotos(items, opts) {
       result.failed.push(item.out);
       continue;
     }
-    const bytes = hit.b64 ? Buffer.from(hit.b64, "base64") : Buffer.from(await (await fetchImpl(hit.url)).arrayBuffer());
-    const ext = detectImageType(bytes);
-    if (!ext) {
-      log(`${item.out}: FAIL the answer was not an image`);
-      result.failed.push(item.out);
-      continue;
-    }
-    // The call is paid for either way: count it first, then write.
+    // The generation is paid for whatever happens next, so it counts against the cap even if
+    // the picture then cannot be fetched or is not an image.
     state.generated += 1;
-    const dest = path.join(photosDir, item.out.replace(/\.\w+$/, ext));
-    mkdirSync(path.dirname(dest), { recursive: true });
-    writeFileSync(dest, bytes);
+    let bytes = null;
+    let failure = null;
+    try {
+      bytes = hit.b64 ? Buffer.from(hit.b64, "base64") : Buffer.from(await (await fetchImpl(hit.url)).arrayBuffer());
+    } catch {
+      failure = "could not fetch the picture";
+    }
+    const ext = bytes ? detectImageType(bytes) : null;
+    if (bytes && !ext) failure = "the answer was not an image";
+    const dest = ext ? path.join(photosDir, item.out.replace(/\.\w+$/, ext)) : null;
     state.log.push({
-      out: path.basename(dest),
+      out: path.basename(dest ?? item.out),
       model,
       size: item.size,
       requestId: res.headers.get("x-request-id") ?? json.id ?? null,
       at: new Date().toISOString(),
+      ...(failure ? { failed: failure } : {}),
     });
     writeFileSync(stateFile, `${JSON.stringify(state, null, 1)}\n`);
+    if (failure) {
+      log(`${item.out}: FAIL ${failure} (still counted: image ${state.generated} of ${cap})`);
+      result.failed.push(item.out);
+      continue;
+    }
+    mkdirSync(path.dirname(dest), { recursive: true });
+    writeFileSync(dest, bytes);
     result.made.push(path.relative(photosDir, dest));
     log(`${item.out}: OK ms=${Date.now() - t0} bytes=${bytes.length} image ${state.generated} of ${cap}`);
   }

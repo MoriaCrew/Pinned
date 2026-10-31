@@ -130,7 +130,7 @@ describe("generatePhotos against a stub endpoint", () => {
     expect(s.logs.join("\n")).not.toContain("secret detail");
   });
 
-  it("does not save an answer that is not an image", async () => {
+  it("does not save an answer that is not an image, but still counts the paid call", async () => {
     const { baseUrl } = await stub((res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ data: [{ b64_json: Buffer.from("<html>").toString("base64") }] }));
@@ -139,6 +139,25 @@ describe("generatePhotos against a stub endpoint", () => {
     const result = await generatePhotos(items("a.webp"), { ...s, baseUrl, key: KEY, log: (l) => s.logs.push(l) });
     expect(result.failed).toEqual(["a.webp"]);
     expect(existsSync(path.join(s.photosDir, "a.webp"))).toBe(false);
+    const state = JSON.parse(readFileSync(s.stateFile, "utf8"));
+    expect(state.generated).toBe(1);
+    expect(state.log[0]).toMatchObject({ out: "a.webp", failed: "the answer was not an image" });
+  });
+
+  it("carries on with the next photo when a picture URL cannot be fetched, and counts the paid call", async () => {
+    const { baseUrl } = await stub((res, n) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data: [n === 1 ? { url: "https://cdn.example/dropped.webp" } : { b64_json: webp.toString("base64") }] }));
+    });
+    const s = setup();
+    const fetchImpl = (url, init) => (String(url).startsWith("https://cdn.example") ? Promise.reject(new TypeError("fetch failed")) : fetch(url, init));
+    const result = await generatePhotos(items("a.webp", "b.webp"), { ...s, baseUrl, key: KEY, fetchImpl, log: (l) => s.logs.push(l) });
+    expect(result).toEqual({ made: ["b.webp"], skipped: [], failed: ["a.webp"] });
+    const state = JSON.parse(readFileSync(s.stateFile, "utf8"));
+    expect(state.generated).toBe(2);
+    expect(state.log.map((e) => [e.out, e.failed ?? null])).toEqual([["a.webp", "could not fetch the picture"], ["b.webp", null]]);
+    expect(s.logs.join("\n")).toContain("FAIL could not fetch the picture");
+    expect(s.logs.join("\n")).not.toContain("cdn.example");
   });
 
   it("needs a key", async () => {
