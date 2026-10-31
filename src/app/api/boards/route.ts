@@ -49,6 +49,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 201, headers: { ...JSON_HEADERS, "Set-Cookie": hostCookie } },
     );
   } catch (error) {
-    return plusErrorResponse(error, "Could not create a board. Please try again.");
+    return plusErrorResponse(error, t(locale, "request.createBoardFailed"));
   }
 }
