@@ -94,6 +94,13 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   and the board has no Plus; absent with Plus (no limit) or
 >   credits off. A failed job-list read omits the field, never
 >   the page.
+> - **In the UI (PIN-231):** a cap people rarely feel, not a meter.
+>   The Add sheet says nothing while plenty are left, one quiet
+>   line at `credits.lowFreePhotosWarning` (3) or fewer, and at 0
+>   invites into the Plus sheet instead of showing the photo
+>   picker; the 429 and a batch photo stopped on the code get the
+>   same invitation, never an error. The Plus sheet lists
+>   "Unlimited photos". Details under "Plus sheet + creations UI".
 > - **Plus that counts:** a Stripe grant always; a demo
 >   (`source: "mock"`) grant only while `PLUS_MODE=mock` (as for
 >   skins).
@@ -356,6 +363,7 @@ list.
 | `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation since PIN-205) |
 | `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
 | `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
+| `lowFreePhotosWarning` | 3 | PIN-231: the Add sheet's quiet "N free photos left on this board" line at or under this many free photos left; 0 disables the line (the 0-left invitation stays) |
 | `plusOnPurchase` | `true` | a webhook grant also gives the board Plus (PIN-181) |
 | `pendingIntentCapPerBoard` | 3 | open checkout intents per board |
 | `intentTtlSeconds` | 1800 | how long an intent holds a cap slot (PIN-178) |
@@ -925,7 +933,7 @@ concurrent first touches grant once; replay after reload) runs
 against the fake Firestore in
 `src/server/firestore-credit-ledger-store.test.ts`.
 
-## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183)
+## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183, PIN-231)
 
 The user-facing word for makes is **creations** (the code keeps
 `makes` / `credits`). There is exactly one sheet that asks for
@@ -964,14 +972,17 @@ announced (`aria-live="polite"`).
 - **Plus sheet.** Title, lead ("Anyone on the board can get Plus.
   Everyone here gets it."), a perks list and one button. Perks in
   order: "+N creations" (N = `Policy.credits.packs[0].credits`; "For
-  everyone on this board. One per AI scene.", PIN-229), "Every skin",
-  "Foil stickers", "Deeper scenes" and "Full-size downloads" (both
-  tagged Soon: planned, not built). The button reads "Get Plus ·
-  €2.99" with a quiet "Once, for this board."; the price is
-  `formatEur(pack.eurCents, locale)`, never a label. With Plus
-  already on, the list collapses to the creations line plus "Plus is
-  on", the lead becomes the add-creations lead, and the button reads
-  "Add N creations · €2.99". On the stripe path one more quiet line
+  everyone on this board. One per AI scene.", PIN-229), "Unlimited
+  photos" ("Add as many photos as you like to this board", camera
+  icon, PIN-231), "Every skin", "Foil stickers", "Deeper scenes" and
+  "Full-size downloads" (both tagged Soon: planned, not built). The
+  button reads "Get Plus · €2.99" with a quiet "Once, for this
+  board."; the price is `formatEur(pack.eurCents, locale)`, never a
+  label. With Plus already on, the list collapses to the creations
+  line plus "Plus is on" (no "Unlimited photos": the limit is
+  already gone and this purchase only adds creations, so "Plus is
+  on" stands for every perk), the lead becomes the add-creations
+  lead, and the button reads "Add N creations · €2.99". On the stripe path one more quiet line
   sits under the button: "You may be charged in your local currency.
   Appears as PINNEDS on your statement." (never in mock or off).
   With nothing to buy (billing off, or the
@@ -1050,12 +1061,42 @@ announced (`aria-live="polite"`).
   Every other error keeps its old copy. The 429's body carries
   `code: "credits_pool_empty"` (`errorResponse` adds it for this
   code only), which is how the Add sheet tells it from a rate limit.
+- **Free photos in the Add sheet (PIN-231).** A cap people rarely
+  feel, not a meter; it rides `credits.freePhotosLeft` in the board
+  view (PIN-230), so a board with Plus or with credits off never
+  shows any of it. Rules in `src/domain/makes-ui.ts`
+  (`freePhotosState`, `freePhotosUsedCopy`, `addPickView`,
+  `isFreePhotosUsedCode` on the shared `FREE_PHOTOS_USED`).
+  - More than `Policy.credits.lowFreePhotosWarning` (3) left:
+    nothing; the pick step is the credits-off pick step.
+  - At or under it: one quiet status line under the picker, no
+    card, no button: "3 free photos left on this board" (plural
+    pair `makes.freePhotosLeft`). 0 turns the line off.
+  - At 0, before anyone picks: the invitation takes the photo
+    picker's place, "This board used its free photos. Get Plus for
+    unlimited photos." (a status line, never an alert) and the same
+    Get Plus button into the Plus sheet as the pool-empty
+    invitation (`onAddMakes` → `openBuyMakes`). "From your other
+    boards" stays under it: library pins use no AI and no free
+    photo. With billing off (no `onAddMakes`, the `canBuy` rule of
+    `poolEmptyCopy`) the plain fact stays, "This board used its
+    free photos, so new photos can't be added right now.", and no
+    button.
+  - A single upload answering the 429 `free_photos_used` swaps the
+    picker for the same invitation at once (the poll may not have
+    caught up), and a batch photo stopped with that `errorCode`
+    shows it instead of the generic error, keeping Try again /
+    Skip. If the board got Plus meanwhile, the picker comes back
+    and the line says "This board has Plus now, so photos are
+    unlimited. Try again."
 - **My boards.** A card whose board has Plus (`hasPlus` in this
   PLUS_MODE, so a mock grant counts only in `mock`) carries a small
   "Plus" tag under its title (`MyBoardCard.plus`).
 - **Copy.** Strings live under `makes.*` and `ui.plus*` in
-  `src/i18n/messages/{en,fr}.json` in key parity (a test pins
-  it); the components take the page's language (the board passes
+  `src/i18n/messages/en.json`; new ones land there only and fall
+  back to English until `npm run i18n:translate` (docs/18), so a
+  test pins that every FR key in the family is still an EN key
+  (PIN-231 relaxed the old strict EN/FR parity); the components take the page's language (the board passes
   its `locale`, kit parts read `useLocale()`). Whole sentences with
   placeholders, so word order can differ by language: the you
   menu's "Plus is on · N creations left" is one plural pair
@@ -1068,13 +1109,18 @@ announced (`aria-live="polite"`).
 Tests: `src/domain/makes-ui.test.ts` (states, thresholds, the
 Get Plus / Add creations label, pool-empty copy, flag parsing + URL
 strip, banner never claims success without a rise, checkout
-answers, prices), `src/domain/plus-ui.test.ts`
+answers, prices, PIN-231 free-photos state, copy and pick view),
+`src/app/g/[slug]/add-free-photos-render.test.ts` (PIN-231: nothing
+above the threshold or with Plus, the low line, 0 left with and
+without billing, the library strip at 0, the stopped batch step,
+Plus since, other stops untouched, the single-upload 429 wiring),
+`src/domain/plus-ui.test.ts`
 (`plusPurchasePath`, `returnSkinStep`, `shownLook`, the look flow
 reducer), `src/domain/you-menu.test.ts` and
 `src/app/auth/you-render.test.ts` (Board Plus and Change look for
 guest, member, member with Plus and host, the sublines in EN and FR),
 `src/app/g/[slug]/plus-render.test.ts` (the sheet in every mode
-and for a guest, order of the perks, Plus on, Coming soon, FR, a
+and for a guest, order of the perks with Unlimited photos, Plus on, Coming soon, FR, a
 member changing the look) and `src/app/g/[slug]/makes-render.test.ts`
 (nothing above the threshold, the low and empty lines, banner
 states, pool-empty copy, wiring guards, EN/FR parity and copy
@@ -1082,7 +1128,10 @@ guardrails), `src/app/g/[slug]/board-render.test.ts` (the problem
 card's action), `src/app/api/boards/shared.test.ts` (the 429's
 code), `src/server/my-boards.test.ts` and `src/app/me/library-parts.test.ts`
 (the Plus tag), plus `src/ui/kit.test.ts` and the
-`lowMakesWarning` cases in `src/policy/policy.test.ts`. No
+`lowMakesWarning` and `lowFreePhotosWarning` cases in
+`src/policy/policy.test.ts`. Phone screenshots (390 px):
+`eval/screenshots/pin-231-add-low-390.png`,
+`pin-231-add-used-390.png` and `pin-231-plus-perks-390.png`. No
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
 

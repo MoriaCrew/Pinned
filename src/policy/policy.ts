@@ -210,6 +210,8 @@ export const PolicySchema = z
         starterMakerWindowMs: z.number().int().min(1).default(604_800_000),
         /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
         lowMakesWarning: z.number().int().min(0).default(2),
+        /** PIN-231: the Add sheet's quiet "N free photos left on this board" line shows at or under this many free photos left (a board without Plus while credits are on); 0 disables the line. At 0 left the sheet offers Plus instead of the photo picker either way. */
+        lowFreePhotosWarning: z.number().int().min(0).default(3),
         /** PIN-181: a webhook-granted purchase also grants the board Plus (`source: "stripe"`). Off = makes only. */
         plusOnPurchase: z.boolean().default(true),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
@@ -233,6 +235,7 @@ export const PolicySchema = z
         starterBoardsPerMaker: 3,
         starterMakerWindowMs: 604_800_000,
         lowMakesWarning: 2,
+        lowFreePhotosWarning: 3,
         plusOnPurchase: true,
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
@@ -474,6 +477,7 @@ export const PolicyOverridesSchema = z.object({
       starterBoardsPerMaker: z.number().int().min(0).optional(),
       starterMakerWindowMs: z.number().int().min(1).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),
+      lowFreePhotosWarning: z.number().int().min(0).optional(),
       plusOnPurchase: z.boolean().optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
       intentTtlSeconds: z.number().int().min(1).optional(),

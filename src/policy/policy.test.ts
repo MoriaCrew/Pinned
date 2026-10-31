@@ -243,6 +243,8 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       starterBoardsPerMaker: 3,
       starterMakerWindowMs: 604_800_000,
       lowMakesWarning: 2,
+      // PIN-231: the Add sheet's quiet free-photos line.
+      lowFreePhotosWarning: 3,
       plusOnPurchase: true,
       pendingIntentCapPerBoard: 3,
       intentTtlSeconds: 1_800,
@@ -309,6 +311,15 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(parsePolicyOverridesJson('{"credits":{"lowMakesWarning":3}}')).toEqual({
       credits: { lowMakesWarning: 3 },
     });
+    // PIN-231 low free-photos line: same shape, deep-overridable, 0 disables it.
+    expect(resolvePolicy({ credits: { lowFreePhotosWarning: 5 } }).credits.lowFreePhotosWarning).toBe(5);
+    expect(
+      resolvePolicy({ credits: { lowFreePhotosWarning: 5 } }, { credits: { lowFreePhotosWarning: 0 } }).credits
+        .lowFreePhotosWarning,
+    ).toBe(0);
+    expect(parsePolicyOverridesJson('{"credits":{"lowFreePhotosWarning":2}}')).toEqual({
+      credits: { lowFreePhotosWarning: 2 },
+    });
     // PIN-151 kill flag: env and per-board layers both flip it, board wins.
     expect(resolvePolicy({ credits: { enabled: true } }).credits.enabled).toBe(true);
     expect(resolvePolicy(null, { credits: { enabled: true } }).credits.enabled).toBe(true);
@@ -325,6 +336,8 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     for (const bad of [
       { credits: { starterMakes: -1 } },
       { credits: { lowMakesWarning: -1 } },
+      { credits: { lowFreePhotosWarning: -1 } },
+      { credits: { lowFreePhotosWarning: 1.5 } },
       { credits: { starterBoardsPerMaker: -1 } },
       { credits: { starterBoardsPerMaker: 1.5 } },
       { credits: { starterMakerWindowMs: 0 } },
