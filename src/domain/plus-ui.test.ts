@@ -13,6 +13,7 @@ import {
   parseTryOn,
   plusPurchasePath,
   plusSheetLocked,
+  closesPlusSheetAfterMock,
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
@@ -260,5 +261,15 @@ describe("plusSheetLocked (PIN-182)", () => {
     expect(plusSheetLocked(true, false)).toBe(true);
     expect(plusSheetLocked(false, true)).toBe(true);
     expect(plusSheetLocked(true, true)).toBe(true);
+  });
+});
+
+describe("closesPlusSheetAfterMock (PIN-182)", () => {
+  it("closes the merged sheet on a grant or a failure, keeps it for unavailable and redirect", () => {
+    expect(closesPlusSheetAfterMock("granted")).toBe(true);
+    expect(closesPlusSheetAfterMock("failed")).toBe(true);
+    expect(closesPlusSheetAfterMock("unavailable")).toBe(false);
+    expect(closesPlusSheetAfterMock("redirect")).toBe(false);
+    expect(closesPlusSheetAfterMock("skipped")).toBe(false);
   });
 });

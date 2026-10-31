@@ -14,6 +14,8 @@ import {
   parseTryOn,
   plusPurchasePath,
   plusSheetLocked,
+  closesPlusSheetAfterMock,
+  type MockGrantOutcome,
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
@@ -69,7 +71,7 @@ export interface LookFlow {
   keep: () => void;
   undo: () => void;
   /** The mock checkout (POST plus, host only); resolves true once Plus was granted. */
-  getPlus: () => Promise<boolean>;
+  getPlus: () => Promise<MockGrantOutcome>;
   dismissNotice: () => void;
 }
 
@@ -194,8 +196,8 @@ export function useLookFlow({
     }
   }
 
-  async function getPlus(): Promise<boolean> {
-    if (state.checkingOut || plusPurchasePath(plus?.mode) !== "mock") return false;
+  async function getPlus(): Promise<MockGrantOutcome> {
+    if (state.checkingOut || plusPurchasePath(plus?.mode) !== "mock") return "skipped";
     const skin = state.tryOn;
     dispatch({ type: "checkoutStart" });
     const result = await startCheckout();
@@ -212,17 +214,18 @@ export function useLookFlow({
           dispatch({ type: "closeSheet" });
           void queryClient.invalidateQueries({ queryKey: key });
         }
-        return true;
+        return "granted";
       case "unavailable":
         dispatch({ type: "checkoutUnavailable" });
-        return false;
+        return "unavailable";
       case "redirect":
         // Stays busy while the browser leaves for checkout.
         window.location.href = result.url;
-        return false;
+        return "redirect";
       case "failed":
+        // The dock notice carries the error; the sheet must not stay up looking idle.
         dispatch({ type: "checkoutFailed" });
-        return false;
+        return "failed";
     }
   }
 
@@ -342,7 +345,7 @@ export function PlusFlow({
   };
   const getPlus = () => {
     if (stripe && pack) makes.buy(pack.lookupKey, look.tryOn);
-    else void look.getPlus().then((granted) => granted && makes.closeSheet());
+    else void look.getPlus().then((kind) => closesPlusSheetAfterMock(kind) && makes.closeSheet());
   };
   return (
     <>
