@@ -29,6 +29,7 @@ function card(pinId: string, elementId: string, status: "pinned" | "candidate" =
     status,
     ownerName: "Robin",
     ownerId: "me",
+    createdAt: 0,
   };
 }
 
