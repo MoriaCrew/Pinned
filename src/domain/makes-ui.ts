@@ -8,7 +8,7 @@
  * an activity count for the whole board, never money held or
  * spent by a person.
  */
-import type { Locale } from "../i18n";
+import type { Locale, MessageKey } from "../i18n";
 import { safeRedirectUrl } from "./plus-ui";
 
 /** The PIN-151 typed pool-empty code (photo 429 + both jobs' errorCode), mirrored client-side. */
@@ -33,6 +33,29 @@ export function makesState(availableMakes: number, lowMakesWarning: number): Mak
   if (availableMakes <= 0) return "empty";
   if (lowMakesWarning > 0 && availableMakes <= lowMakesWarning) return "low";
   return "ok";
+}
+
+/**
+ * The label of every way into the Plus sheet from the creations UI
+ * (PIN-183): "Get Plus" before the board has Plus, "Add creations"
+ * once it does.
+ */
+export function plusActionKey(plusActive: boolean): MessageKey {
+  return plusActive ? "makes.addMore" : "makes.add";
+}
+
+/**
+ * What a photo or scene says when it stopped at the empty pool
+ * (PIN-183). Where buying can work it is an invitation with a way
+ * into the Plus sheet, never an error; with billing off it keeps the
+ * plain fact and no button.
+ */
+export function poolEmptyCopy(
+  kind: "photo" | "scene",
+  { canBuy, plusActive }: { canBuy: boolean; plusActive: boolean },
+): { line: MessageKey; action: MessageKey | null } {
+  if (!canBuy) return { line: kind === "photo" ? "makes.poolEmptyPhoto" : "makes.poolEmptyScene", action: null };
+  return { line: plusActive ? "makes.poolEmptyPlus" : "makes.poolEmpty", action: plusActionKey(plusActive) };
 }
 
 /** The flags `/billing/return` lands with (PIN-149), plus a defensive "failed". */

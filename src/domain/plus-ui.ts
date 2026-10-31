@@ -5,8 +5,10 @@
  * check, entitlement, mode); these helpers only decide what the
  * host sees and which request to send next.
  *
- * - Only the board's host changes the look. Guests never see the
- *   controls and never get a try-on, even from a `?tryon=` link.
+ * - The host changes the look, and so does any joined member while
+ *   the board has Plus (PIN-181, PIN-183: `viewer.canChangeLook`).
+ *   Only the host gets a try-on, even from a `?tryon=` link; a
+ *   member's pick is saved at once.
  * - A free skin (or any skin once Plus counts) applies at once.
  * - A Plus skin without Plus is tried on locally: nothing changes
  *   for anyone else until it is kept, and keeping it asks for Plus.
@@ -26,6 +28,18 @@ export function activeTryOn(boardSkin: SkinId, tryOnSkin: SkinId | null, isHost:
 /** The skin the board root renders: the host's try-on, else the board's own skin. */
 export function effectiveSkin(boardSkin: SkinId, tryOnSkin: SkinId | null, isHost: boolean): SkinId {
   return activeTryOn(boardSkin, tryOnSkin, isHost) ?? boardSkin;
+}
+
+/**
+ * The skin the board root renders right now: the look being saved (anyone
+ * who may change the look sees their pick at once), else the host's try-on,
+ * else the board's own. A member never has a try-on: they save or nothing.
+ */
+export function shownLook(
+  boardSkin: SkinId,
+  { tryOn, applying, isHost, canChangeLook }: { tryOn: SkinId | null; applying: SkinId | null; isHost: boolean; canChangeLook: boolean },
+): SkinId {
+  return (isHost || canChangeLook ? applying : null) ?? effectiveSkin(boardSkin, tryOn, isHost);
 }
 
 /** Free skins always; Plus skins only while the board's Plus counts. */

@@ -7,6 +7,8 @@ import {
   isPoolEmptyCode,
   makesState,
   parseBillingFlag,
+  plusActionKey,
+  poolEmptyCopy,
   readCreditCheckoutResponse,
   urlWithoutBilling,
 } from "./makes-ui";
@@ -19,6 +21,37 @@ describe("makes state (PIN-152)", () => {
     expect(makesState(1, 5)).toBe("low");
     expect(makesState(6, 5)).toBe("ok");
     expect(makesState(3, 0)).toBe("ok");
+  });
+
+  it("with the shipped threshold of 2, speaks at 2 left and not at 3 (PIN-183)", () => {
+    expect(makesState(3, 2)).toBe("ok");
+    expect(makesState(2, 2)).toBe("low");
+    expect(makesState(1, 2)).toBe("low");
+    expect(makesState(0, 2)).toBe("empty");
+    // 0 turns the low state off; empty still speaks.
+    expect(makesState(1, 0)).toBe("ok");
+    expect(makesState(0, 0)).toBe("empty");
+  });
+});
+
+describe("the way into the Plus sheet (PIN-183)", () => {
+  it("says Get Plus until the board has Plus, then Add creations", () => {
+    expect(plusActionKey(false)).toBe("makes.add");
+    expect(plusActionKey(true)).toBe("makes.addMore");
+  });
+
+  it("makes a dry pool an invitation with a button where buying works", () => {
+    expect(poolEmptyCopy("photo", { canBuy: true, plusActive: false })).toEqual({ line: "makes.poolEmpty", action: "makes.add" });
+    expect(poolEmptyCopy("scene", { canBuy: true, plusActive: false })).toEqual({ line: "makes.poolEmpty", action: "makes.add" });
+    expect(poolEmptyCopy("photo", { canBuy: true, plusActive: true })).toEqual({
+      line: "makes.poolEmptyPlus",
+      action: "makes.addMore",
+    });
+  });
+
+  it("keeps the plain fact and no button with billing off", () => {
+    expect(poolEmptyCopy("photo", { canBuy: false, plusActive: false })).toEqual({ line: "makes.poolEmptyPhoto", action: null });
+    expect(poolEmptyCopy("scene", { canBuy: false, plusActive: true })).toEqual({ line: "makes.poolEmptyScene", action: null });
   });
 });
 

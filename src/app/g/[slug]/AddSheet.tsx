@@ -30,7 +30,7 @@ import {
 import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
-import { isPoolEmptyCode } from "../../../domain/makes-ui";
+import { isPoolEmptyCode, poolEmptyCopy } from "../../../domain/makes-ui";
 import { t, tCount } from "../../../i18n";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
 import type { BoardClientView } from "./BoardClient";
@@ -286,7 +286,7 @@ export function AddSheet({
   /** Open at this photo job's review (PIN-122 leftovers). */
   resumeJobId?: string | null;
   photoMemory?: PhotoMemory;
-  /** PIN-152: out of makes — open the buy sheet (only passed while buying can work). */
+  /** PIN-152, PIN-183: out of creations — open the Plus sheet (only passed while buying can work). */
   onAddMakes?: () => void;
   onClose: () => void;
 }) {
@@ -728,12 +728,14 @@ export function AddSheet({
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
   const failedLine = t("en", budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  // PIN-183: where buying works this is an invitation, not an error.
+  const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive: boardView.plus?.active === true });
   const outOfMakes = (
     <>
-      <SheetLine tone="error">{t("en", "makes.poolEmptyPhoto")}</SheetLine>
-      {onAddMakes ? (
+      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t("en", poolEmpty.line)}</SheetLine>
+      {onAddMakes && poolEmpty.action ? (
         <Button variant="primary" onClick={onAddMakes}>
-          {t("en", "makes.add")}
+          {t("en", poolEmpty.action)}
         </Button>
       ) : null}
     </>

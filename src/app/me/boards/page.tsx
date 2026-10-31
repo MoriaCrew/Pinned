@@ -106,6 +106,7 @@ async function MyBoardsList({
   const boards = await listMyBoards(profile, {
     boards: getBoardRepository(),
     users,
+    plusMode: getConfig().plusMode,
   });
   return (
     <>

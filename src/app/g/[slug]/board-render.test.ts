@@ -107,6 +107,38 @@ describe("board scenes strip (PIN-98)", () => {
     expect(refused).not.toContain("Try again");
   });
 
+  it("puts a Get Plus action first on a problem card when the pool ran dry (PIN-183)", () => {
+    const out = html(
+      h(BoardScenes, {
+        count: 0,
+        slots: [
+          {
+            type: "problem",
+            ratio: "2 / 3",
+            id: "s1",
+            idea: "A picnic",
+            line: "This board is out of creations. Get Plus to keep going.",
+            action: { label: "Get Plus", onSelect: noop },
+            onChangeIdea: noop,
+            onTryAgain: noop,
+          },
+        ],
+      }),
+    );
+    expect(out).toContain("This board is out of creations. Get Plus to keep going.");
+    expect(out).toMatch(/pn-btn-primary[^>]*>Get Plus<\/button>/);
+    expect(out.indexOf("Get Plus</button>")).toBeLessThan(out.indexOf("Change idea"));
+    expect(out).toContain("Try again");
+    // Without an action the card is as before.
+    const plain = html(
+      h(BoardScenes, {
+        count: 0,
+        slots: [{ type: "problem", ratio: "2 / 3", id: "s1", idea: "A picnic", line: "x", onChangeIdea: noop }],
+      }),
+    );
+    expect(plain).not.toContain("Get Plus");
+  });
+
   it("numbers prints and shows developing scenes in place", () => {
     const out = html(
       h(BoardScenes, {

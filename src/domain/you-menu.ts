@@ -14,6 +14,10 @@ export interface YouState {
   joined: boolean;
   /** The board's host (`viewer.isHost`). */
   isHost: boolean;
+  /** `viewer.canChangeLook`: the host, or a joined member while the board has Plus (PIN-183). */
+  canChangeLook: boolean;
+  /** The board has creations (`Policy.credits.enabled`): the Board Plus entry applies (PIN-183). */
+  hasCredits: boolean;
   /** Sign-in UI is on (AUTH_MODE=optional with the web config). */
   authEnabled: boolean;
   authStatus: AuthStatus;
@@ -28,6 +32,7 @@ export type YouEntry =
   | "join"
   | "myBoards"
   | "myPins"
+  | "boardPlus"
   | "changeLook"
   | "deleteBoard"
   | "language"
@@ -36,9 +41,11 @@ export type YouEntry =
 
 /**
  * What the menu offers, in order, each only when it applies: your
- * name here (or Join), your library when signed in, Change look and
- * Delete board for the host (PIN-168), Language when more than one
- * is on (PIN-191), then Sign in / Sign out.
+ * name here (or Join), your library when signed in, Board Plus for
+ * everyone on a board with creations (PIN-183: it carries the count),
+ * Change look for the host or a member while the board has Plus
+ * (PIN-183), Delete board for the host alone (PIN-168), Language when
+ * more than one is on (PIN-191), then Sign in / Sign out.
  * Link-only (auth off) never gets an account entry; nothing
  * account-shaped shows while auth loads.
  */
@@ -50,7 +57,9 @@ export function youMenuEntries(state: YouState): YouEntry[] {
   }
   const signedIn = state.authEnabled && state.authStatus === "signedIn";
   if (signedIn) entries.push("myBoards", "myPins");
-  if (state.onBoard && state.isHost) entries.push("changeLook", "deleteBoard");
+  if (state.onBoard && state.hasCredits) entries.push("boardPlus");
+  if (state.onBoard && (state.isHost || state.canChangeLook)) entries.push("changeLook");
+  if (state.onBoard && state.isHost) entries.push("deleteBoard");
   if (state.languageCount > 1) entries.push("language");
   if (state.authEnabled && state.authStatus !== "loading") {
     entries.push(signedIn ? "signOut" : "signIn");

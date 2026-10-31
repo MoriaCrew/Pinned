@@ -127,6 +127,7 @@ describe("sortMyBoards", () => {
     themeId: null,
     themeLabel: null,
     themeMotif: null,
+    plus: false,
     myPinCount: 0,
     latestSceneImageUrl: null,
     lastActivityAt,

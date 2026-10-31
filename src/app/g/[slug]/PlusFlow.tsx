@@ -7,7 +7,6 @@ import type { PlusView } from "../../../domain/plus";
 import {
   activeTryOn,
   chooseLook,
-  effectiveSkin,
   initialLookFlow,
   keepStep,
   lookFlow,
@@ -16,6 +15,7 @@ import {
   readCheckoutResponse,
   readSkinResponse,
   returnSkinStep,
+  shownLook,
   showTryOnBar,
   urlWithoutTryOn,
   type CheckoutResult,
@@ -72,26 +72,32 @@ export interface LookFlow {
 }
 
 /**
- * Board Plus on the board (PIN-111, docs/15): the host's Change
- * look, the local Plus try-on and Keep it. The server decides
- * (host cookie, entitlement, PLUS_MODE); this keeps the screen
- * honest about it: a free look shows at once and reverts on error,
- * a try-on is local until kept, Keep it asks for Plus only when
- * the board lacks it, and billing "off" never sells anything.
- * Back from a Stripe checkout (PIN-182) it puts the look the host
- * was trying on onto the board, once Plus has landed.
+ * Board Plus on the board (PIN-111, docs/15): Change look, the
+ * host's local Plus try-on and Keep it. The server decides (host
+ * cookie, entitlement, PLUS_MODE); this keeps the screen honest
+ * about it: a free look shows at once and reverts on error, a
+ * try-on is local until kept, Keep it asks for Plus only when the
+ * board lacks it, and billing "off" never sells anything. A joined
+ * member can change the look once the board has Plus (PIN-183): no
+ * try-on for them, a pick is saved at once. Back from a Stripe
+ * checkout (PIN-182) it puts the look the host was trying on onto
+ * the board, once Plus has landed.
  */
 export function useLookFlow({
   slug,
   boardSkin,
   isHost,
+  canChangeLook,
   plus,
   tryOnParam,
   billingFlag,
 }: {
   slug: string;
   boardSkin: SkinId;
+  /** Try-on, Keep it and the return look are the host's alone. */
   isHost: boolean;
+  /** `viewer.canChangeLook`: the host, or a joined member while the board has Plus. */
+  canChangeLook: boolean;
   plus: PlusView | undefined;
   /** `?tryon=` from the link (validated again here). */
   tryOnParam: unknown;
@@ -102,7 +108,7 @@ export function useLookFlow({
   const [state, dispatch] = useReducer(lookFlow, initialLookFlow);
   const key = boardQueryKey(slug);
   const tryOn = activeTryOn(boardSkin, state.tryOn, isHost);
-  const shownSkin = (isHost ? state.applying : null) ?? effectiveSkin(boardSkin, state.tryOn, isHost);
+  const shownSkin = shownLook(boardSkin, { tryOn: state.tryOn, applying: state.applying, isHost, canChangeLook });
 
   // ?tryon= from the start flow: once, as soon as the first poll
   // says this browser is the host (the server render cannot know).
@@ -282,9 +288,9 @@ function noticeLine(notice: LookNotice): string {
 
 /**
  * What the flow puts on screen: the Change look sheet, the TryOnBar
- * and one line above the dock (host only: the look flow gives no
- * try-on or notice to anyone else), and the one Plus sheet, which
- * everyone on the board can open (PIN-182). The sheet is open when
+ * (host only: nobody else gets a try-on) and one line above the dock
+ * for a look change, and the one Plus sheet, which everyone on the
+ * board can open (PIN-182). The sheet is open when
  * the creations indicator, a pool-empty button or the host's Keep it
  * asks for it, and buys by mode: the credits checkout in stripe, the
  * host-only demo grant in mock (with a note that it is a demo), and

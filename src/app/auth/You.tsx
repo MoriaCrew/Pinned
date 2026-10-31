@@ -9,7 +9,7 @@ import {
   type YouEntry,
   type YouState,
 } from "../../domain/you-menu";
-import { t, tf } from "../../i18n";
+import { t, tCount, tf } from "../../i18n";
 import { useLocale, useLocaleSettings } from "../../i18n/client";
 import { Avatar, Icon, Menu, cx } from "../../ui";
 import { useAuth, type AuthContextValue } from "./AuthProvider";
@@ -20,12 +20,18 @@ import { SignInButton } from "./SignInButton";
 export interface YouBoard {
   me: { id: string; displayName: string } | null;
   isHost: boolean;
+  /** `viewer.canChangeLook` (PIN-183): the host, or a joined member while the board has Plus. */
+  canChangeLook: boolean;
+  /** The board's creations and Plus state while credits are on; null leaves Board Plus out (PIN-183). */
+  plus: { active: boolean; availableMakes: number } | null;
   /** Opens the join sheet. */
   onJoin: () => void;
   /** Opens the join sheet in edit mode. */
   onEditName: () => void;
-  /** Opens the host's Change look (PIN-111 look flow). */
+  /** Opens Change look (PIN-111 look flow): the host, or a member with Plus. */
   onChangeLook: () => void;
+  /** Opens the Plus sheet (through the join sheet first for someone who has not joined). */
+  onBoardPlus: () => void;
   /** Opens the host's Delete board confirm (PIN-168). */
   onDeleteBoard: () => void;
 }
@@ -34,9 +40,11 @@ export interface YouBoard {
  * The one "you" button (PIN-120), last in every page's own header:
  * your photo, your initials in your person colour, or a person icon.
  * It opens a small menu with your name on this board (Edit name or
- * Join this board), My boards / My pins when signed in, Change look
- * and Delete board (a danger entry that asks first) for the host, and
- * Sign in / Sign out when sign-in is on. Link-only pages get no
+ * Join this board), My boards / My pins when signed in, Board Plus
+ * with the creations left for everyone on a board with creations,
+ * Change look for the host or a member while the board has Plus,
+ * Delete board (a danger entry that asks first) for the host alone,
+ * and Sign in / Sign out when sign-in is on. Link-only pages get no
  * account entries and, off a board, nothing at all.
  */
 export function You(props: { board?: YouBoard; offerSignIn?: boolean; className?: string }) {
@@ -79,6 +87,8 @@ export function YouView({
     onBoard,
     joined: Boolean(board?.me),
     isHost: board?.isHost === true,
+    canChangeLook: board?.canChangeLook === true,
+    hasCredits: Boolean(board?.plus),
     authEnabled: auth.enabled,
     authStatus: auth.status,
     languageCount: enabled.length,
@@ -127,6 +137,17 @@ export function YouView({
         return [{ label: t(locale, "you.myBoards"), href: "/me/boards", onSelect: close }];
       case "myPins":
         return [{ label: t(locale, "you.myPins"), href: "/me/pins", onSelect: close }];
+      case "boardPlus": {
+        if (!board?.plus) return [];
+        const left = tCount(locale, "makes.left", board.plus.availableMakes);
+        return [
+          {
+            label: t(locale, "ui.plusTitle"),
+            detail: board.plus.active ? tf(locale, "you.plusOn", { left }) : left,
+            onSelect: act(board.onBoardPlus),
+          },
+        ];
+      }
       case "changeLook":
         return board ? [{ label: t(locale, "you.changeLook"), onSelect: act(board.onChangeLook) }] : [];
       case "deleteBoard":

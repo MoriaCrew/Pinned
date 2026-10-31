@@ -23,9 +23,12 @@ const signedIn: AuthContextValue = { ...signedOut, status: "signedIn", user: rob
 const board = (over: Partial<YouBoard> = {}): YouBoard => ({
   me: null,
   isHost: false,
+  canChangeLook: false,
+  plus: null,
   onJoin: noop,
   onEditName: noop,
   onChangeLook: noop,
+  onBoardPlus: noop,
   onDeleteBoard: noop,
   ...over,
 });
@@ -90,6 +93,64 @@ describe('"you" button on a board (PIN-120)', () => {
     );
     expect(out).toContain('<p class="pn-menu-note" aria-hidden="true">Sign-in failed. Try again.</p>');
     expect(out).toMatch(/role="alert">Sign-in failed\. Try again\.</);
+  });
+});
+
+describe("Board Plus and Change look in the menu (PIN-183)", () => {
+  const credits = (over: { active?: boolean; availableMakes?: number } = {}) => ({
+    active: false,
+    availableMakes: 4,
+    ...over,
+  });
+  const open = (over: Partial<YouBoard>) => html(h(YouView, { auth: linkOnly, board: board(over), initialOpen: true }));
+  /** The Board Plus line: its label and the quiet subline under it. */
+  const boardPlus = (markup: string) =>
+    /role="menuitem"[^>]*>Board Plus<span class="pn-menu-detail">([^<]*)<\/span>/.exec(markup)?.[1];
+
+  it("shows a guest the entry under Join, with the count, and no Change look", () => {
+    const out = open({ plus: credits() });
+    expect(items(out)).toEqual(["Join this board", "Board Plus"]);
+    expect(boardPlus(out)).toBe("4 creations left");
+  });
+
+  it("reads one left in the singular", () => {
+    expect(boardPlus(open({ me: sam, plus: credits({ availableMakes: 1 }) }))).toBe("1 creation left");
+    expect(boardPlus(open({ me: sam, plus: credits({ availableMakes: 0 }) }))).toBe("0 creations left");
+  });
+
+  it("gives a member Board Plus but no Change look while the board has no Plus", () => {
+    const out = open({ me: sam, plus: credits() });
+    expect(items(out)).toEqual(["Edit name", "Board Plus"]);
+    expect(out).not.toContain("Change look");
+  });
+
+  it("says Plus is on in the subline, and gives that member Change look, not Delete board", () => {
+    const out = open({ me: sam, canChangeLook: true, plus: credits({ active: true, availableMakes: 18 }) });
+    expect(boardPlus(out)).toBe("Plus is on · 18 creations left");
+    expect(items(out)).toEqual(["Edit name", "Board Plus", "Change look"]);
+    expect(out).not.toContain("Delete board");
+    expect(out).not.toContain("data-danger");
+  });
+
+  it("gives the host Board Plus, Change look and Delete board in that order", () => {
+    const out = open({ me: sam, isHost: true, canChangeLook: true, plus: credits() });
+    expect(items(out)).toEqual(["Edit name", "Board Plus", "Change look", "Delete board"]);
+    expect(out.match(/data-danger/g)).toHaveLength(1);
+  });
+
+  it("leaves Board Plus out of a board without creations, so the menu is as before", () => {
+    const out = open({ me: sam, plus: null });
+    expect(items(out)).toEqual(["Edit name"]);
+    expect(out).not.toContain("data-detail");
+    expect(out).not.toContain("pn-menu-detail");
+  });
+
+  it("is a menu item that opens the Plus sheet, after My pins when signed in", () => {
+    const out = html(
+      h(YouView, { auth: signedIn, board: board({ me: sam, plus: credits() }), initialOpen: true }),
+    );
+    expect(items(out)).toEqual(["Edit name", "My boards", "My pins", "Board Plus", "Sign out"]);
+    expect(out).toMatch(/<button[^>]*role="menuitem"[^>]*data-detail=""/);
   });
 });
 
