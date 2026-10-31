@@ -367,6 +367,11 @@ export function AddSheet({
   // In a batch step the queue owns the preview (made from the
   // downscaled blob); the sheet shows it but must never revoke it.
   const batchPreviewUrl = batch?.previewUrl ?? null;
+  // Ref mirror: the unmount cleanup is an empty-deps effect, so a
+  // first-render closure must read the LATEST batch preview here or
+  // it would revoke a queue-owned URL that arrived after mount.
+  const batchPreviewRef = useRef<string | null>(batchPreviewUrl);
+  batchPreviewRef.current = batchPreviewUrl;
   const [previewUrl, setPreviewUrl] = useState<string | null>(batchPreviewUrl ?? remembered);
   const previewRef = useRef<string | null>(batchPreviewUrl ?? remembered);
   const [tapError, setTapError] = useState("");
@@ -377,7 +382,7 @@ export function AddSheet({
   // this sheet made, it revokes.
   function releasePreview() {
     const url = previewRef.current;
-    if (url && url === batchPreviewUrl) return; // the queue owns it
+    if (url && url === batchPreviewRef.current) return; // the queue owns it
     if (url && photoMemory?.current?.url !== url) URL.revokeObjectURL(url);
   }
 
@@ -905,7 +910,7 @@ export function AddSheet({
       ) : null}
 
       {stage === "review" && photoGone && candidatePins.length > 0 ? <SheetLine>{t(locale, "add.photoGone")}</SheetLine> : null}
-      {resuming && jobQuery.isError && !jobQuery.data && !batchBusy ? (
+      {resuming && jobQuery.isError && !jobQuery.data && !batchBusy && !batchEnded ? (
         <SheetLine tone="error">{t(locale, "add.resumeFailed")}</SheetLine>
       ) : null}
       {stage === "review" && candidatePins.length === 0 ? <SheetLine>{t(locale, "add.noneFound")}</SheetLine> : null}

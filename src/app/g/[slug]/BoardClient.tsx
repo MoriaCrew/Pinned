@@ -1295,8 +1295,18 @@ function BoardBody({
             leftovers={leftovers}
             elements={view.elements}
             onPin={(group) => {
-              setBatchStepKey(null);
-              setResumeJobId(group.jobId);
+              // A leftover from this session's batch reopens as its
+              // batch step (preview + tap-to-add ride along, and
+              // confirming marks the queue item done) instead of a
+              // bare resume the queue would later resurface.
+              const queued = uploadQueue.items.find((item) => item.uploadId === group.jobId);
+              if (queued) {
+                setBatchStepKey(queued.key);
+                setResumeJobId(null);
+              } else {
+                setBatchStepKey(null);
+                setResumeJobId(group.jobId);
+              }
               setAddOpen(true);
             }}
           />

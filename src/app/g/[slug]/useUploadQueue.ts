@@ -17,8 +17,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { downscaleTarget } from "../../../domain/add-sheet";
 import {
+  applyItemPatch,
   classifyUploadFailure,
   createQueueItems,
+  isQueueSettled,
   itemStatusForJob,
   type UploadItemStatus,
   type UploadQueueItem,
@@ -102,7 +104,16 @@ export function useUploadQueue(options: UploadQueueOptions) {
   optionsRef.current = options;
   const activeRef = useRef<Set<string>>(new Set());
 
+  // Driver writes go through the settled-safe patch: a late
+  // in-flight resolution can never resurrect a skipped/done item.
   const patch = useCallback((key: string, change: Partial<BatchItem>) => {
+    setItems((current) =>
+      current.map((item) => (item.key === key ? applyItemPatch(item, change) : item)),
+    );
+  }, []);
+
+  // Explicit user actions (skip / done / retry) write unconditionally.
+  const patchForced = useCallback((key: string, change: Partial<BatchItem>) => {
     setItems((current) =>
       current.map((item) => (item.key === key ? { ...item, ...change } : item)),
     );
@@ -152,6 +163,17 @@ export function useUploadQueue(options: UploadQueueOptions) {
         patch(item.key, { blob, previewUrl: item.previewUrl ?? URL.createObjectURL(blob) });
       }
       for (let attempt = 1; attempt <= opts.uploadRetryMaxAttempts; attempt += 1) {
+        // Abandoned mid-flight (skipped/pinned, or superseded by a
+        // retry's fresh upload id): spend nothing more on this item.
+        const live = itemsRef.current.find((i) => i.key === item.key);
+        if (
+          !live ||
+          live.uploadId !== item.uploadId ||
+          live.status === "skipped" ||
+          live.status === "done"
+        ) {
+          return;
+        }
         patch(item.key, { status: "uploading", attempts: attempt });
         // Before any re-send, adopt a job a lost response may have created.
         if (attempt > 1) {
@@ -193,7 +215,9 @@ export function useUploadQueue(options: UploadQueueOptions) {
         if (action === "stop") {
           setItems((current) =>
             current.map((candidate) =>
-              candidate.key === item.key || candidate.status === "queued"
+              (candidate.key === item.key || candidate.status === "queued") &&
+              candidate.status !== "skipped" &&
+              candidate.status !== "done"
                 ? {
                     ...candidate,
                     status: "stopped" as UploadItemStatus,
@@ -258,6 +282,16 @@ export function useUploadQueue(options: UploadQueueOptions) {
 
   const enqueue = useCallback((files: File[]): string | null => {
     if (files.length === 0) return null;
+    // A pick after the previous batch fully settled starts a fresh
+    // queue, so step numbering and the summary describe this pick —
+    // and finished files, blobs and object URLs are released.
+    if (itemsRef.current.length > 0 && isQueueSettled(itemsRef.current)) {
+      for (const old of itemsRef.current) {
+        if (old.previewUrl) URL.revokeObjectURL(old.previewUrl);
+      }
+      itemsRef.current = [];
+      setItems([]);
+    }
     const ids = files.map(() => {
       const id = mintUploadId();
       return { key: id, uploadId: id };
@@ -275,7 +309,7 @@ export function useUploadQueue(options: UploadQueueOptions) {
   /** Retry a terminal/stopped item: fresh upload id (a new job), same blob bytes. */
   const retryItem = useCallback(
     (key: string) => {
-      patch(key, {
+      patchForced(key, {
         uploadId: mintUploadId(),
         status: "queued",
         attempts: 0,
@@ -283,16 +317,23 @@ export function useUploadQueue(options: UploadQueueOptions) {
         error: undefined,
       });
     },
-    [patch],
+    [patchForced],
   );
 
   const skipItem = useCallback(
-    (key: string) => patch(key, { status: "skipped" }),
-    [patch],
+    (key: string) => patchForced(key, { status: "skipped" }),
+    [patchForced],
   );
   const markDone = useCallback(
-    (key: string) => patch(key, { status: "done" }),
-    [patch],
+    (key: string) => {
+      // Pinned: its preview/blob have no later use (the stepper only
+      // moves forward), so release them instead of holding every
+      // finished pick until page unmount.
+      const item = itemsRef.current.find((i) => i.key === key);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      patchForced(key, { status: "done", blob: undefined, previewUrl: undefined });
+    },
+    [patchForced],
   );
 
   return { items, dropped, enqueue, retryItem, skipItem, markDone };

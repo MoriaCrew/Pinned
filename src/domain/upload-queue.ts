@@ -106,6 +106,32 @@ export function stepPosition(
   return { index: index + 1, total: items.length };
 }
 
+/**
+ * Apply a driver patch without resurrecting a user-settled item:
+ * once the user skipped a photo (or it was pinned = done), a late
+ * in-flight upload resolution must not flip it back to uploading,
+ * ready or failed — the stepper would return to a photo already
+ * left. Non-status fields still land; explicit user actions
+ * (skip / done / retry) write through a separate forced path.
+ */
+export function applyItemPatch<T extends UploadQueueItem>(item: T, change: Partial<T>): T {
+  if (
+    (item.status === "skipped" || item.status === "done") &&
+    change.status !== undefined &&
+    change.status !== item.status
+  ) {
+    const safe = { ...change };
+    delete safe.status;
+    return { ...item, ...safe };
+  }
+  return { ...item, ...change };
+}
+
+/** True when nothing is left to step to: a new pick starts a fresh queue. */
+export function isQueueSettled(items: readonly UploadQueueItem[]): boolean {
+  return nextStepItem(items) === null;
+}
+
 /** Items still waiting behind (or in) the driver: queued + uploading. */
 export function pendingCount(items: readonly UploadQueueItem[]): number {
   return items.filter((item) => item.status === "queued" || item.status === "uploading").length;

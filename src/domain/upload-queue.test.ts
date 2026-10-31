@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyItemPatch,
   classifyUploadFailure,
   createQueueItems,
+  isQueueSettled,
   itemStatusForJob,
   nextStepItem,
   pendingCount,
@@ -62,6 +64,22 @@ describe("stepper order", () => {
     expect(stepPosition(items, "b")).toEqual({ index: 2, total: 3 });
     expect(stepPosition(items, "ghost")).toBeNull();
     expect(pendingCount(items)).toBe(1);
+  });
+
+  it("a driver patch never resurrects a skipped or done item (Bugbot #148)", () => {
+    const skipped = item("a", "skipped");
+    expect(applyItemPatch(skipped, { status: "uploading", attempts: 2 })).toEqual({
+      ...skipped,
+      attempts: 2,
+    });
+    expect(applyItemPatch(skipped, { status: "ready" }).status).toBe("skipped");
+    expect(applyItemPatch(item("b", "done"), { status: "failed" }).status).toBe("done");
+    // Unsettled items patch normally.
+    expect(applyItemPatch(item("c", "uploading"), { status: "ready" }).status).toBe("ready");
+    // A settled queue is exactly one with nothing left to step to.
+    expect(isQueueSettled([item("a", "done"), item("b", "skipped")])).toBe(true);
+    expect(isQueueSettled([item("a", "done"), item("b", "ready")])).toBe(false);
+    expect(isQueueSettled([])).toBe(true);
   });
 
   it("maps job statuses onto item statuses", () => {
