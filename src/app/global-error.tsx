@@ -27,6 +27,12 @@ export default function GlobalError() {
   const locale = useSyncExternalStore(subscribe, clientLocale, serverLocale);
   return (
     <html lang={locale} data-theme="paper">
+      {/* No metadata exports here (the root layout failed), so the
+          mobile viewport from layout.tsx is set by hand: without it
+          phones lay out at 980px and the 44px targets shrink. */}
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body>
         <ErrorScreen locale={locale} onRetry={() => window.location.reload()} />
       </body>

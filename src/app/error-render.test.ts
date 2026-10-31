@@ -46,6 +46,7 @@ describe("global error page (PIN-212)", () => {
   it("brings its own <html> and <body> and the same screen, in English on the server", () => {
     const out = renderToStaticMarkup(h(GlobalError));
     expect(out).toContain('<html lang="en" data-theme="paper">');
+    expect(out).toContain('<meta name="viewport" content="width=device-width, initial-scale=1"/>');
     expect(out).toContain("<body><main");
     expect(out).toContain(en["error.pageTitle"]);
     expect(out).toContain("Try again");
