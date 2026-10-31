@@ -6,15 +6,17 @@ import "server-only";
  * per event the handler could not apply but must still ack 200
  * (unknown/dead intent, amount mismatch, unknown refund/dispute
  * mapping). Dead letters are the operator flag: PIN-153's
- * reconciliation drains them. Records carry Stripe ids and ids
- * of our own only - never a full payload, never a board slug
- * beyond the server-internal boardId the ledger already keys.
+ * reconciliation drains them. An event that dead-lettered gets
+ * no processed record (PIN-178), so a Dashboard Resend re-runs
+ * it. Records carry Stripe ids and ids of our own only - never
+ * a full payload, never a board slug beyond the server-internal
+ * boardId the ledger already keys.
  */
 
 export interface ProcessedStripeEvent {
   eventId: string;
   eventType: string;
-  /** Handler outcome word (granted, frozen, dead_letter, ...). */
+  /** Handler outcome word (granted, frozen, duplicate_grant, ...); never a dead letter. */
   outcome: string;
   processedAt: number;
 }

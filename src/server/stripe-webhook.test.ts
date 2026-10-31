@@ -844,3 +844,55 @@ describe("disputes (PIN-150)", () => {
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25, frozen: 25, available: 0 });
   });
 });
+
+describe("dead letters are re-runnable (PIN-178)", () => {
+  it("a dead-lettered event delivered again runs again; a processed one is still a duplicate", async () => {
+    const h = await harness();
+    const orphan = evt(
+      "evt_orphan",
+      "checkout.session.completed",
+      session("00000000-0000-4000-8000-000000000000"),
+    );
+    expect(await h.deliver(orphan)).toEqual({
+      eventId: "evt_orphan",
+      outcome: "dead_letter",
+      duplicate: false,
+    });
+    expect(await h.records.getProcessed("evt_orphan")).toBeNull();
+    // A Dashboard Resend: handled again, not short-circuited.
+    expect(await h.deliver(orphan)).toEqual({
+      eventId: "evt_orphan",
+      outcome: "dead_letter",
+      duplicate: false,
+    });
+    // Same deterministic id: one operator flag, not two.
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["unknown_intent"]);
+
+    const intent = await h.createIntent();
+    const paid = evt("evt_paid_ok", "checkout.session.completed", session(intent.id));
+    expect((await h.deliver(paid)).outcome).toBe("granted");
+    expect(await h.records.getProcessed("evt_paid_ok")).toMatchObject({ outcome: "granted" });
+    expect(await h.deliver(paid)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 25 });
+  });
+
+  it("once the cause is fixed, resending the dead-lettered event applies it exactly once", async () => {
+    const h = await harness();
+    const intent = await h.createIntent();
+    // The refund lands before anything mapped its charge, and
+    // Stripe's session lookup has nothing either: unknown_mapping.
+    const early = evt("evt_re_early", "refund.created", refund());
+    expect((await h.deliver(early)).outcome).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual(["unknown_mapping"]);
+    // Fulfilment maps the charge and grants.
+    expect(
+      (await h.deliver(evt("evt_paid", "checkout.session.completed", session(intent.id)))).outcome,
+    ).toBe("granted");
+    // The operator resends the refund: it now claws, once.
+    expect((await h.deliver(early)).outcome).toBe("refund_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    expect(await h.deliver(early)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    const clawbacks = (await h.ledger.listEntries(SLUG)).filter((e) => e.type === "clawback");
+    expect(clawbacks).toHaveLength(1);
+  });
+});

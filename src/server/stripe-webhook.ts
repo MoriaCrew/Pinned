@@ -20,7 +20,10 @@ import "server-only";
  * circuits replays across restarts, and underneath it the
  * ledger ops are idempotent by event/purchase/refund/dispute
  * id, so a crash between the ledger write and the processed
- * record still converges on retry.
+ * record still converges on retry. An event that wrote a dead
+ * letter gets no processed record (PIN-178): an operator who
+ * fixed the cause re-runs it with the Dashboard's Resend, and
+ * that ledger idempotency makes the re-run safe.
  *
  * MONEY -> MAKES (the one documented formula). For a pack of
  * `credits` makes sold for `eurCents` (Policy.credits.packs),
@@ -201,6 +204,8 @@ interface HandlerContext {
   event: ParsedEvent;
   /** Ledger `at`: the event's own creation time when it carries one. */
   at: number;
+  /** Set by `deadLetter`: this delivery wrote an operator flag, so it is not recorded as processed (PIN-178). */
+  deadLettered: boolean;
 }
 
 async function policyFor(deps: StripeWebhookDeps, boardId: string): Promise<Policy> {
@@ -228,6 +233,7 @@ async function deadLetter(
   reason: string,
   extra: DeadLetterExtra = {},
 ): Promise<string> {
+  ctx.deadLettered = true;
   await deps.records.addDeadLetter({
     id: deadLetterId(ctx.event.id, reason),
     eventId: ctx.event.id,
@@ -1013,7 +1019,9 @@ async function handleDispute(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
  * event id, dispatch, and only then write the processed
  * record - so any unexpected failure above it (store, API)
  * propagates, the route answers non-2xx, and Stripe retries
- * into the ledger's own idempotency.
+ * into the ledger's own idempotency. A delivery that wrote a
+ * dead letter still answers 200 but gets no processed record,
+ * so a Dashboard Resend re-runs the handler (PIN-178).
  */
 export async function handleStripeWebhook(
   rawBody: string,
@@ -1040,14 +1048,16 @@ export async function handleStripeWebhook(
   if (processed) return { eventId: event.id, outcome: "duplicate", duplicate: true };
 
   const now = deps.now?.() ?? Date.now();
-  const ctx: HandlerContext = { event, at: event.createdAt ?? now };
+  const ctx: HandlerContext = { event, at: event.createdAt ?? now, deadLettered: false };
   const outcome = await dispatch(deps, ctx);
-  await deps.records.markProcessed({
-    eventId: event.id,
-    eventType: event.type,
-    outcome,
-    processedAt: deps.now?.() ?? Date.now(),
-  });
+  if (!ctx.deadLettered) {
+    await deps.records.markProcessed({
+      eventId: event.id,
+      eventType: event.type,
+      outcome,
+      processedAt: deps.now?.() ?? Date.now(),
+    });
+  }
   return { eventId: event.id, outcome, duplicate: false };
 }
 
