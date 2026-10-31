@@ -35,3 +35,29 @@ env:
   # dev; add AUTH_MODE=optional here at promotion (PIN-76).
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-prod.firebasestorage.app
+  # PIN-210: live billing (merge only after the operator confirms both live secrets exist in prod Secret Manager)
+  # Sells the Board Plus pack (EUR 2.99: Plus + 20 creations) through
+  # LIVE Stripe Checkout; grants land by webhook only. A referenced
+  # secret that is missing fails the App Hosting build, so this block
+  # must not reach `main` before STRIPE_SECRET_KEY and
+  # STRIPE_WEBHOOK_SECRET exist in moriacrew-pinned-prod with access
+  # for pinned-web (docs/15-board-plus.md, "Going live on prod").
+  # Rollback: PLUS_MODE=off, then a rollout.
+  - variable: PLUS_MODE
+    value: stripe
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+    availability:
+      - RUNTIME
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+  # Creations pool on (code default is off). Judging week: 30 free
+  # per board = one participant's daily Policy caps (20 photos + 10
+  # scenes), so a judge on a fresh board meets the daily caps before
+  # the pool. Spend stays bounded by AI_DAILY_BUDGET_USD and
+  # AI_DAILY_CALL_LIMIT whatever this value is.
+  - variable: POLICY_OVERRIDES_JSON
+    value: '{"credits":{"enabled":true,"starterMakes":30}}'
+  # /PIN-210
