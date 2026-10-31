@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_POLICY } from "../policy/policy";
 import {
   BoardApiError,
   normalizeDisplayName,
@@ -24,24 +25,39 @@ describe("board-session helpers (moved in PIN-93)", () => {
     expect(readCookieValue(null, "pinned_player_x")).toBeNull();
   });
 
-  it("normalizes display names: trim, single spaces, 30 chars, no controls", () => {
-    expect(normalizeDisplayName("  Ana   Maria ")).toBe("Ana Maria");
-    expect(() => normalizeDisplayName(42)).toThrowError(
-      new BoardApiError("Choose a display name."),
-    );
-    expect(() => normalizeDisplayName("   ")).toThrow(BoardApiError);
-    expect(() => normalizeDisplayName("x".repeat(31))).toThrow(BoardApiError);
-    expect(() => normalizeDisplayName("badname")).toThrow(BoardApiError);
+  it("normalizes display names: trim, single spaces, Policy max chars, no controls", () => {
+    const max = DEFAULT_POLICY.displayNameMaxChars;
+    expect(max).toBe(30);
+    expect(normalizeDisplayName("  Ana   Maria ", max)).toBe("Ana Maria");
+    expect(() => normalizeDisplayName(42, max)).toThrowError("Choose a display name.");
+    expect(() => normalizeDisplayName("   ", max)).toThrow(BoardApiError);
+    expect(normalizeDisplayName("x".repeat(max), max)).toBe("x".repeat(max));
+    expect(() => normalizeDisplayName("x".repeat(max + 1), max)).toThrow(BoardApiError);
+    expect(() => normalizeDisplayName("bad\u0001name", max)).toThrow(BoardApiError);
+  });
+
+  it("names the Policy cap in the error (PIN-196: no hard-coded 30)", () => {
+    let caught: unknown;
+    try {
+      normalizeDisplayName("x".repeat(13), 12);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as BoardApiError).message).toBe("Choose a display name up to 12 characters.");
+    expect((caught as BoardApiError).userMessage).toEqual({
+      key: "error.displayNameInvalid",
+      values: { max: 12 },
+    });
   });
 
   it("parseJoinBoardInput surfaces name errors as BoardApiError 400", () => {
-    expect(parseJoinBoardInput({ displayName: "Ana", reclaimPin: "1234" })).toEqual({
+    expect(parseJoinBoardInput({ displayName: "Ana", reclaimPin: "1234" }, DEFAULT_POLICY)).toEqual({
       displayName: "Ana",
       reclaimPin: "1234",
     });
     let caught: unknown;
     try {
-      parseJoinBoardInput({ displayName: "" });
+      parseJoinBoardInput({ displayName: "" }, DEFAULT_POLICY);
     } catch (error) {
       caught = error;
     }

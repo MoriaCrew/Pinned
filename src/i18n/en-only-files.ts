@@ -42,13 +42,9 @@ export const EN_ONLY_FILES: readonly string[] = [
   "src/ui/stickers.tsx",
 
 
-  // PIN-196 server errors
+  // PIN-196 server errors (rest: PIN-201)
   "src/gateway/decorators.ts",
-  "src/server/board-api.ts",
-  "src/server/board-plus.ts",
-  "src/server/decompose-job.ts",
   "src/server/dictation.ts",
-  "src/server/scene-job.ts",
 
   // PIN-197 route errors
 
