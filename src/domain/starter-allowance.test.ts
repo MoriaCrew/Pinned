@@ -33,6 +33,15 @@ describe("decideStarterSlot (PIN-204)", () => {
     });
   });
 
+  it("a claim refreshes expireAt from the current windowMs (Policy raised mid-window)", () => {
+    const opened = decideStarterSlot("k", null, 1_000, { maxBoards: 3, windowMs: 1_000 }).next;
+    expect(decideStarterSlot("k", opened, 1_500, { maxBoards: 3, windowMs: 5_000 }).next).toMatchObject({
+      boards: 2,
+      windowStartedAt: 1_000,
+      expireAt: 6_000,
+    });
+  });
+
   it("maxBoards 0 never allows, even on a fresh window", () => {
     const zero = { ...PARAMS, maxBoards: 0 };
     expect(decideStarterSlot("k", null, 1_000, zero)).toEqual({ allowed: false, next: null });

@@ -62,7 +62,15 @@ export function decideStarterSlot(
   if (current.boards >= params.maxBoards) return { allowed: false, next: null };
   return {
     allowed: true,
-    next: { ...current, boards: current.boards + 1, lastBoardAt: now },
+    // Each counted board re-derives expireAt from today's windowMs,
+    // so a raised window also stretches the TTL. A full counter is
+    // not rewritten; the worst a raise does there is an early refill.
+    next: {
+      ...current,
+      boards: current.boards + 1,
+      lastBoardAt: now,
+      expireAt: current.windowStartedAt + params.windowMs,
+    },
   };
 }
 
