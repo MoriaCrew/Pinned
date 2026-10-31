@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import { getConfig } from "./src/config";
 import { firebaseAuthProxyRewrites } from "./src/domain/auth-proxy";
+import { securityHeaders } from "./src/domain/security-headers";
+import { parsePolicyOverridesJson, resolvePolicy } from "./src/policy/policy";
 
 // PIN-2 scaffold: defaults only. App Hosting serves this app as SSR;
 // image/poster work lands with PIN-11 (no remote image hosts until then).
@@ -31,6 +33,16 @@ const nextConfig: NextConfig = {
       enabled: cfg.authSameOrigin,
       projectId: cfg.firebaseProjectId,
     });
+  },
+  // PIN-212: baseline security headers on every route (values and
+  // the reasons for them: src/domain/security-headers.ts). The HSTS
+  // life is Policy.hstsMaxAgeDays; headers are computed at build, so
+  // POLICY_OVERRIDES_JSON must be BUILD-available to change it.
+  async headers() {
+    const policy = resolvePolicy(parsePolicyOverridesJson(getConfig().policyOverridesJson));
+    return [
+      { source: "/:path*", headers: securityHeaders({ hstsMaxAgeDays: policy.hstsMaxAgeDays }) },
+    ];
   },
 };
 
