@@ -268,16 +268,20 @@
    parent is a centring grid, so the tag still hugs its text. The clamp sits
    on the inner text span: on the padded tag itself, the top of a 4th line
    showed through the bottom padding. min-width: 0 keeps a long word from
-   widening the tag past its cell; the word breaks instead, with a hyphen
-   where the browser hyphenates (not uppercase text in Chromium). */
+   widening the tag past its cell; the word breaks instead. No auto
+   hyphens (PIN-225): a name is English from Spark, or any language once
+   its owner renames it, while the browser hyphenates by the page language
+   ("Pot-ted Succulent" in fr and de). Only real or soft hyphens break. */
 .pn-pin-tag { display: inline-block; min-width: 0; max-width: 100%; padding: var(--tag-pad); border-radius: var(--tag-radius); background: var(--tag-bg); color: var(--tag-fg); rotate: var(--tag-rot); box-shadow: var(--tag-shadow);
   font: 650 var(--tag-size)/1.25 var(--tag-font); letter-spacing: var(--tag-tracking); text-transform: var(--tag-transform); }
-.pn-pin-tag-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: break-word; hyphens: auto; text-wrap: balance; }
+.pn-pin-tag-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: break-word; hyphens: manual; text-wrap: balance; }
 /* Decorations sit on the clamped text span itself (they need not carry
    into a -webkit-box in every engine), and the underline stays inside the
    line box so the clamp's clip can't cut it off the last line. */
 .pn-pin-tag-text { text-decoration: var(--tag-deco); text-underline-offset: 0.12em; }
-.pn-pin-owner { display: inline-flex; align-items: center; gap: 6px; margin-top: -2px; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-pin-owner { display: inline-flex; align-items: center; gap: 6px; margin-top: -2px; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); max-width: 100%; overflow: hidden; }
+/* The ellipsis sits on the name itself: text-overflow does nothing on a flex container's own text (PIN-225). */
+.pn-pin-owner-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pn-pin[data-state="dropped"] .pn-pin-tag { opacity: .7; }
 .pn-pin[data-state="dropped"] .pn-pin-tag-text { text-decoration: line-through; }
 .pn-pins { --sticker: 104px; display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: var(--space-4) var(--space-2); list-style: none; padding: 0; margin: 0; }
@@ -355,9 +359,10 @@
 /* PIN-199: long labels (de, fr, id) wrap inside the button instead of pushing the dock past the screen edge. */
 .pn-dock > .pn-btn { min-width: 0; padding-block: var(--space-2); white-space: normal; text-align: center; line-height: 1.2; text-wrap: balance; }
 .pn-dock-fixed { position: fixed; left: 0; right: 0; bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); z-index: 20; }
-.pn-tray { display: flex; flex: 1; align-items: center; gap: 6px; list-style: none; margin: 0; padding: 0; }
-.pn-tray-slot { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--line-strong); background: var(--surface-sunk); }
-.pn-tray-slot img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(1.5px 0 0 var(--keyline)) drop-shadow(-1.5px 0 0 var(--keyline)) drop-shadow(0 1.5px 0 var(--keyline)) drop-shadow(0 -1.5px 0 var(--keyline)) drop-shadow(0 2px 2px var(--shade)); }
+/* PIN-225: the slots give way (44px down to ~34px) so a long Next label (es "Siguiente") never pushes the dock past its edge. */
+.pn-tray { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; list-style: none; margin: 0; padding: 0; }
+.pn-tray-slot { display: grid; place-items: center; flex: 0 1 44px; min-width: 0; aspect-ratio: 1; border-radius: 50%; border: 1.5px dashed var(--line-strong); background: var(--surface-sunk); }
+.pn-tray-slot img { width: 90%; height: 90%; object-fit: contain; filter: drop-shadow(1.5px 0 0 var(--keyline)) drop-shadow(-1.5px 0 0 var(--keyline)) drop-shadow(0 1.5px 0 var(--keyline)) drop-shadow(0 -1.5px 0 var(--keyline)) drop-shadow(0 2px 2px var(--shade)); }
 .pn-tray-slot.is-filled { border: 0; background: none; animation: pn-pop .35s var(--spring) both; }
 @keyframes pn-pop { from { scale: .4; opacity: 0; } to { scale: 1; opacity: 1; } }
 
