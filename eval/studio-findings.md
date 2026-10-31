@@ -60,7 +60,7 @@ Same 3 compositions (C1-C3) per mode. **Recommended `sceneInputMode`: `flattened
 ## T5 Cost — PASS (estimates)
 
 - Per photo (elements + SAM): **$0.020** (pass: <= $0.05). SAM at $0.0025 per concept call (43 calls). Billing unit confirmed from the wire: every SAM response reports usage.images_processed=1 per call (0 tokens), independent of how many segments matched — so one concept call bills as one image (docs/11 Q2 resolved; dashboard remains the final authority).
-- Per scene (Muse Image /responses): **$0.022** estimated (pass: <= $0.10). Token usage is recorded per call in call-log.json; the /responses token price is not published in this repo, so tokens are priced with Muse Spark list rates as a labelled proxy — treat $/scene as an order-of-magnitude estimate, not a bill.
+- Per scene (Muse Image /responses): **$0.022** estimated in the spike (pass: <= $0.10). Token usage is recorded per call in call-log.json; the spike had no published /responses price, so it priced the tokens with Muse Spark list rates as a labelled proxy. Update (PIN-180): Meta's published Muse Image list price is a flat **$0.01** per generated image whatever the tokens, and the gateway now estimates $0.01 per scene (the later run notes below keep the proxy figures they were measured with). Still an estimate, not a bill.
 - Whole spike Meta estimate: **$0.879** of the $25 local cap (docs/11 A2: local spike money stays separate from the hosted budget; hosted recommendation remains dev/prod $10/day + per-board caps, Robin raises before PIN-55). Higgsfield images used: 14 of 60.
 
 ## T6 Refusals — PASS
