@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/client";
 import { Button, type ButtonSize, type ButtonVariant } from "../../ui";
 import { useAuth } from "./AuthProvider";
 
@@ -20,13 +21,14 @@ export function SignInButton({
   /** Error line goes under the button (page states) instead of beside it (header). */
   stacked?: boolean;
 }) {
+  const locale = useLocale();
   const { signInError, signIn } = useAuth();
   const [busy, setBusy] = useState(false);
   return (
     <span className="pn-lib-signin" data-stacked={stacked ? "" : undefined}>
       {signInError ? (
         <span className="pn-lib-signin-error" role="alert">
-          {t("en", "auth.failed")}
+          {t(locale, "auth.failed")}
         </span>
       ) : null}
       <Button
@@ -38,7 +40,7 @@ export function SignInButton({
           void signIn().finally(() => setBusy(false));
         }}
       >
-        {busy ? t("en", "auth.signingIn") : t("en", "auth.signIn")}
+        {busy ? t(locale, "auth.signingIn") : t(locale, "auth.signIn")}
       </Button>
     </span>
   );

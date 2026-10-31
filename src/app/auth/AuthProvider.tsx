@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { FirebaseWebConfig } from "../../domain/auth-ui";
+import { useLocale } from "../../i18n/client";
 import {
   completeRedirectSignIn,
   RedirectingToGoogle,
@@ -127,6 +128,7 @@ export function AuthProvider({
     config ? "loading" : "signedOut",
   );
   const [signInError, setSignInError] = useState(false);
+  const locale = useLocale();
   const router = useRouter();
   // PIN-86: bumped by every explicit sign-in/out. A hydrate run
   // only applies its result while the epoch it started in is
@@ -163,7 +165,7 @@ export function AuthProvider({
     if (!config) return;
     setSignInError(false);
     try {
-      const idToken = await signInWithGoogle(config);
+      const idToken = await signInWithGoogle(config, locale);
       const signedIn = await postSession(idToken);
       if (!signedIn) throw new Error("session failed");
       authEpoch.current += 1;
@@ -186,7 +188,7 @@ export function AuthProvider({
       }
       setSignInError(true);
     }
-  }, [config, router]);
+  }, [config, router, locale]);
 
   const signOut = useCallback(async () => {
     if (!config) return;

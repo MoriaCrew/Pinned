@@ -7,6 +7,7 @@
  * or Storage — those rules stay deny-all (AGENTS.md).
  */
 import type { FirebaseWebConfig } from "../domain/auth-ui";
+import type { Locale } from "../i18n";
 
 /** Sign-in turned into a full-page redirect; the page is leaving. */
 export class RedirectingToGoogle extends Error {
@@ -42,11 +43,14 @@ function errorCode(error: unknown): string {
  * Popup first; when the browser blocks it (or the hosted domain
  * cannot do popups) fall back to the redirect flow — the result
  * is then picked up by completeRedirectSignIn on return.
+ * `locale` sets the language of Google's sign-in window (PIN-195).
  */
 export async function signInWithGoogle(
   config: FirebaseWebConfig,
+  locale: Locale,
 ): Promise<string> {
   const { auth, authMod } = await loadAuth(config);
+  auth.languageCode = locale;
   const provider = new authMod.GoogleAuthProvider();
   try {
     const result = await authMod.signInWithPopup(auth, provider);
