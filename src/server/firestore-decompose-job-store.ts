@@ -71,6 +71,17 @@ export class FirestoreDecomposeJobStore implements DecomposeJobStore {
     }
   }
 
+  async deleteIfUntouched(jobId: string, createdAt: number): Promise<boolean> {
+    const ref = await this.findRef(jobId);
+    if (!ref) return false;
+    return this.db.runTransaction(async (tx) => {
+      const job = fromSnapshot(await tx.get(ref));
+      if (!job || job.status !== "pending" || job.updatedAt !== createdAt) return false;
+      tx.delete(ref);
+      return true;
+    });
+  }
+
   async get(jobId: string): Promise<DecomposeJob | null> {
     const ref = await this.findRef(jobId);
     if (!ref) return null;
@@ -89,19 +100,25 @@ export class FirestoreDecomposeJobStore implements DecomposeJobStore {
     });
   }
 
-  async update(job: DecomposeJob): Promise<void> {
+  async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
     const ref = this.jobRef(job.boardId, job.id);
-    await this.db.runTransaction(async (tx) => {
+    return this.db.runTransaction(async (tx) => {
       const existing = await tx.get(ref);
       if (!existing.exists) {
         // Fall back to the id lookup in case boardId drifted; the
         // port contract is "missing job throws RangeError".
         const found = await this.txFindRef(tx, job.id);
         if (!found) throw new RangeError(`DecomposeJob ${job.id} not found`);
+        const foundSnap = await tx.get(found);
+        const foundJob = fromSnapshot(foundSnap);
+        if (expectedStatus !== undefined && foundJob?.status !== expectedStatus) return false;
         tx.set(found, toFirestoreData(job));
-        return;
+        return true;
       }
+      const stored = fromSnapshot(existing);
+      if (expectedStatus !== undefined && stored?.status !== expectedStatus) return false;
       tx.set(ref, toFirestoreData(job));
+      return true;
     });
   }
 

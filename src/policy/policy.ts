@@ -39,10 +39,22 @@ const DEFAULT_CREDIT_PACKS = [
 export const PolicySchema = z
   .object({
     elementsPerPhoto: Range.default({ min: 1, max: 6 }),
+    /** Multi-photo pick (batch upload): most files one pick may queue, and how many of them the client uploads at once (serial by default: each in-request job holds sharp buffers; the App Hosting runConfig concurrency is the second line). */
+    photosPerBatch: z.number().int().min(1).default(5),
+    batchUploadConcurrency: z.number().int().min(1).default(1),
+    /** Client upload retries for transient answers only (code-less 429 brakes, 503, network loss after a job check): attempts per file and the backoff step in ms (delay grows per attempt). Coded stops (pool-empty, per-day) never retry. */
+    uploadRetryMaxAttempts: z.number().int().min(1).default(3),
+    uploadRetryBackoffMs: z.number().int().min(0).default(2_000),
+    /** In-process brake on simultaneously running decompose jobs (memory guard beside the runConfig concurrency; busy answers a code-less 429 the client backs off on). */
+    maxConcurrentDecomposeJobs: z.number().int().min(1).default(2),
+    /** Stale-job margin past the summed Policy timeouts (AI-only) bound: the runner fails itself at bound + margin before debiting (the margin covers its non-AI render/store/persist tail); only jobs still pending/running past bound + 2 x margin are swept to failed. */
+    staleJobMarginMs: z.number().int().min(0).default(60_000),
+    /** Minimum SAM confidence for a usable mask when the provider returns one (0 = keep today's behaviour: confidence only orders candidates). */
+    samMinConfidence: z.number().min(0).max(1).default(0),
     conceptMaxWords: z.number().int().min(1).default(3),
     pinsPerScene: Range.default({ min: 1, max: 4 }),
     photosPerParticipantPerDay: z.number().int().min(0).default(20),
-    /** Segmenter (SAM) caps (PIN-92): every segment invocation — concept, tap-add, retry attempt, failure and refusal alike — reserves against these before the provider call, so failing taps cannot burn the shared daily pool unbounded. Per photo 18 = 3x the 6-element cap (concepts + a retry each + tap misses); per participant 150 covers the legit worst case (20 photos x 6 concepts = 120, + retry/tap headroom) while staying under the 200 global daily call limit. */
+    /** Segmenter (SAM) caps (PIN-92): every segment invocation — concept, tap-add, retry attempt, failure and refusal alike — reserves against these before the provider call, so failing taps cannot burn the shared daily pool unbounded. Per photo 18 = 3x the 6-element cap (concepts + a retry each + tap misses); per participant 150 covers the legit worst case (20 photos x 6 concepts = 120, + retry/tap headroom) well under the 500 global daily call limit. */
     segmentsPerPhoto: z.number().int().min(0).default(18),
     segmentsPerParticipantPerDay: z.number().int().min(0).default(150),
     /** Tap-name (Spark crop pass) cap (PIN-117): one call per successful tap-add, counted in its own budget counter — never against photosPerParticipantPerDay. 100 covers the legit worst case (20 photos x up to 5 tap-adds) while failing/refusing names still consume the reservation, so a tap-loop cannot burn Spark spend unbounded. */
@@ -260,8 +272,8 @@ export const PolicySchema = z
       .default({ sparkElements: 4000, sparkChips: 1200, sparkTapName: 1200 }),
     /** 0 means OFF (PIN-59); never a silent fallback. */
     aiCallLogRetentionDays: z.number().int().min(1).default(90),
-    dailyBudgetUsd: z.number().min(0).default(2),
-    dailyCallLimit: z.number().int().min(0).default(200),
+    dailyBudgetUsd: z.number().min(0).default(5),
+    dailyCallLimit: z.number().int().min(0).default(500),
     models: z
       .object({
         spark: z.string().min(1).default("muse-spark-1.3"),
@@ -342,6 +354,13 @@ const RangeOverride = Range.partial();
 const FractionRangeOverride = FractionRange.partial();
 export const PolicyOverridesSchema = z.object({
   elementsPerPhoto: RangeOverride.optional(),
+  photosPerBatch: z.number().int().min(1).optional(),
+  batchUploadConcurrency: z.number().int().min(1).optional(),
+  uploadRetryMaxAttempts: z.number().int().min(1).optional(),
+  uploadRetryBackoffMs: z.number().int().min(0).optional(),
+  maxConcurrentDecomposeJobs: z.number().int().min(1).optional(),
+  staleJobMarginMs: z.number().int().min(0).optional(),
+  samMinConfidence: z.number().min(0).max(1).optional(),
   conceptMaxWords: z.number().int().min(1).optional(),
   pinsPerScene: RangeOverride.optional(),
   photosPerParticipantPerDay: z.number().int().min(0).optional(),

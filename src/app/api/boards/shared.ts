@@ -21,7 +21,6 @@ import { getDecomposeJobStore } from "../../../server/decompose-job-store";
 import { getSceneJobStore } from "../../../server/scene-job-store";
 import { getChipsCacheStore } from "../../../server/chips-cache-store";
 import { getDerivativeStore } from "../../../server/derivative-store";
-import { CREDITS_POOL_EMPTY } from "../../../server/credit-pool";
 import { getCreditLedgerStore } from "../../../server/credit-ledger-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
 import { logServerError } from "../../../server/safe-log";
@@ -133,14 +132,13 @@ export function localizedErrorJson(
   });
 }
 
-/** Map service errors to responses; unknown errors become a generic 500. */
+/** Map service errors to responses; unknown errors become a generic 500.
+ * The typed `code` rides along when present (clients classify 429s by it);
+ * code-less errors stay code-less, and 404 stays uniform. */
 export function errorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof BoardApiError || error instanceof PhotoIntakeError) {
     if (error.status === 404) return notFound();
-    // The empty-pool 429 carries its typed code (docs/15; PIN-183): the Add sheet
-    // tells it from a rate limit by it and offers Plus. Other bodies stay as they are.
-    const poolEmpty = error instanceof BoardApiError && error.code === CREDITS_POOL_EMPTY;
-    return localizedErrorJson(error, error.status, poolEmpty ? { code: CREDITS_POOL_EMPTY } : {});
+    return localizedErrorJson(error, error.status, error.code ? { code: error.code } : {});
   }
   logServerError(fallback, error);
   return NextResponse.json(

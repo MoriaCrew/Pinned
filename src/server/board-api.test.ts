@@ -13,6 +13,7 @@ import {
   parseConfirmPinsInput,
   resolveElementImage,
   sweepExpiredWorkingCopies,
+  sweepStaleDecomposeJobs,
   uploadPhoto,
   type BoardApiDeps,
 } from "./board-api";
@@ -768,5 +769,77 @@ describe("uploadPhoto racing a board delete (PIN-167)", () => {
       status: 404,
     });
     expect(await h.deps.jobs.listForBoard(board.slug)).toEqual([]);
+  });
+});
+
+describe("idempotent upload + stale-job sweep", () => {
+  const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+
+  it("replay with the same uploadId returns the existing job without re-running it", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const first = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    expect(first.id).toBe(UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect(first.replayed).toBeUndefined();
+    const elementsBefore = (await h.boards.listElements(board.slug)).length;
+
+    const second = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    expect(second.replayed).toBe(true);
+    expect(second.status).toBe("ready");
+    expect((await h.boards.listElements(board.slug)).length).toBe(elementsBefore);
+    expect(await h.jobs.listForBoard(board.slug)).toHaveLength(1);
+  });
+
+  it("rejects a malformed uploadId (400 bad_upload_id) and another participant's id (409)", async () => {
+    const h = makeHarness();
+    const { board, owner, other } = await makeBoardWithTwo(h);
+    await expect(
+      uploadPhoto(board.slug, owner, await photoBytes(), h.deps, "not-a-uuid"),
+    ).rejects.toMatchObject({ status: 400, code: "bad_upload_id" });
+
+    await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    await expect(
+      uploadPhoto(board.slug, other, await photoBytes(), h.deps, UPLOAD_ID),
+    ).rejects.toMatchObject({ status: 409, code: "upload_conflict" });
+  });
+
+  it("sweep fails pending and running jobs past bound + 2 x margin, and getJobView shows it", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const stale = (id: string, status: "pending" | "running") => ({
+      id,
+      boardId: board.slug,
+      participantId: owner.id,
+      status,
+      workingRef: `tmp/boards/${board.slug}/jobs/${id}/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: [],
+      pinIds: [],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await h.jobs.create(stale("stale-pending", "pending"));
+    await h.jobs.create(stale("stale-running", "running"));
+
+    // Not yet stale at T0. Still not stale past the runner's own
+    // deadline (default bound 141.5s + margin 60s = 201.5s): the
+    // sweep only fires a further margin later (261.5s), so a run
+    // that spent its AI budgets and is rendering/persisting its
+    // candidates is never swept out from under itself.
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(0);
+    h.setNow(T0 + 210_000);
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(0);
+    h.setNow(T0 + 300_000);
+    expect(await sweepStaleDecomposeJobs(board.slug, h.deps)).toBe(2);
+    for (const id of ["stale-pending", "stale-running"]) {
+      const job = await h.jobs.get(id);
+      expect(job?.status).toBe("failed");
+      expect(job?.errorCode).toBe("stale_running");
+    }
+    const view = await getJobView(board.slug, "stale-running", owner, h.deps);
+    expect(view?.job.status).toBe("failed");
   });
 });

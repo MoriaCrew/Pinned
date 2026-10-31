@@ -247,4 +247,40 @@ describe("credit ledger (PIN-147)", () => {
     copy!.balance = 999;
     expect((await store.getBalance("board-2")).balance).toBe(25);
   });
+
+  it("refundDebit re-credits a debit in full, once per debit under any event id", async () => {
+    const store = new InMemoryCreditLedgerStore();
+    await store.grantStarter(BOARD, { eventId: "s1", amount: 3, at: 1 });
+    await store.debit(BOARD, { eventId: "debit:photo:j1", amount: 1, at: 2 });
+    expect((await store.getBalance(BOARD)).available).toBe(2);
+
+    const refunded = await store.refundDebit(BOARD, {
+      eventId: "refund:photo:j1",
+      debitEventId: "debit:photo:j1",
+      at: 3,
+    });
+    expect(refunded.applied).toBe(true);
+    expect(refunded.entry).toMatchObject({
+      type: "debit_refund",
+      amount: 1,
+      balanceDelta: 1,
+      debitEventId: "debit:photo:j1",
+    });
+    expect((await store.getBalance(BOARD)).available).toBe(3);
+
+    // Same refund event id: replay no-op. Different id, same debit: still no-op.
+    expect(
+      (await store.refundDebit(BOARD, { eventId: "refund:photo:j1", debitEventId: "debit:photo:j1", at: 4 })).applied,
+    ).toBe(false);
+    expect(
+      (await store.refundDebit(BOARD, { eventId: "refund-again", debitEventId: "debit:photo:j1", at: 5 })).applied,
+    ).toBe(false);
+    expect((await store.getBalance(BOARD)).available).toBe(3);
+
+    // Unknown debit: throws, writes nothing.
+    await expect(
+      store.refundDebit(BOARD, { eventId: "refund:ghost", debitEventId: "debit:photo:ghost", at: 6 }),
+    ).rejects.toThrow(RangeError);
+    expect((await store.listEntries(BOARD)).filter((e) => e.type === "debit_refund")).toHaveLength(1);
+  });
 });

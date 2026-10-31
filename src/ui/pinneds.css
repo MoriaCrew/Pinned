@@ -336,6 +336,8 @@
 /* ---------- Dock ---------- */
 .pn-dock { display: flex; align-items: center; gap: var(--space-2); width: min(100% - 2 * var(--space-4), 440px); margin: 0 auto; padding: var(--space-2); border: var(--edge-w) solid var(--edge); border-radius: var(--dock-radius); background: var(--surface-raised); box-shadow: var(--shadow-dock); }
 .pn-dock > .pn-btn { flex: 1 1 0; padding-inline: var(--space-3); }
+/* PIN-199: long labels (de, fr, id) wrap inside the button instead of pushing the dock past the screen edge. */
+.pn-dock > .pn-btn { min-width: 0; padding-block: var(--space-2); white-space: normal; text-align: center; line-height: 1.2; text-wrap: balance; }
 .pn-dock-fixed { position: fixed; left: 0; right: 0; bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); z-index: 20; }
 .pn-tray { display: flex; flex: 1; align-items: center; gap: 6px; list-style: none; margin: 0; padding: 0; }
 .pn-tray-slot { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--line-strong); background: var(--surface-sunk); }

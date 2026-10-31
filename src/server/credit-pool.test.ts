@@ -18,6 +18,7 @@ import {
   getJobView,
   getSceneChips,
   requestScene,
+  sweepStaleDecomposeJobs,
   tapAddPin,
   uploadPhoto,
   type BoardApiDeps,
@@ -27,6 +28,7 @@ import {
   CREDITS_POOL_EMPTY,
   ensureStarterMakes,
   photoDebitEventId,
+  photoRefundEventId,
   sceneDebitEventId,
   starterEventId,
 } from "./credit-pool";
@@ -422,6 +424,211 @@ describe("photo debit (PIN-151)", () => {
     expect((await h.ledger.getBalance("old-board")).available).toBe(1);
   });
 
+  it("a lost-response replay with the same uploadId never double-debits", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+    const first = await uploadPhoto(slug, owner, await photoBytes(), h.api, UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+
+    const replay = await uploadPhoto(slug, owner, await photoBytes(), h.api, UPLOAD_ID);
+    expect(replay.replayed).toBe(true);
+    expect(replay.id).toBe(UPLOAD_ID);
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
+  it("stale sweep keeps a paid-but-unfinished job's candidates and never eats the make (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const paid = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(paid.status).toBe("ready");
+    // The debit landed, then the request died before finishing:
+    // rewind the stored job to a stale `running`.
+    await h.jobs.update({ ...paid, status: "running", updatedAt: T0 });
+    const later = { ...h.api, now: () => T0 + 300_000 };
+    expect(await sweepStaleDecomposeJobs(slug, later)).toBe(1);
+    const swept = await h.jobs.get(paid.id);
+    expect(swept?.status).toBe("failed");
+    expect(swept?.errorCode).toBe("stale_running");
+    // Paid: candidates stay confirmable, pool unchanged, no refund dance.
+    expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit_refund")).toHaveLength(0);
+
+    // Unpaid stale job with candidates: discarded like every unpaid failure.
+    const unpaidElement: Element = {
+      id: "el-unpaid",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Unpaid",
+      description: "never debited",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-unpaid/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-unpaid/flattened.png`,
+      sourcePhotoId: "job-unpaid",
+      faceFlag: false,
+      createdAt: T0,
+    };
+    await h.boards.createElement(unpaidElement);
+    await h.jobs.create({
+      id: "job-unpaid",
+      boardId: slug,
+      participantId: owner.id,
+      status: "running",
+      workingRef: `tmp/boards/${slug}/jobs/job-unpaid/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-unpaid"],
+      pinIds: ["pin-unpaid"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    expect(await sweepStaleDecomposeJobs(slug, later)).toBe(1);
+    expect(await h.boards.getElement("el-unpaid")).toBeNull();
+  });
+
+  it("an unpaid stale job left half-swept is cleaned on confirm, never pinned (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    // The sweep's fail write landed, then the request died before
+    // discarding: failed/stale_running with candidates attached
+    // and no debit in the ledger.
+    await h.boards.createElement({
+      id: "el-half",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Half swept",
+      description: "sweep died mid-cleanup",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-half/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-half/flattened.png`,
+      sourcePhotoId: "job-half",
+      faceFlag: false,
+      createdAt: T0,
+    });
+    await h.boards.createPin({
+      id: "pin-half",
+      boardId: slug,
+      elementId: "el-half",
+      pinnedBy: owner.id,
+      status: "candidate",
+      createdAt: T0,
+    });
+    await h.jobs.create({
+      id: "job-half",
+      boardId: slug,
+      participantId: owner.id,
+      status: "failed",
+      errorCode: "stale_running",
+      workingRef: `tmp/boards/${slug}/jobs/job-half/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-half"],
+      pinIds: ["pin-half"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await expect(
+      confirmPins(slug, owner, { jobId: "job-half", pinIds: ["pin-half"] }, h.api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    // The confirm retried the cleanup instead of pinning for free.
+    expect(await h.boards.getElement("el-half")).toBeNull();
+    expect((await h.jobs.get("job-half"))?.pinIds).toEqual([]);
+    expect((await h.boards.getPin("pin-half"))?.status).not.toBe("pinned");
+  });
+
+  it("a refunded stale job's leftover candidates are unpaid again and get cleaned (Bugbot #147)", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const paid = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(paid.status).toBe("ready");
+    expect(paid.pinIds.length).toBeGreaterThan(0);
+    // The lost finish refunded the make, but its discard died
+    // half-done: rewind to stale-failed with candidates attached.
+    await h.ledger.refundDebit(slug, {
+      eventId: photoRefundEventId(paid.id),
+      debitEventId: photoDebitEventId(paid.id),
+      at: T0,
+    });
+    await h.jobs.update({
+      ...paid,
+      status: "failed",
+      errorCode: "stale_running",
+      updatedAt: T0,
+    });
+    await expect(
+      confirmPins(slug, owner, { jobId: paid.id, pinIds: [paid.pinIds[0]] }, h.api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    expect(await h.boards.listElements(slug)).toHaveLength(0);
+    expect((await h.jobs.get(paid.id))?.pinIds).toEqual([]);
+    // Pool stays whole: the refund stands, nothing re-debited.
+    expect((await h.ledger.getBalance(slug)).available).toBe(3);
+  });
+
+  it("losing the stale CAS to another sweeper still runs the unpaid cleanup (Bugbot #147)", async () => {
+    // Another sweeper writes failed/stale_running first (without
+    // discarding); this confirm's stale transition loses its CAS.
+    class RacingSweeperStore extends InMemoryDecomposeJobStore {
+      private raced = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "failed" && expectedStatus === "running" && !this.raced) {
+          this.raced = true;
+          await super.update({ ...job });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    await h.boards.createElement({
+      id: "el-race",
+      boardId: slug,
+      ownerId: owner.id,
+      label: "Raced",
+      description: "never debited",
+      maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: `boards/${slug}/elements/el-race/cutout.png`,
+      flattenedRef: `boards/${slug}/elements/el-race/flattened.png`,
+      sourcePhotoId: "job-race",
+      faceFlag: false,
+      createdAt: T0,
+    });
+    await h.boards.createPin({
+      id: "pin-race",
+      boardId: slug,
+      elementId: "el-race",
+      pinnedBy: owner.id,
+      status: "candidate",
+      createdAt: T0,
+    });
+    const racing = new RacingSweeperStore();
+    await racing.create({
+      id: "job-race",
+      boardId: slug,
+      participantId: owner.id,
+      status: "running",
+      workingRef: `tmp/boards/${slug}/jobs/job-race/working.webp`,
+      promptVersion: "elements.v1",
+      elementIds: ["el-race"],
+      pinIds: ["pin-race"],
+      faceNote: false,
+      failedConceptCount: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const api: BoardApiDeps = { ...h.api, jobs: racing, now: () => T0 + 300_000 };
+    await expect(
+      confirmPins(slug, owner, { jobId: "job-race", pinIds: ["pin-race"] }, api),
+    ).rejects.toMatchObject({ name: "BoardApiError" });
+    expect(await h.boards.getElement("el-race")).toBeNull();
+    expect((await racing.get("job-race"))?.pinIds).toEqual([]);
+    expect((await h.ledger.getBalance(slug)).available).toBe(3);
+  });
+
   it("never debits a failed photo", async () => {
     const h = makeHarness(ENABLED(3));
     h.setNamer({
@@ -665,12 +872,12 @@ describe("kill flag off mid-life (PIN-151)", () => {
 describe("paid make survives a failed terminal write (PIN-151)", () => {
   class FlakyReadyPhotoStore extends InMemoryDecomposeJobStore {
     private thrown = false;
-    async update(job: DecomposeJob): Promise<void> {
+    async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
       if (job.status === "ready" && !this.thrown) {
         this.thrown = true;
         throw new Error("transient write failure");
       }
-      return super.update(job);
+      return super.update(job, expectedStatus);
     }
   }
 
@@ -695,6 +902,70 @@ describe("paid make survives a failed terminal write (PIN-151)", () => {
     expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
     expect((await h.ledger.getBalance(slug)).available).toBe(1);
     expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toHaveLength(1);
+  });
+
+  it("photo: losing the guarded finish after debiting refunds the make and drops candidates", async () => {
+    // Simulates the stale sweep winning between the debit and the
+    // ready write: the first ready update finds the stored job
+    // already failed, so its CAS on `running` must lose.
+    class SweptPhotoStore extends InMemoryDecomposeJobStore {
+      private swept = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "ready" && !this.swept) {
+          this.swept = true;
+          await super.update({ ...job, status: "failed", errorCode: "stale_running" });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(2));
+    const { slug, owner } = await boardWithOwner(h);
+    const api: BoardApiDeps = { ...h.api, jobs: new SweptPhotoStore() };
+    const job = await uploadPhoto(slug, owner, await photoBytes(), api);
+    expect(job.status).toBe("failed");
+    // Candidates were discarded with the make: nothing confirmable stays.
+    expect(await h.boards.listElements(slug)).toHaveLength(0);
+    // The make came back: debit + debit_refund, pool whole again.
+    expect((await h.ledger.getBalance(slug)).available).toBe(2);
+    const entries = await entriesOf(h, slug);
+    expect(entries.filter((e) => e.type === "debit")).toHaveLength(1);
+    expect(entries.filter((e) => e.type === "debit_refund").map((e) => e.id)).toEqual([
+      photoRefundEventId(job.id),
+    ]);
+    // The stored swept job no longer lists the discarded pins,
+    // in the returned view or in the store (Bugbot #147).
+    expect(job.pinIds).toEqual([]);
+    expect(job.elementIds).toEqual([]);
+    expect((await api.jobs.get(job.id))?.pinIds).toEqual([]);
+    expect((await api.jobs.get(job.id))?.elementIds).toEqual([]);
+  });
+
+  it("photo: a failing refund after a lost finish keeps the paid candidates (Bugbot #147)", async () => {
+    class SweptPhotoStore extends InMemoryDecomposeJobStore {
+      private swept = false;
+      async update(job: DecomposeJob, expectedStatus?: DecomposeJob["status"]): Promise<boolean> {
+        if (job.status === "ready" && !this.swept) {
+          this.swept = true;
+          await super.update({ ...job, status: "failed", errorCode: "stale_running" });
+        }
+        return super.update(job, expectedStatus);
+      }
+    }
+    const h = makeHarness(ENABLED(2));
+    const { slug, owner } = await boardWithOwner(h);
+    // The refund write itself is unavailable (ledger outage).
+    h.ledger.refundDebit = async () => {
+      throw new Error("ledger unavailable");
+    };
+    const api: BoardApiDeps = { ...h.api, jobs: new SweptPhotoStore() };
+    await expect(uploadPhoto(slug, owner, await photoBytes(), api)).rejects.toThrow(
+      "ledger unavailable",
+    );
+    // The paid make was NOT silently destroyed: candidates and the
+    // debit both survive for recovery, and no refund was recorded.
+    expect((await h.boards.listElements(slug)).length).toBeGreaterThan(0);
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit_refund")).toHaveLength(0);
   });
 
   it("scene: the ready write retries, the paid AI scene stays ready", async () => {

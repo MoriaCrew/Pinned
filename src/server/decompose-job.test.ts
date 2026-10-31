@@ -15,12 +15,15 @@ import { processPhoto } from "./photo-intake";
 import {
   InMemoryDecomposeJobStore,
   buildBoardWorkingRef,
+  decomposeBoundMs,
   isUsableMask,
   runDecomposeJob,
+  selectUsableSegment,
   startDecomposeJob,
   validateNamedElements,
   type DecomposeDeps,
 } from "./decompose-job";
+import type { DecodedSegment } from "./sam-mask";
 
 // Verbatim example record from Meta's public SAM docs (see
 // sam-mask.test.ts): a real decodable lossless mask, box
@@ -529,5 +532,137 @@ describe("board deleted mid-run (PIN-167)", () => {
     expect(await h.boards.listElements("board-1")).toEqual([]);
     expect(await h.boards.listPins("board-1")).toEqual([]);
     expect((await h.boards.listEvents("board-1")).map((e) => e.type)).toEqual(["participant_joined"]);
+  });
+});
+
+describe("deterministic upload id (idempotent start)", () => {
+  const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+
+  it("a second start with the same jobId replays: existing job, no port calls, no duplicates", async () => {
+    const h = await makeHarness();
+    const first = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    expect(first.id).toBe(UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect(first.replayed).toBeUndefined();
+
+    const second = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    expect(second.replayed).toBe(true);
+    expect(second.status).toBe("ready");
+    expect(h.calls.namer).toBe(1);
+    expect(h.calls.segmenter).toHaveLength(2);
+    expect(await h.boards.listElements("board-1")).toHaveLength(2);
+  });
+
+  it("a failed working-copy write leaves no orphaned job and a same-id retry succeeds (Bugbot #146)", async () => {
+    const h = await makeHarness();
+    class FlakyWorkingStore extends InMemoryDerivativeStore {
+      private thrown = false;
+      async put(ref: string, bytes: Uint8Array, contentType: string): Promise<void> {
+        if (ref.endsWith("working.webp") && !this.thrown) {
+          this.thrown = true;
+          throw new Error("transient storage failure");
+        }
+        return super.put(ref, bytes, contentType);
+      }
+    }
+    const deps = { ...h.deps, store: new FlakyWorkingStore() };
+    await expect(
+      startDecomposeJob(
+        { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+        deps,
+      ),
+    ).rejects.toThrow("transient storage failure");
+    // No orphaned job at all: the failed start cleaned up after
+    // itself, so nothing counts against the daily photo cap.
+    expect(await h.jobs.get(UPLOAD_ID)).toBeNull();
+    expect(h.calls.namer).toBe(0);
+
+    const recovered = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      deps,
+    );
+    expect(recovered.replayed).toBeUndefined();
+    expect(recovered.status).toBe("ready");
+    expect(await h.boards.listElements("board-1")).toHaveLength(2);
+  });
+
+  it("a failed working-copy write never deletes a job a concurrent retry already claimed (Bugbot #146)", async () => {
+    const h = await makeHarness();
+    class ClaimingFailingStore extends InMemoryDerivativeStore {
+      async put(ref: string, bytes: Uint8Array, contentType: string): Promise<void> {
+        if (ref.endsWith("working.webp")) {
+          // A same-id retry claimed the job while this write was
+          // in flight; the write then reports failure.
+          await h.jobs.claim(UPLOAD_ID, 9_999);
+          throw new Error("ambiguous storage failure");
+        }
+        return super.put(ref, bytes, contentType);
+      }
+    }
+    const deps = { ...h.deps, store: new ClaimingFailingStore() };
+    await expect(
+      startDecomposeJob(
+        { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+        deps,
+      ),
+    ).rejects.toThrow("ambiguous storage failure");
+    // The claimed job survives the failed start's cleanup.
+    expect((await h.jobs.get(UPLOAD_ID))?.status).toBe("running");
+  });
+
+  it("job-store update is compare-and-set on the expected status", async () => {
+    const h = await makeHarness();
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    // A blind `running` progress write must not resurrect the ready job.
+    const lost = await h.jobs.update({ ...job, status: "running" }, "running");
+    expect(lost).toBe(false);
+    expect((await h.jobs.get(job.id))?.status).toBe("ready");
+    const won = await h.jobs.update({ ...job, faceNote: true }, "ready");
+    expect(won).toBe(true);
+    expect((await h.jobs.get(job.id))?.faceNote).toBe(true);
+    // No expected status: unconditional replace, resolving true.
+    expect(await h.jobs.update({ ...job, faceNote: false })).toBe(true);
+  });
+
+  it("decomposeBoundMs sums Policy timeouts over attempts and SAM waves", () => {
+    // Defaults: namer 2 x 30s + 0.5s backoff; SAM ceil(6/4)=2 waves of 2 x 20s + 0.5s.
+    expect(decomposeBoundMs(resolvePolicy(null))).toBe(60_500 + 81_000);
+    expect(
+      decomposeBoundMs(resolvePolicy({ retries: 0, samConcurrency: 6 })),
+    ).toBe(30_000 + 20_000);
+  });
+
+  it("selectUsableSegment: confidence first, size tiebreak, floor and no-confidence fallback", () => {
+    const seg = (id: string, maskPixels: number, confidence?: number): DecodedSegment => ({
+      id,
+      box: { x1: 0, y1: 0, x2: 9, y2: 9 },
+      ...(confidence !== undefined ? { confidence } : {}),
+      raster: new Uint8Array(0),
+      maskWidth: 10,
+      maskHeight: 10,
+      maskPixels,
+      coverageFrame: 0.05,
+      coverageBox: 0.5,
+    });
+    const policy = resolvePolicy(null);
+    // Higher confidence beats a larger mask.
+    expect(selectUsableSegment([seg("big", 900, 0.4), seg("sure", 100, 0.9)], policy)?.id).toBe("sure");
+    // Equal confidence: larger wins.
+    expect(selectUsableSegment([seg("a", 100, 0.9), seg("b", 200, 0.9)], policy)?.id).toBe("b");
+    // No confidence anywhere (mock): largest-first, as before.
+    expect(selectUsableSegment([seg("a", 100), seg("b", 200)], policy)?.id).toBe("b");
+    // The Policy floor drops below-floor candidates.
+    const floored = resolvePolicy({ samMinConfidence: 0.5 });
+    expect(selectUsableSegment([seg("a", 900, 0.4)], floored)).toBeUndefined();
+    expect(selectUsableSegment([seg("a", 900, 0.4), seg("b", 10)], floored)?.id).toBe("b");
   });
 });

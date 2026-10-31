@@ -59,3 +59,12 @@ describe("UI kit follows the language (PIN-194)", () => {
     }
   });
 });
+
+describe("scene ideas use the language's quote marks (PIN-199)", () => {
+  it("keeps English curly quotes and switches for French", () => {
+    expect(html(h(SceneCard, { src: "/s.webp", idea: "Desk day" }))).toContain("“Desk day”");
+    expect(html(h(Developing, { stickers: [], idea: "Desk day" }))).toContain("“Desk day”");
+    expect(inFrench(h(SceneCard, { src: "/s.webp", idea: "Desk day" }))).toContain("« Desk day »");
+    expect(inFrench(h(Developing, { stickers: [], idea: "Desk day" }))).toContain("« Desk day »");
+  });
+});

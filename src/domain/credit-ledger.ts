@@ -44,6 +44,7 @@ export const CREDIT_ENTRY_TYPES = [
   "starter_grant",
   "purchase_grant",
   "debit",
+  "debit_refund",
   "clawback",
   "freeze",
   "restore",
@@ -90,6 +91,8 @@ export interface CreditLedgerEntry {
   purchaseId?: string;
   refundId?: string;
   disputeId?: string;
+  /** For debit_refund entries: the debit entry this refunds. */
+  debitEventId?: string;
   balanceAfter: number;
   frozenAfter: number;
   pendingClawbackAfter: number;
@@ -180,6 +183,11 @@ export interface PurchaseGrantInput extends CreditEventInput {
 
 export interface DebitInput extends CreditEventInput {
   amount: number;
+}
+
+export interface RefundDebitInput extends CreditEventInput {
+  /** The debit entry to refund in full; its recorded amount is re-credited. */
+  debitEventId: string;
 }
 
 export interface ClawbackInput extends CreditEventInput {
@@ -275,6 +283,7 @@ export function assertCreditAccountInvariants(account: BoardCreditAccount): void
 }
 
 interface EntryDraft {
+  debitEventId?: string;
   id: string;
   type: CreditEntryType;
   amount: number;
@@ -508,6 +517,47 @@ export function debitCredits(
  *   `frozen` is clamped to the shrunken pool.
  * Total clawbacks against one purchase never exceed its pack size.
  */
+/**
+ * Refund one applied debit in full (a make whose result could not be
+ * exposed, e.g. a decompose runner that lost its guarded finish after
+ * debiting). Idempotent two ways: by this refund's event id, and per
+ * debit — a second refund naming the same debit under any event id is
+ * a no-op. Refunding an unknown debit throws and writes nothing. The
+ * re-credit pays down pendingClawback first, like every grant.
+ */
+export function refundDebit(
+  account: BoardCreditAccount,
+  input: RefundDebitInput,
+): CreditApplyResult {
+  assertAt(input.at);
+  assertId(input.debitEventId, "debitEventId");
+  if (alreadyApplied(account, input.eventId)) return noOp(account);
+  const debit = account.entries.find(
+    (entry) => entry.type === "debit" && entry.id === input.debitEventId,
+  );
+  if (!debit) {
+    throw new RangeError(
+      `Debit ${input.debitEventId} not found on board ${account.boardId}`,
+    );
+  }
+  const alreadyRefunded = account.entries.some(
+    (entry) => entry.type === "debit_refund" && entry.debitEventId === input.debitEventId,
+  );
+  if (alreadyRefunded) return noOp(account);
+  const next = structuredClone(account);
+  const { balanceDelta, pendingClawbackDelta } = applyGrantToPool(next, debit.amount);
+  return finishWithEntry(next, {
+    id: input.eventId,
+    type: "debit_refund",
+    amount: debit.amount,
+    balanceDelta,
+    frozenDelta: 0,
+    pendingClawbackDelta,
+    debitEventId: input.debitEventId,
+    createdAt: input.at,
+  });
+}
+
 export function clawbackCredits(
   account: BoardCreditAccount,
   input: ClawbackInput,
@@ -777,6 +827,7 @@ export interface CreditLedgerStore {
   recordPurchase(boardId: string, input: RecordPurchaseInput): Promise<CreditApplyResult>;
   grantPurchase(boardId: string, input: PurchaseGrantInput): Promise<CreditApplyResult>;
   debit(boardId: string, input: DebitInput): Promise<CreditApplyResult>;
+  refundDebit(boardId: string, input: RefundDebitInput): Promise<CreditApplyResult>;
   clawback(boardId: string, input: ClawbackInput): Promise<CreditApplyResult>;
   freeze(boardId: string, input: FreezeInput): Promise<CreditApplyResult>;
   restore(boardId: string, input: RestoreInput): Promise<CreditApplyResult>;
@@ -832,6 +883,10 @@ export class InMemoryCreditLedgerStore implements CreditLedgerStore {
 
   async debit(boardId: string, input: DebitInput): Promise<CreditApplyResult> {
     return this.apply(boardId, (account) => debitCredits(account, input));
+  }
+
+  async refundDebit(boardId: string, input: RefundDebitInput): Promise<CreditApplyResult> {
+    return this.apply(boardId, (account) => refundDebit(account, input));
   }
 
   async clawback(boardId: string, input: ClawbackInput): Promise<CreditApplyResult> {
