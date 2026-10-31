@@ -148,7 +148,9 @@ host-only but answers every failure with the uniform 404
   (success) or `?billing=cancelled` (cancel). It grants nothing —
   credits arrive by webhook only (PIN-150), hence "processing".
   Unknown, expired and malformed intents all land on `/` with no
-  flag, indistinguishable from each other.
+  flag, indistinguishable from each other. It is read-only
+  (PIN-178): it never expires or closes an intent, so it
+  cannot race the webhook's grant.
 - `POST /api/boards` (create): unchanged body; additionally sets
   the host cookie. A Plus skin as the initial `themeId` is 402
   `plus_required` (a new board holds no entitlement).
@@ -305,8 +307,11 @@ keeps a corrupt state failing closed. Ledger entry types are
 `starter_grant`, `purchase_grant`, `debit`, `clawback`, `freeze`
 and `restore`, each recording gross `amount` plus the signed
 counter deltas it actually made. Purchases move
-`pending -> granted -> clawed_back`, or `pending -> closed` for an
-expired intent. Rules, all unit-tested including duplicates and
+`pending -> granted -> clawed_back`, or `pending -> closed` when
+the payment can no longer happen (since PIN-178: Stripe reported
+the session expired or its async payment failed, or the session
+was never created; an intent past its TTL alone never closes
+it). Rules, all unit-tested including duplicates and
 out-of-order events: grants are idempotent by purchase id (and
 every entry by its event id); a clawback before its grant records
 against the pending purchase so grant + clawback net to zero;
@@ -368,11 +373,20 @@ per-board pending cap (`Policy.credits.pendingIntentCapPerBoard`,
 values supplied by the caller) is enforced transactionally
 against `checkoutIntentBoards/{boardId}` (`pendingIntentIds`),
 lazily expiring stale pending intents so an abandoned tab
-cannot block a board forever. `resolvePending` answers "still
-payable" for the webhook slice and lazily expires stale intents;
-`close`/`expire` free the cap slot. No routes, Stripe calls or
-board-loop wiring landed in this slice — store selection arrived
-with PIN-149, the first slice to call these stores (below).
+cannot block a board forever. `close`/`expire` free the cap
+slot. No routes, Stripe calls or board-loop wiring landed in
+this slice — store selection arrived with PIN-149, the first
+slice to call these stores (below).
+
+Since PIN-178 the TTL only governs that cap slot. Intent status
+reads: `pending` holds a slot; `expired` means the TTL passed
+and a later buy's cap check (or `expire`) freed the slot, while
+the ledger purchase stays `pending`; `closed` is final (granted,
+or a terminal outcome). Lazy expiry never touches the ledger,
+nothing on a read path expires anything, and `close` also
+finalizes an `expired` intent, so a late grant lands on it.
+The old `resolvePending` ("still payable") call is gone: the
+webhook resolves an intent by id whatever its status.
 
 ## Stripe Checkout adapter + buy route (PIN-149)
 
@@ -414,9 +428,12 @@ Checkout Sessions create + Adaptive Pricing):
 
 - `mode: "payment"`, one line item at quantity 1 on the EUR
   base price. `expires_at` tracks the intent's expiry (floored
-  at Stripe's 30-minute minimum session life, capped under
-  its 24-hour maximum) so a session cannot be paid long after
-  its intent died; the webhook stays the grant authority.
+  at 31 minutes, just over Stripe's 30-minute minimum session
+  life, capped under its 24-hour maximum) so a board cannot
+  keep payable sessions open long after their cap slots
+  freed. A session paid in the gap after the intent's TTL
+  still grants (PIN-178); the webhook stays the grant
+  authority.
 - `adaptive_pricing: { enabled: true }` — Stripe presents the
   payer's local currency and handles conversion; the session
   still settles in EUR. This only takes effect on eligible
@@ -458,8 +475,12 @@ PIN-153 registered the endpoint, and `apphosting.dev.yaml`
 references it - PIN-150 itself shipped no reference, since a
 dangling one would break deploys). The route fails closed with 503 when
 stripe mode, the API key, or the signing secret is absent;
-400 only for a bad/missing signature; 500 only for unexpected
-store/API failures so Stripe retries them. Every handled
+413 when the declared `content-length` exceeds
+`Policy.credits.webhookMaxBytes` (1 MiB; PIN-178, checked
+before the body is read); 400 only for a bad/missing
+signature; 500 only for unexpected store/API failures so
+Stripe retries them, logged through the slug-redacting
+`logServerError`. Every handled
 decision answers 200: processed, duplicate, unhandled type,
 and every dead letter below. The service
 (`src/server/stripe-webhook.ts`) takes an injected Stripe
@@ -500,30 +521,45 @@ and dispute lifecycle pages):
   its amount/currency are the settlement values - after
   retrieving the session/PaymentIntent/charge through the
   injected client when the snapshot lacks fields). Unknown
-  intent, dead board/intent (TTL passed at event time), or
-  any mismatch writes a dead letter and grants nothing. On
-  grant the Stripe session/payment_intent/charge mapping is
-  persisted on the intent (additive fields; a conflicting
-  remap refuses) so later refund/dispute events, which carry
-  only charge/payment_intent ids, resolve back via
-  `findByStripeIds`; the intent then closes.
-- `async_payment_failed` + `expired` close (expire) the
-  intent and its ledger purchase, never grant; a purchase
-  the ledger refuses to close (e.g. partially pre-clawed)
-  dead-letters for an operator.
+  intent, a deleted board (`dead_board`), a purchase a
+  terminal event already closed (`dead_intent`), or any
+  mismatch writes a dead letter and grants nothing. The
+  intent's TTL and status do not matter (PIN-178): a paid
+  session grants whenever its ledger purchase is still
+  pending, so a payment in the 30-31 minute gap, after the
+  payer's return redirect, after another buy's cap check
+  expired the intent, or an async payment days later all
+  grant. On grant the Stripe session/payment_intent/charge
+  mapping is persisted on the intent (additive fields; a
+  conflicting remap refuses) so later refund/dispute events,
+  which carry only charge/payment_intent ids, resolve back
+  via `findByStripeIds`; the intent then closes.
+- `async_payment_failed` + `expired` are the terminal
+  events: they close the intent and its ledger purchase,
+  never grant; a purchase the ledger refuses to close (e.g.
+  partially pre-clawed) dead-letters for an operator. Stripe
+  never reports one session both expired and paid, so a paid
+  event after `expired` would dead-letter `dead_intent`.
 - Refunds claw back per-refund, never from the cumulative
   `charge.refunded`: a Refund's status transitions
   (`pending`/`requires_action` -> `succeeded`/`failed`/
   `canceled`, notified on `refund.updated`/`refund.failed`),
   so only `succeeded` refunds count, on `refund.created` or
   `refund.updated`, once per refund id.
-- Disputes: `created` freezes, `funds_withdrawn` is the
-  final clawback, `funds_reinstated` restores, and `closed`
-  restores on `won`/`warning_closed` and final-clawbacks on
-  `lost` when `funds_withdrawn` has not already done so
-  (restoring only the freeze's rounding excess then). Funds
-  reinstated after a final clawback cannot be un-clawed by
-  the ledger, so that case dead-letters as
+- Disputes freeze until Stripe reports the outcome (PIN-178).
+  Card disputes deliver `funds_withdrawn` about a second
+  after `created`, so it cannot be the final clawback:
+
+  | Event | Effect |
+  | --- | --- |
+  | `created` | freeze (ceil) |
+  | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
+  | `funds_reinstated` | restore the freeze |
+  | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
+  | `closed` `lost` | the one final clawback (floor), then restore the ceil excess |
+
+  Funds reinstated after a final clawback cannot be
+  un-clawed by the ledger, so that case dead-letters as
   `reinstated_after_final_clawback` instead of pretending.
 - Out-of-order delivery follows the PIN-147 ledger
   semantics: a refund clawed before its grant nets the grant
@@ -539,7 +575,8 @@ refunded EUR cents + makes already clawed for refunds, and
 each refund claws the difference, so partial refunds sum to
 exactly the pack with no rounding drift. Dispute freezes use
 the same ratio with `ceil` (round up protects the pool; the
-excess over the final floor amount is restored at close).
+excess over the final floor amount is restored by the
+`lost` close that claws).
 Foreign-presentment refund/dispute amounts are never
 FX-guessed: settled EUR comes from the reported
 BalanceTransaction - or, for a fresh dispute carrying no
@@ -549,17 +586,22 @@ the charge BalanceTransaction's own Stripe-reported
 counting is atomic in the intent store (`countRefund`
 prices the delta from the stored cumulative inside the
 write), and a dispute's final clawback is claimed
-atomically by whichever terminal event lands first; the
-other, in any order, only releases the freeze's ceil
-excess. When none of that reads as EUR the
+atomically by the `lost` close, so a re-delivery or a
+`funds_withdrawn` after it, in any order, never claws
+twice. When none of that reads as EUR the
 event dead-letters (`fx_unverifiable`).
 
 Durable records: `stripeWebhookEvents/{eventId}` is the
 processed-event record (written only after handling, so a
 crash retries into the ledger's own event/purchase/refund/
 dispute idempotency, and a replay after restart short-
-circuits), and `billingDeadLetters/{eventId:reason}` is the
-operator flag PIN-153 reconciliation drains - reasons include
+circuits). Since PIN-178 an event that wrote a dead letter
+gets no processed record: once the cause is fixed, the
+Dashboard's Resend re-runs the handler, and that same
+idempotency keeps the re-run from applying anything twice.
+`billingDeadLetters/{eventId:reason}` is the operator flag
+PIN-153 reconciliation drains (a re-run that dead-letters
+again keeps the one record) - reasons include
 `unknown_intent`, `dead_intent`, `dead_board`,
 `amount_mismatch`, `amount_unverifiable`, `pack_mismatch`,
 `unknown_purchase`, `unknown_mapping` (refund/dispute for a
@@ -745,7 +787,14 @@ grant), grant-no-payment (a granted purchase matching no paid
 session by intent id or by the intent's mapped Stripe
 session/payment-intent ids), dead-letters by reason (including
 `reinstated_after_final_clawback` and `fx_unverifiable`), and
-pending intents past their TTL. Board slugs print only as
+pending intents past their TTL. That last row still counts
+toward the exit code, but since PIN-178 it is a prompt to
+look, not lost money: such an intent can still grant (an
+open session in its last minute, or an async payment still
+settling); it only says no buy on that board has freed the
+slot yet and no terminal Stripe event has closed it. Check the
+session in Stripe if the row outlives the session's 24-hour
+maximum life. Board slugs print only as
 short hashes, like `usage:costs`. Exit 0 means clean; exit 1
 means anomalies exist; exit 2 is a usage/config error.
 
@@ -761,7 +810,12 @@ same cadence: a run of non-2xx deliveries means grants are
 not landing and paid-no-grant will confirm it. A paid-no-grant
 row is paid money with no makes - find the intent, read the
 dead letter for the blocking reason, fix forward, never grant
-by hand-editing the ledger. Refunds from an agent key are
+by hand-editing the ledger. Since PIN-178 the fix-forward is:
+remove the cause, then use Resend on that event in the Stripe
+Dashboard; a dead-lettered event has no processed record, so
+the handler runs again (its ledger ops are idempotent). The
+dead-letter record stays until an operator drains it.
+Refunds from an agent key are
 approval-gated in Stripe (an operator must approve the
 pending request in the Dashboard): agents only ever
 demonstrate the gate and report the pending request, they do
@@ -861,3 +915,14 @@ a genuinely unknown charge still dead-letters.
   and `src/billing/webhook-endpoint.test.ts` (exact 11-event
   list + dev URL, create/reuse/drift/wildcard plans,
   ensure-script mirror incl. the pinned API version).
+- PIN-178: `src/server/stripe-webhook.test.ts` (paid at 30:30,
+  after the return redirect, after a cap check expired the
+  intent, async success two days later all grant; paid after
+  `expired` dead-letters; won card dispute restores in full;
+  `lost` claws once in either order with `funds_withdrawn`;
+  dead letters re-run on Resend, processed events stay
+  duplicates), `src/server/checkout-intent.test.ts` (expired
+  intents close, freed slot stays freed, memory + fake
+  Firestore), `src/server/credit-checkout.test.ts` (return
+  resolver only reads) and the route's 413 + slug-redacted 500
+  log in `src/app/api/billing/stripe-webhook-routes.test.ts`.
