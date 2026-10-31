@@ -161,6 +161,28 @@ describe("runSet against a fake app", () => {
     expect(record.scenes[0].attempts.map((a) => a.status)).toEqual(["refused", "ready"]);
   });
 
+  it("retries a scene request the server failed on, and counts it as a failure only if no try works", async () => {
+    app = await startFakeApp({ sceneHttp: [503] });
+    const { run: record, failures } = await run();
+    expect(failures).toEqual([]);
+    expect(record.scenes[0].attempts.map((a) => a.status)).toEqual(["http-503", "ready"]);
+    expect(record.jobs).toBe(5);
+
+    work = makeWorkspace();
+    await app.close();
+    app = await startFakeApp({ sceneHttp: [503, 503, 503] });
+    const spent = await run();
+    expect(spent.failures).toEqual(["scene c1-street: request: HTTP 503 busy after 3 tries"]);
+  });
+
+  it("does not retry a scene the server turned down with a limit", async () => {
+    app = await startFakeApp({ sceneHttp: [429] });
+    const { run: record, failures } = await run();
+    expect(sceneRequests()).toHaveLength(1);
+    expect(failures).toEqual(["scene c1-street: request: HTTP 429 busy after 1 tries"]);
+    expect(record.scenes[0].status).toBe("http-429");
+  });
+
   it("rejects a collage from a live app, and accepts it from a mock one", async () => {
     app = await startFakeApp({ scene: [{ status: "ready", kind: "collage" }] });
     const live = await run();

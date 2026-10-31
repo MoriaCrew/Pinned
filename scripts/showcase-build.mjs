@@ -30,7 +30,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { assertLocalBase, latestPromptVersion, listPromptFiles, modelsFromEnv, readHealth, runSet } from "./showcase/driver.mjs";
+import { assertLocalBase, latestPromptVersion, listPromptFiles, missingPhotos, modelsFromEnv, readHealth, runSet } from "./showcase/driver.mjs";
 import { DEFAULT_IMAGE_CAP, generatePhotos, validatePhotoItems } from "./showcase/photos.mjs";
 import { REPO_ROOT, serveEnv, startServer } from "./showcase/serve.mjs";
 import { writeSheet } from "./showcase/sheet.mjs";
@@ -101,11 +101,9 @@ async function plan() {
   let missing = 0;
   for (const spec of specs) {
     log(`${spec.id}: ${spec.friends.length} photos, ${spec.scenes.length} scenes`);
-    for (const friend of spec.friends) {
-      if (!existsSync(path.join(photosDir, friend.photo))) {
-        missing += 1;
-        log(`  missing photo ${friend.photo}`);
-      }
+    for (const photo of missingPhotos(spec, photosDir)) {
+      missing += 1;
+      log(`  missing photo ${photo}`);
     }
   }
   log(`jobs: ${jobs.min} at least, ${jobs.max} at most (cap ${opt["max-jobs"]}); photos folder ${missing ? `is missing ${missing}` : "is complete"}`);
@@ -164,6 +162,11 @@ async function run() {
   const sceneTries = int("scene-tries", opt["scene-tries"]);
   const jobs = planJobs(specs, { sceneTries });
   if (jobs.min > maxJobs) die(`these sets need at least ${jobs.min} model jobs; --max-jobs is ${maxJobs}`);
+  // Before an earlier run's folder is moved aside: a run that cannot start must not touch it.
+  for (const spec of specs) {
+    const absent = missingPhotos(spec, photosDir);
+    if (absent.length) die(`${spec.id}: photos not found in the photos folder: ${absent.join(", ")} (see plan)`);
+  }
   let base;
   try {
     base = assertLocalBase(opt["base-url"] ?? process.env.SHOWCASE_BASE_URL ?? "http://localhost:3000", { allowRemote: opt["allow-remote-base"] });

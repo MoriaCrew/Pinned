@@ -58,6 +58,7 @@ const ELEMENTS = {
  * A fake boards API. `plan`:
  *   photo[name]  statuses the friend's successive jobs end with (default ["ready"])
  *   scene        { status, kind } the scenes end with, one entry per attempt (the last repeats)
+ *   sceneHttp    HTTP statuses the first scene requests answer with, before the normal answer
  *   mock         what /api/health says
  *   uploadError  make uploads answer 500 with a message that holds the slug
  * Returns { base, requests, close }.
@@ -115,6 +116,11 @@ export async function startFakeApp(plan = {}) {
       if (route === "POST /api/boards/:slug/pins/confirm") return json(200, {});
       if (url.pathname.includes("/elements/")) return image("image/png");
       if (route === "POST /api/boards/:slug/scenes") {
+        const status = plan.sceneHttp?.[sceneCalls];
+        if (status) {
+          sceneCalls += 1;
+          return json(status, { error: "busy" });
+        }
         const wanted = plan.scene ?? [{ status: "ready", kind: "ai" }];
         const outcome = wanted[Math.min(sceneCalls, wanted.length - 1)];
         sceneCalls += 1;

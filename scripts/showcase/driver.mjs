@@ -59,6 +59,9 @@ export const modelsFromEnv = (env) => ({
   image: env.META_MODEL_IMAGE || DEFAULT_MODELS.image,
 });
 
+/** The photo names of a set that are not in the photos folder. */
+export const missingPhotos = (spec, photosDir) => spec.friends.map((f) => f.photo).filter((photo) => !existsSync(path.join(photosDir, photo)));
+
 /** What the server says about itself (/api/health): whether models are mocked. */
 export async function readHealth(base, fetchImpl = fetch) {
   let res;
@@ -93,8 +96,8 @@ export async function runSet(spec, ctx) {
     say(`FAILED ${text}`);
   };
 
-  const missingPhotos = spec.friends.filter((f) => !existsSync(path.join(photosDir, f.photo)));
-  if (missingPhotos.length) throw new Error(`photos not found in the photos folder: ${missingPhotos.map((f) => f.photo).join(", ")}`);
+  const absent = missingPhotos(spec, photosDir);
+  if (absent.length) throw new Error(`photos not found in the photos folder: ${absent.join(", ")}`);
   mkdirSync(path.join(outDir, "photos"), { recursive: true });
 
   const t0 = Date.now();
@@ -248,8 +251,8 @@ export async function runSet(spec, ctx) {
         const tStart = Date.now();
         const posted = await api(`/api/boards/${slug}/scenes`, { method: "POST", cookie, json: { elementIds: ids, prompt: scene.prompt } });
         if (!posted.res.ok) {
-          entry.attempts.push({ status: `http-${posted.res.status}`, ms: Date.now() - tStart });
-          fail(`scene ${scene.id}: ${httpError("request", posted).message}`);
+          // Recorded as an attempt; it becomes a failure only if no later try works.
+          entry.attempts.push({ status: `http-${posted.res.status}`, error: httpError("request", posted).message, ms: Date.now() - tStart });
           refused = posted.res.status < 500;
           continue;
         }
@@ -257,6 +260,7 @@ export async function runSet(spec, ctx) {
         if (card && !ENDED.has(card.status)) {
           card = await pollUntil(`scene ${scene.id}`, async () => {
             const p = await api(`/api/boards/${slug}/scenes/${card.id}`, { cookie });
+            if (!p.res.ok) throw httpError(`scene ${scene.id} poll`, p);
             const s = p.body.scene;
             return s && ENDED.has(s.status) ? { done: true, value: s } : { done: false };
           });
@@ -276,10 +280,12 @@ export async function runSet(spec, ctx) {
       if (!result) {
         entry.status = last?.status ?? "skipped";
         entry.kind = last?.kind ?? null;
-        if (!String(last?.status).startsWith("http-")) {
-          const why = last?.status === "ready" ? `came back as ${last.kind}, not an AI scene` : `${last?.status}${last?.refusalReason ? ` (${last.refusalReason})` : ""}`;
-          fail(`scene ${scene.id}: ${why} after ${entry.attempts.length} tries`);
-        }
+        const why = last?.error
+          ? last.error
+          : last?.status === "ready"
+            ? `came back as ${last.kind}, not an AI scene`
+            : `${last?.status}${last?.refusalReason ? ` (${last.refusalReason})` : ""}`;
+        fail(`scene ${scene.id}: ${why} after ${entry.attempts.length} tries`);
         continue;
       }
       entry.status = result.status;
