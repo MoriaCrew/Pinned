@@ -126,6 +126,9 @@ describe("board scenes strip (PIN-98)", () => {
       }),
     );
     expect(out).toContain("This board is out of creations. Get Plus to keep going.");
+    // The invitation is announced as a status, not an error.
+    expect(out).toContain('role="status">This board is out of creations.');
+    expect(out).not.toContain('role="alert"');
     expect(out).toMatch(/pn-btn-primary[^>]*>Get Plus<\/button>/);
     expect(out.indexOf("Get Plus</button>")).toBeLessThan(out.indexOf("Change idea"));
     expect(out).toContain("Try again");

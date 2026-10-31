@@ -141,7 +141,8 @@ function ProblemCard({ slot }: { slot: Extract<SceneSlot, { type: "problem" }> }
     <article className="pn-print-wrap" style={{ "--t": 0 } as CSSProperties} aria-label={`${t(locale, "ui.scene")}: ${slot.idea}`}>
       <div className="pn-print">
         <div className={cx("pn-print-frame", styles.problem)} style={{ aspectRatio: slot.ratio }}>
-          <p className={styles.problemLine} role="alert">
+          {/* An invitation (a Plus action) is a status, not an error (PIN-183). */}
+          <p className={styles.problemLine} role={slot.action ? "status" : "alert"}>
             {slot.line}
           </p>
         </div>
