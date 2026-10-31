@@ -2,10 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { canDeleteCard, type PinCard } from "../../../domain/board-view";
+import {
+  applyPinFilter,
+  optionFilter,
+  serializePinFilter,
+  showsOnePerson,
+  type PinFilter,
+  type PinFilterOption,
+} from "../../../domain/pin-filter";
 import { t, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
-import { IconButton, Menu, Pin, SectionHead, cx } from "../../../ui";
+import { Button, FilterChips, IconButton, Menu, Pin, SectionHead, cx, type FilterChipItem } from "../../../ui";
 import styles from "./board.module.css";
+import type { PinFilterControls } from "./usePinFilter";
 
 export interface DeleteControls {
   /** Element whose delete is waiting for "Yes, delete". */
@@ -26,7 +35,9 @@ export interface DeleteControls {
  * unpinned candidates live in the leftovers line above the grid
  * (PIN-122), never here. Own things get a More menu whose Delete
  * asks once more (PIN-77 owner-only delete) and whose Rename opens
- * the board's rename sheet (PIN-157).
+ * the board's rename sheet (PIN-157). With `filter`, a sticky chip
+ * row (New / All / Mine / people) narrows the grid only; picks and
+ * pick numbers still come from every card (PIN-218).
  */
 export function BoardThings({
   cards,
@@ -39,7 +50,9 @@ export function BoardThings({
   onRename,
   foilPinId = null,
   showHead = true,
+  filter,
 }: {
+  /** Every card on the board: the filter narrows the grid, never the picks. */
   cards: PinCard[];
   count: number;
   meId: string | null;
@@ -52,19 +65,37 @@ export function BoardThings({
   /** Board Plus perk (PIN-111): this pin wears foil. */
   foilPinId?: string | null;
   showHead?: boolean;
+  /** PIN-218: the New / All / Mine / people row; it stays while picking. */
+  filter?: PinFilterControls;
 }) {
   const locale = useLocale();
+  const active = filter?.active ?? ALL_PINS;
+  const shown = applyPinFilter(cards, active, meId);
+  const filtered = active.kind !== "all";
   return (
     <section aria-labelledby="board-things">
       {showHead ? (
-        <SectionHead title={t(locale, "board.pins")} count={count} id="board-things" />
+        <SectionHead
+          title={t(locale, "board.pins")}
+          count={filtered ? tf(locale, "board.filterShown", { shown: shown.length, total: count }) : count}
+          id="board-things"
+        />
       ) : (
         <h2 className="pn-sr" id="board-things">
           {t(locale, "board.pins")}
         </h2>
       )}
-      <ul className={cx("pn-pins", styles.pins)}>
-        {cards.filter((card) => card.status === "pinned").map((card) => {
+      {filter && filter.options.length > 0 ? <PinFilterRow filter={filter} /> : null}
+      {filtered && shown.length === 0 && filter ? (
+        <div className={styles.filterEmpty}>
+          <p className={styles.quietLine}>{t(locale, "board.filterEmpty")}</p>
+          <Button size="sm" onClick={() => filter.onChange(ALL_PINS)}>
+            {t(locale, "board.filterShowAll")}
+          </Button>
+        </div>
+      ) : null}
+      <ul className={cx("pn-pins", styles.pins, showsOnePerson(active) && "pn-pins-solo")}>
+        {shown.map((card) => {
           const owner = { id: card.ownerId, name: card.ownerName ?? t(locale, "board.someone") };
           const pickIndex = pickNumbers.get(card.pinId);
           const mine = canDeleteCard(card, meId);
@@ -86,6 +117,44 @@ export function BoardThings({
         })}
       </ul>
     </section>
+  );
+}
+
+const ALL_PINS: PinFilter = { kind: "all" };
+
+/** The filter row's chips from the domain's options (PIN-218). */
+export function filterChipItems(locale: Locale, options: readonly PinFilterOption[]): FilterChipItem[] {
+  return options.map((option) => {
+    const id = serializePinFilter(optionFilter(option));
+    switch (option.kind) {
+      case "new":
+        return { id, label: t(locale, "board.filterNew"), count: option.count, tone: "new" as const };
+      case "all":
+        return { id, label: t(locale, "board.filterAll"), count: option.count };
+      case "mine": {
+        const label = t(locale, "board.filterMine");
+        return { id, label, count: option.count, person: { id: option.participantId, name: label } };
+      }
+      case "person": {
+        const label = option.name ?? t(locale, "board.someone");
+        return { id, label, count: option.count, person: { id: option.participantId, name: label } };
+      }
+    }
+  });
+}
+
+function PinFilterRow({ filter }: { filter: PinFilterControls }) {
+  const locale = useLocale();
+  return (
+    <FilterChips
+      label={t(locale, "board.filterLabel")}
+      items={filterChipItems(locale, filter.options)}
+      selectedId={serializePinFilter(filter.active)}
+      onSelect={(id) => {
+        const option = filter.options.find((o) => serializePinFilter(optionFilter(o)) === id);
+        if (option) filter.onChange(optionFilter(option));
+      }}
+    />
   );
 }
 

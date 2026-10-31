@@ -41,10 +41,38 @@ Principles:
 ## UI kit
 
 - `src/ui/` holds the components (`import { … } from "../ui"`):
-  Icon (21 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Icon (23 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
-  CreditLine, SceneCard, Developing, BoardHeader, SectionHead, Dock,
-  Sheet, EmptyState, Menu, SkinPicker, TryOnBar, PlusSheet.
+  CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
+  FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,
+  PlusSheet, Composer.
+- `FilterChips` (PIN-218) is the board's pin filter row under the
+  Pins head: New (pins from others since your last visit) · All ·
+  Mine · one chip per person with pins, most recently active first.
+  It sticks to the top while the grid scrolls, scrolls sideways,
+  and each chip is a 44px `aria-pressed` toggle with its count; a
+  person chip is their colour dot and their name cut at 14ch (the
+  full name is spoken). The row is left out when no chip would
+  narrow the grid; one person's pins hide the owner line. It only
+  filters the grid: picks, the tray and pruning use every pin. The
+  choice lasts for the tab (sessionStorage); "last visit" is the
+  newest pin time seen, saved to localStorage when the page is
+  hidden or left (`src/domain/pin-filter.ts`,
+  `src/app/g/[slug]/usePinFilter.ts`).
+- `Composer` (PIN-216) is the Make sheet's foot, shaped like a chat
+  box: a field that grows from one line to four (then scrolls), the
+  mic inside it on the right, and the labelled "Make it" beside it
+  (Enter sends, Shift+Enter is a new line, never during IME
+  composition). Recording draws over the field (dot, elapsed / the
+  Policy clip cap) without resizing it, and the mic turns into Stop
+  in place. The count shows only near `scenePromptMaxChars`. Above
+  it: the picks as 40px stickers (tap one to drop it, "+" back to
+  picking) and the ideas as one sideways-scrolling chip row; chips
+  generated for the picks join after the fixed ones, behind a
+  "Finding more ideas" chip, and a chip wears a sticker only when it
+  names that pick. While the phone keyboard is open the sheet rides
+  just above it and the middle scrolls in less height (PIN-226,
+  `Sheet keyboardAware`, `src/ui/use-keyboard-inset.ts`).
 - `src/ui/pinneds.css` (loaded by the root layout) styles them. Each
   skin's look (display face, sticker keyline/shadow/tilt, name-tag
   style, button and print shape, ground pattern, band) is a set of
@@ -236,5 +264,9 @@ No pins yet: three dashed ghost outlines.
 | Oct 30 | A thing's name tag wraps to up to 3 lines, "…" only past that (PIN-164) | One line cut most names after ~9 letters in the wide uppercase looks |
 | Oct 31 | One purchase replaces the Plus plans and makes packs: €2.99 once per board for Plus + 20 creations, bought by any joined member for the board; free pool 5; members change the look once the board has Plus; no host plan sold (PIN-181; supersedes the Oct 29 Plus row) | One clear thing to buy; guests never have to pay, and anyone who wants more can give it to the board |
 | Oct 31 | One Board Plus sheet is the only screen that asks for money: the perks plus one €2.99 purchase (Plus + 20 creations) for the board, through the credits checkout; no plan cards, no Host plan, no separate "Add makes" sheet; makes are called "creations" in the UI (PIN-182) | One clear thing to buy and one word for what it buys; any member can give it to the board, and nobody sees a price list |
+| Oct 31 | The Make sheet is a chat-style composer: mic and Stop are icon buttons inside the field (the chat convention, an exception to "icon-only for close, share, more"), "Make it" stays labelled; ideas are one scrolling row; tapping a pressed chip takes it back out (PIN-216) | Robin: the mic below the field felt awkward; the old sheet overflowed a 390x844 phone and wiped typed text |
 | Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |
+| Oct 31 | Busy boards get a sticky filter row above the pins (New / All / Mine / people) instead of reordering or paging the grid; the grid stays oldest first (PIN-218) | 100+ pins from 18 people is 40 rows; finding your own or a friend's pins, or what is new, should take one tap, and polling must never reshuffle the grid |
 | Oct 31 | When a page throws, visitors get the Paper dead end "Something came unpinned." with Try again and Go home, never the error, its message or digest; `global-error` carries the same screen when the root layout itself fails (PIN-212) | Judges and first-time visitors never see Next's bare "Application error"; same quiet look as not-found, one primary action |
+| Oct 31 | The Make sheet rides above the phone keyboard; measured, not configured: a `visualViewport` hook sets `--pn-keyboard-inset` on the sheet (0 with the keyboard closed or while pinch-zoomed), which lifts it and takes the same height off its scrolling middle; no glide under reduced motion; the root viewport keeps the default `interactive-widget` (PIN-226) | iOS Safari and Chrome on Android lay the keyboard over the page, so it covered the field and Make it while typing; changing the viewport would move every page on Android |
+| Oct 31 | Name tags never auto-hyphenate (`hyphens: manual`); a pin's owner name ends with "…" when it does not fit, full name in `title`; the picking dock's tray slots shrink (44px down to about 34px) so a long Next label never leaves the dock (PIN-225) | Spark names things in English and owners can rename in any language, but the browser hyphenates by the page language ("Pot-ted Succulent" in fr and de); es "Siguiente" and de "Weiter" pushed the Next button past the dock edge at 390px |

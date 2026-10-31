@@ -55,12 +55,21 @@ export function selectedCards(
 }
 
 const charCount = (value: string) => [...value].length;
+const lower = (value: string) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+
+/** A chip shows pressed while the idea holds its words, in any case (PIN-216). */
+export function chipInPrompt(prompt: string, chip: string): boolean {
+  const needle = lower(chip);
+  return needle.length > 0 && lower(prompt).includes(needle);
+}
 
 /**
- * A chip fills an empty prompt, swaps a prompt that is just
- * another chip, or extends a typed idea ("a picnic" + chip ->
- * "a picnic floating in space"). A chip already in the text, or
- * one that would bust Policy.scenePromptMaxChars, changes nothing.
+ * A chip tap (PIN-70, PIN-216): fills an empty idea, swaps an idea
+ * that is just an earlier chip, else joins with ", " ("a picnic" +
+ * chip -> "a picnic, floating in space"). Tapping a pressed chip takes
+ * it back out when it is the idea or one comma part of it; words typed
+ * around it are never touched. Busting Policy.scenePromptMaxChars
+ * changes nothing.
  */
 export function applyChip(
   prompt: string,
@@ -69,23 +78,72 @@ export function applyChip(
   maxChars: number,
 ): string {
   const current = prompt.trim();
-  if (!current) return charCount(chip) <= maxChars ? chip : prompt;
-  if (chips.includes(current)) return charCount(chip) <= maxChars ? chip : prompt;
-  if (current.includes(chip)) return prompt;
-  const joined = `${current} ${chip}`;
-  return charCount(joined) <= maxChars ? joined : prompt;
+  const fits = (next: string) => (charCount(next) <= maxChars ? next : prompt);
+  if (!current) return fits(chip);
+  if (lower(current) === lower(chip)) return "";
+  if (chips.some((known) => lower(known) === lower(current))) return fits(chip);
+  if (chipInPrompt(current, chip)) {
+    const parts = current.split(/\s*,\s*/);
+    const kept = parts.filter((part) => lower(part) !== lower(chip));
+    return kept.length < parts.length ? kept.join(", ") : prompt;
+  }
+  return fits(joinIdea(current, chip));
+}
+
+/** Adds words to the end of an idea: ", " between parts, one space after . ! or ? (PIN-216). */
+function joinIdea(current: string, addition: string): string {
+  const base = current.trim().replace(/[\s,;]+$/, "");
+  if (!base) return addition;
+  return `${base}${/[.!?]$/.test(base) ? " " : ", "}${addition}`;
 }
 
 /**
- * Sticker thumbnail for each idea chip (PIN-100): chip i wears the
- * i-th picked thing, wrapping round (i mod n). Picks that share an
- * image count once, and with fewer than two distinct stickers every
- * chip would carry the same thumbnail, which reads as noise, so no
- * chip gets one. Result is parallel to `chips`.
+ * The idea row (PIN-216): the fixed Policy chips first, then the
+ * chips generated for these picks after them, so a late arrival
+ * never moves a chip under the thumb.
  */
+export function ideaChips(fixed: readonly string[], current: readonly string[]): string[] {
+  return [...new Set([...fixed, ...current])];
+}
+
+const isWordChar = (ch: string | undefined) => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
+
+/**
+ * A chip's sticker (PIN-216): the first pick whose name the chip
+ * says as whole words, in any case; a chip that names no pick gets
+ * no thumbnail.
+ */
+export function chipThumb(chip: string, cards: readonly PinCard[]): string | undefined {
+  const text = lower(chip);
+  const names = (label: string) => {
+    const needle = lower(label);
+    for (let at = needle ? text.indexOf(needle) : -1; at >= 0; at = text.indexOf(needle, at + 1)) {
+      if (!isWordChar(text[at - 1]) && !isWordChar(text[at + needle.length])) return true;
+    }
+    return false;
+  };
+  return cards.find((card) => names(card.element.label))?.element.imageUrl;
+}
+
+/**
+ * Display, not Policy: the idea's "n/max" count shows from this share
+ * of Policy.scenePromptMaxChars, so it only speaks near the limit.
+ */
+export const PROMPT_COUNT_FROM = 0.8;
+
+export function promptCountVisible(prompt: string, maxChars: number): boolean {
+  return charCount(prompt) >= Math.floor(maxChars * PROMPT_COUNT_FROM);
+}
+
+/** Recording clock "m:ss" (PIN-216), for elapsed and the Policy clip cap. */
+export function clipClock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
 /**
  * Append a dictated transcript to the idea (PIN-119): fills an
- * empty prompt, else joins with one space. A trailing full stop
+ * empty prompt, else joins like a chip does (PIN-216). A trailing full stop
  * on the transcript drops (idea fragments read better without),
  * and text that would bust Policy.scenePromptMaxChars is cut at
  * the cap rather than rejected — the words already typed win.
@@ -97,18 +155,10 @@ export function appendDictation(
 ): string {
   const spoken = transcript.replace(/\s+/g, " ").trim().replace(/[.!\s]+$/, "");
   if (!spoken) return prompt;
-  const current = prompt.trim();
-  const joined = current ? `${current} ${spoken}` : spoken;
-  return [...joined].slice(0, Math.max(0, maxChars)).join("");
-}
-
-export function chipThumbs(
-  chips: readonly string[],
-  cards: readonly PinCard[],
-): (string | undefined)[] {
-  const sources = [...new Set(cards.map((card) => card.element.imageUrl))];
-  if (sources.length < 2) return chips.map(() => undefined);
-  return chips.map((_, index) => sources[index % sources.length]);
+  const joined = joinIdea(prompt, spoken);
+  const cut = [...joined].slice(0, Math.max(0, maxChars)).join("");
+  // A cut never leaves a dangling ", " behind.
+  return cut === joined ? cut : cut.replace(/[\s,]+$/, "");
 }
 
 /** Stable identity of a pick set for generated chips (PIN-75). */
