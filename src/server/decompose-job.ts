@@ -281,11 +281,11 @@ export async function startDecomposeJob(
   }
   // Only the stripped derivative is ever written; input.bytes (the
   // original upload) is not stored anywhere (privacy invariant). A
-  // failed write still runs the job, which fails it cleanly as
-  // working_copy_missing instead of stranding a pending job.
-  await deps.store
-    .put(workingRef, processed.derivative, processed.contentType)
-    .catch(() => undefined);
+  // failed write propagates (the upload 500s) and leaves the job
+  // pending on purpose: a same-id retry recovers it through the
+  // pending path above, instead of a terminal working_copy_missing
+  // job that the same uploadId could never retry past.
+  await deps.store.put(workingRef, processed.derivative, processed.contentType);
   return runDecomposeJob(jobId, runDeps);
 }
 

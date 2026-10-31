@@ -555,4 +555,36 @@ describe("deterministic upload id (idempotent start)", () => {
     expect(h.calls.segmenter).toHaveLength(2);
     expect(await h.boards.listElements("board-1")).toHaveLength(2);
   });
+
+  it("a failed working-copy write leaves the job pending and a same-id retry recovers it (Bugbot #146)", async () => {
+    const h = await makeHarness();
+    class FlakyWorkingStore extends InMemoryDerivativeStore {
+      private thrown = false;
+      async put(ref: string, bytes: Uint8Array, contentType: string): Promise<void> {
+        if (ref.endsWith("working.webp") && !this.thrown) {
+          this.thrown = true;
+          throw new Error("transient storage failure");
+        }
+        return super.put(ref, bytes, contentType);
+      }
+    }
+    const deps = { ...h.deps, store: new FlakyWorkingStore() };
+    await expect(
+      startDecomposeJob(
+        { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+        deps,
+      ),
+    ).rejects.toThrow("transient storage failure");
+    // Not terminally failed: the pending job is recoverable.
+    expect((await h.jobs.get(UPLOAD_ID))?.status).toBe("pending");
+    expect(h.calls.namer).toBe(0);
+
+    const recovered = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      deps,
+    );
+    expect(recovered.replayed).toBe(true);
+    expect(recovered.status).toBe("ready");
+    expect(await h.boards.listElements("board-1")).toHaveLength(2);
+  });
 });
