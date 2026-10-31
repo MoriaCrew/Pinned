@@ -275,6 +275,11 @@ export class MetaGateway implements ModelGateway {
     promptText?: string;
     maskEncoding?: "lossless" | "one_bit";
     includeConfidence?: boolean;
+    /**
+     * Policy samStore (PIN-213). Undefined sends no `store` key at
+     * all (the pre-PIN-213 wire format); a boolean is sent as given.
+     */
+    store?: boolean;
     timeoutMs?: number;
   }): Promise<{ segments: SamSegment[] }> {
     const metadata: Record<string, string> = {};
@@ -282,6 +287,7 @@ export class MetaGateway implements ModelGateway {
     if (input.includeConfidence) metadata.include_confidence = "true";
     const json = await this.request("segmentObject", this.options.samModel, "/responses", {
       model: this.options.samModel,
+      ...(input.store === undefined ? {} : { store: input.store }),
       ...(Object.keys(metadata).length ? { metadata } : {}),
       input: [
         {
@@ -328,11 +334,6 @@ export class MetaGateway implements ModelGateway {
     return sceneImageOutcome(json.output);
   }
 
-  /**
-   * Spark suggestion chips (prompts/chips.v1.md, PIN-75): one
-   * small text-only chat call. Labels travel as JSON data, never
-   * instructions; limits arrive from Policy via the port input.
-   */
   /**
    * Muse Voice file transcription (PIN-119, meta-model-cookbook
    * 06_muse_voice transcribe_recording): POST /asr/transcribe as
@@ -415,6 +416,12 @@ export class MetaGateway implements ModelGateway {
     };
   }
 
+  /**
+   * Spark suggestion chips (prompts/chips.v2.md, PIN-75/PIN-214):
+   * one small text-only chat call. The system prompt names the
+   * request's language; labels travel as JSON data, never
+   * instructions; limits arrive from Policy via the port input.
+   */
   async suggestChips(input: SuggestChipsInput): Promise<string[]> {
     const out = await this.chatJson(
       "suggestChips",

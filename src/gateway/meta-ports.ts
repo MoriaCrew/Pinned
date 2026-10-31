@@ -82,6 +82,7 @@ export function metaSegmenter(gateway: MetaGateway): Segmenter {
           promptText: promptText.value,
           maskEncoding: input.maskEncoding,
           includeConfidence: input.includeConfidence,
+          store: input.store,
           timeoutMs: input.timeoutMs,
         });
         return { status: "ready", value: { segments } };

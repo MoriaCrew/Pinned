@@ -123,6 +123,40 @@ describe("MetaGateway (contract, fake fetch)", () => {
     expect(out.segments).toHaveLength(2);
   });
 
+  it("SAM body carries no `store` key unless Policy samStore says so (PIN-213)", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const gw = gateway(fakeFetch((_url, init) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return { output_text: "" };
+    }) as typeof fetch);
+    const base = { imageRef: "https://x/a.jpg", concept: "mug", includeConfidence: true };
+
+    // Default: field omitted, wire format unchanged (also with an explicit undefined).
+    await gw.segmentObject(base);
+    await gw.segmentObject({ ...base, store: undefined });
+    for (const body of bodies) expect(Object.keys(body)).not.toContain("store");
+
+    // Flag false / true: sent as given, alongside the existing keys.
+    bodies.length = 0;
+    await gw.segmentObject({ ...base, store: false });
+    await gw.segmentObject({ ...base, store: true });
+    expect(bodies[0]).toMatchObject({
+      model: "sam-3.1",
+      store: false,
+      metadata: { include_confidence: "true" },
+    });
+    expect(bodies[1].store).toBe(true);
+    expect(Array.isArray(bodies[0].input)).toBe(true);
+
+    // Only the `store` key differs from the default body.
+    bodies.length = 0;
+    await gw.segmentObject(base);
+    await gw.segmentObject({ ...base, store: false });
+    const { store: _sent, ...withoutStore } = bodies[1];
+    expect(_sent).toBe(false);
+    expect(withoutStore).toEqual(bodies[0]);
+  });
+
   it("SAM empty output_text is a valid no-match, not an error", async () => {
     const gw = gateway(fakeFetch(() => ({ output: [{ content: [{ type: "output_text", text: "" }] }] })) as typeof fetch);
     await expect(gw.segmentObject({ imageRef: "https://x/a.jpg", concept: "mug" })).resolves.toEqual({

@@ -62,7 +62,13 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.chipsCacheTtlHours).toBe(24);
     expect(DEFAULT_POLICY.chipsMax).toBe(4);
     expect(DEFAULT_POLICY.maxTokens.sparkChips).toBe(1200);
-    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v1");
+    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v2");
+    // PIN-214 fixed idea chips: Policy keeps the count, the text is i18n.
+    expect(DEFAULT_POLICY.sceneChipsCount).toBe(4);
+    expect(DEFAULT_POLICY).not.toHaveProperty("sceneChips");
+    expect(resolvePolicy(null, { sceneChipsCount: 2 }).sceneChipsCount).toBe(2);
+    expect(resolvePolicy({ sceneChipsCount: 0 }).sceneChipsCount).toBe(0);
+    for (const bad of [-1, 1.5]) expect(() => resolvePolicy({ sceneChipsCount: bad })).toThrow();
     // PIN-117 tap-name crop pass: own counter, token budget, prompt.
     expect(DEFAULT_POLICY.tapNamesPerParticipantPerDay).toBe(100);
     expect(DEFAULT_POLICY.maxTokens.sparkTapName).toBe(1200);
@@ -100,6 +106,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.boardDeletePerIp).toEqual({ limit: 60, windowMs: 600_000 });
     expect(resolvePolicy({ boardDeletePerIp: { limit: 5 } }).boardDeletePerIp).toEqual({ limit: 5, windowMs: 600_000 });
     expect(() => resolvePolicy({ boardDeletePerIp: { windowMs: 0 } })).toThrow();
+    // PIN-205: the board-create brake moved here from RATE_LIMITS, same values.
+    expect(DEFAULT_POLICY.boardCreatePerIp).toEqual({ limit: 10, windowMs: 3_600_000 });
+    expect(resolvePolicy({ boardCreatePerIp: { limit: 50 } }).boardCreatePerIp).toEqual({ limit: 50, windowMs: 3_600_000 });
+    expect(() => resolvePolicy({ boardCreatePerIp: { limit: 0 } })).toThrow();
     // PIN-212 HSTS life: a year by default, the env layer can change it, 0 fails closed.
     expect(DEFAULT_POLICY.hstsMaxAgeDays).toBe(365);
     expect(resolvePolicy({ hstsMaxAgeDays: 30 }).hstsMaxAgeDays).toBe(30);
@@ -135,6 +145,29 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(() =>
       resolvePolicy({ usableMaskFrameFraction: { min: 0.7, max: 0.6 } }),
     ).toThrow();
+  });
+
+  it("samStore (PIN-213): default omits the field; env and board layers flip it; bad types fail closed", () => {
+    // Default = today's wire format: the key is absent, not false.
+    expect(DEFAULT_POLICY.samStore).toBeUndefined();
+    expect(resolvePolicy(null).samStore).toBeUndefined();
+    expect(resolvePolicy(null, {}).samStore).toBeUndefined();
+    // Env layer (POLICY_OVERRIDES_JSON) sets it globally.
+    const env = parsePolicyOverridesJson('{"samStore": false}');
+    expect(resolvePolicy(env).samStore).toBe(false);
+    // Per-board override works with no env layer (the dev probe path)...
+    expect(resolvePolicy(null, { samStore: false }).samStore).toBe(false);
+    // ...and beats the env layer in both directions.
+    expect(resolvePolicy({ samStore: false }, { samStore: true }).samStore).toBe(true);
+    expect(resolvePolicy({ samStore: true }, { samStore: false }).samStore).toBe(false);
+    // A board override that omits the key leaves the env value alone.
+    expect(resolvePolicy({ samStore: false }, { faces: "allow" }).samStore).toBe(false);
+    // It is independent of the scene flag.
+    expect(resolvePolicy(null, { samStore: false }).sceneStore).toBe(false);
+    for (const bad of ["false", 0, null]) {
+      expect(() => resolvePolicy({ samStore: bad as never })).toThrow();
+      expect(() => resolvePolicy(null, { samStore: bad as never })).toThrow();
+    }
   });
 
   it("merge order is defaults < env < board, deep for nested", () => {

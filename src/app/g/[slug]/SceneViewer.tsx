@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
-import { viewerEscapeTarget } from "../../../domain/scene-viewer";
+import { isAiScene, viewerEscapeTarget } from "../../../domain/scene-viewer";
 import { t, tf } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { Button, CreditLine, IconButton, Menu, cx } from "../../../ui";
@@ -107,6 +107,8 @@ export function SceneViewer({
           <IconButton icon="close" label={t(locale, "ui.close")} variant="ghost" onClick={onClose} />
         </div>
         <CreditLine items={slot.credits} remixOf={slot.remixOf} className={styles.viewerCredits} />
+        {/* PIN-222: AI scenes only; a collage already says what it is. */}
+        {isAiScene(slot.kind) ? <p className={styles.viewerComposed}>{t(locale, "ui.sceneComposedBy")}</p> : null}
         {confirmDelete ? (
           // In the actions row's place, inside the panel's flow: never over the idea and Close.
           <div className={styles.viewerConfirm} role="group" aria-labelledby={confirmId}>

@@ -23,6 +23,21 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   id: "Bahasa Indonesia",
 };
 
+/**
+ * Each language's English name, for AI prompts that must answer in
+ * it (PIN-214, prompts/chips.v2.md). Same variants as the UI
+ * translations: Latin American Spanish, Brazilian Portuguese.
+ */
+export const LOCALE_ENGLISH_NAMES: Record<Locale, string> = {
+  en: "English",
+  fr: "French",
+  es: "Latin American Spanish",
+  "pt-BR": "Brazilian Portuguese",
+  de: "German",
+  it: "Italian",
+  id: "Indonesian",
+};
+
 /** Old or alternate primary subtags that mean one of ours ("in" is Indonesian on older Android). */
 const BASE_ALIASES: Readonly<Record<string, string>> = { in: "id" };
 

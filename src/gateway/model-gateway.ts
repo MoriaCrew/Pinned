@@ -35,5 +35,7 @@ export interface ModelGateway {
     promptText?: string;
     maskEncoding?: "lossless" | "one_bit";
     includeConfidence?: boolean;
+    /** Policy samStore (PIN-213): omitted from the body when undefined. */
+    store?: boolean;
   }): Promise<{ segments: SamSegment[] }>;
 }
