@@ -590,10 +590,17 @@ refuse: fail closed, never gift a make.
 (`Policy.credits.starterMakes`, default 25) is granted by
 board creation when credits are on, under the deterministic
 ledger event id `starter:{boardId}`; it never blocks creation.
-Pre-existing boards get it lazily on the first credit touch —
-a board-view balance read, a photo preflight or a scene run —
-through the ledger's once-only `grantStarter`, so any number
-of touches and replays still grant exactly once.
+Every later credit touch — a board-view balance read (each
+5-second poll), a photo preflight, a scene run or a make's
+debit — first reads the account head with `getBalance`: one
+`creditAccounts/{boardId}` doc read, no transaction, no
+`purchases`/`entries` read (PIN-179). Only a missing head or
+`starterGranted: false` (a board that predates the flag, or a
+failed grant at creation) runs the ledger's transactional,
+once-only `grantStarter` and then re-reads the head. So a
+granted board's poll costs one document read whatever the
+ledger size, and any number of concurrent first touches and
+replays still grant exactly once.
 
 **What a make is.** Exactly one successful AI production:
 
@@ -656,8 +663,13 @@ ledger writes; starter once at create/lazy/replay; debit on
 photo and AI-scene success only; no debit on failure, refusal,
 collage or riders; pool-empty photo/scene lanes; the photo
 drain and concurrent scene last-make races; kill flag off
-mid-life) plus the `credits.enabled` cases in
-`src/policy/policy.test.ts`.
+mid-life; PIN-179 head-only polls and makes, concurrent first
+touches) plus the `credits.enabled` cases in
+`src/policy/policy.test.ts`. The PIN-179 cost contract (a
+granted board's read is one head-doc get with no transaction;
+concurrent first touches grant once; replay after reload) runs
+against the fake Firestore in
+`src/server/firestore-credit-ledger-store.test.ts`.
 
 ## Makes UI (PIN-152)
 

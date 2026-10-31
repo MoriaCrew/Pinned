@@ -1,6 +1,15 @@
 import type { Firestore } from "@google-cloud/firestore";
 import { describe, expect, it } from "vitest";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
+import { resolvePolicy } from "../policy/policy";
+import {
+  ensureStarterMakes,
+  photoDebitEventId,
+  readAvailableMakes,
+  starterEventId,
+  tryDebitMake,
+  type CreditPoolDeps,
+} from "./credit-pool";
 import { FirestoreCreditLedgerStore } from "./firestore-credit-ledger-store";
 
 /**
@@ -10,7 +19,10 @@ import { FirestoreCreditLedgerStore } from "./firestore-credit-ledger-store";
  * serialized through a lock (the observable guarantee real
  * Firestore gives via contention + retry — the loser's callback
  * re-reads committed state). Subcollections are plain path
- * prefixes; only whole-collection gets are exercised.
+ * prefixes; only whole-collection gets are exercised. Every get
+ * is logged (`reads`: a doc path, or `<collection>/*` for a
+ * whole-collection get) and transactions are counted, so the
+ * PIN-179 cost contract is observable.
  */
 type Data = Record<string, unknown>;
 
@@ -33,6 +45,7 @@ class FakeDocRef {
     readonly path: string,
   ) {}
   async get(): Promise<FakeSnapshot> {
+    this.db.reads.push(this.path);
     return new FakeSnapshot(this, this.db.store.get(this.path));
   }
   applySet(data: Data): void {
@@ -55,6 +68,7 @@ class FakeCollection {
     return new FakeDocRef(this.db, `${this.path}/${id}`);
   }
   async get(): Promise<{ docs: FakeSnapshot[] }> {
+    this.db.reads.push(`${this.path}/*`);
     const prefix = `${this.path}/`;
     const docs = [...this.db.store.entries()]
       .filter(
@@ -83,12 +97,19 @@ class FakeTransaction {
 
 class FakeFirestore {
   readonly store = new Map<string, Data>();
+  reads: string[] = [];
+  transactions = 0;
   private lock: Promise<unknown> = Promise.resolve();
 
+  resetCounts(): void {
+    this.reads = [];
+    this.transactions = 0;
+  }
   collection(name: string): FakeCollection {
     return new FakeCollection(this, name);
   }
   async runTransaction<T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> {
+    this.transactions += 1;
     const run = async () => {
       const writes: (() => void)[] = [];
       const result = await fn(new FakeTransaction(writes));
@@ -129,6 +150,7 @@ describe("FirestoreCreditLedgerStore (PIN-148, fake Firestore)", () => {
       balance: 0,
       frozen: 0,
       pendingClawback: 0,
+      starterGranted: false,
       available: 0,
     });
     expect(await store.listEntries("ghost")).toEqual([]);
@@ -274,5 +296,143 @@ describe("FirestoreCreditLedgerStore (PIN-148, fake Firestore)", () => {
     ).toEqual(["creditAccounts/board-2/entries/evt-starter-2"]);
     expect(await store.getAccount("never-touched")).toBeNull();
     expect(fake.store.has("creditAccounts/never-touched")).toBe(false);
+  });
+});
+
+const HEAD = `creditAccounts/${BOARD}`;
+
+function poolDeps(
+  store: FirestoreCreditLedgerStore,
+  enabled = true,
+): CreditPoolDeps {
+  return {
+    credits: store,
+    policy: resolvePolicy({ credits: { enabled, starterMakes: 25 } }),
+    now: () => 1_000,
+  };
+}
+
+async function starterEntries(store: FirestoreCreditLedgerStore) {
+  return (await store.listEntries(BOARD)).filter((e) => e.type === "starter_grant");
+}
+
+describe("cheap balance read (PIN-179, fake Firestore)", () => {
+  it("getBalance on a granted board is one head-doc get: no transaction, no subcollection read", async () => {
+    const { fake, store } = makeStore();
+    await store.grantStarter(BOARD, { eventId: "e-starter", amount: 25, at: 1 });
+    await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 60 });
+    await store.grantPurchase(BOARD, { eventId: "e-grant", purchaseId: "p1", at: 2 });
+    await store.freeze(BOARD, { eventId: "e-freeze", purchaseId: "p1", disputeId: "dp-1", amount: 10, at: 3 });
+    await store.debit(BOARD, { eventId: "e-debit", amount: 5, at: 4 });
+    fake.resetCounts();
+
+    expect(await store.getBalance(BOARD)).toEqual({
+      boardId: BOARD,
+      balance: 80,
+      frozen: 10,
+      pendingClawback: 0,
+      starterGranted: true,
+      available: 70,
+    });
+    expect(fake.transactions).toBe(0);
+    expect(fake.reads).toEqual([HEAD]);
+  });
+
+  it("board polls on a granted board cost one head read each and no ledger transaction", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store);
+    await ensureStarterMakes(BOARD, deps); // the create-board path
+    fake.resetCounts();
+
+    for (let i = 0; i < 3; i += 1) {
+      expect(await readAvailableMakes(BOARD, deps)).toBe(25);
+    }
+    expect(fake.transactions).toBe(0);
+    expect(fake.reads).toEqual([HEAD, HEAD, HEAD]);
+  });
+
+  it("a never-touched board gets the starter exactly once under concurrent first touches", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store);
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => readAvailableMakes(BOARD, deps)),
+    );
+    expect(results).toEqual([25, 25, 25, 25]);
+    // All four saw no head and raced into the grant; it still landed once.
+    expect(fake.transactions).toBe(4);
+    expect((await starterEntries(store)).map((e) => e.id)).toEqual([starterEventId(BOARD)]);
+
+    fake.resetCounts();
+    expect(await readAvailableMakes(BOARD, deps)).toBe(25);
+    expect(fake.transactions).toBe(0);
+    expect(fake.reads).toEqual([HEAD]);
+  });
+
+  it("mixed concurrent first touches (polls and a make) grant once and debit once", async () => {
+    const { store } = makeStore();
+    const deps = poolDeps(store);
+    const [, debit] = await Promise.all([
+      readAvailableMakes(BOARD, deps),
+      tryDebitMake(BOARD, photoDebitEventId("job-1"), deps),
+      readAvailableMakes(BOARD, deps),
+    ]);
+    expect(debit).toBe("debited");
+    expect((await store.listEntries(BOARD)).map((e) => e.type).sort()).toEqual([
+      "debit",
+      "starter_grant",
+    ]);
+    expect((await store.getBalance(BOARD)).available).toBe(24);
+  });
+
+  it("a head without the starter (a purchase landed first) grants it once, then reads cheap", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store);
+    await store.recordPurchase(BOARD, { purchaseId: "p1", credits: 60 });
+    await store.grantPurchase(BOARD, { eventId: "e-grant", purchaseId: "p1", at: 2 });
+    fake.resetCounts();
+
+    expect(await readAvailableMakes(BOARD, deps)).toBe(85);
+    expect(fake.transactions).toBe(1);
+    fake.resetCounts();
+    expect(await readAvailableMakes(BOARD, deps)).toBe(85);
+    expect(fake.transactions).toBe(0);
+    expect(fake.reads).toEqual([HEAD]);
+    expect(await starterEntries(store)).toHaveLength(1);
+  });
+
+  it("a make on a granted board runs only the debit transaction", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store);
+    await ensureStarterMakes(BOARD, deps);
+    fake.resetCounts();
+
+    expect(await tryDebitMake(BOARD, photoDebitEventId("job-1"), deps)).toBe("debited");
+    expect(fake.transactions).toBe(1);
+    expect((await store.getBalance(BOARD)).available).toBe(24);
+  });
+
+  it("replays stay once-only: create-path ensure, a duplicate starter event, a reloaded store", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store);
+    expect(await readAvailableMakes(BOARD, deps)).toBe(25); // lazy grant
+    await ensureStarterMakes(BOARD, deps); // create-path replay
+    expect(
+      (await store.grantStarter(BOARD, { eventId: starterEventId(BOARD), amount: 25, at: 2 })).applied,
+    ).toBe(false);
+
+    const reloaded = new FirestoreCreditLedgerStore(fake as unknown as Firestore);
+    fake.resetCounts();
+    expect(await readAvailableMakes(BOARD, poolDeps(reloaded))).toBe(25);
+    expect(fake.transactions).toBe(0);
+    expect(await starterEntries(store)).toHaveLength(1);
+  });
+
+  it("credits disabled: no ledger read or transaction at all", async () => {
+    const { fake, store } = makeStore();
+    const deps = poolDeps(store, false);
+    expect(await readAvailableMakes(BOARD, deps)).toBeNull();
+    expect(await tryDebitMake(BOARD, photoDebitEventId("job-1"), deps)).toBe("disabled");
+    expect(fake.reads).toEqual([]);
+    expect(fake.transactions).toBe(0);
   });
 });

@@ -20,7 +20,7 @@ import "server-only";
  * Enabled-but-unwired (no store in deps) reads as an empty pool
  * and refuses debits: failing closed beats gifting free makes.
  */
-import type { CreditLedgerStore } from "../domain/credit-ledger";
+import type { CreditBalanceView, CreditLedgerStore } from "../domain/credit-ledger";
 import type { Policy } from "../policy/policy";
 
 /** Typed pool-empty code: the photo 429 and both jobs' errorCode (PIN-151). */
@@ -58,9 +58,10 @@ export function sceneDebitEventId(jobId: string): string {
 /**
  * Grant Policy.credits.starterMakes exactly once per board (the
  * ledger's once-only grant under the deterministic event id).
- * Called at board creation and lazily on first credit touch for
- * boards that predate the flag. No-op while disabled, so a
- * disabled server writes nothing to the ledger, ever.
+ * Called directly at board creation; later touches reach it only
+ * when the head read shows no starter yet (boards that predate
+ * the flag). No-op while disabled, so a disabled server writes
+ * nothing to the ledger, ever.
  */
 export async function ensureStarterMakes(
   boardId: string,
@@ -75,10 +76,31 @@ export async function ensureStarterMakes(
 }
 
 /**
+ * The cheap credit touch (PIN-179): read the account head, and
+ * only when it is missing or its starter has not landed run the
+ * transactional once-only grant, then re-read. A board whose
+ * starter is granted costs one head read per touch — no ledger
+ * transaction, no purchases/entries read — however often the
+ * board page polls. Concurrent first touches may each call the
+ * grant; its deterministic event id keeps it exactly once.
+ */
+async function balanceWithStarter(
+  boardId: string,
+  credits: CreditLedgerStore,
+  deps: CreditPoolDeps,
+): Promise<CreditBalanceView> {
+  const head = await credits.getBalance(boardId);
+  if (head.starterGranted) return head;
+  await ensureStarterMakes(boardId, deps);
+  return credits.getBalance(boardId);
+}
+
+/**
  * Available makes for the board, ensuring the starter pool first
- * (a balance read is a credit touch). Null while credits are
- * disabled — callers then keep the exact pre-credit behaviour
- * and response shapes.
+ * (a balance read is a credit touch) through the cheap head read
+ * above. Null while credits are disabled — callers then keep the
+ * exact pre-credit behaviour and response shapes, with no ledger
+ * call at all.
  */
 export async function readAvailableMakes(
   boardId: string,
@@ -86,8 +108,7 @@ export async function readAvailableMakes(
 ): Promise<number | null> {
   if (!creditsEnabled(deps.policy)) return null;
   if (!deps.credits) return 0;
-  await ensureStarterMakes(boardId, deps);
-  return (await deps.credits.getBalance(boardId)).available;
+  return (await balanceWithStarter(boardId, deps.credits, deps)).available;
 }
 
 export type DebitMakeResult = "debited" | "pool_empty" | "disabled";
@@ -112,7 +133,9 @@ export async function tryDebitMake(
 ): Promise<DebitMakeResult> {
   if (!creditsEnabled(deps.policy)) return "disabled";
   if (!deps.credits) return "pool_empty";
-  await ensureStarterMakes(boardId, deps);
+  // Same cheap touch: only a never-granted head costs a starter
+  // transaction before the debit's own.
+  await balanceWithStarter(boardId, deps.credits, deps);
   try {
     await deps.credits.debit(boardId, {
       eventId,

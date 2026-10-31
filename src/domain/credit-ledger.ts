@@ -111,11 +111,14 @@ export interface BoardCreditAccount {
   appliedEventIds: string[];
 }
 
+/** The account head as one cheap read: counters, starter flag, derived `available`. */
 export interface CreditBalanceView {
   boardId: string;
   balance: number;
   frozen: number;
   pendingClawback: number;
+  /** Lets a credit touch skip the transactional starter grant (PIN-179). */
+  starterGranted: boolean;
   available: number;
 }
 
@@ -147,6 +150,7 @@ export function creditBalanceView(account: BoardCreditAccount): CreditBalanceVie
     balance: account.balance,
     frozen: account.frozen,
     pendingClawback: account.pendingClawback,
+    starterGranted: account.starterGranted,
     available: availableCredits(account),
   };
 }
@@ -759,6 +763,11 @@ export function closePurchase(
  * Accounts are created lazily by the first applied mutation; reads
  * of an unknown board report a zero balance rather than throwing,
  * mirroring "this board has no makes yet".
+ *
+ * `getBalance` is the cheap read (PIN-179): the account head only,
+ * no transaction and no purchases/entries — one document read in
+ * Firestore. Board polls, the photo preflight and the scene run
+ * call it on every touch, so it must stay that cheap.
  */
 export interface CreditLedgerStore {
   getAccount(boardId: string): Promise<BoardCreditAccount | null>;
@@ -799,8 +808,9 @@ export class InMemoryCreditLedgerStore implements CreditLedgerStore {
   }
 
   async getBalance(boardId: string): Promise<CreditBalanceView> {
-    const account = await this.getAccount(boardId);
-    return creditBalanceView(account ?? emptyCreditAccount(boardId));
+    assertId(boardId, "boardId");
+    // Head fields only, no account clone: mirrors the Firestore head-doc read.
+    return creditBalanceView(this.accounts.get(boardId) ?? emptyCreditAccount(boardId));
   }
 
   async listEntries(boardId: string): Promise<CreditLedgerEntry[]> {

@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { emptyBoardCounters, type DecomposeJob, type Element, type SceneJob } from "../domain/board";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
@@ -292,6 +292,76 @@ describe("starter grant (PIN-151)", () => {
     expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
       starterEventId("old-board"),
     ]);
+  });
+});
+
+describe("cheap balance read (PIN-179)", () => {
+  it("board polls on a granted board read the head only: no starter grant call", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const grant = vi.spyOn(h.ledger, "grantStarter");
+    const reads = vi.spyOn(h.ledger, "getBalance");
+    for (let i = 0; i < 3; i += 1) {
+      expect((await getBoardView(slug, owner, h.api))?.credits).toEqual({ availableMakes: 3 });
+    }
+    expect(grant).not.toHaveBeenCalled();
+    expect(reads).toHaveBeenCalledTimes(3);
+  });
+
+  it("concurrent first touches on a pre-existing board grant the starter exactly once", async () => {
+    const h = makeHarness(ENABLED(5));
+    await h.boards.createBoard({
+      slug: "old-board",
+      title: "Old board",
+      counters: emptyBoardCounters(),
+      createdAt: 1,
+      version: 1,
+    });
+    const views = await Promise.all(
+      Array.from({ length: 4 }, () => getBoardView("old-board", null, h.api)),
+    );
+    expect(views.map((v) => v?.credits)).toEqual(Array(4).fill({ availableMakes: 5 }));
+    expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
+      starterEventId("old-board"),
+    ]);
+
+    const grant = vi.spyOn(h.ledger, "grantStarter");
+    await getBoardView("old-board", null, h.api);
+    expect(grant).not.toHaveBeenCalled();
+  });
+
+  it("photo preflight, photo debit and an AI scene on a granted board never call the starter grant", async () => {
+    const h = makeHarness(ENABLED(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const grant = vi.spyOn(h.ledger, "grantStarter");
+
+    const job = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(job.status).toBe("ready");
+    await confirmPins(slug, owner, { jobId: job.id, pinIds: [job.pinIds[0]] }, h.api);
+    const { scene } = await requestScene(
+      slug,
+      owner,
+      { elementIds: [job.elementIds[0]], prompt: "on a picnic blanket" },
+      h.api,
+    );
+    expect(scene.kind).toBe("ai");
+
+    expect(grant).not.toHaveBeenCalled();
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+  });
+
+  it("credits disabled: board polls make no ledger call at all", async () => {
+    const h = makeHarness();
+    const { slug, owner } = await boardWithOwner(h);
+    const spies = [
+      vi.spyOn(h.ledger, "getBalance"),
+      vi.spyOn(h.ledger, "getAccount"),
+      vi.spyOn(h.ledger, "grantStarter"),
+      vi.spyOn(h.ledger, "debit"),
+    ];
+    const view = await getBoardView(slug, owner, h.api);
+    expect(view).not.toHaveProperty("credits");
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });
 
