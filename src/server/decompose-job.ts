@@ -367,6 +367,26 @@ export function decomposeBoundMs(policy: Policy): number {
   return namer + sam;
 }
 
+/**
+ * Pick the one segment a concept/tap becomes (multi-instance stays
+ * 1): usable-frame window first, the Policy confidence floor when
+ * the provider returned a confidence, then confidence descending
+ * with mask size as the tiebreak. No confidence (mock adapter)
+ * keeps the old largest-first order exactly.
+ */
+export function selectUsableSegment(
+  decoded: DecodedSegment[],
+  policy: Policy,
+): DecodedSegment | undefined {
+  return decoded
+    .filter((d) => d.maskPixels > 0 && isUsableMask(d.coverageFrame, policy))
+    .filter((d) => d.confidence === undefined || d.confidence >= policy.samMinConfidence)
+    .sort(
+      (a, b) =>
+        (b.confidence ?? -1) - (a.confidence ?? -1) || b.maskPixels - a.maskPixels,
+    )[0];
+}
+
 async function finish(
   deps: DecomposeDeps,
   job: DecomposeJob,
@@ -512,6 +532,7 @@ export async function runDecomposeJob(
       const outcome = await deps.segmenter.segment({
         imageRef,
         prompt: { kind: "concept", concept: element.concept },
+        includeConfidence: true,
         photoId: job.id,
         timeoutMs: policy.timeoutsMs.sam,
         boardId: job.boardId,
@@ -525,7 +546,7 @@ export async function runDecomposeJob(
         job.failedConceptCount += 1;
         return;
       }
-      const usable = outcome.value.segments
+      const decoded = outcome.value.segments
         .map((segment) => {
           try {
             return decodeSegment(segment, frame);
@@ -533,9 +554,8 @@ export async function runDecomposeJob(
             return null;
           }
         })
-        .filter((d): d is DecodedSegment => d !== null)
-        .filter((d) => d.maskPixels > 0 && isUsableMask(d.coverageFrame, policy))
-        .sort((a, b) => b.maskPixels - a.maskPixels)[0];
+        .filter((d): d is DecodedSegment => d !== null);
+      const usable = selectUsableSegment(decoded, policy);
       if (!usable) {
         job.failedConceptCount += 1;
         return;
@@ -812,6 +832,7 @@ export async function addTapElement(
 
   const outcome = await deps.segmenter.segment({
     imageRef,
+    includeConfidence: true,
     photoId: job.id,
     prompt: {
       kind: "point",
@@ -835,7 +856,7 @@ export async function addTapElement(
       ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
     };
   }
-  const usable = outcome.value.segments
+  const decodedTap = outcome.value.segments
     .map((segment) => {
       try {
         return decodeSegment(segment, frame);
@@ -843,9 +864,8 @@ export async function addTapElement(
         return null;
       }
     })
-    .filter((d): d is DecodedSegment => d !== null)
-    .filter((d) => d.maskPixels > 0 && isUsableMask(d.coverageFrame, policy))
-    .sort((a, b) => b.maskPixels - a.maskPixels)[0];
+    .filter((d): d is DecodedSegment => d !== null);
+  const usable = selectUsableSegment(decodedTap, policy);
   if (!usable) return { status: "no_usable_mask" };
 
   let tapIndex = job.elementIds.filter((id) => id.includes("-tap")).length;

@@ -34,6 +34,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.batchUploadConcurrency).toBe(1);
     expect(DEFAULT_POLICY.uploadRetryMaxAttempts).toBe(3);
     expect(DEFAULT_POLICY.maxConcurrentDecomposeJobs).toBe(2);
+    expect(DEFAULT_POLICY.samMinConfidence).toBe(0);
     expect(DEFAULT_POLICY.dailyBudgetUsd).toBe(5);
     expect(DEFAULT_POLICY.dailyCallLimit).toBe(500);
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });

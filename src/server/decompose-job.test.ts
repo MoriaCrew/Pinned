@@ -18,10 +18,12 @@ import {
   decomposeBoundMs,
   isUsableMask,
   runDecomposeJob,
+  selectUsableSegment,
   startDecomposeJob,
   validateNamedElements,
   type DecomposeDeps,
 } from "./decompose-job";
+import type { DecodedSegment } from "./sam-mask";
 
 // Verbatim example record from Meta's public SAM docs (see
 // sam-mask.test.ts): a real decodable lossless mask, box
@@ -637,5 +639,30 @@ describe("deterministic upload id (idempotent start)", () => {
     expect(
       decomposeBoundMs(resolvePolicy({ retries: 0, samConcurrency: 6 })),
     ).toBe(30_000 + 20_000);
+  });
+
+  it("selectUsableSegment: confidence first, size tiebreak, floor and no-confidence fallback", () => {
+    const seg = (id: string, maskPixels: number, confidence?: number): DecodedSegment => ({
+      id,
+      box: { x1: 0, y1: 0, x2: 9, y2: 9 },
+      ...(confidence !== undefined ? { confidence } : {}),
+      raster: new Uint8Array(0),
+      maskWidth: 10,
+      maskHeight: 10,
+      maskPixels,
+      coverageFrame: 0.05,
+      coverageBox: 0.5,
+    });
+    const policy = resolvePolicy(null);
+    // Higher confidence beats a larger mask.
+    expect(selectUsableSegment([seg("big", 900, 0.4), seg("sure", 100, 0.9)], policy)?.id).toBe("sure");
+    // Equal confidence: larger wins.
+    expect(selectUsableSegment([seg("a", 100, 0.9), seg("b", 200, 0.9)], policy)?.id).toBe("b");
+    // No confidence anywhere (mock): largest-first, as before.
+    expect(selectUsableSegment([seg("a", 100), seg("b", 200)], policy)?.id).toBe("b");
+    // The Policy floor drops below-floor candidates.
+    const floored = resolvePolicy({ samMinConfidence: 0.5 });
+    expect(selectUsableSegment([seg("a", 900, 0.4)], floored)).toBeUndefined();
+    expect(selectUsableSegment([seg("a", 900, 0.4), seg("b", 10)], floored)?.id).toBe("b");
   });
 });
