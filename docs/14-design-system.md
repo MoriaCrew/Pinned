@@ -70,7 +70,9 @@ Principles:
   picking) and the ideas as one sideways-scrolling chip row; chips
   generated for the picks join after the fixed ones, behind a
   "Finding more ideas" chip, and a chip wears a sticker only when it
-  names that pick.
+  names that pick. While the phone keyboard is open the sheet rides
+  just above it and the middle scrolls in less height (PIN-226,
+  `Sheet keyboardAware`, `src/ui/use-keyboard-inset.ts`).
 - `src/ui/pinneds.css` (loaded by the root layout) styles them. Each
   skin's look (display face, sticker keyline/shadow/tilt, name-tag
   style, button and print shape, ground pattern, band) is a set of
@@ -266,4 +268,5 @@ No pins yet: three dashed ghost outlines.
 | Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |
 | Oct 31 | Busy boards get a sticky filter row above the pins (New / All / Mine / people) instead of reordering or paging the grid; the grid stays oldest first (PIN-218) | 100+ pins from 18 people is 40 rows; finding your own or a friend's pins, or what is new, should take one tap, and polling must never reshuffle the grid |
 | Oct 31 | When a page throws, visitors get the Paper dead end "Something came unpinned." with Try again and Go home, never the error, its message or digest; `global-error` carries the same screen when the root layout itself fails (PIN-212) | Judges and first-time visitors never see Next's bare "Application error"; same quiet look as not-found, one primary action |
+| Oct 31 | The Make sheet rides above the phone keyboard; measured, not configured: a `visualViewport` hook sets `--pn-keyboard-inset` on the sheet (0 with the keyboard closed or while pinch-zoomed), which lifts it and takes the same height off its scrolling middle; no glide under reduced motion; the root viewport keeps the default `interactive-widget` (PIN-226) | iOS Safari and Chrome on Android lay the keyboard over the page, so it covered the field and Make it while typing; changing the viewport would move every page on Android |
 | Oct 31 | Name tags never auto-hyphenate (`hyphens: manual`); a pin's owner name ends with "…" when it does not fit, full name in `title`; the picking dock's tray slots shrink (44px down to about 34px) so a long Next label never leaves the dock (PIN-225) | Spark names things in English and owners can rename in any language, but the browser hyphenates by the page language ("Pot-ted Succulent" in fr and de); es "Siguiente" and de "Weiter" pushed the Next button past the dock edge at 390px |

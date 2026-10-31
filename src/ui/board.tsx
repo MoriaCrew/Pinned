@@ -6,6 +6,7 @@ import { t, tCount, tf } from "../i18n";
 import { useLocale } from "../i18n/client";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/locales";
 import { Avatar, AvatarStack, Button, IconButton, Wordmark, cx, pickedCountLabel, type Person } from "./primitives";
+import { useKeyboardInset } from "./use-keyboard-inset";
 
 export interface BoardCounts {
   people?: number;
@@ -238,6 +239,7 @@ export function Sheet({
   className,
   labelledBy,
   initialFocusId,
+  keyboardAware = false,
 }: {
   title: ReactNode;
   onClose?: () => void;
@@ -250,11 +252,14 @@ export function Sheet({
   labelledBy?: string;
   /** Id of the field to put the caret in when the sheet opens (else the sheet itself). */
   initialFocusId?: string;
+  /** Measure the on-screen keyboard into `--pn-keyboard-inset` on the sheet (PIN-226); its CSS decides how to ride above it. */
+  keyboardAware?: boolean;
 }) {
   const locale = useLocale();
   const autoId = useId();
   const titleId = labelledBy ?? `${autoId}-title`;
   const ref = useRef<HTMLElement>(null);
+  useKeyboardInset(ref, keyboardAware);
   // Latest onClose without re-running the focus effect: callers pass
   // inline handlers, and re-running would yank focus out of fields.
   const onCloseRef = useRef(onClose);

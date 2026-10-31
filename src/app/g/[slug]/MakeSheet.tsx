@@ -25,7 +25,8 @@ import { DictationBar, useDictation } from "./Dictation";
  * sheet's foot with the mic inside the field. "Make it" hands a
  * validated payload to the board (which owns the developing print and
  * polling). In remix mode (PIN-79) one line names the base scene and
- * the picks are the things to add.
+ * the picks are the things to add. While the phone keyboard is open
+ * the sheet rides above it and its middle shrinks (PIN-226).
  */
 export function MakeSheet({
   cards,
@@ -146,6 +147,7 @@ export function MakeSheet({
     <Sheet
       layer="fixed"
       className="pn-make-sheet"
+      keyboardAware
       title={remixParent ? t(locale, "make.remixTitle") : t(locale, "make.title")}
       onClose={() => onClose(prompt)}
       footer={

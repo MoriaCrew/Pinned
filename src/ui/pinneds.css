@@ -697,7 +697,11 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 
 /* ---------- Make sheet (PIN-100; chat-style composer PIN-216) ---------- */
 /* Long on a small phone: the body scrolls, the title and the composer (the foot) stay put. */
-.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; max-height: 92vh; max-height: 92dvh; }
+/* Rides above the on-screen keyboard (PIN-226): the sheet's hook measures --pn-keyboard-inset (0px when closed); the sheet lifts by it and its scrolling middle gives up the same height. */
+.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .pn-sheet.pn-make-sheet { transition: none; }
+}
 .pn-make-sheet > .pn-sheet-grab, .pn-make-sheet > .pn-sheet-head, .pn-make-sheet > .pn-sheet-foot { flex: none; }
 .pn-make-sheet > .pn-sheet-grab { align-self: center; }
 /* The sheet itself takes focus when it opens (so a screen reader starts at the title); it is not a control, so no ring around it. */
