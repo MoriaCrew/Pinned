@@ -1,10 +1,12 @@
 /**
  * Stripe catalog manifest (PIN-146, docs/15-board-plus.md).
  *
- * The committed source of truth for what Pinneds sells: credit
- * ("makes") packs and the draft host-monthly plan. Runtime code
- * imports this module later (checkout/webhook slices); nothing
- * here reads env or touches the network.
+ * The committed source of truth for what Pinneds sells: since
+ * PIN-181 one Board Plus pack (Plus for the board + 20
+ * "creations", the user-facing name for makes), the retired
+ * makes packs (kept so the seed archives them) and the draft
+ * host-monthly plan. Nothing here reads env or touches the
+ * network.
  *
  * `scripts/seed-stripe-catalog.mjs` mirrors this manifest to
  * converge a Stripe sandbox onto it (keep the two in sync — a
@@ -19,7 +21,7 @@ export const CATALOG_ID = "pinneds";
 /** Bump when the manifest's Stripe-facing shape changes. */
 export const CATALOG_VERSION = "dev-v1";
 
-export type CatalogItemStatus = "live" | "draft";
+export type CatalogItemStatus = "live" | "draft" | "retired";
 export type CatalogTaxBehavior = "inclusive" | "exclusive" | "unspecified";
 
 export interface CatalogItem {
@@ -27,7 +29,7 @@ export interface CatalogItem {
   itemKey: string;
   /** Price identity: Stripe price `lookup_key`. Stable across price transfers. */
   lookupKey: string;
-  /** Customer-facing product name ("makes" copy). */
+  /** Customer-facing product name, shown on the Stripe Checkout page. */
   name: string;
   description: string;
   /** Smallest currency unit (EUR cents). Must be a positive integer. */
@@ -38,11 +40,27 @@ export interface CatalogItem {
   credits?: number;
   /** Present only for subscription prices. */
   recurring?: { interval: "month" | "year" };
-  /** "draft" items are seeded in Stripe but not offered by runtime yet. */
+  /**
+   * "draft" items are seeded in Stripe but not offered by runtime
+   * yet; "retired" items are no longer sold, and the seed archives
+   * their product and prices (old purchases keep their own terms).
+   */
   status: CatalogItemStatus;
 }
 
 export const CATALOG_ITEMS: readonly CatalogItem[] = [
+  {
+    itemKey: "plus_20",
+    lookupKey: "pinneds_plus_20",
+    name: "Board Plus · 20 creations",
+    description:
+      "Board Plus for one board: every look, foil stickers and 20 creations (photos and scenes). Nothing expires.",
+    unitAmount: 299,
+    currency: "eur",
+    taxBehavior: "inclusive",
+    credits: 20,
+    status: "live",
+  },
   {
     itemKey: "credits_25",
     lookupKey: "pinneds_credits_25",
@@ -53,7 +71,7 @@ export const CATALOG_ITEMS: readonly CatalogItem[] = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 25,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "credits_60",
@@ -65,7 +83,7 @@ export const CATALOG_ITEMS: readonly CatalogItem[] = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 60,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "credits_150",
@@ -77,7 +95,7 @@ export const CATALOG_ITEMS: readonly CatalogItem[] = [
     currency: "eur",
     taxBehavior: "inclusive",
     credits: 150,
-    status: "live",
+    status: "retired",
   },
   {
     itemKey: "host_monthly",
@@ -189,16 +207,22 @@ export interface ExistingPrice {
   metadata?: Record<string, string>;
 }
 
+/** "archive" and "retired" apply to retired items only; "retired" is their converged no-op. */
 export type ProductPlan =
   | { kind: "create" }
   | { kind: "reuse"; productId: string }
-  | { kind: "update"; productId: string };
+  | { kind: "update"; productId: string }
+  | { kind: "archive"; productId: string }
+  | { kind: "retired" };
 
 export type PricePlan =
   | { kind: "create" }
   | { kind: "reuse"; priceId: string }
   /** Immutable fields drifted: mint a new price, transfer the lookup key, archive the old. */
-  | { kind: "transfer"; oldPriceId: string };
+  | { kind: "transfer"; oldPriceId: string }
+  /** Retired item: archive every still-active price under its lookup key. */
+  | { kind: "archive"; priceIds: string[] }
+  | { kind: "retired" };
 
 export interface CatalogItemPlan {
   item: CatalogItem;
@@ -232,6 +256,12 @@ export function planProduct(
   products: readonly ExistingProduct[],
 ): ProductPlan {
   const existing = matchProduct(item, products);
+  if (item.status === "retired") {
+    // Never created, or already archived: nothing to do.
+    return existing && existing.active !== false
+      ? { kind: "archive", productId: existing.id }
+      : { kind: "retired" };
+  }
   if (!existing) return { kind: "create" };
   const drifted =
     existing.name !== item.name ||
@@ -253,6 +283,12 @@ export function planPrice(
   productId: string,
   prices: readonly ExistingPrice[],
 ): PricePlan {
+  if (item.status === "retired") {
+    const priceIds = prices
+      .filter((price) => price.lookup_key === item.lookupKey && price.active !== false)
+      .map((price) => price.id);
+    return priceIds.length > 0 ? { kind: "archive", priceIds } : { kind: "retired" };
+  }
   const existing = prices.find((price) => price.lookup_key === item.lookupKey);
   if (!existing) return { kind: "create" };
   const matches =
@@ -272,6 +308,9 @@ export function planPrice(
  * Full plan for one run. A not-yet-created product has no id, so
  * its price can only be "reuse" never; a price carrying the
  * lookup key under some other product transfers onto the new one.
+ * A retired item plans the archive of its product and of every
+ * active price under its lookup key; once archived it plans
+ * "retired" (a no-op), so re-runs stay idempotent.
  */
 export function buildCatalogPlan(
   items: readonly CatalogItem[],
@@ -281,7 +320,7 @@ export function buildCatalogPlan(
   assertValidCatalog(items);
   return items.map((item) => {
     const product = planProduct(item, products);
-    const productId = product.kind === "create" ? "" : product.productId;
+    const productId = "productId" in product ? product.productId : "";
     return { item, product, price: planPrice(item, productId, prices) };
   });
 }

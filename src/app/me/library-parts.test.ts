@@ -27,7 +27,7 @@ const board = (over: Partial<MyBoardCard>): MyBoardCard => ({
 describe("My boards cards (PIN-104)", () => {
   it("draws each board in its own skin and maps first-generation themes", () => {
     const markup = html(
-      h(BoardCards, {
+      h(BoardCards, { locale: "en",
         boards: [
           board({ slug: "a", themeId: "zine" }),
           board({ slug: "b", themeId: "gran" }),
@@ -42,16 +42,16 @@ describe("My boards cards (PIN-104)", () => {
   });
 
   it("shows the latest scene as a print, or ghost outlines when there is none", () => {
-    const withScene = html(h(BoardCards, { boards: [board({ latestSceneImageUrl: "/api/boards/s/scenes/1/image" })] }));
+    const withScene = html(h(BoardCards, { locale: "en", boards: [board({ latestSceneImageUrl: "/api/boards/s/scenes/1/image" })] }));
     expect(withScene).toContain("pn-lib-board-print");
     expect(withScene).toContain('src="/api/boards/s/scenes/1/image"');
-    const without = html(h(BoardCards, { boards: [board({})] }));
+    const without = html(h(BoardCards, { locale: "en", boards: [board({})] }));
     expect(without).toContain("pn-lib-board-ghosts");
     expect(without).not.toContain("<img");
   });
 
   it("gives each card a closed More menu button beside the link, named for the board (PIN-166)", () => {
-    const markup = html(h(BoardCards, { boards: [board({ title: "Garden swap", themeId: "zine" })] }));
+    const markup = html(h(BoardCards, { locale: "en", boards: [board({ title: "Garden swap", themeId: "zine" })] }));
     expect(markup).toContain('aria-label="More for Garden swap"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).toContain('aria-expanded="false"');
@@ -61,7 +61,7 @@ describe("My boards cards (PIN-104)", () => {
   });
 
   it("sets the counts in mono lines", () => {
-    const markup = html(h(BoardCards, { boards: [board({ myPinCount: 1 })] }));
+    const markup = html(h(BoardCards, { locale: "en", boards: [board({ myPinCount: 1 })] }));
     expect(markup).toContain("1 thing of yours");
     expect(markup).toContain("Oct 29");
   });
@@ -79,7 +79,7 @@ describe("My pins library (PIN-104)", () => {
   });
 
   it("labels every pin with its source board's title", () => {
-    const markup = html(h(PinLibrary, { cards: [card("e1", "Teal mug")], boardSlug: null }));
+    const markup = html(h(PinLibrary, { locale: "en", cards: [card("e1", "Teal mug")], boardSlug: null }));
     expect(markup).toContain("Teal mug");
     expect(markup).toContain("From Sam&#x27;s 30th");
     expect(markup).not.toContain("pn-lib-pin-btn");
@@ -87,7 +87,7 @@ describe("My pins library (PIN-104)", () => {
   });
 
   it("adds a spoken Pin here button per pin only with a board context", () => {
-    const markup = html(h(PinLibrary, { cards: [card("e1", "Teal mug"), card("e2", "Duck")], boardSlug: "slug-one" }));
+    const markup = html(h(PinLibrary, { locale: "en", cards: [card("e1", "Teal mug"), card("e2", "Duck")], boardSlug: "slug-one" }));
     expect(markup).toContain("data-pinnable");
     expect(markup.match(/pn-lib-pin-btn/g)).toHaveLength(2);
     expect(markup).toContain('aria-label="Pin here: Teal mug"');
@@ -120,7 +120,6 @@ describe("Strings owned by the landing and library screens (PIN-104)", () => {
       "landing.another",
       "notFound.home",
       "auth.signIn",
-      "auth.signOut",
       "myBoards.emptyAction",
       "myPins.emptyAction",
       "myPins.backToBoard",

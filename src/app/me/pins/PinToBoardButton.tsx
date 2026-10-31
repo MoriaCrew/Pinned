@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "../../../i18n/client";
 import { Button } from "../../../ui";
 import { pinButtonView, type PinButtonState } from "../library-format";
 
@@ -22,8 +23,9 @@ export function PinToBoardButton({
   /** The thing's name, so each button is spoken as "Pin here: Teal mug". */
   label: string;
 }) {
+  const locale = useLocale();
   const [state, setState] = useState<PinButtonState>("idle");
-  const view = pinButtonView(state);
+  const view = pinButtonView(locale, state);
   const spoken = `${view.label}: ${label}`;
   return (
     <>

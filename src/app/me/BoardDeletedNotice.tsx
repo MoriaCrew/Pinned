@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { urlWithoutBoardDeletedFlag } from "../../domain/board-delete-ui";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/client";
 import { Icon } from "../../ui";
 
 /**
@@ -12,6 +13,7 @@ import { Icon } from "../../ui";
  * link shows the page as it is. It carries no slug.
  */
 export function BoardDeletedNotice({ show }: { show: boolean }) {
+  const locale = useLocale();
   useEffect(() => {
     if (!show) return;
     const next = urlWithoutBoardDeletedFlag(window.location.href);
@@ -21,7 +23,7 @@ export function BoardDeletedNotice({ show }: { show: boolean }) {
   return (
     <p className="pn-lib-notice" role="status">
       <Icon name="check" size={20} />
-      {t("en", "board.deletedNotice")}
+      {t(locale, "board.deletedNotice")}
     </p>
   );
 }

@@ -189,10 +189,14 @@ people/elements/pins/scenes counts, and `npm run usage:costs`
 prints per-board estimated AI costs (slugs are passed locally only,
 or printed hashed, never committed).
 
-Billing (makes credits; design in `docs/15-board-plus.md`): modes are
+Billing (makes credits, "creations" in the UI; design in
+`docs/15-board-plus.md`): modes are
 `PLUS_MODE=off|mock|stripe` — `off` sells nothing (the default, and
-prod), `mock` is the no-money demo, `stripe` sells credit packs via
-hosted Checkout with webhook-only grants. The dev backend runs
+prod), `mock` is the no-money demo, `stripe` sells the one Board Plus
+pack (€2.99 once per board: Plus + 20 creations; any joined member can
+buy it for the board; each board starts with 5 free) via hosted
+Checkout with webhook-only grants. Once a board has Plus, any joined
+member can change its look. The dev backend runs
 `stripe` against the pinneds-dev **sandbox** since PIN-153 (including
 `Policy.credits.enabled`, which defaults off in code). Operator
 scripts: `npm run seed:stripe-catalog` converges a sandbox onto the
