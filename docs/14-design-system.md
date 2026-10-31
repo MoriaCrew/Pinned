@@ -104,9 +104,38 @@ Principles:
   small bits of CSS are the `pn-landing-…` / `pn-lib-…` block in
   `pinneds.css`.
 - The landing's sticker pile and "How it works" visuals use synthetic
-  images from `public/landing/` (provenance in its README), not
-  `public/lab/`. The secondary "See a board" button exists only when
-  `DEMO_BOARD_SLUG` is set; unset shows nothing.
+  images from `public/landing/sets/<id>/` (provenance in
+  `public/landing/README.md`), not `public/lab/`. The secondary "See a
+  board" button exists only when `DEMO_BOARD_SLUG` is set; unset shows
+  nothing.
+- **Showcase sets (PIN-175).** The pile, the step-1 photo with its two
+  name tags, the three step-2 stickers and the step-3 scene all come
+  from one set, picked per request (the page is dynamic, so a
+  returning visitor sees a different one). A set is plain data in
+  `src/app/landing-sets.data.ts` (type and picking in the pure
+  `src/domain/landing-sets.ts`): sticker id to file and owner (a
+  made-up first name), 5 to 7 pile slots, the photo's crop and tag
+  anchors, the trio, the scene's crop. Every position is a percentage
+  of the box it sits in; a tag's anchor is its **centre** in percent of
+  the step-1 art box (so it can later follow a real segmentation box)
+  with a tilt in degrees. `?set=<id>` pins a set (an unknown or
+  repeated value is a random pick), and the quiet "Show another" link
+  under the pile is a plain `<a href="/?set=<other id>">`: no script,
+  no cookie, 44px tall, with an accessible name that says what it
+  changes because the pictures themselves are hidden from assistive
+  tech. `src/app/landing-sets.test.ts` is the manifest: every file
+  exists and is used, 5 to 7 distinct pile stickers, a trio from at
+  least two friends, tag text in the catalog and at most 13 characters
+  (the art box is 124 px wide on a phone), no EXIF, no XMP but the
+  IPTC "made by a trained model" marker, at most 220 KB per set. To
+  add a set: a folder under `public/landing/sets/`, a provenance row
+  in its README, one entry in the data file; the whole recipe, from
+  source photos to screenshots, is `docs/17-showcase-sets.md`. Layout
+  notes from the try-on and cat sets: a sticker's `size` is the side
+  of a square box and the picture fits inside it, so a tall cut-out (a
+  standing person, a skateboard) needs a size near 50 to read; the
+  foil sweep recolours whatever it crosses, so put it on a sticker
+  whose colour the scene does not depend on.
 - My boards draws each board as a mini board in **its own skin**
   (`skinForTheme(themeId)`): the skin's ground, display face and print
   around the latest scene, with mono counts. My pins is the sticker

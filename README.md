@@ -124,7 +124,9 @@ them directly:
   id with claim-before-call (`src/server/decompose-job.ts`,
   `src/server/scene-job.ts`). The request does the work; the board
   page polls with TanStack Query. There is no queue in v1.
-- **Routes** — pages: `/` (landing), `/new` (create a board),
+- **Routes** — pages: `/` (landing: one showcase set per visit,
+  `/?set=<id>` pins one; see `docs/14`, and `docs/17` to make a
+  set), `/new` (create a board),
   `/g/{slug}` (the board), `/me/boards` + `/me/pins` (signed-in
   library). API under `src/app/api/boards/`: board create/view/
   delete (host only),
