@@ -118,8 +118,9 @@ Principles:
   your person colour once you joined the board, else a person icon.
   It opens the kit `Menu`, each entry only when it applies: "You're
   {name} here" (a quiet `note` line) + Edit name, or Join this board;
-  My boards + My pins when signed in; Change look for the host; Sign
-  in with Google / Sign out when sign-in is on. Off a board it is
+  My boards + My pins when signed in; Change look and a danger
+  Delete board (asks first, PIN-168) for the host; Sign in with
+  Google / Sign out when sign-in is on. Off a board it is
   account-only: nothing in link-only, a quiet "Sign in" when signed
   out (left out where the page itself asks you to sign in), the
   avatar menu once signed in. On the landing it sits top right over

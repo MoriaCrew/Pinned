@@ -27,14 +27,28 @@ describe("you menu entries (PIN-120)", () => {
     ]);
   });
 
-  it("gives the host Change look before the account line", () => {
-    expect(youMenuEntries(state({ joined: true, isHost: true }))).toEqual(["joinedAs", "editName", "changeLook"]);
+  it("gives the host Change look and Delete board before the account line (PIN-168)", () => {
+    expect(youMenuEntries(state({ joined: true, isHost: true }))).toEqual([
+      "joinedAs",
+      "editName",
+      "changeLook",
+      "deleteBoard",
+    ]);
     expect(youMenuEntries(state({ joined: true, isHost: true, authEnabled: true }))).toEqual([
       "joinedAs",
       "editName",
       "changeLook",
+      "deleteBoard",
       "signIn",
     ]);
+  });
+
+  it("never offers Delete board to a non-host, or off a board (PIN-168)", () => {
+    expect(youMenuEntries(state({ joined: true }))).not.toContain("deleteBoard");
+    expect(youMenuEntries(state({ joined: true, authEnabled: true, authStatus: "signedIn" }))).not.toContain(
+      "deleteBoard",
+    );
+    expect(youMenuEntries(state({ onBoard: false, isHost: true }))).not.toContain("deleteBoard");
   });
 
   it("shows nothing account-shaped while sign-in state loads", () => {

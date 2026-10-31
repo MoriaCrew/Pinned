@@ -24,6 +24,8 @@ export interface YouBoard {
   onEditName: () => void;
   /** Opens the host's Change look (PIN-111 look flow). */
   onChangeLook: () => void;
+  /** Opens the host's Delete board confirm (PIN-168). */
+  onDeleteBoard: () => void;
 }
 
 /**
@@ -31,8 +33,9 @@ export interface YouBoard {
  * your photo, your initials in your person colour, or a person icon.
  * It opens a small menu with your name on this board (Edit name or
  * Join this board), My boards / My pins when signed in, Change look
- * for the host, and Sign in / Sign out when sign-in is on. Link-only
- * pages get no account entries and, off a board, nothing at all.
+ * and Delete board (a danger entry that asks first) for the host, and
+ * Sign in / Sign out when sign-in is on. Link-only pages get no
+ * account entries and, off a board, nothing at all.
  */
 export function You(props: { board?: YouBoard; offerSignIn?: boolean; className?: string }) {
   const auth = useAuth();
@@ -119,6 +122,10 @@ export function YouView({
         return [{ label: t("en", "you.myPins"), href: "/me/pins", onSelect: close }];
       case "changeLook":
         return board ? [{ label: t("en", "you.changeLook"), onSelect: act(board.onChangeLook) }] : [];
+      case "deleteBoard":
+        return board
+          ? [{ label: t("en", "you.deleteBoard"), danger: true, onSelect: act(board.onDeleteBoard) }]
+          : [];
       case "signIn":
         return [{ label: t("en", "you.signIn"), onSelect: act(() => void auth.signIn()) }];
       case "signOut":

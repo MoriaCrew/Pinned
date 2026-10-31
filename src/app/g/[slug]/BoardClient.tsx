@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { notFound } from "next/navigation";
 import {
   QueryClient,
   QueryClientProvider,
@@ -15,6 +16,12 @@ import {
   type BoardViewLike,
   type BoardViewScene,
 } from "../../../domain/board-view";
+import {
+  boardPollEnabled,
+  boardPollError,
+  showBoardGone,
+  type BoardDeletePhase,
+} from "../../../domain/board-delete-ui";
 import { rollbackElementLabel, withElementLabel } from "../../../domain/element-label";
 import {
   attemptPollInterval,
@@ -64,6 +71,7 @@ import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
 import { RenameSheet } from "./RenameSheet";
 import { PlusFlow, useLookFlow } from "./PlusFlow";
+import { DeleteBoardSheet } from "./DeleteBoardSheet";
 import { isPoolEmptyCode, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesBuySheet, MakesIndicator, useMakesFlow } from "./MakesFlow";
 import { SceneViewer } from "./SceneViewer";
@@ -262,6 +270,9 @@ function BoardBody({
   // opening (even of the same thing) must not close or speak in this one.
   const [renamingOpenId, setRenamingOpenId] = useState(0);
   const renameOpens = useRef(0);
+  // PIN-168: the host's Delete board confirm, and where our own delete is.
+  const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
+  const [deletePhase, setDeletePhase] = useState<BoardDeletePhase>("idle");
   const [sharingSceneId, setSharingSceneId] = useState<string | null>(null);
   const [shareErrorSceneId, setShareErrorSceneId] = useState<string | null>(null);
   // Join sheet: open while an intent waits for a name (or "edit").
@@ -301,10 +312,12 @@ function BoardBody({
       const response = await fetch(`/api/boards/${encodeURIComponent(slug)}`, {
         cache: "no-store",
       });
-      if (!response.ok) throw new Error("load failed");
+      if (!response.ok) throw boardPollError(response.status);
       return (await response.json()) as BoardClientView;
     },
     initialData: initialView,
+    // PIN-168: no polling while our own delete is in flight or done.
+    enabled: boardPollEnabled(deletePhase),
     refetchInterval: policy.pollIntervalMs,
     refetchIntervalInBackground: false,
   });
@@ -1083,6 +1096,13 @@ function BoardBody({
   const showDock = !empty;
   const lookSampleUrls = lookSample(cards);
 
+  // PIN-168: the host deleted this board while it was open here (the
+  // poll got a 404). Show the not-found an unknown link shows; that
+  // unmounts the board, so the polling stops with it. Not while our own
+  // delete is in flight or done: that 404 is ours, and the host lands
+  // on the "Board deleted" page instead.
+  if (showBoardGone(deletePhase, boardQuery.error)) notFound();
+
   return (
     <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>
       <main className={cx(styles.board, !showDock && styles.boardRest, look.tryOn && styles.boardTryOn)} inert={viewerOpen}>
@@ -1101,6 +1121,7 @@ function BoardBody({
                 onJoin: () => setJoinIntent({ kind: "join" }),
                 onEditName: () => setJoinIntent({ kind: "edit" }),
                 onChangeLook: look.openLook,
+                onDeleteBoard: () => setDeleteBoardOpen(true),
               }}
             />
           }
@@ -1136,7 +1157,7 @@ function BoardBody({
               {shareNotice === "copied" ? t("en", "share.copied") : t("en", "share.copyFailed")}
             </p>
           ) : null}
-          {boardQuery.isError ? (
+          {boardQuery.isError && deletePhase === "idle" ? (
             <div className={styles.errorRow}>
               <p className={styles.error} role="alert">
                 {t("en", "board.loadError")}
@@ -1353,6 +1374,19 @@ function BoardBody({
             unavailable={makes.unavailable}
             onBuy={makes.buy}
             onClose={makes.closeSheet}
+          />
+        ) : null}
+
+        {isHost && deleteBoardOpen ? (
+          <DeleteBoardSheet
+            slug={slug}
+            title={view.board.title}
+            signedIn={auth.enabled && auth.status === "signedIn"}
+            onPhase={(phase) => {
+              setDeletePhase(phase);
+              if (phase === "left") queryClient.removeQueries({ predicate: (query) => query.queryKey[1] === slug });
+            }}
+            onClose={() => setDeleteBoardOpen(false)}
           />
         ) : null}
 
