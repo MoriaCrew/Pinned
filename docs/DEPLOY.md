@@ -236,13 +236,23 @@ element; delete the throwaway board.
 
 ## 7. Live billing
 
-Turned on by PIN-210 with promotion #2, after Stripe live activation,
-the tax decision (PIN-154) and the legal pages (PIN-26). Steps and
-smoke: `docs/15-board-plus.md`, "Going live on prod".
+PIN-210 comes in two pieces (Robin, Oct 31). The operator scripts and
+runbook land on `dev` before the freeze and change nothing on prod.
+The prod switch, a config-only PR to `apphosting.prod.yaml`, merges
+once Stripe live activation and the tax decision (PIN-154) are done
+and both live secrets exist. The legal pages (PIN-26) are already on
+`dev`. If the switch is ready by the Nov 3 freeze it rides promotion
+#2; otherwise a config-only promotion turns it on as soon as it is
+ready, even during judging week (§8). The live purchase is made on
+the demo board and kept (§6.4). Steps, smoke and rollback:
+`docs/15-board-plus.md`, "Going live on prod".
 
 ## 8. Judging week (Nov 4–8)
 
 - **Freeze** `main` and `dev` (dev.pinneds.com is the fallback demo).
+  One planned exception: if the live-billing switch (§7) wasn't
+  ready by the freeze, it goes out as a config-only promotion once it
+  is. Run the §5 smoke and the billing smoke in `docs/15` right after.
 - **Twice a day:** health, the demo board, `usage:costs`.
 - **Meta slow or down:** set the demo board's `dailyBudgetUsd` to 0.
   Scenes become honest collages, uploads say AI is switched off,

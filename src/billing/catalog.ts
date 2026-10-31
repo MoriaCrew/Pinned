@@ -125,6 +125,18 @@ export function findCatalogItem(lookupKey: string): CatalogItem | undefined {
   return CATALOG_ITEMS.find((item) => item.lookupKey === lookupKey);
 }
 
+/**
+ * What one seed run converges (PIN-210): a sandbox takes every
+ * item; the live account skips drafts (sandbox-only test objects,
+ * never real products) but still archives retired items.
+ */
+export function catalogItemsForMode(
+  items: readonly CatalogItem[],
+  mode: "sandbox" | "live",
+): CatalogItem[] {
+  return mode === "live" ? items.filter((item) => item.status !== "draft") : [...items];
+}
+
 // ---------------------------------------------------------------------------
 // Validation (pure). The seed script refuses to run on any error.
 // ---------------------------------------------------------------------------
