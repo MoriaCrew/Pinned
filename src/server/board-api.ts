@@ -102,6 +102,7 @@ export function publicScene(slug: string, scene: Scene) {
     status: scene.status,
     // Pre-PIN-71 scenes are all AI composes; collages say so.
     kind: scene.kind ?? "ai",
+    ...(scene.collageReason ? { collageReason: scene.collageReason } : {}),
     promptVersion: scene.promptVersion,
     ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
     ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
@@ -123,6 +124,7 @@ export function publicSceneJob(job: SceneJob) {
     elementIds: job.elementIds,
     prompt: job.prompt,
     kind: job.kind ?? "ai",
+    ...(job.collageReason ? { collageReason: job.collageReason } : {}),
     ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
     ...(job.errorCode ? { errorCode: job.errorCode } : {}),

@@ -37,6 +37,7 @@ import {
 } from "../../../domain/make-sheet";
 import {
   boardCounts,
+  explainsBudgetCollage,
   latestActivity,
   pickNumbers,
   pickedInOrder,
@@ -1050,6 +1051,8 @@ function BoardBody({
             <p className={styles.error} role="alert">
               {t("en", "share.failed")}
             </p>
+          ) : explainsBudgetCollage(scene) ? (
+            <p className={styles.collageNote}>{t("en", "makes.collageBudget")}</p>
           ) : null,
       });
     }

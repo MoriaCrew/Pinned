@@ -27,6 +27,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import type { DecomposeJob, Element, MaskBox, Pin } from "../domain/board";
+import { aiBudgetDenial } from "../domain/ai-budget";
 import type { BoardRepository } from "../domain/board-repository";
 import {
   normalizeElements,
@@ -360,6 +361,8 @@ export async function runDecomposeJob(
     await deps.jobs.update({ ...job, updatedAt: now() });
 
     let refusedCount = 0;
+    // PIN-180: the first cutter call the AI budget / call limit / switch denied.
+    let budgetDeniedCode: string | undefined;
     // Serialize progress writes so parallel landings cannot
     // overwrite each other's elementIds/pinIds snapshots.
     let persistChain: Promise<void> = Promise.resolve();
@@ -383,6 +386,7 @@ export async function runDecomposeJob(
       });
       if (outcome.status !== "ready") {
         if (outcome.status === "refused") refusedCount += 1;
+        else if (aiBudgetDenial(outcome.errorCode)) budgetDeniedCode ??= outcome.errorCode;
         job.failedConceptCount += 1;
         return;
       }
@@ -501,7 +505,8 @@ export async function runDecomposeJob(
     if (refusedCount > 0 && refusedCount === kept.length) {
       return finish(deps, job, "refused", "segment_refused");
     }
-    return finish(deps, job, "failed", "no_usable_pins");
+    // No pin landed. If the budget closed the cutter, say so (PIN-180).
+    return finish(deps, job, "failed", budgetDeniedCode ?? "no_usable_pins");
   } catch {
     // Unexpected service failure: typed terminal state, and any
     // candidate pins already persisted above stay persisted.

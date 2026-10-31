@@ -27,6 +27,7 @@ import {
   type PendingTapPin,
   type ReviewHelp,
 } from "../../../domain/add-sheet";
+import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
 import { isPoolEmptyCode } from "../../../domain/makes-ui";
@@ -723,6 +724,10 @@ export function AddSheet({
   // PIN-152: out of makes — the copy names the fix, and the
   // button opens the buy sheet while buying can work.
   const jobPoolEmpty = job?.status === "failed" && isPoolEmptyCode(job.errorCode);
+  // PIN-180: the day's AI budget / call limit / switch closed the namer or
+  // the cutter: say so instead of the generic "didn't work".
+  const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
+  const failedLine = t("en", budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
   const outOfMakes = (
     <>
       <SheetLine tone="error">{t("en", "makes.poolEmptyPhoto")}</SheetLine>
@@ -833,7 +838,7 @@ export function AddSheet({
 
       {/* Failed after some things landed: the review offers those, no error line. */}
       {job?.status === "failed" && candidatePins.length === 0 ? (
-        jobPoolEmpty ? outOfMakes : <SheetLine tone="error">{t("en", "add.failed")}</SheetLine>
+        jobPoolEmpty ? outOfMakes : <SheetLine tone="error">{failedLine}</SheetLine>
       ) : null}
       {job?.status === "refused" ? <SheetLine>{t("en", "add.refused")}</SheetLine> : null}
       {uploadError ? (uploadPoolEmpty ? outOfMakes : <SheetLine tone="error">{uploadError}</SheetLine>) : null}

@@ -209,9 +209,9 @@ from env var names / Secret Manager only, never from git.
   pass (PIN-117, `prompts/tap-name.v1.md`): a real label and
   `faceFlag`, so a tapped person gets the face consent note. The
   generic label "My thing" remains only as the typed fallback.
-- **Costs are estimates.** Spike figures of about $0.02 per photo
-  and $0.02 per scene are estimates from `docs/11` §8 (T5); Muse
-  Image dollars used Spark rates as a labelled proxy. The provider
+- **Costs are estimates.** About $0.02 per photo (spike figure,
+  `docs/11` §8, T5) and $0.01 per scene (Muse Image's flat list
+  price per generated image, `docs/16-ai-usage.md`). The provider
   dashboard is authoritative.
 - **Optional sign-in, link-first.** Identity on a board is a
   signed participant cookie; anyone with the board link can join,

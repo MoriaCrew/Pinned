@@ -6,7 +6,8 @@ import { DEFAULT_POLICY } from "../policy/policy";
 import { InMemoryBudgetStore } from "./budget";
 import { collectMetaCallLog, decoratePorts } from "./decorators";
 import { fixtureSceneComposer, type StudioFixtures } from "./fixture-ports";
-import { MetaGateway } from "./meta-gateway";
+import { MUSE_IMAGE_USD_PER_IMAGE, estimateMetaCostUsd, estimateReserveUsd } from "./costs";
+import { MetaGateway, type MetaCallLog } from "./meta-gateway";
 import { metaSceneComposer } from "./meta-ports";
 import { mockElementNamer, mockSceneComposer, mockSegmenter } from "./mock-ports";
 import {
@@ -67,7 +68,11 @@ type WireBody = {
   tools: Record<string, unknown>[];
 };
 
-function metaComposer(handler: () => unknown, status = 200) {
+function metaComposer(
+  handler: () => unknown,
+  status = 200,
+  onLog?: (entry: MetaCallLog) => void,
+) {
   const calls: { url: string; body: WireBody }[] = [];
   const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({
@@ -86,6 +91,7 @@ function metaComposer(handler: () => unknown, status = 200) {
     samModel: DEFAULT_POLICY.models.sam,
     imageModel: DEFAULT_POLICY.models.image,
     fetchFn,
+    ...(onLog ? { onLog } : {}),
   });
   return { calls, composer: metaSceneComposer(gateway) };
 }
@@ -390,5 +396,95 @@ describe("decorated scene composer (PIN-61 chain)", () => {
       promptVersion: "scene.v1",
       outcome: "refused",
     });
+  });
+});
+
+describe("scene pricing: flat Muse Image price per generated image (PIN-180)", () => {
+  const NOW = Date.UTC(2026, 9, 29, 12, 0, 0);
+
+  async function decoratedRun(handler: () => unknown) {
+    const logs: AiCallLog[] = [];
+    const { composer } = metaComposer(handler, 200, collectMetaCallLog);
+    const ports = decoratePorts(
+      { elementNamer: mockElementNamer, segmenter: mockSegmenter, sceneComposer: composer },
+      {
+        policy: DEFAULT_POLICY,
+        budget: new InMemoryBudgetStore(),
+        appendLog: async (log) => {
+          logs.push(log);
+        },
+        now: () => NOW,
+      },
+    );
+    const out = await ports.sceneComposer!.composeScene(composeInput());
+    return { out, logs };
+  }
+
+  it("the reserve is the flat price, whatever the Spark token budget", () => {
+    expect(MUSE_IMAGE_USD_PER_IMAGE).toBe(0.01);
+    expect(estimateReserveUsd("composeScene", { sparkElementsMaxTokens: 4000 })).toBe(0.01);
+    expect(estimateReserveUsd("composeScene", { sparkElementsMaxTokens: 1 })).toBe(0.01);
+  });
+
+  it("an ok call with an image costs $0.01 however many tokens it used", () => {
+    const base = { operation: "composeScene", model: "muse-image", latencyMs: 1, outcome: "ok" as const };
+    expect(estimateMetaCostUsd({ ...base, images: 1 })).toBe(0.01);
+    // A row with no image count is an ok call: one image.
+    expect(estimateMetaCostUsd({ ...base, inputTokens: 10_373, outputTokens: 821 })).toBe(0.01);
+    expect(estimateMetaCostUsd({ ...base, images: 1, inputTokens: 10_373, outputTokens: 821 })).toBe(0.01);
+    expect(estimateMetaCostUsd({ ...base, images: 1, inputTokens: 1, outputTokens: 1 })).toBe(0.01);
+    // A reply that held no image, and a failed call, are free.
+    expect(estimateMetaCostUsd({ ...base, images: 0, inputTokens: 10_373, outputTokens: 821 })).toBe(0);
+    expect(estimateMetaCostUsd({ ...base, outcome: "error", inputTokens: 10_373 })).toBe(0);
+  });
+
+  it("the gateway counts the generated images on the call log and keeps the tokens", async () => {
+    const entries: MetaCallLog[] = [];
+    const { composer } = metaComposer(() => composeFixture.response, 200, (entry) => {
+      entries.push(entry);
+    });
+    expect((await composer.composeScene(composeInput())).status).toBe("ready");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      operation: "composeScene",
+      outcome: "ok",
+      images: 1,
+      inputTokens: 10_373,
+      outputTokens: 821,
+    });
+    expect(estimateMetaCostUsd(entries[0])).toBe(0.01);
+  });
+
+  it("an AiCallLog row for a generated scene reserves and prices the flat $0.01, with tokens kept", async () => {
+    const { out, logs } = await decoratedRun(() => composeFixture.response);
+    expect(out.status).toBe("ready");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      operation: "composeScene",
+      outcome: "ok",
+      reservedMicroUsd: 10_000,
+      costMicroUsdEst: 10_000,
+      costEstimateUsd: 0.01,
+      images: 1,
+      inputTokens: 10_373,
+      outputTokens: 821,
+    });
+  });
+
+  it("a refusal (HTTP 200, no image) keeps its reservation but is priced at $0", async () => {
+    const { out, logs } = await decoratedRun(() => ({
+      output: [{ type: "message", content: [{ type: "output_text", text: "no" }] }],
+      usage: { input_tokens: 9_000, output_tokens: 40 },
+    }));
+    expect(out).toMatchObject({ status: "refused", errorCode: "no_image" });
+    expect(logs[0]).toMatchObject({
+      outcome: "refused",
+      reservedMicroUsd: 10_000,
+      costMicroUsdEst: 0,
+      costEstimateUsd: 0,
+      inputTokens: 9_000,
+      outputTokens: 40,
+    });
+    expect(logs[0].images).toBeUndefined();
   });
 });

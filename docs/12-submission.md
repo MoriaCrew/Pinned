@@ -122,7 +122,7 @@ synthetic images.
 | Scene compose time (T4, spike) | Mean **14.4 s**, max 27.2 s over 25 ok scenes (bar ≤ 30 s) | `eval/studio-findings.md` (T4) |
 | Photo → pins, hosted dev (PIN-67 live run, Oct 29) | 3 synthetic fixtures, 12.6 / 11.0 / 16.1 s upload→ready (mean 13.2 s); all 9 candidate pins confirmed | `eval/studio-findings.md` (PIN-67 section) |
 | Cost per photo (T5, **estimate**) | **≈ $0.020**/photo (bar ≤ $0.05). SAM bills one image per concept call (`usage.images_processed=1`); provider dashboard is authoritative | `eval/studio-findings.md` (T5); `docs/11` §8 |
-| Cost per scene (T5, **estimate**) | **≈ $0.022**/scene (bar ≤ $0.10). Muse Image dollars used Spark token rates as a labelled proxy — order-of-magnitude only | `eval/studio-findings.md` (T5); `README.md` "Known v1 limits" |
+| Cost per scene (T5, **estimate**) | **≈ $0.01**/scene (bar ≤ $0.10). Meta's published Muse Image price is a flat $0.01 per generated image, whatever the tokens; the PIN-50 spike had priced tokens at Spark rates (≈ $0.022). Provider dashboard is authoritative | `src/gateway/costs.ts`; `docs/16-ai-usage.md`; `eval/studio-findings.md` (T5) |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
 | Automated tests | **408 passed / 1 skipped** (56 files), `AI_MOCK=1`, live run Oct 29, 2026 at `dev` tip `fc406c9` (the PIN-87 merge). Re-run at freeze; CI never makes paid calls | Oct 29 live run of `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
 | Pull requests | **78 total / 74 merged** as counted Oct 29, 2026 — a moving number; recount at freeze (command below) | `gh pr list --state all --limit 200` (Oct 29 live count) |
@@ -276,10 +276,10 @@ make **no** "zero data retention" claim (`docs/11` §4, §9 Q1).
 
 **"What does it cost, and what stops a runaway bill?" (cost
 guardrails)**
-Estimates, labelled as such: ≈ $0.020 per photo and ≈ $0.022
-per scene in the PIN-50 spike, with Muse Image dollars at
-Spark rates as a proxy — the provider dashboard is
-authoritative (§3). Guardrails are structural, not
+Estimates, labelled as such: ≈ $0.020 per photo in the PIN-50
+spike and ≈ $0.01 per scene (Muse Image's flat list price per
+generated image) — the provider dashboard is authoritative
+(§3). Guardrails are structural, not
 aspirational: every model call runs one decorator chain —
 timeout → single retry on 429/5xx → **reserve daily budget,
 fail closed** → call → log cost (`src/gateway/decorators.ts`,
