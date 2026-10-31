@@ -8,6 +8,11 @@ runConfig:
   maxInstances: 2
   cpu: 1
   memoryMiB: 512
+  # Explicit ceiling (never the platform default): each decompose request
+  # holds sharp buffers + a base64 working image on 512 MiB. The client
+  # uploads serially and Policy.maxConcurrentDecomposeJobs brakes per
+  # instance; this is the second line. Validate against dev memory.
+  concurrency: 10
 
 env:
   - variable: AI_MOCK

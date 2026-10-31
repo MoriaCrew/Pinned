@@ -30,8 +30,11 @@ import { issueHostCredential, verifyHostToken } from "./host-session";
 import { isMessageKey, userMessage } from "../i18n/user-message";
 import {
   addTapElement,
+  decomposeBoundMs,
+  discardJobCandidates,
   startDecomposeJob,
   tapFallbackLabel,
+  STALE_JOB_ERROR,
   type DecomposeDeps,
   type DecomposeJobStore,
   type StartedDecomposeJob,
@@ -52,7 +55,9 @@ import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
 import {
   CREDITS_POOL_EMPTY,
+  creditsEnabled,
   ensureStarterMakes,
+  photoDebitEventId,
   readAvailableMakes,
 } from "./credit-pool";
 
@@ -413,6 +418,129 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
   };
 }
 
+/**
+ * Fail one pending/running job that outlived the summed Policy
+ * timeouts bound + 2 x Policy.staleJobMarginMs. The runner checks
+ * its own deadline at bound + margin before debiting (the margin
+ * covers its non-AI render/store/persist tail), so by bound +
+ * 2 x margin a still-live job belongs to a dead request. The transition is
+ * CAS on the read status and never debits; a runner that debited
+ * just before losing this race sees its guarded finish fail and
+ * refunds (decompose-job). With credits on, landed-but-undebited
+ * candidates are discarded like every unpaid failure; off, the
+ * keep-what-landed rule stands. One exception (Bugbot #147): if
+ * the debit DID land and the request then died before finishing,
+ * the sweep must not eat a paid make — it checks the ledger and
+ * keeps a paid job's candidates confirmable (no refund either:
+ * the user gets exactly what they paid for, via leftovers).
+ */
+/**
+ * Is this job's photo make currently paid for — a debit landed
+ * and was not refunded? Only consulted when a stale transition
+ * was just written (rare), so a ledger scan is fine. No store
+ * while credits are on means no debit could have landed
+ * (tryDebitMake pool-empties); a read error also answers
+ * "paid" — preserving possibly-paid candidates beats discarding
+ * them on a transient failure. A refunded debit answers unpaid:
+ * after a lost finish refunds the make, leftover candidates must
+ * not stay confirmable for free (Bugbot #147).
+ */
+async function jobIsPaid(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean> {
+  if (!deps.credits) return false;
+  const entries = await deps.credits.listEntries(job.boardId).catch(() => null);
+  if (entries === null) return true;
+  const debitEventId = photoDebitEventId(job.id);
+  const debited = entries.some(
+    (entry) => entry.type === "debit" && entry.id === debitEventId,
+  );
+  if (!debited) return false;
+  return !entries.some(
+    (entry) => entry.type === "debit_refund" && entry.debitEventId === debitEventId,
+  );
+}
+
+/**
+ * Discard a stale-failed job's candidates while credits are on and
+ * no debit landed for it, persisting the emptied id lists. Paid
+ * jobs keep their candidates (jobIsPaid). Idempotent, so it
+ * doubles as the retry for a cleanup a dead request left
+ * half-done between the fail write and the discard: without the
+ * retry an unpaid `stale_running` job would stay confirmable
+ * forever (Bugbot #147).
+ */
+async function discardUnpaidStaleCandidates(
+  failed: DecomposeJob,
+  deps: BoardApiDeps,
+  now: number,
+): Promise<DecomposeJob> {
+  if (!creditsEnabled(deps.policy) || failed.pinIds.length === 0) return failed;
+  if (await jobIsPaid(failed, deps)) return failed;
+  const snapshot: DecomposeJob = {
+    ...failed,
+    elementIds: [...failed.elementIds],
+    pinIds: [...failed.pinIds],
+  };
+  await discardJobCandidates(decomposeDeps(deps), snapshot);
+  const cleared: DecomposeJob = {
+    ...failed,
+    elementIds: snapshot.elementIds,
+    pinIds: snapshot.pinIds,
+    updatedAt: now,
+  };
+  await deps.jobs.update(cleared, "failed").catch(() => false);
+  return cleared;
+}
+
+export async function failStaleJobIfNeeded(
+  job: DecomposeJob,
+  deps: BoardApiDeps,
+  now: number,
+): Promise<DecomposeJob> {
+  // Already stale-failed: retry an unpaid cleanup that may have
+  // died between the fail write and the discard.
+  if (job.status === "failed" && job.errorCode === STALE_JOB_ERROR) {
+    return discardUnpaidStaleCandidates(job, deps, now);
+  }
+  if (job.status !== "pending" && job.status !== "running") return job;
+  const boundMs = decomposeBoundMs(deps.policy) + 2 * deps.policy.staleJobMarginMs;
+  if (now - job.updatedAt <= boundMs) return job;
+  const failed: DecomposeJob = {
+    ...job,
+    status: "failed",
+    errorCode: STALE_JOB_ERROR,
+    updatedAt: now,
+  };
+  const written = await deps.jobs.update(failed, job.status);
+  if (!written) {
+    const stored = (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
+    // Losing the CAS to another sweeper does not skip the unpaid
+    // cleanup: that sweeper may not have discarded yet (or died
+    // trying), and callers like confirmPins act on what this
+    // returns. The discard is idempotent, so running it here too
+    // is safe. A job that finished instead is returned untouched.
+    if (stored.status === "failed" && stored.errorCode === STALE_JOB_ERROR) {
+      return discardUnpaidStaleCandidates(stored, deps, now);
+    }
+    return stored;
+  }
+  return discardUnpaidStaleCandidates(failed, deps, now);
+}
+
+/** Sweep every stale pending/running decompose job on one board. Returns failures written. */
+export async function sweepStaleDecomposeJobs(
+  boardId: string,
+  deps: BoardApiDeps,
+): Promise<number> {
+  const now = deps.now?.() ?? Date.now();
+  const jobs = await deps.jobs.listForBoard(boardId);
+  let failedCount = 0;
+  for (const job of jobs) {
+    const after = await failStaleJobIfNeeded(job, deps, now);
+    if (after.status === "failed" && job.status !== "failed") failedCount += 1;
+  }
+  return failedCount;
+}
+
 function startOfUtcDay(now: number): number {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -436,7 +564,7 @@ export async function sweepExpiredWorkingCopies(
     if (job.workingDeletedAt !== undefined) continue;
     if (now - job.createdAt < ttlMs) continue;
     await deps.store.delete(job.workingRef);
-    await deps.jobs.update({ ...job, workingDeletedAt: now, updatedAt: now });
+    await deps.jobs.update({ ...job, workingDeletedAt: now, updatedAt: now }, job.status);
     deleted += 1;
   }
   return deleted;
@@ -458,13 +586,20 @@ async function deleteWorkingCopy(job: DecomposeJob, deps: BoardApiDeps): Promise
   const latest = (await deps.jobs.get(job.id)) ?? job;
   if (latest.workingDeletedAt !== undefined) return latest;
   const updated: DecomposeJob = { ...latest, workingDeletedAt: now, updatedAt: now };
-  await deps.jobs.update(updated);
+  await deps.jobs.update(updated, latest.status);
   return updated;
 }
 
 const UPLOAD_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * In-process running-decompose count (Policy.maxConcurrentDecomposeJobs):
+ * the memory brake in front of sharp + base64 working images. Busy
+ * answers a code-less 429, the shape the batch client backs off on;
+ * the App Hosting runConfig concurrency is the second line.
+ */
+let runningDecomposeJobs = 0;
 
 /**
  * Upload one photo and run its DecomposeJob in-request (A4: the
@@ -532,9 +667,16 @@ export async function uploadPhoto(
     }
   }
 
-  // Opportunistic A6a sweep; never blocks the upload itself.
+  // Opportunistic A6a + stale-job sweeps; never block the upload.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
+  await sweepStaleDecomposeJobs(slug, deps).catch(() => undefined);
 
+  if (runningDecomposeJobs >= deps.policy.maxConcurrentDecomposeJobs) {
+    // Deliberately NO code: transient busy is the client's backoff
+    // signal, distinct from the coded pool-empty/per-day stops.
+    throw new BoardApiError(userMessage("error.cuttingBusy"), 429);
+  }
+  runningDecomposeJobs += 1;
   let job: StartedDecomposeJob;
   try {
     job = await startDecomposeJob(
@@ -553,6 +695,8 @@ export async function uploadPhoto(
       throw new BoardApiError("Board not found.", 404);
     }
     throw error;
+  } finally {
+    runningDecomposeJobs -= 1;
   }
   // PIN-167: a board deleted while the job ran answers like an unknown board.
   if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
@@ -573,8 +717,10 @@ export async function getJobView(
   deps: BoardApiDeps,
 ) {
   if (!viewer) return null;
-  const job = await deps.jobs.get(jobId);
-  if (!job || job.boardId !== slug || job.participantId !== viewer.id) return null;
+  const found = await deps.jobs.get(jobId);
+  if (!found || found.boardId !== slug || found.participantId !== viewer.id) return null;
+  // A poller of a dead run sees the stale failure, not `running` forever.
+  const job = await failStaleJobIfNeeded(found, deps, deps.now?.() ?? Date.now());
   const pins: Pin[] = [];
   const elements: Element[] = [];
   for (const pinId of job.pinIds) {
@@ -719,10 +865,17 @@ export async function confirmPins(
   deps: BoardApiDeps,
 ): Promise<{ pinnedPinIds: string[]; droppedPinIds: string[]; workingCopyDeleted: boolean }> {
   const input = parseConfirmPinsInput(rawInput, deps.policy);
-  const job = await deps.jobs.get(input.jobId);
-  if (!job || job.boardId !== slug || job.participantId !== participant.id) {
+  const foundJob = await deps.jobs.get(input.jobId);
+  if (!foundJob || foundJob.boardId !== slug || foundJob.participantId !== participant.id) {
     throw new BoardApiError("Job not found.", 404);
   }
+  // Run the stale check (and its unpaid-candidate cleanup) before
+  // accepting anything: a confirm must never slip into the window
+  // between a sweep's fail write and its discard, and this retries
+  // a cleanup a dead request left half-done. A paid stale job
+  // keeps its candidates and stays confirmable; an unpaid one's
+  // pin ids are cleared, so the pin check below refuses them.
+  const job = await failStaleJobIfNeeded(foundJob, deps, deps.now?.() ?? Date.now());
   // Only a finished photo can be confirmed (PIN-122 Bugbot): a job
   // still cutting keeps adding candidates from its in-memory photo,
   // so a Clear (or pin) now would not stick. The review only offers

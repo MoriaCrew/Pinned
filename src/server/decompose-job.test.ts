@@ -15,6 +15,7 @@ import { processPhoto } from "./photo-intake";
 import {
   InMemoryDecomposeJobStore,
   buildBoardWorkingRef,
+  decomposeBoundMs,
   isUsableMask,
   runDecomposeJob,
   startDecomposeJob,
@@ -611,5 +612,30 @@ describe("deterministic upload id (idempotent start)", () => {
     ).rejects.toThrow("ambiguous storage failure");
     // The claimed job survives the failed start's cleanup.
     expect((await h.jobs.get(UPLOAD_ID))?.status).toBe("running");
+  });
+
+  it("job-store update is compare-and-set on the expected status", async () => {
+    const h = await makeHarness();
+    const job = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    // A blind `running` progress write must not resurrect the ready job.
+    const lost = await h.jobs.update({ ...job, status: "running" }, "running");
+    expect(lost).toBe(false);
+    expect((await h.jobs.get(job.id))?.status).toBe("ready");
+    const won = await h.jobs.update({ ...job, faceNote: true }, "ready");
+    expect(won).toBe(true);
+    expect((await h.jobs.get(job.id))?.faceNote).toBe(true);
+    // No expected status: unconditional replace, resolving true.
+    expect(await h.jobs.update({ ...job, faceNote: false })).toBe(true);
+  });
+
+  it("decomposeBoundMs sums Policy timeouts over attempts and SAM waves", () => {
+    // Defaults: namer 2 x 30s + 0.5s backoff; SAM ceil(6/4)=2 waves of 2 x 20s + 0.5s.
+    expect(decomposeBoundMs(resolvePolicy(null))).toBe(60_500 + 81_000);
+    expect(
+      decomposeBoundMs(resolvePolicy({ retries: 0, samConcurrency: 6 })),
+    ).toBe(30_000 + 20_000);
   });
 });

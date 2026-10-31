@@ -43,6 +43,7 @@ import {
   grantPurchase as grantPurchaseOp,
   grantStarter as grantStarterOp,
   recordPurchase as recordPurchaseOp,
+  refundDebit as refundDebitOp,
   restoreCredits,
   type BoardCreditAccount,
   type ClawbackInput,
@@ -56,6 +57,7 @@ import {
   type FreezeInput,
   type PurchaseGrantInput,
   type RecordPurchaseInput,
+  type RefundDebitInput,
   type RestoreInput,
   type StarterGrantInput,
 } from "../domain/credit-ledger";
@@ -249,6 +251,10 @@ export class FirestoreCreditLedgerStore implements CreditLedgerStore {
 
   async debit(boardId: string, input: DebitInput): Promise<CreditApplyResult> {
     return this.apply(boardId, (account) => debitCredits(account, input));
+  }
+
+  async refundDebit(boardId: string, input: RefundDebitInput): Promise<CreditApplyResult> {
+    return this.apply(boardId, (account) => refundDebitOp(account, input));
   }
 
   async clawback(boardId: string, input: ClawbackInput): Promise<CreditApplyResult> {
