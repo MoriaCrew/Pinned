@@ -43,8 +43,22 @@ Principles:
 - `src/ui/` holds the components (`import { … } from "../ui"`):
   Icon (21 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
-  CreditLine, SceneCard, Developing, BoardHeader, SectionHead, Dock,
-  Sheet, EmptyState, Menu, SkinPicker, TryOnBar, PlusSheet.
+  CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
+  FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,
+  PlusSheet.
+- `FilterChips` (PIN-218) is the board's pin filter row under the
+  Pins head: New (pins from others since your last visit) · All ·
+  Mine · one chip per person with pins, most recently active first.
+  It sticks to the top while the grid scrolls, scrolls sideways,
+  and each chip is a 44px `aria-pressed` toggle with its count; a
+  person chip is their colour dot and their name cut at 14ch (the
+  full name is spoken). The row is left out when no chip would
+  narrow the grid; one person's pins hide the owner line. It only
+  filters the grid: picks, the tray and pruning use every pin. The
+  choice lasts for the tab (sessionStorage); "last visit" is the
+  newest pin time seen, saved to localStorage when the page is
+  hidden or left (`src/domain/pin-filter.ts`,
+  `src/app/g/[slug]/usePinFilter.ts`).
 - `src/ui/pinneds.css` (loaded by the root layout) styles them. Each
   skin's look (display face, sticker keyline/shadow/tilt, name-tag
   style, button and print shape, ground pattern, band) is a set of
@@ -237,3 +251,4 @@ No pins yet: three dashed ghost outlines.
 | Oct 31 | One purchase replaces the Plus plans and makes packs: €2.99 once per board for Plus + 20 creations, bought by any joined member for the board; free pool 5; members change the look once the board has Plus; no host plan sold (PIN-181; supersedes the Oct 29 Plus row) | One clear thing to buy; guests never have to pay, and anyone who wants more can give it to the board |
 | Oct 31 | One Board Plus sheet is the only screen that asks for money: the perks plus one €2.99 purchase (Plus + 20 creations) for the board, through the credits checkout; no plan cards, no Host plan, no separate "Add makes" sheet; makes are called "creations" in the UI (PIN-182) | One clear thing to buy and one word for what it buys; any member can give it to the board, and nobody sees a price list |
 | Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |
+| Oct 31 | Busy boards get a sticky filter row above the pins (New / All / Mine / people) instead of reordering or paging the grid; the grid stays oldest first (PIN-218) | 100+ pins from 18 people is 40 rows; finding your own or a friend's pins, or what is new, should take one tap, and polling must never reshuffle the grid |
