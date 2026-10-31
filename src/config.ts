@@ -96,6 +96,21 @@ export interface AppConfig {
   storageBucket: string | null;
   labEnabled: boolean;
   /**
+   * PIN-112: how many X-Forwarded-For entries the hosting platform
+   * appends after the client address (CLIENT_IP_TRUSTED_HOPS, an
+   * integer >= 0). The rate-limit key is the entry this many
+   * positions from the right end. Null (unset or invalid) keeps the
+   * first entry. Set per backend only after measuring with
+   * GET /api/lab/client-ip (SECURITY.md).
+   */
+  clientIpTrustedHops: number | null;
+  /**
+   * PIN-112: a platform header that carries the client address
+   * (CLIENT_IP_HEADER), read before X-Forwarded-For. Off (null)
+   * unless set to a valid header name.
+   */
+  clientIpHeader: string | null;
+  /**
    * UI languages this deploy offers (PIN-190, docs/18-i18n.md):
    * UI_LOCALES is a comma list ("en,fr,es"); unknown codes are
    * dropped and English is always on. Default English only, so the
@@ -153,6 +168,20 @@ function nonEmpty(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** Integer >= 0, or null when unset/invalid (PIN-112). */
+function parseTrustedHops(value: string | undefined): number | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/** A plain header name, lower-cased, or null (PIN-112). */
+function parseHeaderName(value: string | undefined): string | null {
+  const trimmed = nonEmpty(value)?.toLowerCase() ?? null;
+  return trimmed && /^[a-z0-9-]+$/.test(trimmed) ? trimmed : null;
+}
+
 /**
  * PIN-163: the client authDomain moves to the app's own host only
  * when the /__/auth proxy exists for it (same-origin opt-in and a
@@ -197,6 +226,8 @@ export function parseConfig(
     policyOverridesJson: nonEmpty(env.POLICY_OVERRIDES_JSON),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 500)),
     labEnabled: env.PINNED_LAB === "1",
+    clientIpTrustedHops: parseTrustedHops(env.CLIENT_IP_TRUSTED_HOPS),
+    clientIpHeader: parseHeaderName(env.CLIENT_IP_HEADER),
     sessionSecret: nonEmpty(env.SESSION_SECRET),
     firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
     firebaseWebAuthDomain: resolveAuthDomain({
