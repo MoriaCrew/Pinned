@@ -531,3 +531,28 @@ describe("board deleted mid-run (PIN-167)", () => {
     expect((await h.boards.listEvents("board-1")).map((e) => e.type)).toEqual(["participant_joined"]);
   });
 });
+
+describe("deterministic upload id (idempotent start)", () => {
+  const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+
+  it("a second start with the same jobId replays: existing job, no port calls, no duplicates", async () => {
+    const h = await makeHarness();
+    const first = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    expect(first.id).toBe(UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect(first.replayed).toBeUndefined();
+
+    const second = await startDecomposeJob(
+      { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+      h.deps,
+    );
+    expect(second.replayed).toBe(true);
+    expect(second.status).toBe("ready");
+    expect(h.calls.namer).toBe(1);
+    expect(h.calls.segmenter).toHaveLength(2);
+    expect(await h.boards.listElements("board-1")).toHaveLength(2);
+  });
+});

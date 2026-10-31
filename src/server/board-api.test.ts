@@ -770,3 +770,36 @@ describe("uploadPhoto racing a board delete (PIN-167)", () => {
     expect(await h.deps.jobs.listForBoard(board.slug)).toEqual([]);
   });
 });
+
+describe("idempotent upload", () => {
+  const UPLOAD_ID = "11111111-2222-4333-8444-555555555555";
+
+  it("replay with the same uploadId returns the existing job without re-running it", async () => {
+    const h = makeHarness();
+    const { board, owner } = await makeBoardWithTwo(h);
+    const first = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    expect(first.id).toBe(UPLOAD_ID);
+    expect(first.status).toBe("ready");
+    expect(first.replayed).toBeUndefined();
+    const elementsBefore = (await h.boards.listElements(board.slug)).length;
+
+    const second = await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    expect(second.replayed).toBe(true);
+    expect(second.status).toBe("ready");
+    expect((await h.boards.listElements(board.slug)).length).toBe(elementsBefore);
+    expect(await h.jobs.listForBoard(board.slug)).toHaveLength(1);
+  });
+
+  it("rejects a malformed uploadId (400 bad_upload_id) and another participant's id (409)", async () => {
+    const h = makeHarness();
+    const { board, owner, other } = await makeBoardWithTwo(h);
+    await expect(
+      uploadPhoto(board.slug, owner, await photoBytes(), h.deps, "not-a-uuid"),
+    ).rejects.toMatchObject({ status: 400, code: "bad_upload_id" });
+
+    await uploadPhoto(board.slug, owner, await photoBytes(), h.deps, UPLOAD_ID);
+    await expect(
+      uploadPhoto(board.slug, other, await photoBytes(), h.deps, UPLOAD_ID),
+    ).rejects.toMatchObject({ status: 409, code: "upload_conflict" });
+  });
+});

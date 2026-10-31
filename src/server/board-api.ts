@@ -32,7 +32,9 @@ import {
   addTapElement,
   startDecomposeJob,
   tapFallbackLabel,
+  type DecomposeDeps,
   type DecomposeJobStore,
+  type StartedDecomposeJob,
   type TapPoint,
 } from "./decompose-job";
 import type { DerivativeStore } from "./derivative-store";
@@ -395,6 +397,22 @@ export async function getBoardView(
   };
 }
 
+/** BoardApiDeps narrowed to the decompose service's deps. */
+function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
+  return {
+    boards: deps.boards,
+    jobs: deps.jobs,
+    store: deps.store,
+    namer: deps.namer,
+    segmenter: deps.segmenter,
+    ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
+    ...(deps.credits ? { credits: deps.credits } : {}),
+    policy: deps.policy,
+    now: deps.now,
+    newId: deps.newId,
+  };
+}
+
 function startOfUtcDay(now: number): number {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -444,58 +462,89 @@ async function deleteWorkingCopy(job: DecomposeJob, deps: BoardApiDeps): Promise
   return updated;
 }
 
+const UPLOAD_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
 /**
  * Upload one photo and run its DecomposeJob in-request (A4: the
  * request does the work; the client also polls the job route for
  * pop-in/retry). Enforces Policy.photosPerParticipantPerDay at the
  * API edge (the PIN-61 budget decorator enforces the same cap at
  * the namer port as a second line). PhotoIntakeError propagates.
+ *
+ * With `uploadId` (the client's deterministic per-file UUID, which
+ * becomes the job id) the call is idempotent: an existing own job
+ * is returned marked `replayed` BEFORE the daily cap, the credit
+ * preflight, intake or any AI spend — a lost-response retry can
+ * never double-debit. A still-pending own job falls through to
+ * startDecomposeJob's pending recovery (its first attempt already
+ * passed the cap and preflight). Another participant's id is a
+ * generic 409.
  */
 export async function uploadPhoto(
   slug: string,
   participant: Participant,
   bytes: Uint8Array,
   deps: BoardApiDeps,
-): Promise<DecomposeJob> {
+  uploadId?: string,
+): Promise<StartedDecomposeJob> {
   const board = await deps.boards.getBoard(slug);
   if (!board) throw new BoardApiError("Board not found.", 404);
 
-  const now = deps.now?.() ?? Date.now();
-  const todaysJobs = (await deps.jobs.listForBoard(slug)).filter(
-    (job) => job.participantId === participant.id && job.createdAt >= startOfUtcDay(now),
-  );
-  if (todaysJobs.length >= deps.policy.photosPerParticipantPerDay) {
-    throw new BoardApiError(userMessage("error.photosPerDay"), 429, "photos_per_day");
+  let recoveringPending = false;
+  if (uploadId !== undefined) {
+    if (!UPLOAD_ID_PATTERN.test(uploadId)) {
+      throw new BoardApiError(userMessage("error.uploadIdInvalid"), 400, "bad_upload_id");
+    }
+    const existing = await deps.jobs.get(uploadId).catch(() => null);
+    if (existing) {
+      if (existing.boardId !== slug || existing.participantId !== participant.id) {
+        throw new BoardApiError(userMessage("error.uploadIdConflict"), 409, "upload_conflict");
+      }
+      if (existing.status !== "pending") {
+        return { ...existing, replayed: true };
+      }
+      recoveringPending = true;
+    }
   }
 
-  // PIN-151 preflight (after the Policy daily cap above, which
-  // keeps applying): with credits on and an empty pool the
-  // photo AI path refuses here — the same 429 deny shape as the
-  // cap — before intake, any job or any AI spend. The starter
-  // pool lands lazily inside this read for older boards.
-  const availableMakes = await readAvailableMakes(slug, deps);
-  if (availableMakes !== null && availableMakes < 1) {
-    throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+  if (!recoveringPending) {
+    const now = deps.now?.() ?? Date.now();
+    const todaysJobs = (await deps.jobs.listForBoard(slug)).filter(
+      (job) =>
+        job.participantId === participant.id &&
+        job.id !== uploadId &&
+        job.createdAt >= startOfUtcDay(now),
+    );
+    if (todaysJobs.length >= deps.policy.photosPerParticipantPerDay) {
+      throw new BoardApiError(userMessage("error.photosPerDay"), 429, "photos_per_day");
+    }
+
+    // PIN-151 preflight (after the Policy daily cap above, which
+    // keeps applying): with credits on and an empty pool the
+    // photo AI path refuses here — the same 429 deny shape as the
+    // cap — before intake, any job or any AI spend. The starter
+    // pool lands lazily inside this read for older boards.
+    const availableMakes = await readAvailableMakes(slug, deps);
+    if (availableMakes !== null && availableMakes < 1) {
+      throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+    }
   }
 
   // Opportunistic A6a sweep; never blocks the upload itself.
   await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
 
-  let job: DecomposeJob;
+  let job: StartedDecomposeJob;
   try {
     job = await startDecomposeJob(
-      { boardId: slug, participantId: participant.id, bytes },
       {
-        boards: deps.boards,
-        jobs: deps.jobs,
-        store: deps.store,
-        namer: deps.namer,
-        segmenter: deps.segmenter,
-        ...(deps.credits ? { credits: deps.credits } : {}),
-        policy: deps.policy,
-        now: deps.now,
-        newId: deps.newId,
+        boardId: slug,
+        participantId: participant.id,
+        bytes,
+        ...(uploadId !== undefined ? { jobId: uploadId } : {}),
       },
+      decomposeDeps(deps),
     );
   } catch (error) {
     // PIN-167: deleted between this request's board read and the

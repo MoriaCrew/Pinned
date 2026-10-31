@@ -194,17 +194,32 @@ export interface StartDecomposeInput {
   participantId: string;
   /** Raw upload bytes; only the stripped intake derivative is stored. */
   bytes: Uint8Array;
+  /**
+   * Deterministic job id (the client's upload id). When a job with
+   * this id already exists for the same board + participant, the
+   * call is a replay: the existing job is returned (marked
+   * `replayed`) with no new intake write, no port calls and no
+   * second debit. Absent = a fresh random id (deps.newId).
+   */
+  jobId?: string;
 }
+
+/** A started (or replayed) job; `replayed` marks the idempotent path. */
+export type StartedDecomposeJob = DecomposeJob & { replayed?: boolean };
 
 /**
  * Intake + create the pending job + run it in-request (docs/11
- * A4: request does the work, client polls). PhotoIntakeError from
- * intake propagates before any job or object exists.
+ * A4: request does the work, client polls). Intake itself is
+ * memory-only, so a PhotoIntakeError still propagates before any
+ * job or object exists. The working copy is written only AFTER
+ * the job create lands: create is the atomic anchor for replayed
+ * (deterministic-id) uploads, so a losing duplicate never writes
+ * storage, never calls a port and can never double-debit.
  */
 export async function startDecomposeJob(
   input: StartDecomposeInput,
   deps: DecomposeDeps,
-): Promise<DecomposeJob> {
+): Promise<StartedDecomposeJob> {
   const now = deps.now ?? Date.now;
   const board = await deps.boards.getBoard(input.boardId);
   if (!board) throw new RangeError(`Board ${input.boardId} not found`);
@@ -215,13 +230,11 @@ export async function startDecomposeJob(
   if (!participant) {
     throw new RangeError(`Participant ${input.participantId} not found`);
   }
+  const runDeps = { ...deps, userIdAtCall: participant.userId ?? null };
 
   const processed = await processPhoto(input.bytes);
-  const jobId = (deps.newId ?? randomUUID)();
+  const jobId = input.jobId ?? (deps.newId ?? randomUUID)();
   const workingRef = buildBoardWorkingRef(input.boardId, jobId);
-  // Only the stripped derivative is ever written; input.bytes (the
-  // original upload) is not stored anywhere (privacy invariant).
-  await deps.store.put(workingRef, processed.derivative, processed.contentType);
 
   const at = now();
   const job: DecomposeJob = {
@@ -241,10 +254,39 @@ export async function startDecomposeJob(
   try {
     await deps.jobs.create(job);
   } catch (cause) {
-    await deps.store.delete(workingRef).catch(() => undefined);
-    throw cause;
+    // Already exists: the replay path (a lost-response retry or a
+    // concurrent duplicate of the same deterministic upload id).
+    const existing = await deps.jobs.get(jobId).catch(() => null);
+    if (
+      !existing ||
+      existing.boardId !== input.boardId ||
+      existing.participantId !== input.participantId
+    ) {
+      throw cause;
+    }
+    if (existing.status !== "pending") {
+      return { ...cloneJob(existing), replayed: true };
+    }
+    // Pending: the first attempt died between create and run (or is
+    // in that window now). Recover it: write the working copy only
+    // if it is not there yet (identical-byte retries make this a
+    // no-op difference), then run — claim-before-call still gates
+    // a concurrent first attempt.
+    const present = await deps.store.get(workingRef).catch(() => null);
+    if (!present) {
+      await deps.store.put(workingRef, processed.derivative, processed.contentType);
+    }
+    const ran = await runDecomposeJob(jobId, runDeps);
+    return { ...ran, replayed: true };
   }
-  return runDecomposeJob(jobId, { ...deps, userIdAtCall: participant.userId ?? null });
+  // Only the stripped derivative is ever written; input.bytes (the
+  // original upload) is not stored anywhere (privacy invariant). A
+  // failed write still runs the job, which fails it cleanly as
+  // working_copy_missing instead of stranding a pending job.
+  await deps.store
+    .put(workingRef, processed.derivative, processed.contentType)
+    .catch(() => undefined);
+  return runDecomposeJob(jobId, runDeps);
 }
 
 /**
