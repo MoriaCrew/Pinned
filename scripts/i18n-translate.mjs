@@ -65,7 +65,7 @@ import { MESSAGES_DIR, ROOT, listLocales, loadEnglish, loadGlossary, loadLocale,
 
 const TRANSLATE_PROMPT = "translate-ui.v1";
 const REVIEW_PROMPT = "review-ui.v1";
-/** docs/08-ux-principles.md §2: icon + ≤6 words. */
+/** Button labels stay short: ≤6 words (docs/archive/08-ux-principles.md §2). */
 const BUTTON_MAX_WORDS = 6;
 const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 const HTTP_ATTEMPTS = 3;

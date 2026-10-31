@@ -4,7 +4,9 @@ import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
 import { createBoardWithHost, publicBoard } from "../../../server/board-api";
 import { buildHostCookieHeader, hostCookieMaxAgeSeconds } from "../../../server/host-session";
-import { RATE_LIMITS, checkRateLimit, clientKey } from "../../../server/rate-limit";
+import { requestMakerKey } from "../../../server/maker-context";
+import { checkRateLimit, clientKey } from "../../../server/rate-limit";
+import { signedInUserId } from "../auth-shared";
 import { plusErrorResponse } from "./plus-shared";
 import { JSON_HEADERS, boardApiDeps, isSecureRequest } from "./shared";
 
@@ -16,10 +18,12 @@ export const dynamic = "force-dynamic";
  * PIN-103: also sets the host cookie (this browser is the host),
  * scoped to Path=/api/boards/<slug>; the board stores only the
  * token's hash. A Plus skin as the initial theme is a 402.
+ * PIN-205: while credits are on, the maker (signed-in user, else
+ * client address) decides whether the board gets the free pool.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const locale = await getLocale();
-  const gate = RATE_LIMITS.boardCreatePerIp;
+  const gate = getPolicy().boardCreatePerIp;
   if (!checkRateLimit(clientKey(request, "board-create"), gate.limit, gate.windowMs)) {
     return NextResponse.json(
       { error: t(locale, "request.tooManyBoards") },
@@ -37,7 +41,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   try {
     const policy = getPolicy();
-    const { board, hostToken } = await createBoardWithHost(body, boardApiDeps(policy));
+    const context = policy.credits.enabled
+      ? { makerKey: await requestMakerKey(request, signedInUserId) }
+      : undefined;
+    const { board, hostToken } = await createBoardWithHost(body, boardApiDeps(policy), context);
     const hostCookie = buildHostCookieHeader(
       board.slug,
       hostToken,

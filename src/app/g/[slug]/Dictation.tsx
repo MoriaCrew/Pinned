@@ -1,23 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { t } from "../../../i18n";
+import { clipClock } from "../../../domain/make-sheet";
+import { t, tf } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
-import { Button, Hint } from "../../../ui";
 import { blobToDictationWav } from "./dictate-audio";
 
-type DictateState = "idle" | "recording" | "working";
+export type DictateState = "idle" | "recording" | "working";
 
 /**
- * "Say it instead" dictation for the Make-sheet idea (PIN-119):
- * MediaRecorder captures a short clip, the clip is re-encoded to
- * mono 16kHz WAV, the board transcribe route runs it through the
- * decorated Muse Voice port, and the transcript is appended to
- * the idea field. Rendered only when a mic + MediaRecorder exist
- * (hidden on unsupported browsers) and only when the caller says
- * dictation is on (Policy/AI); failures are friendly lines.
+ * Dictation for the Make-sheet idea (PIN-119; a hook since PIN-216 so
+ * the mic can live inside the field): MediaRecorder captures a short
+ * clip, the clip is re-encoded to mono 16kHz WAV, the board transcribe
+ * route runs it through the decorated Muse Voice port, and the
+ * transcript goes to `onText`. `supported` is false without a mic +
+ * MediaRecorder (the caller hides the mic); `elapsed` counts whole
+ * seconds up to the Policy clip cap; failures are friendly lines.
  */
-export function DictateButton({
+export function useDictation({
   slug,
   maxSeconds,
   onText,
@@ -30,8 +30,9 @@ export function DictateButton({
   const locale = useLocale();
   const [supported, setSupported] = useState(false);
   const [state, setState] = useState<DictateState>("idle");
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const sessionRef = useRef<{ recorder: MediaRecorder; stream: MediaStream; timer: number } | null>(
+  const sessionRef = useRef<{ recorder: MediaRecorder; stream: MediaStream; timer: number; clock: number } | null>(
     null,
   );
   // Unmount + double-start guard: a getUserMedia promise can
@@ -51,7 +52,6 @@ export function DictateButton({
       liveRef.current = false;
       stopSession();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function stopSession() {
@@ -59,6 +59,7 @@ export function DictateButton({
     sessionRef.current = null;
     if (!session) return;
     window.clearTimeout(session.timer);
+    window.clearInterval(session.clock);
     if (session.recorder.state === "recording") {
       // Detach first so teardown can never trigger an upload.
       session.recorder.onstop = null;
@@ -132,7 +133,12 @@ export function DictateButton({
     const timer = window.setTimeout(() => {
       if (recorder.state === "recording") recorder.stop();
     }, Math.max(300, maxSeconds * 1000 - 300));
-    sessionRef.current = { recorder, stream, timer };
+    const startedAt = Date.now();
+    const clock = window.setInterval(() => {
+      setElapsed(Math.min(maxSeconds, Math.round((Date.now() - startedAt) / 1000)));
+    }, 1000);
+    sessionRef.current = { recorder, stream, timer, clock };
+    setElapsed(0);
     recorder.start();
     setState("recording");
   }
@@ -143,23 +149,30 @@ export function DictateButton({
     }
   }
 
-  if (!supported) return null;
+  return { supported, state, elapsed, error, start: () => void start(), stop };
+}
 
+/**
+ * The recording line inside the idea field (PIN-216): a dot, elapsed
+ * over the Policy cap, and what is happening. It covers the field
+ * without changing its size; Stop is the field's own mic button, so
+ * focus never jumps. Screen readers hear the state from the composer's
+ * status line instead.
+ */
+export function DictationBar({ state, elapsed, maxSeconds }: { state: DictateState; elapsed: number; maxSeconds: number }) {
+  const locale = useLocale();
+  if (state === "idle") return null;
   return (
-    <div className="pn-make-dictate">
+    <div className="pn-dictate-bar" data-state={state} aria-hidden="true">
+      <span className="pn-dictate-dot" />
       {state === "recording" ? (
-        <>
-          <Button icon="mic" onClick={stop}>
-            {t(locale, "make.dictateStop")}
-          </Button>
-          <Hint point="none">{t(locale, "make.dictateListening")}</Hint>
-        </>
-      ) : (
-        <Button icon="mic" disabled={state === "working"} onClick={() => void start()}>
-          {state === "working" ? t(locale, "make.dictateWorking") : t(locale, "make.dictate")}
-        </Button>
-      )}
-      {error ? <Hint point="none">{error}</Hint> : null}
+        <span className="pn-dictate-clock">
+          {tf(locale, "make.dictateElapsed", { elapsed: clipClock(elapsed), cap: clipClock(maxSeconds) })}
+        </span>
+      ) : null}
+      <span className="pn-dictate-text">
+        {t(locale, state === "recording" ? "make.dictateListening" : "make.dictateWorking")}
+      </span>
     </div>
   );
 }

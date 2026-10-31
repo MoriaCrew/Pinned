@@ -69,6 +69,8 @@ export interface PinCard {
   /** Element owner's display name; null when unknown (UI falls back). */
   ownerName: string | null;
   ownerId: string;
+  /** Pin time (server clock): the filter row's New chip and activity order (PIN-218). */
+  createdAt: number;
 }
 
 /**
@@ -79,7 +81,7 @@ export interface PinCard {
 export function pinCards(view: BoardViewLike): PinCard[] {
   const elementsById = new Map(view.elements.map((e) => [e.id, e]));
   const namesById = new Map(view.participants.map((p) => [p.id, p.displayName]));
-  const cards: (PinCard & { createdAt: number })[] = [];
+  const cards: PinCard[] = [];
   for (const pin of view.pins) {
     const element = elementsById.get(pin.elementId);
     if (!element) continue;
@@ -93,7 +95,7 @@ export function pinCards(view: BoardViewLike): PinCard[] {
     });
   }
   cards.sort((a, b) => a.createdAt - b.createdAt || a.pinId.localeCompare(b.pinId));
-  return cards.map(({ createdAt: _createdAt, ...card }) => card);
+  return cards;
 }
 
 /**

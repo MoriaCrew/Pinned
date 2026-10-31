@@ -6,10 +6,10 @@ including amendments A1–A6. The game it replaces is archived in
 `docs/archive/` (01, 02, 05). Architecture decisions:
 `docs/adr/003-studio-architecture.md`._
 
-> **Findings ownership (A1):** only PIN-49 edits this file. PIN-50
-> writes spike results to `eval/studio-findings.md`; a later docs
-> update folds them into the Findings table in §8. No other issue
-> edits `docs/11` without first landing behind the PIN-49 merge.
+> **Findings ownership (A1):** PIN-50 wrote spike results to
+> `eval/studio-findings.md`; the Findings table in §8 folds them in.
+> Since Oct 31 any PR that changes behaviour this file describes edits
+> it in the same PR (surgically; `AGENTS.md`). Oct 31 refresh: PIN-219.
 
 ## 1. Product
 
@@ -23,7 +23,9 @@ Pinneds is a shared pinboard of real things.
   lands in the board's gallery, credited to the people whose things
   are in it.
 - Scenes can be remixed.
-- There are no accounts: the link is the invitation.
+- No account is needed: the link is the invitation. Optional Google
+  sign-in (PIN-57, `docs/13`) adds a personal library and never gates
+  the loop.
 - Solo works too (a board with one person), and that is also the
   judge demo.
 
@@ -47,7 +49,7 @@ Logistics:
 | No hard-coded limits | Every count, size, cap, timeout and TTL comes from one Policy object (§5.1). |
 | Process | Firebase App Hosting dev/prod and the required Bugbot check stay. |
 | Testing | Muse Code runs the live tests itself with synthetic images from Higgsfield. Robin reviews later; he is not a gate. |
-| Identity and persistence | Design it now (owned elements, persistent scenes, `ownerId` everywhere). Sign-in comes later behind `AUTH_MODE`. |
+| Identity and persistence | Design it now (owned elements, persistent scenes, `ownerId` everywhere). Sign-in shipped behind `AUTH_MODE` (PIN-57, `docs/13`). |
 | The game | Dropped: judging, rubric, roast levels, personas, deadlines, reveal and guessing, diary. Code removal: PIN-52. |
 
 ## 3. Verified API facts: use these, not memory
@@ -157,39 +159,43 @@ object. The defaults below are proposals; tune them from evidence.
 | Timeouts in ms: Spark / SAM / scene | 30,000 / 20,000 / 120,000 |
 | Retries on 429/5xx | 1 |
 | Daily AI budget | the existing `AI_DAILY_BUDGET_USD` (see A2) |
-| Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0` |
-| Prompt versions | `elements.v1`, `scene.v1` |
+| Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`, `muse-voice-transcribe-1.0` |
+| Prompt versions | `elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v2` |
 | `credits.enabled` / `credits.starterMakes` | `false` / 5 (PIN-151: the makes pool, docs/15; 25 before PIN-181; off = pre-credit behaviour exactly, on = 1 make per successful photo or AI scene, collage stays free) |
 
-> **A2 (budget):** hosted `AI_DAILY_BUDGET_USD=2` / 200 calls
-> (`apphosting.dev.yaml`, `apphosting.prod.yaml`, `.env.example`) is
-> too small for family play — a few scenes would exhaust it. Keep the
-> local slice-0 spike cap ($25 Meta, PIN-50) separate from the hosted
-> budget. Proposed hosted default: dev/prod **$10/day** plus
-> per-board caps (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`
-> above). Robin raises the hosted value before PIN-55. `0` must mean
-> "off", not the current $2 fallback
-> (`src/config.ts`: `positiveNumber(env.AI_DAILY_BUDGET_USD, 2)`).
+> **A2 (budget), as of Oct 31:** the original hosted $2 / 200 calls
+> was too small for family play, so it was raised. Today the code
+> default is **$5/day and 500 calls** (`src/config.ts`:
+> `aiDailyBudgetUsd`, `aiDailyCallLimit`) and the dev backend sets
+> the same 5 / 500. Prod runs **$50/day and 10,000 calls during
+> judging** (Robin's decision, Oct 31; applied by PIN-209, see
+> `docs/DEPLOY.md`). Per-board and per-participant caps
+> (`scenesPerBoardPerDay`, `photosPerParticipantPerDay` above) still
+> bound one board. `AI_DAILY_BUDGET_USD=0` means "off" (PIN-59).
+> The local slice-0 spike cap ($25 Meta, PIN-50) is separate.
 
 ### 5.2 Model ports and decorators
 
-- **Ports by capability:** `ElementNamer` (Spark vision to elements
-  JSON), `Segmenter` (SAM concept, point or box to masks) and
-  `SceneComposer` (Muse Image to image). Each has a Meta adapter, a
-  mock adapter and a recorded-fixture adapter.
+- **Ports by capability** (`src/gateway/index.ts`, six today):
+  `ElementNamer` (Spark vision to elements JSON), `Segmenter` (SAM
+  concept, point or box to masks), `SceneComposer` (Muse Image to
+  image), plus `ChipSuggester` (idea chips, PIN-75), `TapNamer`
+  (names a tapped cut-out, PIN-117) and `SpeechTranscriber` (Muse
+  Voice dictation, PIN-119). Each has a Meta adapter, a mock adapter
+  and a recorded-fixture adapter.
 - **One decorator chain on every port:** timeout → retry on 429/5xx
   → reserve budget (fail closed) → call → log cost (`AiCallLog`) →
   fall back.
 - **Refusals** become the outcome `refused`, with a friendly line.
   Never a 500.
-- This chain also fixes the open code-review findings:
+- This chain was built to fix the Oct 28 code-review findings:
   - The budget check scans every AI log of the day. Use one counter
     doc per day with `FieldValue.increment` instead.
   - The guard checks, then calls, so parallel requests all pass, and
     failed log writes are swallowed. Reserve spend first, fail closed.
-  - Creating a game has no per-IP limit.
+  - Creating a board had no per-IP limit.
   - Model calls have no timeout and no `max_tokens`.
-  - `AI_DAILY_BUDGET_USD=0` falls back to $2. It should mean "off".
+  - `AI_DAILY_BUDGET_USD=0` fell back to $2. It should mean "off".
   - A `%2F` slug reaches Firestore as a path. Validate
     `^[A-Za-z0-9_-]{22}$` first.
   - Server modules lack `server-only` (verified: no `server-only`
@@ -199,8 +205,8 @@ object. The defaults below are proposals; tune them from evidence.
 
 - `DecomposeJob` and `SceneJob` documents move
   `pending → running → ready / failed / refused`.
-- They are idempotent by job id, with claim-before-call, as in the
-  segment service (`src/server/segment-submission.ts`).
+- They are idempotent by job id, with claim-before-call, as in
+  `src/server/decompose-job.ts`.
 - The request does the work and writes the status; the client polls.
 - **A4:** no queue in slices 1–2 (request + poll). Add a queue
   (Inngest or Firebase task-queue functions) only if retries get
@@ -208,10 +214,11 @@ object. The defaults below are proposals; tune them from evidence.
 
 ### 5.4 Data model
 
-- **Participant.** One per board, signed cookie; it already exists
-  (`src/server/player-session.ts`). Later it links to a **User**
-  (Firebase Auth, Google) behind `AUTH_MODE`, using the claim flow
-  described in `docs/archive/02`.
+- **Participant.** One per board, signed cookie
+  (`src/server/board-session.ts`; the board creator also holds a
+  host token, `host-session.ts`). With `AUTH_MODE=optional` it links
+  to a **User** (Firebase Auth, Google; `src/server/user-session.ts`,
+  `docs/13`).
 - **Element.** An owned asset: `ownerId`, `label`, `description`,
   mask box, cut-out ref, flattened ref, `sourcePhotoId`, `faceFlag`,
   `createdAt`.
@@ -236,12 +243,15 @@ object. The defaults below are proposals; tune them from evidence.
   client storage rules stay deny-all.
 - Original uploads are never written anywhere (`docs/06`).
 
-> **A6 (TTL gap):** the `tmp/` bucket lifecycle rule is **14 days**
-> today (`storage.lifecycle.json`: `age: 14`, `matchesPrefix:
-> ["tmp/"]`; `docs/06`). A 24 h `workingCopyTtlHours` therefore needs
-> (a) an app-side delete once pins are chosen (or at TTL), and
-> (b) an operator lifecycle fix to 1 day as the backstop. Until both
-> land, do not claim 24 h deletion in user-facing copy.
+> **A6 (TTL gap):** the `tmp/` bucket lifecycle rule was **14 days**
+> (`storage.lifecycle.json`, `matchesPrefix: ["tmp/"]`; `docs/06`). A
+> 24 h `workingCopyTtlHours` needs (a) an app-side delete once pins
+> are chosen or at TTL, and (b) a 1-day lifecycle rule as backstop.
+> (a) shipped: the app deletes the working copy at "Pin selected" and
+> an opportunistic per-board sweep deletes copies past the TTL
+> (`src/server/board-api.ts`, `decompose-job.ts`). (b) lands with
+> PIN-209. Until the 1-day rule is applied on a bucket, do not claim
+> a hard 24 h deletion in user-facing copy.
 
 ### 5.6 Scene inputs
 
@@ -273,7 +283,7 @@ object. The defaults below are proposals; tune them from evidence.
 
 ### 5.10 Themes replace presets (A5)
 
-- The curated preset library (`docs/09`) becomes **board themes**:
+- The curated preset library (`docs/archive/09`) becomes **board themes**:
   palette/type/motif tokens only. Keep the PIN-41 pre-generated art
   as theme assets.
 - Host personas inside presets are deleted with the game code in
@@ -283,7 +293,7 @@ object. The defaults below are proposals; tune them from evidence.
 ## 6. UX
 
 **Layout.** One board page, with scenes first and the pins grid
-below. A fixed bottom bar opens two sheets: 📷 Add and ✨ Make a
+below. A fixed bottom bar opens two sheets: Add photo and Make a
 scene.
 
 **Add sheet.**
@@ -297,7 +307,7 @@ scene.
 
 1. Select up to `pinsPerScene.max` pins on the board.
 2. Write a prompt or tap one of 3–4 suggestion chips.
-3. "Make it ✨" closes the sheet, and a "cooking…" card appears in
+3. "Make it" closes the sheet, and a "cooking…" card appears in
    the gallery.
 
 **Scene card.** The image, "made from Robin's mug + Aye's cat",
@@ -312,7 +322,7 @@ the latest scene.
 - No settings knobs on screen.
 - Waiting is always visible.
 - Target: a new player's first scene within 90 s.
-- Follow `docs/08`: an icon plus 6 words at most, 44 px targets.
+- Follow `docs/14` (no emoji, short verb-first labels, 44 px targets).
 
 ## 7. Slices and schedule
 
@@ -328,8 +338,8 @@ the latest scene.
 
 Foundations run ahead of the slices: PIN-51 (Policy + gateway,
 §5.1–5.2) and PIN-52 (delete the game code, rename routes to
-boards), both blocked by PIN-49. Sign-in is PIN-57 (later); the
-family launch is PIN-58 (Robin).
+boards), both blocked by PIN-49. Sign-in is PIN-57 (shipped behind
+`AUTH_MODE`, `docs/13`); the family launch is PIN-58 (Robin).
 
 If a day slips, cut in this order: remix → SVG outlines → chips
 become a fixed list → the Discord board.
@@ -412,16 +422,17 @@ owning issue in brackets decides or verifies.
 4. **Hosted $2 budget:** hosted `AI_DAILY_BUDGET_USD=2` / 200 calls
    is too small for family play (A2). Raise to what, and what stops
    one board from spending the day's budget?
-   **Default:** dev/prod $10/day + per-board caps
-   (`scenesPerBoardPerDay` 40) + per-participant caps; Robin applies
-   the env raise before PIN-55. Local spike money ($25, PIN-50)
-   stays separate. [PIN-51 / PIN-55, operator]
+   **Default:** per-board caps (`scenesPerBoardPerDay` 40) +
+   per-participant caps. **Resolved:** see A2 (code default $5 / 500;
+   prod $50 / 10,000 during judging). Local spike money ($25,
+   PIN-50) stays separate. [PIN-51 / PIN-55, operator]
 5. **24 h TTL vs 14 d lifecycle:** Policy says
    `workingCopyTtlHours` 24, but the bucket rule deletes `tmp/`
    after 14 days (A6). Which is the real guarantee?
    **Default:** app deletes the working copy when pins are chosen
    (or at 24 h via a sweeper); operator tightens the lifecycle rule
    to 1 day as backstop. No 24 h claim in copy until both exist.
+   **Status:** the app side shipped; the 1-day rule is PIN-209 (A6).
    [PIN-53 + operator]
 6. **Slug validation:** a `%2F` slug reaches Firestore as a path.
    Validate at every route entry, or centrally in the repository?
@@ -429,7 +440,7 @@ owning issue in brackets decides or verifies.
    at the first server boundary of every `/g/{slug}` route (404,
    not 500), plus a unit test. Exactly 22 chars matches the current
    128-bit base64url generator. [PIN-51]
-7. **Preset fate:** `docs/09` presets bundle a host persona with a
+7. **Preset fate:** `docs/archive/09` presets bundle a host persona with a
    look. The game is gone — keep, halve, or delete?
    **Default (A5):** looks become board themes (tokens + PIN-41
    art); personas are deleted in PIN-52. [PIN-52 / PIN-53]
@@ -448,20 +459,27 @@ owning issue in brackets decides or verifies.
 10. **Chips:** suggestion chips generated per board (Spark, a paid
     call) or a fixed list?
     **Default:** fixed list in v1; generated chips only if slice 2
-    lands with time to spare (cut order, §7). [PIN-54]
+    lands with time to spare (cut order, §7). **Resolved:** generated
+    chips shipped (PIN-75: `chips.v1`, cached per label set); the
+    fixed list is the instant fallback (`sceneChips` in Policy).
+    Since PIN-214 both follow the viewer's UI language (`chips.v2`,
+    cached per language; fixed chips are `make.chip.*` i18n keys,
+    Policy keeps `sceneChipsCount`). [PIN-54]
 
 ## 10. Context to load
 
 - **Repo (`dev`):** `AGENTS.md`; `docs/06` (photo intake), `docs/07`
-  (SAM lab), `docs/08` (UX principles), `docs/09` (themes),
-  `docs/10` (domains); measurements in `docs/archive/02` and
-  `docs/07`.
+  (SAM lab), `docs/10` (domains), `docs/13`–`docs/19` (sign-in,
+  design system, Board Plus, AI usage, showcase sets, languages,
+  Meta models); index in `docs/README.md`; measurements in
+  `docs/archive/02` and `docs/07`. Themes (`docs/archive/09`) now
+  live in `src/domain/board-themes.ts`.
 - **`src/server/`:** `photo-intake.ts`, `sam-mask.ts`,
-  `segment-submission.ts`, `confirm-cutout.ts`,
-  `derivative-store.ts`, `player-session.ts`, `rate-limit.ts`,
-  `ai-usage.ts`.
-- **`src/gateway/`:** `model-gateway.ts`, `meta-gateway.ts`,
-  `mock-gateway.ts`.
+  `decompose-job.ts`, `board-api.ts`, `derivative-store.ts`,
+  `board-session.ts`, `host-session.ts`, `user-session.ts`,
+  `rate-limit.ts`, `ai-usage.ts`.
+- **`src/gateway/`:** `ports.ts`, `decorators.ts`, `meta-gateway.ts`,
+  `mock-ports.ts`, `fixture-ports.ts`.
 - **External:** meta-models/meta-model-cookbook, folders
   `05_muse_image/01` to `04` and `07_sam`; the `@meta-sam/parser`
   README.

@@ -66,6 +66,13 @@ export interface AppConfig {
    */
   demoBoardSlug: string | null;
   /**
+   * Public contact address shown on /privacy and /terms (PIN-26),
+   * from LEGAL_CONTACT_EMAIL. Env only, never committed. Null when
+   * unset or not address-shaped: the pages then point to GitHub
+   * issues instead of inventing an address.
+   */
+  legalContactEmail: string | null;
+  /**
    * Board Plus billing adapter (PIN-103, docs/15). "off" (the
    * default; anything but an exact known value) answers every
    * checkout "unavailable" and writes nothing; "mock" grants the
@@ -95,6 +102,21 @@ export interface AppConfig {
   stripeApiVersion: typeof STRIPE_API_VERSION;
   storageBucket: string | null;
   labEnabled: boolean;
+  /**
+   * PIN-112: how many X-Forwarded-For entries the hosting platform
+   * appends after the client address (CLIENT_IP_TRUSTED_HOPS, an
+   * integer >= 0). The rate-limit key is the entry this many
+   * positions from the right end. Null (unset or invalid) keeps the
+   * first entry. Set per backend only after measuring with
+   * GET /api/lab/client-ip (SECURITY.md).
+   */
+  clientIpTrustedHops: number | null;
+  /**
+   * PIN-112: a platform header that carries the client address
+   * (CLIENT_IP_HEADER), read before X-Forwarded-For. Off (null)
+   * unless set to a valid header name.
+   */
+  clientIpHeader: string | null;
   /**
    * UI languages this deploy offers (PIN-190, docs/18-i18n.md):
    * UI_LOCALES is a comma list ("en,fr,es"); unknown codes are
@@ -141,6 +163,14 @@ function parseDemoBoardSlug(value: string | undefined): string | null {
   return trimmed && DEMO_SLUG_PATTERN.test(trimmed) ? trimmed : null;
 }
 
+/** One address, no spaces or markup: anything else fails closed to null (PIN-26). */
+const CONTACT_EMAIL_PATTERN = /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[A-Za-z]{2,}$/;
+
+function parseContactEmail(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && CONTACT_EMAIL_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 /**
  * The one place the Stripe API version is pinned (PIN-149).
  * Matches the bundled stripe SDK's ApiVersion; a config test
@@ -151,6 +181,20 @@ export const STRIPE_API_VERSION = "2026-10-28.endive" as const;
 function nonEmpty(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+/** Integer >= 0, or null when unset/invalid (PIN-112). */
+function parseTrustedHops(value: string | undefined): number | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/** A plain header name, lower-cased, or null (PIN-112). */
+function parseHeaderName(value: string | undefined): string | null {
+  const trimmed = nonEmpty(value)?.toLowerCase() ?? null;
+  return trimmed && /^[a-z0-9-]+$/.test(trimmed) ? trimmed : null;
 }
 
 /**
@@ -197,6 +241,8 @@ export function parseConfig(
     policyOverridesJson: nonEmpty(env.POLICY_OVERRIDES_JSON),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 500)),
     labEnabled: env.PINNED_LAB === "1",
+    clientIpTrustedHops: parseTrustedHops(env.CLIENT_IP_TRUSTED_HOPS),
+    clientIpHeader: parseHeaderName(env.CLIENT_IP_HEADER),
     sessionSecret: nonEmpty(env.SESSION_SECRET),
     firebaseWebApiKey: nonEmpty(env.NEXT_PUBLIC_FIREBASE_API_KEY),
     firebaseWebAuthDomain: resolveAuthDomain({
@@ -206,6 +252,7 @@ export function parseConfig(
       configured: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
     }),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
+    legalContactEmail: parseContactEmail(env.LEGAL_CONTACT_EMAIL),
     plusMode:
       env.PLUS_MODE === "mock"
         ? "mock"

@@ -92,6 +92,7 @@ describe("foil perk (PIN-111)", () => {
     status: "pinned",
     ownerName: "Robin",
     ownerId: "p1",
+    createdAt: 0,
     pinId,
   });
   const deletion: DeleteControls = {

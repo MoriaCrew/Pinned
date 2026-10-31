@@ -51,8 +51,7 @@ export function Sticker({
       data-foil={foil ? "" : undefined}
       style={{ ...(vars as CSSProperties), ...style }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out */}
-      <img src={src} alt={alt} draggable={false} loading={loading} />
+      <img src={src} alt={alt} draggable={false} loading={loading} decoding="async" />
       {foil ? <span className="pn-foil" aria-hidden="true" /> : null}
       {state === "picked" && pickIndex ? (
         <span className="pn-sticker-badge" aria-hidden="true">
@@ -108,9 +107,9 @@ export function Pin({
     </span>
   );
   const who = owner ? (
-    <span className="pn-pin-owner">
+    <span className="pn-pin-owner" title={owner.name}>
       <Avatar id={owner.id} name={owner.name} size="dot" />
-      {owner.name}
+      <span className="pn-pin-owner-name">{owner.name}</span>
     </span>
   ) : null;
   if (onToggle) {
@@ -259,8 +258,7 @@ export function CreditLine({
         <span className="pn-credit-stack">
           {shown.map((item, index) =>
             item.src ? (
-              // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
-              <img key={`${item.thing}-${index}`} className="pn-credit-dot" src={item.src} alt="" />
+              <img key={`${item.thing}-${index}`} className="pn-credit-dot" src={item.src} alt="" width={40} height={40} loading="lazy" decoding="async" />
             ) : (
               <Avatar key={`${item.thing}-${index}`} id={item.owner?.id ?? item.thing} name={item.owner?.name ?? item.thing} size="lg" />
             ),
@@ -292,8 +290,7 @@ export function CreditLine({
           const body = (
             <>
               {item.src ? (
-                // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
-                <img src={item.src} alt="" />
+                <img src={item.src} alt="" width={30} height={30} loading="lazy" decoding="async" />
               ) : item.owner ? (
                 <Avatar id={item.owner.id} name={item.owner.name} />
               ) : null}

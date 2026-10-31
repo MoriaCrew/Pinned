@@ -12,8 +12,48 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
   (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
   and the AI budget are unchanged. With credits on, AI makes
   ("creations" in the UI) spend the board pool instead (PIN-151
-  below). Each board starts with a free pool of 5
-  (`credits.starterMakes`). **Guests never have to pay.**
+  below). A new board starts with a free pool of 5
+  (`credits.starterMakes`) while its maker still has free boards
+  left (the rule below). **Guests never have to pay.**
+
+> **Free creations rule (PIN-204/205).** Free creations are a
+> welcome gift per maker, not per board. A maker gets the free
+> pool (`credits.starterMakes`, 5) on each of their first
+> `credits.starterBoardsPerMaker` (3) new boards per
+> `credits.starterMakerWindowMs` (7 days, counted from their first
+> board in the window). After that, a new board starts at 0: it
+> still works (people join, signed-in members add things from
+> their other boards, scenes fall back to free collages) and
+> shows the usual Get Plus invitation. Paid creations are never limited
+> by this rule, and creating a board is never blocked by it.
+>
+> - **Who is a maker:** the signed-in user when sign-in is on and
+>   the request carries a session, else the client address the
+>   rate limiter uses (`clientIp` in `src/server/rate-limit.ts`,
+>   PIN-112) — IPv4 as is, IPv6 grouped by its /64, anything
+>   unreadable in one shared bucket. People behind one shared
+>   IPv4 (office, school or event Wi-Fi, some mobile carriers)
+>   share one allowance while signed out; signing in gives each
+>   person their own. Signed-in and signed-out counts are kept
+>   apart.
+> - **What is stored:** a versioned sha256 of that source in
+>   `starterAllowances/{key}`, never the raw address or uid. A
+>   plain hash of an IPv4 address can be reversed by brute force,
+>   so the counter must not outlive its window: enable the TTL
+>   policy on `starterAllowances.expireAtTs` (operator console
+>   step, docs/16). A keyed hash is tracked in PIN-207.
+> - **When it counts:** once per board creation, before the board
+>   is written. The decided amount is stored on the board
+>   (`Board.starterMakes`, server-only), and the lazy starter
+>   grant uses it, so a failed grant at creation never becomes a
+>   full pool. A counter failure gives 0, and so does a lazy grant
+>   for an unknown or deleted board (fail closed).
+> - **Credits off:** nothing is counted or stored; creation is
+>   unchanged.
+> - **The hard wall** stays the site-wide daily AI budget
+>   (`dailyBudgetUsd` / `dailyCallLimit`), which free and paid
+>   makes share today (PIN-206 splits it). Tuning ideas after
+>   launch: PIN-207.
 - **One purchase (PIN-181).** €2.99 once for this board buys
   Board Plus (every look, foil stickers) plus 20 creations. Any
   joined member, or the host, can buy it for the board; it is a
@@ -268,6 +308,8 @@ list.
 | `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
 | `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
 | `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation since PIN-205) |
+| `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
 | `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
 | `plusOnPurchase` | `true` | a webhook grant also gives the board Plus (PIN-181) |
 | `pendingIntentCapPerBoard` | 3 | open checkout intents per board |
@@ -725,6 +767,10 @@ refuse: fail closed, never gift a make.
 (`Policy.credits.starterMakes`, default 5 since PIN-181) is granted by
 board creation when credits are on, under the deterministic
 ledger event id `starter:{boardId}`; it never blocks creation.
+Since PIN-205 creation first decides the amount for the maker
+(the pool, or 0 past `starterBoardsPerMaker`; "Free creations
+rule" above) and stores it on the board; a lazy grant uses that
+stored amount, and the Policy default only for boards without it.
 Every later credit touch — a board-view balance read (each
 5-second poll), a photo preflight, a scene run or a make's
 debit — first reads the account head with `getBalance`: one
@@ -1133,16 +1179,16 @@ missing permission: add read on that one resource only.
 After step 4, merge the PIN-210 PR to `dev`: its
 `apphosting.prod.yaml` commit adds `PLUS_MODE=stripe`, both secret
 references and
-`POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":30}}`
+`POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
 (the dev backend ignores that file). Promotion #2 carries it to
 `main`.
 
 **Smoke after the rollout.** `GET https://pinneds.com/api/health`
 shows `plusMode: "stripe"`; a webhook POST with a bad
-`Stripe-Signature` answers 400; a new board shows 30 creations.
+`Stripe-Signature` answers 400; a new board shows 5 creations.
 Robin buys the €2.99 pack on a throwaway board with a real card:
 Checkout says "Board Plus · 20 creations", the board shows Plus
-and 50 creations, the endpoint's delivery in Workbench is 200.
+and 25 creations, the endpoint's delivery in Workbench is 200.
 Refund it in the Dashboard (Payments → the payment → Refund,
 full): the refund events claw back the 20 creations (the board
 keeps Plus, see Follow-ups). Then

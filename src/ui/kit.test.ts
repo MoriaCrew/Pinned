@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   BoardHeader,
   COMPACT_CREDIT_SLOTS,
+  Composer,
   CreditLine,
   Developing,
   Dock,
@@ -17,6 +20,7 @@ import {
   Sticker,
   boardMetaLine,
   compactCreditsName,
+  isSubmitKey,
   pickedCountLabel,
   splitCompactCredits,
 } from "./index";
@@ -36,9 +40,10 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 22 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(22);
+  it("ships 23 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(23);
     expect(ICON_NAMES).toContain("mic");
+    expect(ICON_NAMES).toContain("stop");
     expect(html(h(Icon, { name: "camera" }))).toContain('aria-hidden="true"');
     expect(html(h(Icon, { name: "share", title: "Share" }))).toContain('aria-label="Share"');
   });
@@ -122,6 +127,42 @@ describe("UI kit components (PIN-97)", () => {
     expect(on).toContain("Get Plus · €2.99");
     // Perks that aren't built yet say so.
     expect((on.match(/pn-perk-soon/g) ?? []).length).toBe(2);
+  });
+});
+
+describe("Language polish (PIN-225)", () => {
+  const css = readFileSync(path.join(process.cwd(), "src/ui/pinneds.css"), "utf8");
+  /** The declarations of the rule that starts a line with exactly this selector. */
+  const rule = (selector: string) => new RegExp(`^${selector.replace(/\./g, "\\.")} \\{([^}]*)\\}`, "m").exec(css)?.[1] ?? "";
+
+  it("never auto-hyphenates a name tag: the page language would break English or renamed names wrongly", () => {
+    expect(rule(".pn-pin-tag-text")).toMatch(/hyphens: manual;/);
+    expect(css).not.toMatch(/hyphens: auto/);
+    // A long word still wraps instead of widening the tag.
+    expect(rule(".pn-pin-tag-text")).toMatch(/overflow-wrap: break-word;/);
+  });
+
+  it("ends a pin's owner name with an ellipsis and keeps the full name in title and text", () => {
+    const owner = { id: "p1", name: "Maximiliane-Josephine Habsburg" };
+    for (const markup of [
+      html(h(Pin, { src: "/a.webp", label: "Teal mug", owner })),
+      html(h(Pin, { src: "/a.webp", label: "Teal mug", owner, onToggle: () => {} })),
+    ]) {
+      expect(markup).toContain('<span class="pn-pin-owner" title="Maximiliane-Josephine Habsburg">');
+      expect(markup).toContain('<span class="pn-pin-owner-name">Maximiliane-Josephine Habsburg</span>');
+    }
+    // text-overflow does nothing on a flex container's own text, so the name is its own box.
+    expect(rule(".pn-pin-owner-name")).toMatch(/text-overflow: ellipsis;/);
+    expect(rule(".pn-pin-owner-name")).toMatch(/overflow: hidden;/);
+    // The row must not size the grid cell to the whole name.
+    expect(rule(".pn-pin-owner")).toMatch(/overflow: hidden;/);
+  });
+
+  it("lets the picking tray slots shrink so a long Next label stays inside the dock", () => {
+    expect(rule(".pn-tray")).toMatch(/min-width: 0;/);
+    expect(rule(".pn-tray-slot")).toMatch(/flex: 0 1 44px;/);
+    expect(rule(".pn-tray-slot")).toMatch(/min-width: 0;/);
+    expect(rule(".pn-tray-slot")).toMatch(/aspect-ratio: 1;/);
   });
 });
 
@@ -378,5 +419,55 @@ describe("Menu links (PIN-104)", () => {
     expect(link).toContain('href="/me/boards"');
     expect(link).toContain('role="menuitem"');
     expect(markup).toMatch(/<button[^>]*role="menuitem"[^>]*>Sign out/);
+  });
+});
+
+describe("Composer (PIN-216)", () => {
+  const composer = (over: Partial<Parameters<typeof Composer>[0]> = {}) =>
+    html(
+      h(Composer, {
+        id: "idea",
+        label: "Your idea",
+        value: "",
+        onChange: () => {},
+        submitLabel: "Make it",
+        onSubmit: () => {},
+        ...over,
+      }),
+    );
+
+  it("is a labelled one-line field with a labelled send button and a spoken status line", () => {
+    const markup = composer({ placeholder: "e.g. a picnic", maxLength: 500 });
+    expect(markup).toMatch(/<label class="pn-sr" for="idea">Your idea<\/label>/);
+    expect(markup).toMatch(/<textarea[^>]*id="idea"[^>]*rows="1"/);
+    expect(markup).toContain('enterKeyHint="send"');
+    expect(markup).toMatch(/<button[^>]*pn-btn-primary[^>]*>Make it<\/button>/);
+    expect(markup).toMatch(/<span class="pn-sr" role="status"><\/span>/);
+    // Nothing under the field until there is an error or the count matters.
+    expect(markup).not.toContain("pn-composer-foot");
+  });
+
+  it("puts the tool inside the field, covers the field with an overlay, and shows error + count under it", () => {
+    const markup = composer({
+      tool: h("button", { type: "button" }, "mic"),
+      overlay: h("span", null, "0:07 / 0:30"),
+      error: "No mic here.",
+      count: "450/500",
+      submitDisabled: true,
+    });
+    expect(markup).toMatch(/pn-composer-field.*pn-composer-overlay.*0:07 \/ 0:30.*pn-composer-tool.*mic/);
+    expect(markup).toContain("readOnly");
+    expect(markup).toMatch(/role="alert">.*No mic here\./);
+    expect(markup).toContain('<span class="pn-field-count">450/500</span>');
+    expect(markup).toContain('aria-describedby="idea-foot"');
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Make it/);
+  });
+
+  it("sends on Enter only: not Shift+Enter, not while an IME composes", () => {
+    expect(isSubmitKey({ key: "Enter", shiftKey: false })).toBe(true);
+    expect(isSubmitKey({ key: "Enter", shiftKey: true })).toBe(false);
+    expect(isSubmitKey({ key: "Enter", shiftKey: false, isComposing: true })).toBe(false);
+    expect(isSubmitKey({ key: "Enter", shiftKey: false, keyCode: 229 })).toBe(false);
+    expect(isSubmitKey({ key: "a", shiftKey: false })).toBe(false);
   });
 });

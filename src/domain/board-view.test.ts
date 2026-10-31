@@ -29,6 +29,13 @@ describe("board view model (PIN-66)", () => {
     ]);
   });
 
+  it("keeps each pin's createdAt on its card for the filter row (PIN-218)", () => {
+    expect(pinCards(view()).map((c) => [c.pinId, c.createdAt])).toEqual([
+      ["pin1", 100],
+      ["pin2", 200],
+    ]);
+  });
+
   it("shows delete only on own pins (PIN-77: element owner, not pinnedBy)", () => {
     const cards = pinCards(view());
     expect(canDeleteCard(cards[0], "p1")).toBe(true);

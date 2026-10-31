@@ -78,7 +78,6 @@ export function SceneCard({
   const hasBody = Boolean(idea || hasCredits || hasActions || footer);
   const frame = (
     <div className="pn-print-frame" style={{ aspectRatio: ratio }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked scene image */}
       <img src={src} alt={alt} loading="lazy" />
     </div>
   );
@@ -171,7 +170,6 @@ export function Developing({
       <div className="pn-print">
         <div className="pn-develop-frame pn-print-frame" style={{ aspectRatio: ratio }}>
           {cuts.map((cut, i) => (
-            // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
             <img
               key={`${cut.src}-${i}`}
               className="pn-develop-cut"

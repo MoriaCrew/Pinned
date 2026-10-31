@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { LOCALE_ENGLISH_NAMES, LOCALES } from "../i18n/locales";
 import { DEFAULT_POLICY, resolvePolicy } from "../policy/policy";
 import {
   fixtureChipSuggester,
@@ -21,10 +22,21 @@ import {
   normalizeElements,
   normalizeTapName,
   sceneElementLabel,
+  type SegmentPrompt,
   type SuggestChipsInput,
   sceneImageOutcome,
   type NameElementsInput,
 } from "./ports";
+
+// PIN-214: a stand-in German catalog (never edit de.json by hand)
+// so the mock suggester's language is visible in its output.
+const DE_CHIPS = vi.hoisted(() => ({
+  "make.chip.picnic": "auf einer sonnigen Picknickdecke",
+  "make.chip.museum": "in einem winzigen Museum",
+  "make.chip.space": "schwebend im Weltall",
+  "make.chip.party": "auf einer Geburtstagsparty",
+}));
+vi.mock("../i18n/messages/de.json", () => ({ default: DE_CHIPS }));
 
 const fixtures = JSON.parse(
   readFileSync(
@@ -261,6 +273,44 @@ describe("meta adapters (fake fetch)", () => {
     expect(texts[1]).not.toBe(texts[2]);
   });
 
+  it("segment omits `store` by default and sends store:false for concept and point calls (PIN-213)", async () => {
+    const { calls, gateway } = metaGateway(() => ({ output_text: SAM_LINE }));
+    const segmenter = metaSegmenter(gateway);
+    const base = { imageRef: "https://x.test/a.jpg", timeoutMs: DEFAULT_POLICY.timeoutsMs.sam };
+    const concept: SegmentPrompt = { kind: "concept", concept: "teal mug" };
+    const point: SegmentPrompt = {
+      kind: "point",
+      points: [{ x: 0.5, y: 0.25 }],
+      frame: { width: 100, height: 200 },
+    };
+
+    await segmenter.segment({ ...base, prompt: concept });
+    await segmenter.segment({ ...base, prompt: point });
+    expect(calls.map((c) => "store" in c.body)).toEqual([false, false]);
+
+    await segmenter.segment({ ...base, prompt: concept, store: false });
+    await segmenter.segment({ ...base, prompt: point, store: false });
+    expect(calls.slice(2).map((c) => c.body.store)).toEqual([false, false]);
+    // Same SAM model, endpoint and prompt text as the default calls.
+    expect(calls[2].body.model).toBe(calls[0].body.model);
+    expect(calls[3].body.input).toEqual(calls[1].body.input);
+  });
+
+  it("mock and fixture segmenters ignore `store` (PIN-213)", async () => {
+    const base = { imageRef: "https://x.test/a.jpg", timeoutMs: DEFAULT_POLICY.timeoutsMs.sam };
+    const prompt: SegmentPrompt = { kind: "concept", concept: "teal mug" };
+    const mockPlain = await mockSegmenter.segment({ ...base, prompt });
+    const mockStore = await mockSegmenter.segment({ ...base, prompt, store: false });
+    expect(mockStore).toEqual(mockPlain);
+
+    const fixture = fixtureSegmenter(fixtures);
+    const fixturePlain = await fixture.segment({ ...base, prompt });
+    const fixtureStore = await fixture.segment({ ...base, prompt, store: false });
+    expect(fixtureStore).toEqual(fixturePlain);
+    expect(mockPlain.status).toBe("ready");
+    expect(fixturePlain.status).toBe("ready");
+  });
+
   it("passes the provider HTTP status through for retry decisions (PIN-61)", () => {
     const rateLimited = Object.assign(new Error("slow down"), {
       code: "http_429",
@@ -299,6 +349,7 @@ describe("ChipSuggester port (PIN-75)", () => {
     const p = DEFAULT_POLICY;
     return {
       labels: ["Teal Mug", "Orange Tabby Cat"],
+      locale: "en",
       maxChips: p.chipsMax,
       maxChipChars: p.scenePromptMaxChars,
       maxTokens: p.maxTokens.sparkChips,
@@ -308,15 +359,25 @@ describe("ChipSuggester port (PIN-75)", () => {
     };
   }
 
-  it("system prompt is prompts/chips.v1.md above the rule, Policy count in the slot", () => {
+  it("system prompt is prompts/chips.v2.md above the rule, count and language in the slots", () => {
+    expect(DEFAULT_POLICY.promptVersions.chips).toBe("chips.v2");
     const file = readFileSync(
-      path.join(process.cwd(), "prompts/chips.v1.md"),
+      path.join(process.cwd(), "prompts/chips.v2.md"),
       "utf8",
     ).replace(/\r\n/g, "\n");
     const aboveRule = file.split("\n---\n")[0].trimEnd();
-    expect(chipsSystemPrompt({ maxChips: 4 })).toBe(
-      aboveRule.replaceAll("{{MAX_CHIPS}}", "4"),
+    expect(chipsSystemPrompt({ maxChips: 4, locale: "de" })).toBe(
+      aboveRule
+        .replaceAll("{{MAX_CHIPS}}", "4")
+        .replaceAll("{{LANGUAGE_NAME}}", "German")
+        .replaceAll("{{LOCALE}}", "de"),
     );
+    // Every UI language has a name for the slot; no slot is left over.
+    for (const locale of LOCALES) {
+      const prompt = chipsSystemPrompt({ maxChips: 4, locale });
+      expect(prompt).toContain(`Write every chip in ${LOCALE_ENGLISH_NAMES[locale]} (${locale})`);
+      expect(prompt).not.toMatch(/\{\{|undefined/);
+    }
   });
 
   it("normalizeChips dedupes, caps count/chars and drops junk", () => {
@@ -329,7 +390,7 @@ describe("ChipSuggester port (PIN-75)", () => {
     expect(normalizeChips("nope", { maxChips: 4, maxChipChars: 500 })).toEqual([]);
   });
 
-  it("meta suggester sends labels as JSON data with the chips token budget", async () => {
+  it("meta suggester sends the language in the system prompt, labels as JSON data, chips token budget", async () => {
     const { calls, gateway } = metaGateway(() => ({
       choices: [
         {
@@ -342,20 +403,40 @@ describe("ChipSuggester port (PIN-75)", () => {
       ],
       usage: { prompt_tokens: 40, completion_tokens: 30 },
     }));
-    const out = await metaChipSuggester(gateway).suggestChips(chipsInput());
+    const out = await metaChipSuggester(gateway).suggestChips(chipsInput({ locale: "fr" }));
     expect(out).toEqual({
       status: "ready",
       value: {
         chips: ["sharing a tiny espresso bar", "napping in a sunbeam"],
-        promptVersion: "chips.v1",
+        promptVersion: "chips.v2",
       },
     });
     expect(calls[0].url).toBe("https://api.meta.ai/v1/chat/completions");
     expect(calls[0].body.max_tokens).toBe(DEFAULT_POLICY.maxTokens.sparkChips);
     const messages = calls[0].body.messages as { role: string; content: unknown }[];
+    // PIN-214 contract: the system prompt is chips.v2 filled for French.
+    expect(messages[0]).toEqual({
+      role: "system",
+      content: chipsSystemPrompt({ maxChips: DEFAULT_POLICY.chipsMax, locale: "fr" }),
+    });
+    expect(String(messages[0].content)).toContain("Write every chip in French (fr)");
     expect(JSON.parse(String(messages[1].content))).toEqual({
       labels: ["Teal Mug", "Orange Tabby Cat"],
     });
+  });
+
+  it("mock suggester answers in the request's language (PIN-214)", async () => {
+    // de.json is stubbed above: the translate run has not filled make.chip.* yet.
+    const de = await mockChipSuggester.suggestChips(chipsInput({ locale: "de" }));
+    expect(de).toEqual({
+      status: "ready",
+      value: { chips: Object.values(DE_CHIPS), promptVersion: "chips.v2" },
+    });
+    const en = await mockChipSuggester.suggestChips(chipsInput({ locale: "en", maxChips: 2 }));
+    expect(en.status === "ready" && en.value.chips).toEqual([
+      "on a sunny picnic blanket",
+      "in a tiny museum",
+    ]);
   });
 
   it("mock and fixture suggesters are deterministic, capped and mock-word-free", async () => {
@@ -367,7 +448,7 @@ describe("ChipSuggester port (PIN-75)", () => {
       if (first.status === "ready") {
         expect(first.value.chips).toHaveLength(DEFAULT_POLICY.chipsMax);
         expect(first.value.chips.join(" ")).not.toMatch(/mock/i);
-        expect(first.value.promptVersion).toBe("chips.v1");
+        expect(first.value.promptVersion).toBe("chips.v2");
       }
     }
   });

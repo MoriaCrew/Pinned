@@ -157,8 +157,7 @@ export function Chip({
       aria-pressed={selected === undefined ? undefined : selected}
     >
       {thumb ? (
-        // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
-        <img className="pn-chip-thumb" src={thumb} alt="" />
+        <img className="pn-chip-thumb" src={thumb} alt="" width={28} height={28} loading="lazy" decoding="async" />
       ) : icon ? (
         <Icon name={icon} size={18} />
       ) : null}
@@ -224,7 +223,6 @@ export function Avatar({
       aria-hidden={label ? undefined : true}
     >
       {src ? (
-        // eslint-disable-next-line @next/next/no-img-element -- profile photo
         <img src={src} alt="" />
       ) : size === "dot" ? null : (
         initials(name)

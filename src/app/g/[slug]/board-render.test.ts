@@ -4,9 +4,10 @@ import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { PinCard } from "../../../domain/board-view";
+import { pinFilterOptions, type PinFilter } from "../../../domain/pin-filter";
 import { t } from "../../../i18n";
 import { BoardScenes, type PrintSlot } from "./BoardScenes";
-import { BoardThings, pinMenuItems, type DeleteControls } from "./BoardThings";
+import { BoardThings, filterChipItems, pinMenuItems, type DeleteControls } from "./BoardThings";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
@@ -17,6 +18,7 @@ const card = (over: Partial<PinCard> & { pinId: string }): PinCard => ({
   status: "pinned",
   ownerName: "Robin",
   ownerId: "p1",
+  createdAt: 0,
   ...over,
 });
 
@@ -78,6 +80,86 @@ describe("board things grid (PIN-98)", () => {
       h(BoardThings, { cards, count: 2, meId: null, picking: false, pickNumbers: new Map(), onTapPin: noop, deletion }),
     );
     expect(out).not.toContain("More for");
+  });
+});
+
+describe("pin filter row (PIN-218)", () => {
+  const long = "Maximiliane-Josephine von Habsburg";
+  const cards = [
+    card({ pinId: "m1", createdAt: 1 }),
+    card({ pinId: "s1", ownerId: "p2", ownerName: "Sam", createdAt: 2 }),
+    card({ pinId: "l1", ownerId: "p3", ownerName: long, createdAt: 3 }),
+    card({ pinId: "s2", ownerId: "p2", ownerName: "Sam", createdAt: 4 }),
+  ];
+  const base = { cards, count: 4, meId: "p1", pickNumbers: new Map<string, number>(), onTapPin: noop, deletion };
+  const controls = (active: PinFilter, lastSeenAt: number | null = null) => ({
+    options: pinFilterOptions(cards, "p1", lastSeenAt),
+    active,
+    onChange: noop,
+  });
+
+  it("renders a labelled group of pressed-state chips: New, All, Mine, then people by latest pin", () => {
+    const out = html(h(BoardThings, { ...base, picking: false, filter: controls({ kind: "all" }, 1) }));
+    expect(out).toContain('role="group" aria-label="Show pins from"');
+    const chips = [...out.matchAll(/class="pn-chip pn-filter-chip" aria-pressed="(true|false)" aria-label="([^"]+)"/g)];
+    expect(chips.map((m) => [m[2], m[1]])).toEqual([
+      ["New, 3 pins", "false"],
+      ["All, 4 pins", "true"],
+      ["Mine, 1 pin", "false"],
+      ["Sam, 2 pins", "false"],
+      [`${long}, 1 pin`, "false"],
+    ]);
+    expect(out).toContain('data-tone="new"');
+    expect(out.match(/data-pin-id=/g)).toHaveLength(4);
+    expect(out).not.toContain("pn-pins-solo");
+  });
+
+  it("narrows to one person: their pins, 'n of total', owner line hidden", () => {
+    const out = html(
+      h(BoardThings, { ...base, picking: false, filter: controls({ kind: "person", participantId: "p2" }) }),
+    );
+    expect(out).toContain('aria-pressed="true" aria-label="Sam, 2 pins"');
+    expect(out).toContain(">2 of 4<");
+    expect(out.match(/data-pin-id="(\w+)"/g)).toEqual(['data-pin-id="s1"', 'data-pin-id="s2"']);
+    expect(out).toContain("pn-pins-solo");
+  });
+
+  it("stays while picking and numbers picks from every card, filtered out or not", () => {
+    const out = html(
+      h(BoardThings, {
+        ...base,
+        picking: true,
+        showHead: false,
+        pickNumbers: new Map([["m1", 1], ["s2", 2]]),
+        filter: controls({ kind: "person", participantId: "p2" }),
+      }),
+    );
+    expect(out).toContain("pn-filter-row");
+    expect(out).not.toContain('data-pin-id="m1"');
+    expect(out).toContain("picked 2");
+  });
+
+  it("offers Show all when a filter has nothing left, and no row when nothing would narrow", () => {
+    const empty = html(
+      h(BoardThings, {
+        ...base,
+        picking: false,
+        filter: { options: pinFilterOptions(cards, "p1", null), active: { kind: "new", since: 99 }, onChange: noop },
+      }),
+    );
+    expect(empty).toContain("No pins here right now.");
+    expect(empty).toContain("Show all");
+    const solo = [card({ pinId: "a" }), card({ pinId: "b" })];
+    const none = html(
+      h(BoardThings, { ...base, cards: solo, count: 2, picking: false, filter: { options: pinFilterOptions(solo, "p1", null), active: { kind: "all" }, onChange: noop } }),
+    );
+    expect(none).not.toContain("pn-filter-row");
+    expect(none).toContain(">2<");
+  });
+
+  it("names an unknown owner's chip Someone", () => {
+    const items = filterChipItems("en", [{ kind: "person", participantId: "x", name: null, count: 1 }]);
+    expect(items).toEqual([{ id: "person:x", label: "Someone", count: 1, person: { id: "x", name: "Someone" } }]);
   });
 });
 
@@ -333,6 +415,17 @@ describe("scene viewer (PIN-131)", () => {
 
   it("shows Remix of a deleted scene in the viewer's credits", () => {
     expect(viewer({ slot: { ...remix, remixOf: { deleted: true } } })).toContain("Remix of a deleted scene");
+  });
+
+  it("credits Muse Image on AI scenes and remixes only, never on a collage (PIN-222)", () => {
+    const caption = `<p class="${styles.viewerComposed}">Composed by Muse Image</p>`;
+    expect(viewer({ slot: { ...remix, kind: "scene", remixOf: null } })).toContain(caption);
+    expect(viewer()).toContain(caption);
+    expect(viewer({ slot: { ...remix, kind: "collage" } })).not.toContain("Composed by Muse Image");
+    // It sits between the credits and the actions, and stays through the delete confirm.
+    const out = viewer();
+    expect(out.indexOf(styles.viewerComposed ?? "")).toBeGreaterThan(out.indexOf(styles.viewerCredits ?? ""));
+    expect(out.indexOf(styles.viewerComposed ?? "")).toBeLessThan(out.indexOf("pn-print-actions"));
   });
 
   it("lets the Scenes heading take focus when a delete leaves no print to return to (PIN-143)", () => {

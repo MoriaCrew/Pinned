@@ -73,6 +73,15 @@ describe("landing page showcase sets (PIN-175)", () => {
     expect(css).toMatch(/\.pn-landing-pile \{[^}]*position: relative;/);
   });
 
+  it("links Privacy, Terms and the source from the footer (PIN-26)", async () => {
+    const html = await landing({ set: "classic" });
+    const foot = /<footer class="pn-landing-foot">([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? "";
+    expect(foot).toContain(`<a href="/privacy">${en["footer.privacy"]}</a>`);
+    expect(foot).toContain(`<a href="/terms">${en["footer.terms"]}</a>`);
+    expect(foot).toContain(`<a href="https://github.com/MoriaCrew/Pinned">${en["footer.source"]}</a>`);
+    expect(foot).toContain(`aria-label="${en["footer.label"]}"`);
+  });
+
   it("loads the hero stickers at once and the pictures further down when needed", async () => {
     const set = landingSetById("classic");
     const html = await landing({ set: set.id });
@@ -81,5 +90,30 @@ describe("landing page showcase sets (PIN-175)", () => {
     expect(tag(pile)).toContain('loading="eager"');
     expect(tag(set.photo.src)).toContain('loading="lazy"');
     expect(tag(set.scene.src)).toContain('loading="lazy"');
+  });
+});
+
+describe("landing Made with Meta AI credit (PIN-222)", () => {
+  it("names the four models, one short line each, in the footer", async () => {
+    const html = await landing({ set: "classic" });
+    const footer = /<footer class="pn-landing-foot">.*<\/footer>/s.exec(html)?.[0] ?? "";
+    expect(footer).toContain(`id="made-with-meta">${en["landing.meta.title"]}</h2>`);
+    const lines = [...footer.matchAll(/<li><svg[^>]*>.*?<\/svg>([^<]+)<\/li>/gs)].map((match) => match[1]);
+    expect(lines).toEqual([
+      en["landing.meta.spark"],
+      en["landing.meta.sam"],
+      en["landing.meta.image"],
+      en["landing.meta.voice"],
+    ]);
+    // A credit, not an ad: every line stays short, and the icons are decoration.
+    for (const line of lines) expect(line?.split(" ").length).toBeLessThanOrEqual(6);
+    expect(footer).not.toMatch(/<svg[^>]*role="img"/);
+  });
+
+  it("keeps the model names as product names and links the models doc and the source", async () => {
+    const html = await landing({ set: "classic" });
+    for (const name of ["Muse Spark", "SAM 3.1", "Muse Image", "Muse Voice"]) expect(html).toContain(name);
+    expect(html).toContain('href="https://github.com/MoriaCrew/Pinned/blob/main/docs/19-meta-models.md"');
+    expect(html).toContain(`>${en["footer.source"]}</a>`);
   });
 });

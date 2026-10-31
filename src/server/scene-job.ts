@@ -34,6 +34,7 @@ import type {
 } from "../domain/board";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
+import { startOfUtcDay } from "../domain/time";
 import { MUSE_IMAGE_USD_PER_IMAGE } from "../gateway/costs";
 import type { ComposeSceneElement, SceneComposer } from "../gateway/ports";
 import type { MessageKey } from "../i18n";
@@ -282,11 +283,6 @@ export interface StartSceneInput {
    * never calls the composer twice (idempotent double submit).
    */
   sceneId?: string;
-}
-
-function startOfUtcDay(now: number): number {
-  const d = new Date(now);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 /**

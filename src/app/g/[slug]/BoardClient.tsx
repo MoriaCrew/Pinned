@@ -63,13 +63,16 @@ import {
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
-import { AddSheet, boardQueryKey, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { AddSheet, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import { useUploadQueue } from "./useUploadQueue";
 import { nextStepItem, stepPosition } from "../../../domain/upload-queue";
 import { createPhotoMemory } from "./photo-memory";
 import { MakeSheet } from "./MakeSheet";
 import { BoardScenes, type PrintSlot, type SceneSlot } from "./BoardScenes";
+import { pinInMiddleOfScreen, prefersReducedMotion, revealScenes } from "./board-scroll";
 import { BoardThings } from "./BoardThings";
+import { usePinFilter } from "./usePinFilter";
 import { BoardLeftovers } from "./Leftovers";
 import { leftoversOf } from "../../../domain/leftovers";
 import { JoinSheet } from "./JoinSheet";
@@ -305,6 +308,8 @@ function BoardBody({
   const [remixOfId, setRemixOfId] = useState<string | null>(null);
   // PIN-75: generated chips, keyed by the selection they were made for.
   const [generatedChips, setGeneratedChips] = useState<{ key: string; chips: string[] } | null>(null);
+  // PIN-216: the selection whose chips request has answered (the sheet's loading chip goes).
+  const [chipsDoneKey, setChipsDoneKey] = useState<string | null>(null);
   const [confirmDeleteElementId, setConfirmDeleteElementId] = useState<string | null>(null);
   const [deleteErrorElementId, setDeleteErrorElementId] = useState<string | null>(null);
   // PIN-157: the thing whose rename sheet is open (mounted here, not in its More menu).
@@ -324,6 +329,8 @@ function BoardBody({
   const [pickHintSeen, setPickHintSeen] = useState<boolean>(() => readFlag(PICK_HINT_STORAGE_KEY));
   // After a tap on a thing at rest starts picking, keep that thing in view.
   const [scrollToPinId, setScrollToPinId] = useState<string | null>(null);
+  // PIN-215: after Make it, the new scene's print is brought into view.
+  const [scrollToSceneId, setScrollToSceneId] = useState<string | null>(null);
   // PIN-131: the scene viewer. `?scene=` is its state: opening pushes
   // it, Back pops it, and a link that carries it opens the viewer.
   const [viewerId, setViewerId] = useState<string | null>(initialSceneId);
@@ -446,6 +453,8 @@ function BoardBody({
 
   const cards = pinCards(view);
   const selectableIds = selectableCards(cards).map((card) => card.pinId);
+  // PIN-218: narrows the grid only; picks, pruning and the tray use every card.
+  const pinFilter = usePinFilter(slug, cards, view.me?.id ?? null);
 
   useEffect(() => {
     setSelected((current) => {
@@ -453,7 +462,6 @@ function BoardBody({
       return pruned.size === current.size ? current : pruned;
     });
     // selectableIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectableIds.join(",")]);
 
   const makeScene = useMutation({
@@ -700,13 +708,14 @@ function BoardBody({
         if (chips.length > 0) setGeneratedChips({ key, chips });
       } catch {
         // Fixed chips stay; generation is best-effort.
+      } finally {
+        if (!cancelled) setChipsDoneKey(key);
       }
     })();
     return () => {
       cancelled = true;
     };
     // pickedElementIds' content is keyed by selectionKey.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [makeOpen, selectionKey, slug, view.me?.id]);
   const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
   // The remix parent from the live view (a deleted/hidden parent
@@ -758,7 +767,6 @@ function BoardBody({
     setSelected(new Set());
     setSheetPrompt("");
     setPicking(true);
-    window.scrollTo({ top: 0 });
   }
 
   function exitPicking() {
@@ -780,6 +788,7 @@ function BoardBody({
     setMakeOpen(false);
     setPicking(false);
     setSheetPrompt("");
+    setScrollToSceneId(sceneAttempt.sceneId);
     makeScene.mutate(sceneAttempt);
   }
 
@@ -823,6 +832,8 @@ function BoardBody({
     setSheetPrompt("");
     setAttemptError("");
     startPicking();
+    // The Remixing hint sits at the top of the board.
+    window.scrollTo({ top: 0 });
   }
 
   // Keeps any idea restored by Change idea; a new picking session
@@ -868,6 +879,9 @@ function BoardBody({
       setAddOpen(true);
     } else if (intent.kind === "make") {
       setRemixOfId(null);
+      // PIN-215: stay where you are. Picking hides the Scenes, which moves
+      // the grid, so put the pin at the middle of the screen back there.
+      setScrollToPinId(pinInMiddleOfScreen(document, window.innerHeight));
       startPicking();
     } else if (intent.kind === "pick") {
       if (picking) {
@@ -1164,7 +1178,6 @@ function BoardBody({
     setSceneMissing(true);
     closeViewer();
     // viewerIds' content is keyed by its join; closeViewer reads refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerId, viewerIds.join(",")]);
   useEffect(() => {
     const id = viewerReturnId.current;
@@ -1187,6 +1200,15 @@ function BoardBody({
   });
 
   const showScenes = !pickingNow && (!empty || slots.length > 0);
+  // PIN-215: Make it from anywhere on the board lands on the developing
+  // print (docs/11 §6): scroll to the Scenes, strip back to its start,
+  // focus its heading. Waits for the card, which comes a render after the press.
+  const sceneInSlots = scrollToSceneId !== null && showScenes && slots.some((slot) => slot.id === scrollToSceneId);
+  useEffect(() => {
+    if (!sceneInSlots) return;
+    revealScenes(document, prefersReducedMotion());
+    setScrollToSceneId(null);
+  }, [sceneInSlots]);
   const atMax = picked.length >= policy.pinsPerScene.max;
   const showDock = !empty;
   const lookSampleUrls = lookSample(cards);
@@ -1349,6 +1371,7 @@ function BoardBody({
             pickNumbers={pickNumbers(cards, selected)}
             foilPinId={foilPinId(cards, view.plus)}
             showHead={!pickingNow}
+            filter={pinFilter}
             onTapPin={(pinId) => requireJoin({ kind: "pick", pinId })}
             onRename={(elementId) => {
               renameElement.reset();
@@ -1438,6 +1461,10 @@ function BoardBody({
           <MakeSheet
             cards={picked}
             chips={sheetChips}
+            fixedChips={policy.sceneChips}
+            chipsLoading={
+              pickedElementIds.length > 0 && generatedChips?.key !== selectionKey && chipsDoneKey !== selectionKey
+            }
             pinsPerScene={policy.pinsPerScene}
             promptMaxChars={policy.scenePromptMaxChars}
             dictate={
@@ -1457,7 +1484,16 @@ function BoardBody({
                 : null
             }
             onMake={submitScene}
-            onClose={() => setMakeOpen(false)}
+            onRemovePick={togglePin}
+            // "+" and close both go back to the tray and keep the idea (PIN-216).
+            onAddPicks={(prompt) => {
+              setSheetPrompt(prompt);
+              setMakeOpen(false);
+            }}
+            onClose={(prompt) => {
+              setSheetPrompt(prompt);
+              setMakeOpen(false);
+            }}
           />
         ) : null}
 

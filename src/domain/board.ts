@@ -63,6 +63,13 @@ export interface Board {
   plus?: BoardPlus | null;
   /** Host credential (PIN-103); server-only, never in a response. */
   host?: BoardHost | null;
+  /**
+   * Free creations this board was given at creation (PIN-205): the
+   * Policy starter pool, or 0 once its maker used up their free
+   * boards. Written only while credits are on; absent = the Policy
+   * default (boards made before the rule). Server-only.
+   */
+  starterMakes?: number;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter

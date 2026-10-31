@@ -30,6 +30,15 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     ).toBeNull();
   });
 
+  it("legal contact email: env only, junk fails closed to null (PIN-26)", () => {
+    expect(parseConfig({}).legalContactEmail).toBeNull();
+    expect(parseConfig({ LEGAL_CONTACT_EMAIL: " " }).legalContactEmail).toBeNull();
+    expect(parseConfig({ LEGAL_CONTACT_EMAIL: " hello@example.org " }).legalContactEmail).toBe("hello@example.org");
+    for (const junk of ["not-an-address", "a@b", "a b@example.org", "<a@example.org>", "a@example.org?subject=x"]) {
+      expect(parseConfig({ LEGAL_CONTACT_EMAIL: junk }).legalContactEmail, junk).toBeNull();
+    }
+  });
+
   it("PLUS_MODE: off by default, mock only on the exact value (PIN-103)", () => {
     expect(parseConfig({}).plusMode).toBe("off");
     expect(parseConfig({ PLUS_MODE: "" }).plusMode).toBe("off");
@@ -215,5 +224,23 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.meta.apiKey).toBe("k");
     expect(cfg.meta.baseUrl).toBe("https://example.test/v1");
     expect(cfg.meta.sparkModel).toBe("custom");
+  });
+
+  it("client address settings: off by default, invalid values fail closed to off (PIN-112)", () => {
+    const hops = (value: string | undefined) =>
+      parseConfig({ CLIENT_IP_TRUSTED_HOPS: value }).clientIpTrustedHops;
+    expect(hops(undefined)).toBeNull();
+    for (const bad of ["", "  ", "-1", "1.5", "two", "2x", "1e3", "99999999999999999999"]) {
+      expect(hops(bad)).toBeNull();
+    }
+    expect(hops("0")).toBe(0);
+    expect(hops(" 2 ")).toBe(2);
+    const header = (value: string | undefined) =>
+      parseConfig({ CLIENT_IP_HEADER: value }).clientIpHeader;
+    expect(header(undefined)).toBeNull();
+    expect(header("")).toBeNull();
+    expect(header("bad header")).toBeNull();
+    expect(header("x:y")).toBeNull();
+    expect(header(" X-Fah-Client-Ip ")).toBe("x-fah-client-ip");
   });
 });

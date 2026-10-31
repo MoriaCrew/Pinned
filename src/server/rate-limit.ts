@@ -1,4 +1,5 @@
 import "server-only";
+import { getConfig } from "../config";
 /**
  * Best-effort in-process rate limiting (PIN-43).
  *
@@ -36,10 +37,50 @@ export function checkRateLimit(
   return existing.count <= limit;
 }
 
-/** First forwarded IP, or "unknown" (PIN-90 hashes before storage). */
+export interface ClientIpOptions {
+  /** X-Forwarded-For entries the platform appends after the client; null = first entry. */
+  trustedHops: number | null;
+  /** Platform header read first when configured; null = off. */
+  header: string | null;
+}
+
+/** X-Forwarded-For entries, trimmed, empty ones dropped. */
+export function forwardedEntries(headers: Headers): string[] {
+  return (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Rate-limit address (PIN-112). Without a hop count: the first
+ * X-Forwarded-For entry, as before. With n hops: the entry n
+ * positions from the right end, i.e. the address the platform
+ * appended; entries before it are ignored. Too few entries fall
+ * back to the first one, never to a shared constant. A configured
+ * header wins only when it holds a single value.
+ */
+export function pickClientIp(headers: Headers, options: ClientIpOptions): string {
+  if (options.header) {
+    const direct = headers.get(options.header)?.trim();
+    if (direct && !direct.includes(",")) return direct;
+  }
+  const hops = options.trustedHops;
+  if (hops !== null) {
+    const entries = forwardedEntries(headers);
+    if (entries.length > hops) return entries[entries.length - 1 - hops];
+  }
+  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || headers.get("x-real-ip") || "unknown";
+}
+
+/** Client address per config, or "unknown" (PIN-90 hashes before storage). */
 export function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "unknown";
+  const cfg = getConfig();
+  return pickClientIp(request.headers, {
+    trustedHops: cfg.clientIpTrustedHops,
+    header: cfg.clientIpHeader,
+  });
 }
 
 export function clientKey(request: Request, scope: string): string {
@@ -50,9 +91,6 @@ export const RATE_LIMITS = {
   playersPerIpGame: { limit: 20, windowMs: 10 * 60_000 },
   submissionsPerIpGame: { limit: 30, windowMs: 10 * 60_000 },
   labPerIp: { limit: 20, windowMs: 10 * 60_000 },
-  // PIN-61: board creation has no route yet (PIN-53/65 wire it);
-  // the limit lives here so the entry point cannot ship without one.
-  boardCreatePerIp: { limit: 10, windowMs: 60 * 60_000 },
   // Global per-IP upload brake across boards (the per-game gate
   // above alone lets one IP rotate slugs), wired on the upload
   // entry points that exist today.

@@ -7,7 +7,7 @@ import type { MyPinCard } from "../../../domain/my-pins";
 import { t, tf, type Locale } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import { Button, Icon, Sticker } from "../../../ui";
-import { boardQueryKey } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 
 export interface MyPinsResponse {
   elements: MyPinCard[];

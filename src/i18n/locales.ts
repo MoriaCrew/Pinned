@@ -23,6 +23,21 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   id: "Bahasa Indonesia",
 };
 
+/**
+ * Each language's English name, for AI prompts that must answer in
+ * it (PIN-214, prompts/chips.v2.md). Same variants as the UI
+ * translations: Latin American Spanish, Brazilian Portuguese.
+ */
+export const LOCALE_ENGLISH_NAMES: Record<Locale, string> = {
+  en: "English",
+  fr: "French",
+  es: "Latin American Spanish",
+  "pt-BR": "Brazilian Portuguese",
+  de: "German",
+  it: "Italian",
+  id: "Indonesian",
+};
+
 /** Old or alternate primary subtags that mean one of ours ("in" is Indonesian on older Android). */
 const BASE_ALIASES: Readonly<Record<string, string>> = { in: "id" };
 
@@ -99,4 +114,21 @@ export function negotiateLocale(input: {
     if (match) return match;
   }
   return DEFAULT_LOCALE;
+}
+
+/**
+ * The language when no server or provider is around (global-error,
+ * PIN-212, where the root layout itself failed): the saved choice in
+ * the cookie jar, else the page's own `lang` (the server already
+ * negotiated it), else English. Every language counts as on, because
+ * the cookie is only ever written for an enabled one and `lang`
+ * came from the server's enabled list.
+ */
+export function localeFromDocument(cookieJar: string, htmlLang: string): Locale {
+  const saved = cookieJar
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`))
+    ?.slice(LOCALE_COOKIE.length + 1);
+  return negotiateLocale({ cookie: saved, acceptLanguage: htmlLang, enabled: LOCALES });
 }

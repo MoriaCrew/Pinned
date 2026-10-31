@@ -9,6 +9,7 @@ import { decoratePorts } from "../gateway/decorators";
 import { mockElementNamer, mockSegmenter, mockTapNamer, MOCK_TAP_NAME } from "../gateway/mock-ports";
 import type {
   ElementNamer,
+  SegmentInput,
   SegmentPrompt,
   Segmenter,
   TapNamer,
@@ -61,6 +62,7 @@ interface ServiceHarness {
   jobs: InMemoryDecomposeJobStore;
   store: InMemoryDerivativeStore;
   prompts: SegmentPrompt[];
+  inputs: SegmentInput[];
   segmenter: Segmenter;
   setNow(now: number): void;
 }
@@ -89,6 +91,7 @@ async function makeServiceHarness(opts: {
   const jobs = new InMemoryDecomposeJobStore();
   const store = new InMemoryDerivativeStore();
   const prompts: SegmentPrompt[] = [];
+  const inputs: SegmentInput[] = [];
   let now = T0;
   const namer: ElementNamer = {
     async nameElements(input) {
@@ -106,6 +109,7 @@ async function makeServiceHarness(opts: {
   const segmenter: Segmenter = {
     async segment(input) {
       prompts.push(input.prompt);
+      inputs.push(input);
       if (input.prompt.kind === "point" && opts.pointOutcome) return opts.pointOutcome;
       const segments =
         input.prompt.kind === "point" ? (opts.pointSegments ?? [DOCS_SEGMENT]) : [DOCS_SEGMENT];
@@ -118,6 +122,7 @@ async function makeServiceHarness(opts: {
     jobs,
     store,
     prompts,
+    inputs,
     segmenter,
     setNow(value: number) {
       now = value;
@@ -179,6 +184,22 @@ describe("addTapElement point -> pin (PIN-78)", () => {
     expect((await sharp(flattened as Buffer).metadata()).format).toBe("jpeg");
     // Working copy survives for more taps until confirm (A6a).
     expect(await h.store.get(job.workingRef)).not.toBeNull();
+  });
+
+  it("the point call carries no store key by default and store:false from Policy samStore (PIN-213)", async () => {
+    const plain = await makeServiceHarness();
+    const plainJob = await readyJob(plain);
+    await addTapElement(plainJob.id, { x: 0.25, y: 0.75 }, "My thing", plain.deps);
+    const plainPoint = plain.inputs.filter((i) => i.prompt.kind === "point");
+    expect(plainPoint).toHaveLength(1);
+    expect(Object.keys(plainPoint[0])).not.toContain("store");
+
+    const flagged = await makeServiceHarness({ policyOverrides: { samStore: false } });
+    const flaggedJob = await readyJob(flagged);
+    await addTapElement(flaggedJob.id, { x: 0.25, y: 0.75 }, "My thing", flagged.deps);
+    // The photo's concept call and the tap's point call both carry it.
+    expect(flagged.inputs.map((i) => i.store)).toEqual([false, false]);
+    expect(flagged.inputs.map((i) => i.prompt.kind)).toEqual(["concept", "point"]);
   });
 
   it("enforces elementsPerPhoto.max including tap-adds, before any SAM spend", async () => {
