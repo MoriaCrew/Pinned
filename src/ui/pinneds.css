@@ -330,7 +330,7 @@
 .pn-board-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(36px * var(--display-scale)); line-height: 1.05; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); text-wrap: balance; }
 .pn-board-meta { margin: 0; font: 500 13px/18px var(--font-mono); letter-spacing: .02em; color: var(--ink-muted); }
 .pn-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
-.pn-section-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
+.pn-section-title { margin: 0; scroll-margin-top: var(--space-4); font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
 .pn-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: 0 var(--space-4); margin: var(--space-5) 0 var(--space-3); }
 
 /* ---------- Dock ---------- */

@@ -104,6 +104,10 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.boardCreatePerIp).toEqual({ limit: 10, windowMs: 3_600_000 });
     expect(resolvePolicy({ boardCreatePerIp: { limit: 50 } }).boardCreatePerIp).toEqual({ limit: 50, windowMs: 3_600_000 });
     expect(() => resolvePolicy({ boardCreatePerIp: { limit: 0 } })).toThrow();
+    // PIN-212 HSTS life: a year by default, the env layer can change it, 0 fails closed.
+    expect(DEFAULT_POLICY.hstsMaxAgeDays).toBe(365);
+    expect(resolvePolicy({ hstsMaxAgeDays: 30 }).hstsMaxAgeDays).toBe(30);
+    expect(() => resolvePolicy({ hstsMaxAgeDays: 0 })).toThrow();
     expect(resolvePolicy({ userSessionDays: 7 }).userSessionDays).toBe(7);
     expect(() => resolvePolicy({ userSessionDays: 0 })).toThrow();
     expect(resolvePolicy({ chipsMax: 2, chipsCacheTtlHours: 1 }).chipsMax).toBe(2);

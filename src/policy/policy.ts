@@ -107,6 +107,10 @@ export const PolicySchema = z
     userSessionDays: z.number().int().min(1).default(30),
     /** Life of the cookie that remembers a language picked by hand (PIN-190, docs/18-i18n.md). */
     localeCookieDays: z.number().int().min(1).default(365),
+    /** How long browsers remember "HTTPS only" for this site (the
+     * Strict-Transport-Security max-age, PIN-212). Read by
+     * next.config.ts at BUILD, so a change needs a rebuild. */
+    hstsMaxAgeDays: z.number().int().min(1).default(365),
     /** Sign-in provider pin + freshness (PIN-94): session exchange
      * only accepts these Firebase `sign_in_provider` values, so
      * enabling another provider (e.g. Anonymous) in a console can
@@ -408,6 +412,7 @@ export const PolicyOverridesSchema = z.object({
   joinNewWindowMs: z.number().int().min(1).optional(),
   userSessionDays: z.number().int().min(1).optional(),
   localeCookieDays: z.number().int().min(1).optional(),
+  hstsMaxAgeDays: z.number().int().min(1).optional(),
   authAllowedProviders: z.array(z.string().min(1)).min(1).optional(),
   authFreshWindowMs: z.number().int().min(1).optional(),
   myBoardsRemovePerIp: z
