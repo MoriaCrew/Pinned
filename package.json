@@ -13,6 +13,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "tokens": "node scripts/build-tokens.mjs",
+    "og:card": "WRITE_OG_CARD=1 vitest run src/server/og-card.test.ts",
     "test": "vitest run",
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "spike:studio": "node scripts/studio-spike.mjs",
