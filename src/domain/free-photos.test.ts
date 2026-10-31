@@ -13,6 +13,11 @@ describe("freePhotoAllowance (PIN-230)", () => {
     expect(freePhotoAllowance({ ...base, stored: 7 })).toBe(7);
   });
 
+  it("the board's own Policy override wins over what creation stored", () => {
+    expect(freePhotoAllowance({ ...base, stored: 0, boardOverride: 1000 })).toBe(1000);
+    expect(freePhotoAllowance({ ...base, stored: 15, boardOverride: 0 })).toBe(0);
+  });
+
   it("Plus or credits off: no limit", () => {
     expect(freePhotoAllowance({ ...base, hasPlus: true, stored: 0 })).toBeNull();
     expect(freePhotoAllowance({ ...base, creditsEnabled: false, stored: 0 })).toBeNull();

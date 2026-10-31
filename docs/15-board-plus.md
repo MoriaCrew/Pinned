@@ -83,7 +83,10 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   above and stores it (`Board.freePhotos`, server-only): the
 >   Policy value on a win, 0 past the maker's free boards (else
 >   new boards would farm free photos). Boards without the field
->   use the Policy value.
+>   use the Policy value. A board's own override
+>   (`policyOverrides.credits.freePhotosPerBoard`) wins over the
+>   stored amount: an operator's explicit choice for that board,
+>   e.g. the shared demo board (DEPLOY §6.4).
 > - **At the limit:** `POST /photos` answers a typed 429
 >   `{ code: "free_photos_used" }` before intake, any job or any
 >   AI call — checked before the daily cap, since waiting a day

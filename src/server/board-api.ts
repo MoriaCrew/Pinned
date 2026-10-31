@@ -588,6 +588,7 @@ function boardFreePhotoAllowance(board: Board, deps: BoardApiDeps): number | nul
   return freePhotoAllowance({
     creditsEnabled: creditsEnabled(deps.policy),
     hasPlus: hasPlus(board, deps.plusMode ?? "off"),
+    boardOverride: board.policyOverrides?.credits?.freePhotosPerBoard,
     stored: board.freePhotos,
     policyDefault: deps.policy.credits.freePhotosPerBoard,
   });
