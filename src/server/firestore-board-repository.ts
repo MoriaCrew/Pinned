@@ -64,6 +64,7 @@ import {
   type JoinRateParams,
 } from "../domain/join-rate";
 import type { ReclaimAttemptState } from "../domain/reclaim-lockout";
+import { toFirestoreData } from "./firestore-util";
 
 const BOARDS = "boards";
 const PARTICIPANTS = "participants";
@@ -73,10 +74,6 @@ const SCENES = "scenes";
 const EVENTS = "events";
 const RECLAIM_ATTEMPTS = "reclaimAttempts";
 const JOIN_ATTEMPTS = "joinAttempts";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 function toStored<T extends object>(value: T, seq: number): DocumentData {
   return { ...toFirestoreData(value), _seq: seq };

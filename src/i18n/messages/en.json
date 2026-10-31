@@ -343,7 +343,6 @@
   "add.photoStep": "Photo {i} of {n}",
   "add.skipPhoto": "Skip this photo",
   "add.retryPhoto": "Try this photo again",
-  "add.nextPhoto": "Next photo",
   "add.droppedPhotos.one": "Only the first photos fit. 1 was left out.",
   "add.droppedPhotos.other": "Only the first photos fit. {n} were left out.",
   "add.batchWaitingCount.one": "1 waiting",

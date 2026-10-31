@@ -89,7 +89,6 @@ export function BoardCards({ locale, boards }: { locale: Locale; boards: MyBoard
             ) : null}
             {board.latestSceneImageUrl ? (
               <span className="pn-lib-board-print" aria-hidden="true">
-                {/* eslint-disable-next-line @next/next/no-img-element -- board-link-checked image route */}
                 <img src={board.latestSceneImageUrl} alt="" loading="lazy" />
               </span>
             ) : (

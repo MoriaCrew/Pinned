@@ -110,7 +110,6 @@ export default async function HomePage({
                 <span className="pn-print-wrap" style={{ "--t": -0.9 } as CSSProperties}>
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
                       <img
                         src={photo.src}
                         alt=""
@@ -156,7 +155,6 @@ export default async function HomePage({
                 <span className="pn-print-wrap" style={{ "--t": 0.9 } as CSSProperties}>
                   <span className="pn-print">
                     <span className="pn-print-frame" style={{ aspectRatio: "1" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- synthetic landing fixture */}
                       <img src={scene.src} alt="" loading="lazy" style={{ objectPosition: scene.objectPosition }} />
                     </span>
                     <span className="pn-print-meta">

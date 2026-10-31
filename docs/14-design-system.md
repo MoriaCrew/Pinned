@@ -1,7 +1,7 @@
 # 14 — Pinneds design system (PIN-95)
 
 Status: **Accepted** by Robin on Oct 29, 2026. Replaces the
-first-generation Studio look (`docs/09`), which read as
+first-generation Studio look (`docs/archive/09`), which read as
 AI-generated. The product flow (`docs/11` §6) is unchanged; the
 look and the interaction design are rebuilt from scratch.
 

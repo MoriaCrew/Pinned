@@ -190,7 +190,6 @@ export function Dock(
           {slots.map((slot, i) => (
             <li key={i} className={cx("pn-tray-slot", slot && "is-filled")}>
               {slot ? (
-                // eslint-disable-next-line @next/next/no-img-element -- board-link-checked cut-out
                 <img src={slot.src} alt={slot.label ?? ""} />
               ) : null}
             </li>

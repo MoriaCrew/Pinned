@@ -17,7 +17,6 @@ import "server-only";
  */
 import {
   Firestore,
-  type DocumentData,
   type DocumentReference,
 } from "@google-cloud/firestore";
 import type {
@@ -25,13 +24,10 @@ import type {
   ProcessedStripeEvent,
   StripeWebhookRecordStore,
 } from "./stripe-webhook-records";
+import { toFirestoreData } from "./firestore-util";
 
 const PROCESSED_EVENTS = "stripeWebhookEvents";
 const DEAD_LETTERS = "billingDeadLetters";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 function assertId(value: string, name: string): void {
   if (typeof value !== "string" || !value.trim()) {

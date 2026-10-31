@@ -51,7 +51,6 @@ export function DictateButton({
       liveRef.current = false;
       stopSession();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function stopSession() {

@@ -61,14 +61,11 @@ import {
   type RestoreInput,
   type StarterGrantInput,
 } from "../domain/credit-ledger";
+import { toFirestoreData } from "./firestore-util";
 
 const CREDIT_ACCOUNTS = "creditAccounts";
 const PURCHASES = "purchases";
 const ENTRIES = "entries";
-
-function toFirestoreData<T extends object>(value: T): DocumentData {
-  return JSON.parse(JSON.stringify(value)) as DocumentData;
-}
 
 function assertBoardId(boardId: string): void {
   if (typeof boardId !== "string" || !boardId.trim()) {

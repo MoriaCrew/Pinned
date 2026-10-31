@@ -63,7 +63,8 @@ import {
 import { BoardHeader, Button, Dock, EmptyState, Hint, cx } from "../../../ui";
 import { useAuth } from "../../auth/AuthProvider";
 import { You } from "../../auth/You";
-import { AddSheet, boardQueryKey, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { AddSheet, type AddBatchStep, type PhotoMemory } from "./AddSheet";
+import { boardQueryKey } from "./board-query";
 import { useUploadQueue } from "./useUploadQueue";
 import { nextStepItem, stepPosition } from "../../../domain/upload-queue";
 import { createPhotoMemory } from "./photo-memory";
@@ -456,7 +457,6 @@ function BoardBody({
       return pruned.size === current.size ? current : pruned;
     });
     // selectableIds identity changes per render; key on its content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectableIds.join(",")]);
 
   const makeScene = useMutation({
@@ -709,7 +709,6 @@ function BoardBody({
       cancelled = true;
     };
     // pickedElementIds' content is keyed by selectionKey.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [makeOpen, selectionKey, slug, view.me?.id]);
   const sheetChips = chipsForSelection(generatedChips, selectionKey, policy.sceneChips);
   // The remix parent from the live view (a deleted/hidden parent
@@ -1167,7 +1166,6 @@ function BoardBody({
     setSceneMissing(true);
     closeViewer();
     // viewerIds' content is keyed by its join; closeViewer reads refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerId, viewerIds.join(",")]);
   useEffect(() => {
     const id = viewerReturnId.current;
