@@ -109,3 +109,23 @@ describe("Make sheet as a chat-style composer (PIN-216)", () => {
     expect(source).not.toMatch(/useState<readonly string\[\]>\(chips\)/);
   });
 });
+
+describe("Make sheet rides above the phone keyboard (PIN-226)", () => {
+  const css = readFileSync(path.join(process.cwd(), "src/ui/pinneds.css"), "utf8");
+  const rule = /\.pn-sheet\.pn-make-sheet \{([^}]*)\}/.exec(css)?.[1] ?? "";
+
+  it("renders as a keyboard-aware sheet whose CSS reads --pn-keyboard-inset", () => {
+    expect(sheet()).toMatch(/<section[^>]*class="pn-sheet pn-make-sheet"[^>]*role="dialog"/);
+    const source = readFileSync(path.join(__dirname, "MakeSheet.tsx"), "utf8");
+    expect(source).toMatch(/className="pn-make-sheet"\s+keyboardAware/);
+    // Lifted by the keyboard; the same height comes off the cap, so the scrolling middle shrinks.
+    expect(rule).toContain("margin-bottom: var(--pn-keyboard-inset, 0px);");
+    expect(rule).toContain("max-height: calc(92vh - var(--pn-keyboard-inset, 0px));");
+    expect(rule).toContain("max-height: calc(92dvh - var(--pn-keyboard-inset, 0px));");
+  });
+
+  it("glides with the keyboard, but not under reduced motion", () => {
+    expect(rule).toMatch(/transition: margin-bottom [^;]*, max-height [^;]*;/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.pn-sheet\.pn-make-sheet \{ transition: none; \}/);
+  });
+});
