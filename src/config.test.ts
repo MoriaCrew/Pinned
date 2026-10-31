@@ -216,4 +216,22 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(cfg.meta.baseUrl).toBe("https://example.test/v1");
     expect(cfg.meta.sparkModel).toBe("custom");
   });
+
+  it("client address settings: off by default, invalid values fail closed to off (PIN-112)", () => {
+    const hops = (value: string | undefined) =>
+      parseConfig({ CLIENT_IP_TRUSTED_HOPS: value }).clientIpTrustedHops;
+    expect(hops(undefined)).toBeNull();
+    for (const bad of ["", "  ", "-1", "1.5", "two", "2x", "1e3", "99999999999999999999"]) {
+      expect(hops(bad)).toBeNull();
+    }
+    expect(hops("0")).toBe(0);
+    expect(hops(" 2 ")).toBe(2);
+    const header = (value: string | undefined) =>
+      parseConfig({ CLIENT_IP_HEADER: value }).clientIpHeader;
+    expect(header(undefined)).toBeNull();
+    expect(header("")).toBeNull();
+    expect(header("bad header")).toBeNull();
+    expect(header("x:y")).toBeNull();
+    expect(header(" X-Fah-Client-Ip ")).toBe("x-fah-client-ip");
+  });
 });

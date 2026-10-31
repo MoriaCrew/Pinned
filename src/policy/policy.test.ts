@@ -217,6 +217,17 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     }
   });
 
+  it("cut-out cache max-age (PIN-217): one-day default, env/board overrides, fail closed", () => {
+    expect(DEFAULT_POLICY.elementImageCacheSeconds).toBe(86_400);
+    const env = parsePolicyOverridesJson('{"elementImageCacheSeconds": 3600}');
+    expect(resolvePolicy(env).elementImageCacheSeconds).toBe(3_600);
+    expect(resolvePolicy(env, { elementImageCacheSeconds: 0 }).elementImageCacheSeconds).toBe(0);
+    for (const bad of [{ elementImageCacheSeconds: -1 }, { elementImageCacheSeconds: 60.5 }]) {
+      expect(() => resolvePolicy(bad)).toThrow();
+      expect(() => resolvePolicy(null, bad)).toThrow();
+    }
+  });
+
   it("credits: packs mirror the PIN-146 catalog, starter/intent defaults, deep-overridable (PIN-147)", () => {
     expect(DEFAULT_POLICY.credits).toEqual({
       enabled: false,

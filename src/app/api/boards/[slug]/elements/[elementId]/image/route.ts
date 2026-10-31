@@ -14,6 +14,10 @@ export const dynamic = "force-dynamic";
  * Board-link-checked element image (?kind=cutout|flattened).
  * The slug IS the capability link; the element must belong to
  * that board. Every miss is the same 404 — no existence leak.
+ * Cut-outs are immutable once made (a rename changes only the
+ * label), so a hit may be cached privately, in the browser only,
+ * for Policy.elementImageCacheSeconds (PIN-217): the link check
+ * still runs on every request that reaches the server.
  */
 export async function GET(
   request: Request,
@@ -30,7 +34,7 @@ export async function GET(
     headers: {
       "Content-Type": image.contentType,
       "Content-Length": String(image.bytes.length),
-      "Cache-Control": "private, no-store",
+      "Cache-Control": `private, max-age=${policy.elementImageCacheSeconds}`,
       "X-Content-Type-Options": "nosniff",
     },
   });

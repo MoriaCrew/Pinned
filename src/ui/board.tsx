@@ -127,7 +127,7 @@ export function Dock(
           {slots.map((slot, i) => (
             <li key={i} className={cx("pn-tray-slot", slot && "is-filled")}>
               {slot ? (
-                <img src={slot.src} alt={slot.label ?? ""} />
+                <img src={slot.src} alt={slot.label ?? ""} width={40} height={40} loading="lazy" decoding="async" />
               ) : null}
             </li>
           ))}
