@@ -65,10 +65,22 @@ export function tCount(
   baseKey: string,
   n: number,
 ): string {
-  const translated = catalogs[locale][`${baseKey}.other` as MessageKey] !== undefined;
-  const ruleLocale = translated ? locale : DEFAULT_LOCALE;
+  const ruleLocale = countRuleLocale(locale, catalogs[locale], baseKey);
   const form = pluralRule(ruleLocale).select(n) === "one" ? "one" : "other";
   return tf(ruleLocale, `${baseKey}.${form}` as MessageKey, { n });
+}
+
+/**
+ * Whose plural rule picks the form: the language's own when its
+ * catalog has the message, English's when it falls back (pure, so a
+ * test can pass any catalog).
+ */
+export function countRuleLocale(
+  locale: Locale,
+  catalog: Readonly<Record<string, string | undefined>>,
+  baseKey: string,
+): Locale {
+  return catalog[`${baseKey}.other`] !== undefined ? locale : DEFAULT_LOCALE;
 }
 
 /**

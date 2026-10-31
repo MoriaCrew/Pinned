@@ -286,7 +286,7 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(sheet()).not.toContain("local currency");
     expect(sheet({ paymentNote: true, available: false })).not.toContain("local currency");
     const fr = sheetFr({ paymentNote: true });
-    expect(fr).toContain("Le paiement peut se faire dans votre devise locale. Apparaît sous le nom PINNEDS sur votre relevé.");
+    expect(fr).toContain("Tu peux être facturé dans ta devise locale. Apparaît comme PINNEDS sur ton relevé.");
   });
 
   it("renders in French with French prices", () => {
