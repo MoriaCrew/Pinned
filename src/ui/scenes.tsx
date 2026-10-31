@@ -104,7 +104,7 @@ export function SceneCard({
         ) : null}
         {hasBody ? (
           <div className="pn-print-body">
-            {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
+            {idea ? <p className="pn-print-idea">{tf(locale, "ui.quoted", { text: idea })}</p> : null}
             {hasCredits ? <CreditLine compact items={credits ?? []} remixOf={remixOf} onOpen={onOpen} /> : null}
             {hasActions ? (
               <div className="pn-print-actions">
@@ -193,7 +193,7 @@ export function Developing({
             <Tag tone="ink">{statusLabel ?? t(locale, "ui.developing")}</Tag>
             {elapsed ? <span className="pn-board-meta">{elapsed}</span> : null}
           </div>
-          {idea ? <p className="pn-print-idea">{`“${idea}”`}</p> : null}
+          {idea ? <p className="pn-print-idea">{tf(locale, "ui.quoted", { text: idea })}</p> : null}
           <p className="pn-develop-line">{line ?? t(locale, "ui.developingLine")}</p>
           {footer}
         </div>
