@@ -6,7 +6,7 @@ import { BoardPlusError, hostOnlyError, type HostRouteDeps } from "../../../serv
 import { getBoardRepository } from "../../../server/board-repository";
 import { hostTokenFrom } from "../../../server/host-session";
 import { readJsonCapped, rateLimit, rejectCrossSite, requireJson } from "./request-guards";
-import { JSON_HEADERS, errorResponse, notFound } from "./shared";
+import { errorResponse, localizedErrorJson, notFound } from "./shared";
 
 /** One per-IP budget shared by the two host-only routes. */
 const HOST_ROUTES_SCOPE = "board-host";
@@ -48,10 +48,7 @@ export function hostRouteDeps(policy: Policy): HostRouteDeps {
 export function plusErrorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof BoardPlusError) {
     if (error.status === 404) return notFound();
-    return NextResponse.json(
-      { error: error.message, ...(error.code ? { code: error.code } : {}) },
-      { status: error.status, headers: JSON_HEADERS },
-    );
+    return localizedErrorJson(error, error.status, error.code ? { code: error.code } : {});
   }
   return errorResponse(error, fallback);
 }

@@ -27,10 +27,11 @@ import type { Policy } from "../policy/policy";
 import { BoardApiError, publicParticipant } from "./board-session";
 import { plusRequiredError } from "./board-plus";
 import { issueHostCredential, verifyHostToken } from "./host-session";
-import { t, tf } from "../i18n";
+import { isMessageKey, userMessage } from "../i18n/user-message";
 import {
   addTapElement,
   startDecomposeJob,
+  tapFallbackLabel,
   type DecomposeJobStore,
   type TapPoint,
 } from "./decompose-job";
@@ -91,6 +92,15 @@ export function sceneImageUrl(slug: string, sceneId: string): string {
   return `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(sceneId)}/image`;
 }
 
+/**
+ * PIN-196: refusals store the catalog key, which the view leaves out
+ * so the client shows its own line in the reader's language. Older
+ * docs hold English text and pass through as-is (no migration).
+ */
+function refusalReasonView(stored: string | undefined): { refusalReason?: string } {
+  return stored && !isMessageKey(stored) ? { refusalReason: stored } : {};
+}
+
 export function publicScene(slug: string, scene: Scene) {
   const imageUrl = scene.status === "ready" && scene.imageRef ? sceneImageUrl(slug, scene.id) : null;
   return {
@@ -105,7 +115,7 @@ export function publicScene(slug: string, scene: Scene) {
     ...(scene.collageReason ? { collageReason: scene.collageReason } : {}),
     promptVersion: scene.promptVersion,
     ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
-    ...(scene.refusalReason ? { refusalReason: scene.refusalReason } : {}),
+    ...refusalReasonView(scene.refusalReason),
     // Stored pixel size (PIN-129): the print frame takes this shape.
     ...(validSceneSize(scene) ?? {}),
     imageUrl,
@@ -128,7 +138,7 @@ export function publicSceneJob(job: SceneJob) {
     ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
     promptVersion: job.promptVersion,
     ...(job.errorCode ? { errorCode: job.errorCode } : {}),
-    ...(job.refusalReason ? { refusalReason: job.refusalReason } : {}),
+    ...refusalReasonView(job.refusalReason),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
@@ -219,18 +229,18 @@ export interface CreateBoardInput {
 
 export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoardInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BoardApiError("Give your board a title.");
+    throw new BoardApiError(userMessage("error.titleMissing"));
   }
   const body = value as Record<string, unknown>;
   const rawTitle = typeof body.title === "string" ? body.title : "";
   const title = rawTitle.trim().replace(/\s+/g, " ");
   if (!title || [...title].length > policy.boardTitleMaxChars || /[\u0000-\u001f\u007f]/.test(title)) {
-    throw new BoardApiError(`Give your board a title up to ${policy.boardTitleMaxChars} characters.`);
+    throw new BoardApiError(userMessage("error.titleTooLong", { max: policy.boardTitleMaxChars }));
   }
   let themeId: string | undefined;
   if (body.themeId !== undefined && body.themeId !== null && body.themeId !== "") {
     if (!isBoardThemeId(body.themeId)) {
-      throw new BoardApiError("That theme is not available.");
+      throw new BoardApiError(userMessage("error.themeUnknown"));
     }
     // PIN-103: a new board holds no entitlement, so a Plus skin
     // here would bypass the skin gate; the host buys Plus first.
@@ -284,7 +294,7 @@ export async function createBoardWithHost(
       throw error;
     }
   }
-  throw new BoardApiError("Could not create a board. Please try again.", 503);
+  throw new BoardApiError(userMessage("error.createBoardFailed"), 503);
 }
 
 /** createBoardWithHost for callers that do not hand out the host cookie. */
@@ -456,7 +466,7 @@ export async function uploadPhoto(
     (job) => job.participantId === participant.id && job.createdAt >= startOfUtcDay(now),
   );
   if (todaysJobs.length >= deps.policy.photosPerParticipantPerDay) {
-    throw new BoardApiError("Daily photo limit reached for this board.", 429, "photos_per_day");
+    throw new BoardApiError(userMessage("error.photosPerDay"), 429, "photos_per_day");
   }
 
   // PIN-151 preflight (after the Policy daily cap above, which
@@ -466,7 +476,7 @@ export async function uploadPhoto(
   // pool lands lazily inside this read for older boards.
   const availableMakes = await readAvailableMakes(slug, deps);
   if (availableMakes !== null && availableMakes < 1) {
-    throw new BoardApiError("This board is out of makes.", 429, CREDITS_POOL_EMPTY);
+    throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
   }
 
   // Opportunistic A6a sweep; never blocks the upload itself.
@@ -536,7 +546,7 @@ export async function getJobView(
 
 export function parseTapAddInput(value: unknown): TapPoint {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BoardApiError("Tap a spot in the photo.");
+    throw new BoardApiError(userMessage("error.tapMissing"));
   }
   const body = value as Record<string, unknown>;
   const { x, y } = body;
@@ -550,7 +560,7 @@ export function parseTapAddInput(value: unknown): TapPoint {
     y < 0 ||
     y > 1
   ) {
-    throw new BoardApiError("Tap a spot in the photo.");
+    throw new BoardApiError(userMessage("error.tapMissing"));
   }
   return { x, y };
 }
@@ -579,7 +589,7 @@ export async function tapAddPin(
   if (!job || job.boardId !== slug || job.participantId !== participant.id) {
     throw new BoardApiError("Job not found.", 404);
   }
-  const outcome = await addTapElement(jobId, point, t("en", "add.tapLabel"), {
+  const outcome = await addTapElement(jobId, point, tapFallbackLabel(), {
     userIdAtCall: participant.userId ?? null,
     ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
     boards: deps.boards,
@@ -601,17 +611,17 @@ export async function tapAddPin(
     case "not_found":
       throw new BoardApiError("Job not found.", 404);
     case "working_copy_gone":
-      throw new BoardApiError(t("en", "add.tapGone"), 409, "working_copy_gone");
+      throw new BoardApiError(userMessage("add.tapGone"), 409, "working_copy_gone");
     case "cap_reached":
-      throw new BoardApiError(t("en", "add.tapCap"), 409, "elements_per_photo_max");
+      throw new BoardApiError(userMessage("add.tapCap"), 409, "elements_per_photo_max");
     case "job_not_ready":
-      throw new BoardApiError(t("en", "add.finding"), 409, "job_not_ready");
+      throw new BoardApiError(userMessage("add.finding"), 409, "job_not_ready");
     case "no_usable_mask":
-      throw new BoardApiError(t("en", "add.tapNone"), 400, "no_usable_mask");
+      throw new BoardApiError(userMessage("add.tapNone"), 400, "no_usable_mask");
     case "refused":
-      throw new BoardApiError(t("en", "add.refused"), 400, "refused");
+      throw new BoardApiError(userMessage("add.refused"), 400, "refused");
     case "failed":
-      throw new BoardApiError(t("en", "add.failed"), 503, outcome.errorCode ?? "tap_add_failed");
+      throw new BoardApiError(userMessage("add.failed"), 503, outcome.errorCode ?? "tap_add_failed");
   }
 }
 
@@ -627,18 +637,18 @@ export interface ConfirmPinsInput {
  */
 export function parseConfirmPinsInput(value: unknown, policy: Policy): ConfirmPinsInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BoardApiError("Choose which pins to keep.");
+    throw new BoardApiError(userMessage("error.keepMissing"));
   }
   const body = value as Record<string, unknown>;
   if (typeof body.jobId !== "string" || !body.jobId) {
-    throw new BoardApiError("Choose which pins to keep.");
+    throw new BoardApiError(userMessage("error.keepMissing"));
   }
   if (!Array.isArray(body.pinIds) || body.pinIds.some((id) => typeof id !== "string" || !id)) {
-    throw new BoardApiError("Choose which pins to keep.");
+    throw new BoardApiError(userMessage("error.keepMissing"));
   }
   const pinIds = [...new Set(body.pinIds as string[])];
   if (pinIds.length > policy.elementsPerPhoto.max) {
-    throw new BoardApiError("Too many pins for one photo.");
+    throw new BoardApiError(userMessage("error.tooManyPinsPhoto"));
   }
   return { jobId: body.jobId, pinIds };
 }
@@ -671,7 +681,7 @@ export async function confirmPins(
   // Pin once the job is ready; the leftovers line says "still
   // cutting" on this 409 and the next poll brings the rest.
   if (job.status === "pending" || job.status === "running") {
-    throw new BoardApiError("Still cutting this photo. Try again in a moment.", 409);
+    throw new BoardApiError(userMessage("error.stillCutting"), 409);
   }
   const now = deps.now?.() ?? Date.now();
   const jobPinIds = new Set(job.pinIds);
@@ -679,11 +689,11 @@ export async function confirmPins(
   const pinnedPinIds: string[] = [];
   for (const pinId of input.pinIds) {
     if (!jobPinIds.has(pinId)) {
-      throw new BoardApiError("That pin is not part of this photo.");
+      throw new BoardApiError(userMessage("error.pinNotInPhoto"));
     }
     const pin = await deps.boards.getPin(pinId);
     if (!pin || pin.boardId !== slug || pin.pinnedBy !== participant.id) {
-      throw new BoardApiError("That pin is not part of this photo.");
+      throw new BoardApiError(userMessage("error.pinNotInPhoto"));
     }
     if (pin.status === "candidate") {
       await deps.boards.setPinStatus(pinId, "pinned", now);
@@ -765,7 +775,7 @@ export async function renameMyElement(
   const raw = typeof body === "object" && body !== null ? (body as { label?: unknown }).label : undefined;
   const checked = normalizeElementLabel(raw, deps.policy.elementLabelMaxChars);
   if (!checked.ok) {
-    throw new BoardApiError(tf("en", "board.renameInvalid", { max: deps.policy.elementLabelMaxChars }));
+    throw new BoardApiError(userMessage("board.renameInvalid", { max: deps.policy.elementLabelMaxChars }));
   }
   const renamed = await deps.boards.renameElement(elementId, checked.label);
   if (!renamed) throw new BoardApiError("Element not found.", 404);
@@ -930,7 +940,7 @@ export interface RequestSceneInput {
 
 export function parseRequestSceneInput(value: unknown): RequestSceneInput {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BoardApiError("Pick some pins and describe your scene.");
+    throw new BoardApiError(userMessage("error.sceneInputMissing"));
   }
   const body = value as Record<string, unknown>;
   if (
@@ -938,22 +948,22 @@ export function parseRequestSceneInput(value: unknown): RequestSceneInput {
     body.elementIds.length === 0 ||
     body.elementIds.some((id) => typeof id !== "string" || !id)
   ) {
-    throw new BoardApiError("Pick at least one pin for your scene.");
+    throw new BoardApiError(userMessage("error.scenePinsMissing"));
   }
   if (typeof body.prompt !== "string" || !body.prompt.trim()) {
-    throw new BoardApiError("Describe your scene.");
+    throw new BoardApiError(userMessage("error.scenePromptMissing"));
   }
   let parentSceneId: string | undefined;
   if (body.parentSceneId !== undefined && body.parentSceneId !== null && body.parentSceneId !== "") {
     if (typeof body.parentSceneId !== "string") {
-      throw new BoardApiError("That scene is not ready to remix.");
+      throw new BoardApiError(userMessage("error.remixNotReady"));
     }
     parentSceneId = body.parentSceneId;
   }
   let sceneId: string | undefined;
   if (body.sceneId !== undefined && body.sceneId !== null && body.sceneId !== "") {
     if (typeof body.sceneId !== "string") {
-      throw new BoardApiError("That scene id is not valid.");
+      throw new BoardApiError(userMessage("error.sceneIdInvalid"));
     }
     sceneId = body.sceneId;
   }
@@ -970,7 +980,7 @@ function requireSceneDeps(deps: BoardApiDeps): {
   composer: SceneComposer;
 } {
   if (!deps.sceneJobs || !deps.composer) {
-    throw new BoardApiError("Scenes are not available on this server.", 503);
+    throw new BoardApiError(userMessage("error.scenesOff"), 503);
   }
   return { sceneJobs: deps.sceneJobs, composer: deps.composer };
 }
@@ -1027,7 +1037,7 @@ export async function requestScene(
                 error.code === "parent_not_found"
               ? 404
               : 400;
-      throw new BoardApiError(error.message, status, error.code);
+      throw new BoardApiError(error.userMessage ?? error.message, status, error.code);
     }
     if (error instanceof RangeError) {
       throw new BoardApiError("Board not found.", 404);
@@ -1109,7 +1119,7 @@ export async function deleteScene(
   if (scene.deletedAt === undefined) {
     const job = deps.sceneJobs ? await deps.sceneJobs.get(slug, scene.id) : null;
     if (isInFlight(scene.status) || (job !== null && isInFlight(job.status))) {
-      throw new BoardApiError(t("en", "board.sceneDeleteDeveloping"), 409, "scene_in_flight");
+      throw new BoardApiError(userMessage("board.sceneDeleteDeveloping"), 409, "scene_in_flight");
     }
     await deps.boards.putScene({ ...scene, hidden: true, deletedAt: now, deletedBy: role });
   }
