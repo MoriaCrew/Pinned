@@ -72,6 +72,8 @@ export interface DecomposeJobStore {
   claim(jobId: string, now: number): Promise<DecomposeJob | null>;
   /** Replace the stored job (progress + terminal states). */
   update(job: DecomposeJob): Promise<void>;
+  /** Remove a job outright (start cleanup when the working-copy write fails after create). Missing job is a no-op. */
+  delete(jobId: string): Promise<void>;
   /** All jobs on one board, createdAt-ascending (caps + TTL sweep). */
   listForBoard(boardId: string): Promise<DecomposeJob[]>;
 }
@@ -117,6 +119,10 @@ export class InMemoryDecomposeJobStore implements DecomposeJobStore {
       throw new RangeError(`DecomposeJob ${job.id} not found`);
     }
     this.jobs.set(job.id, cloneJob(job));
+  }
+
+  async delete(jobId: string): Promise<void> {
+    this.jobs.delete(jobId);
   }
 }
 
@@ -281,11 +287,16 @@ export async function startDecomposeJob(
   }
   // Only the stripped derivative is ever written; input.bytes (the
   // original upload) is not stored anywhere (privacy invariant). A
-  // failed write propagates (the upload 500s) and leaves the job
-  // pending on purpose: a same-id retry recovers it through the
-  // pending path above, instead of a terminal working_copy_missing
-  // job that the same uploadId could never retry past.
-  await deps.store.put(workingRef, processed.derivative, processed.contentType);
+  // failed write removes the just-created job and propagates (the
+  // upload 500s): no orphaned pending job counts against the daily
+  // photo cap, and any retry — same id or a fresh pick — starts
+  // clean, exactly as when storage failed before create existed.
+  try {
+    await deps.store.put(workingRef, processed.derivative, processed.contentType);
+  } catch (error) {
+    await deps.jobs.delete(jobId).catch(() => undefined);
+    throw error;
+  }
   return runDecomposeJob(jobId, runDeps);
 }
 

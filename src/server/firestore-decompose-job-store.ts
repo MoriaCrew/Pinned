@@ -71,6 +71,11 @@ export class FirestoreDecomposeJobStore implements DecomposeJobStore {
     }
   }
 
+  async delete(jobId: string): Promise<void> {
+    const ref = await this.findRef(jobId);
+    if (ref) await ref.delete();
+  }
+
   async get(jobId: string): Promise<DecomposeJob | null> {
     const ref = await this.findRef(jobId);
     if (!ref) return null;
