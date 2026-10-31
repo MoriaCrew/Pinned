@@ -281,6 +281,13 @@
 .pn-pin[data-state="dropped"] .pn-pin-tag { opacity: .7; }
 .pn-pin[data-state="dropped"] .pn-pin-tag-text { text-decoration: line-through; }
 .pn-pins { --sticker: 104px; display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: var(--space-4) var(--space-2); list-style: none; padding: 0; margin: 0; }
+/* Long boards (PIN-217): a pin far off screen skips layout, paint and its lazy cut-out request until it nears the viewport
+   (still in the a11y tree and tab order; focus or scrollIntoView renders it). 210px is a row of two-line names at 390px
+   (186 one line, 204 two, 223 three); `auto` then keeps each pin's real height. Paint containment clips at the box edge, so the
+   box is padded out by --space-3 and pulled back by the same margin: nothing moves, and the pick badge, tilt, shadow and focus ring
+   still draw. The pad ignores pointer events, so a neighbour's pad never covers a control. The Add sheet's few pins are left alone. */
+.pn-pins:not(.pn-add-keep) .pn-pin { content-visibility: auto; contain-intrinsic-block-size: auto 210px; padding: var(--space-3); margin: calc(-1 * var(--space-3)); pointer-events: none; }
+.pn-pins:not(.pn-add-keep) .pn-pin > * { pointer-events: auto; }
 
 /* ---------- Credit line ---------- */
 .pn-credit { display: grid; gap: var(--space-2); }

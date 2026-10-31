@@ -33,6 +33,19 @@ as the code it unblocks — allowlist changes need their own reviewed PR.
 - Full request/response dumps from live AI calls containing user content.
   Log shapes, counts, latency and cost — redact payloads (`--redact`).
 
+## Rate-limit client address (PIN-112)
+
+Per-IP limits key on one address from `X-Forwarded-For`. Entries a
+client sends come first; the hosting platform appends its own after
+them, so only the platform-appended client entry can be trusted.
+`CLIENT_IP_TRUSTED_HOPS=n` makes the key the entry `n` positions from
+the right end; unset keeps the first entry (local default). A hosted
+backend sets `n` only after measuring its layout with the lab probe
+`GET /api/lab/client-ip` (dev only; it answers header counts and
+positions, never an address — usage in the route comment).
+`CLIENT_IP_HEADER` (a platform header read first) stays unset unless
+the probe shows the platform overwrites a client-sent copy.
+
 ## If something leaks anyway — rotate first
 
 1. **Revoke/rotate the credential immediately.** Deleting the file or
