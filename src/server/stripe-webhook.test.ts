@@ -31,6 +31,8 @@ import { InMemoryStripeWebhookRecordStore } from "./stripe-webhook-records";
 const SECRET = "whsec_test_fake_signing_secret";
 const NOW = Math.floor(Date.now() / 1000) * 1000;
 const PACK = "pinneds_credits_25";
+/** Test-local pack on the retired 25-make terms: the handler is pack-agnostic (the shipped default is pinned below and in policy.test.ts). */
+const TEST_PACK = { lookupKey: PACK, credits: 25, eurCents: 499, label: "25 makes" };
 const SESSION_ID = "cs_test_fake_1";
 const PAYMENT_INTENT_ID = "pi_test_fake_1";
 const CHARGE_ID = "ch_test_fake_1";
@@ -90,7 +92,7 @@ async function harness() {
     ledger,
     records,
     boards,
-    policy: resolvePolicy(null),
+    policy: resolvePolicy({ credits: { packs: [TEST_PACK] } }),
     now: () => nowMs,
   };
   async function createIntent(): Promise<CheckoutIntent> {
@@ -173,9 +175,13 @@ function dispute(over: Record<string, unknown> = {}) {
 }
 
 describe("money -> makes formula (PIN-150)", () => {
-  const pack = DEFAULT_POLICY.credits.packs[0];
+  const pack = TEST_PACK;
   it("floor for clawbacks, ceil for freezes, capped at the pack", () => {
-    expect(pack).toMatchObject({ credits: 25, eurCents: 499 });
+    // The shipped pack (PIN-181): 20 makes for 299 cents.
+    const shipped = DEFAULT_POLICY.credits.packs[0];
+    expect(shipped).toMatchObject({ credits: 20, eurCents: 299 });
+    expect([makesFloorForCents(299, shipped), makesFloorForCents(150, shipped)]).toEqual([20, 10]);
+    expect([makesFreezeForCents(150, shipped), makesFreezeForCents(1, shipped)]).toEqual([11, 1]);
     expect(makesFloorForCents(499, pack)).toBe(25);
     expect(makesFloorForCents(250, pack)).toBe(12);
     expect(makesFloorForCents(10, pack)).toBe(0);

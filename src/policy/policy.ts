@@ -23,7 +23,7 @@ const FractionRange = z.object({
   max: z.number().min(0).max(1),
 });
 
-/** One purchasable makes pack (PIN-147). `lookupKey` is the Stripe price lookup key from the PIN-146 catalog manifest (`src/billing/catalog.ts`); a policy test pins the defaults below to that manifest so the two cannot drift. `eurCents`/`label` are display + offer data — the Stripe price remains the charging truth. */
+/** One purchasable makes pack (PIN-147). `lookupKey` is the Stripe price lookup key from the PIN-146 catalog manifest (`src/billing/catalog.ts`); a policy test pins the defaults below to that manifest's live items so the two cannot drift. `eurCents`/`label` are display + offer data — the Stripe price remains the charging truth; a buy stores the pack's `credits` + `eurCents` on its intent (PIN-181), so later price changes never reprice it. */
 const CreditPack = z.object({
   lookupKey: z.string().min(1),
   credits: z.number().int().positive(),
@@ -31,10 +31,9 @@ const CreditPack = z.object({
   label: z.string().min(1),
 });
 
+/** PIN-181: one purchase, Board Plus for the board + 20 creations ("creations" is the user-facing word for makes). */
 const DEFAULT_CREDIT_PACKS = [
-  { lookupKey: "pinneds_credits_25", credits: 25, eurCents: 499, label: "25 makes · €4.99" },
-  { lookupKey: "pinneds_credits_60", credits: 60, eurCents: 999, label: "60 makes · €9.99" },
-  { lookupKey: "pinneds_credits_150", credits: 150, eurCents: 1999, label: "150 makes · €19.99" },
+  { lookupKey: "pinneds_plus_20", credits: 20, eurCents: 299, label: "20 creations · €2.99" },
 ];
 
 export const PolicySchema = z
@@ -120,9 +119,11 @@ export const PolicySchema = z
       })
       .default({ limit: 60, windowMs: 600_000 }),
     /**
-     * Board Plus (PIN-103, docs/15-board-plus.md). Price labels
-     * are display-only placeholders until Stripe lands — nothing
-     * is ever charged from them. hostCookieDays is the host
+     * Board Plus (PIN-103, docs/15-board-plus.md). Since PIN-181
+     * Plus is sold only inside the credits pack (any joined member
+     * can buy it for the board, `credits.plusOnPurchase`); the
+     * price labels are legacy display-only placeholders that
+     * nothing charges from. hostCookieDays is the host
      * credential's life: the server checks it against the stored
      * issue time with the board's effective Policy (so a per-board
      * override does apply there), while the cookie's Max-Age is
@@ -158,10 +159,13 @@ export const PolicySchema = z
      * Board makes credits (PIN-147, docs/15-board-plus.md). Pure
      * offer + ledger parameters only: nothing here charges or
      * grants by itself (the ledger domain is
-     * `src/domain/credit-ledger.ts`; checkout/webhook wiring is a
-     * later slice). `starterMakes` is the free pool each new board
-     * is granted once; paid makes never expire (no TTL knob on
-     * purpose). `pendingIntentCapPerBoard` bounds concurrent
+     * `src/domain/credit-ledger.ts`; the buy route and webhook
+     * read these). `packs` is the one Board Plus purchase since
+     * PIN-181 (UI calls makes "creations"). `starterMakes` is the
+     * free pool each new board is granted once; paid makes never
+     * expire (no TTL knob on purpose). `plusOnPurchase` makes the
+     * webhook grant also give the board Plus (PIN-181).
+     * `pendingIntentCapPerBoard` bounds concurrent
      * not-yet-paid purchase intents one board may hold, and
      * `intentTtlSeconds` is how long such an intent holds one of
      * those cap slots (30 min, matching a hosted checkout sitting
@@ -174,9 +178,11 @@ export const PolicySchema = z
         /** Kill/enable flag for pool debit (PIN-151): false (default) keeps the credits loop inert in the board flow — no starter grants, no debits, no pool gate, no balance in the board view. Ships disabled; activation is a later operator flip (env/per-board override), never a deploy. */
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
-        starterMakes: z.number().int().min(0).default(25),
+        starterMakes: z.number().int().min(0).default(5),
         /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
-        lowMakesWarning: z.number().int().min(0).default(5),
+        lowMakesWarning: z.number().int().min(0).default(2),
+        /** PIN-181: a webhook-granted purchase also grants the board Plus (`source: "stripe"`). Off = makes only. */
+        plusOnPurchase: z.boolean().default(true),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
         intentTtlSeconds: z.number().int().min(1).default(1_800),
         /** Buy-route per-IP brake (PIN-149, in-process like plus.hostRoutesPerIp): bounds checkout-session creation attempts before any Stripe call. */
@@ -192,8 +198,9 @@ export const PolicySchema = z
       .default({
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
-        starterMakes: 25,
-        lowMakesWarning: 5,
+        starterMakes: 5,
+        lowMakesWarning: 2,
+        plusOnPurchase: true,
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
         checkoutPerIp: { limit: 20, windowMs: 600_000 },
@@ -410,6 +417,7 @@ export const PolicyOverridesSchema = z.object({
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),
+      plusOnPurchase: z.boolean().optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
       intentTtlSeconds: z.number().int().min(1).optional(),
       checkoutPerIp: z

@@ -100,7 +100,7 @@ function buy(slug: string, body: unknown, opts: Send = {}) {
 
 describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", () => {
   it("invalid slug -> uniform 404", async () => {
-    const res = await buy("a/b", { lookupKey: "pinneds_credits_25" });
+    const res = await buy("a/b", { lookupKey: "pinneds_plus_20" });
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not found." });
   });
@@ -109,7 +109,7 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
     const { slug, hostCookie } = await hostedBoard();
     const cross = await buy(
       slug,
-      { lookupKey: "pinneds_credits_25" },
+      { lookupKey: "pinneds_plus_20" },
       { cookie: hostCookie, headers: { "sec-fetch-site": "cross-site" } },
     );
     expect(cross.status).toBe(403);
@@ -117,7 +117,7 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
     const form = await buy(slug, null, {
       cookie: hostCookie,
       headers: { "content-type": "text/plain" },
-      raw: "lookupKey=pinneds_credits_25",
+      raw: "lookupKey=pinneds_plus_20",
     });
     expect(form.status).toBe(415);
     expect(await form.json()).toMatchObject({ code: "unsupported_media_type" });
@@ -126,7 +126,7 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
   it("no board session -> 401 participant_required, even for unknown boards", async () => {
     const { slug } = await hostedBoard();
     for (const target of [slug, generateSlug()]) {
-      const res = await buy(target, { lookupKey: "pinneds_credits_25" });
+      const res = await buy(target, { lookupKey: "pinneds_plus_20" });
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ code: "participant_required" });
     }
@@ -138,7 +138,7 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
     const bad = await buy(slug, { lookupKey: "pinneds_credits_999" }, { cookie });
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ code: "pack_unknown" });
-    const ok = await buy(slug, { lookupKey: "pinneds_credits_25" }, { cookie });
+    const ok = await buy(slug, { lookupKey: "pinneds_plus_20" }, { cookie });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ status: "unavailable" });
     expect(await getLedger().getAccount(slug)).toBeNull();
@@ -146,7 +146,7 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
 
   it("the host cookie alone also authorizes a buy attempt", async () => {
     const { slug, hostCookie } = await hostedBoard();
-    const res = await buy(slug, { lookupKey: "pinneds_credits_60" }, { cookie: hostCookie });
+    const res = await buy(slug, { lookupKey: "pinneds_plus_20" }, { cookie: hostCookie });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "unavailable" });
     expect(await getLedger().getAccount(slug)).toBeNull();
@@ -157,13 +157,13 @@ describe("POST /api/boards/[slug]/credits/checkout, PLUS_MODE=off (PIN-149)", ()
     const ip = freshIp();
     for (let i = 0; i < 3; i++) {
       expect(
-        (await buy(slug, { lookupKey: "pinneds_credits_25" }, { cookie: hostCookie, ip }))
+        (await buy(slug, { lookupKey: "pinneds_plus_20" }, { cookie: hostCookie, ip }))
           .status,
       ).toBe(200);
     }
     const limited = await buy(
       slug,
-      { lookupKey: "pinneds_credits_25" },
+      { lookupKey: "pinneds_plus_20" },
       { cookie: hostCookie, ip },
     );
     expect(limited.status).toBe(429);
@@ -177,8 +177,8 @@ describe("GET /billing/return (PIN-149)", () => {
     const now = Date.now();
     const intent = await getIntents().create({
       boardId: slug,
-      packLookupKey: "pinneds_credits_25",
-      credits: 25,
+      packLookupKey: "pinneds_plus_20",
+      credits: 20,
       at: now,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 3,
@@ -197,8 +197,8 @@ describe("GET /billing/return (PIN-149)", () => {
 
     const stale = await getIntents().create({
       boardId: slug,
-      packLookupKey: "pinneds_credits_25",
-      credits: 25,
+      packLookupKey: "pinneds_plus_20",
+      credits: 20,
       at: now - 7_200_000,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 3,
