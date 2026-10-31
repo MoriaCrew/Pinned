@@ -268,6 +268,8 @@
   "you.myPins": "My pins",
   "you.changeLook": "Change look",
   "you.deleteBoard": "Delete board",
+  "you.language": "Language",
+  "you.languageTitle": "Choose a language",
   "you.signIn": "Sign in with Google",
   "you.signOut": "Sign out",
   "you.alsoHere": "Also here: {names}",

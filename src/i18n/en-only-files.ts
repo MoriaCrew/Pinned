@@ -13,8 +13,6 @@
  * on the server.
  */
 export const EN_ONLY_FILES: readonly string[] = [
-  // PIN-191 language switcher
-  "src/app/auth/You.tsx",
 
   // PIN-192 add flow
   "src/app/g/[slug]/AddSheet.tsx",
