@@ -12,7 +12,9 @@ import "server-only";
  *   in its transaction (the participant-cap shape in
  *   firestore-board-repository.ts), so concurrent creates for one
  *   board contend on it and the cap re-evaluates against the
- *   winner's write. Transitions out of `pending` remove the id.
+ *   winner's write. Transitions out of `pending` remove the id;
+ *   lazy expiry of stale intents frees their slots and touches
+ *   nothing else (PIN-178: the ledger purchase stays pending).
  *
  * Client access stays deny-all in firestore.rules; the stored
  * `boardId` is read only server-side and never enters the public
@@ -31,7 +33,6 @@ import {
   assertCreateCheckoutIntentInput,
   buildCheckoutIntent,
   capExceededError,
-  isCheckoutIntentResolvable,
   mintCheckoutIntentId,
   partitionPendingIntents,
   type CheckoutIntent,
@@ -138,8 +139,10 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
 
   /**
    * Shared close/expire transition. `nextStatus` applies only to
-   * a pending intent the caller passes the guard for; anything
-   * else returns the stored record unchanged.
+   * an intent the caller's guard accepts; anything else returns
+   * the stored record unchanged. Leaving `pending` also drops the
+   * id from the board's cap index (an expired intent is already
+   * out of it).
    */
   private async transition(
     intentId: string,
@@ -154,41 +157,12 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
       const snap = await tx.get(ref);
       const intent = intentFrom(snap.exists ? snap.data() : undefined);
       if (!intent) return null;
-      if (intent.status !== "pending" || !applies(intent)) {
-        return structuredClone(intent);
-      }
+      if (!applies(intent)) return structuredClone(intent);
       const indexRef = this.boardIndexRef(intent.boardId);
-      const indexSnap = await tx.get(indexRef);
+      const indexSnap = intent.status === "pending" ? await tx.get(indexRef) : null;
       const next: CheckoutIntent = { ...intent, status: nextStatus, closedAt: at };
       tx.set(ref, toFirestoreData(next));
-      tx.set(
-        indexRef,
-        toFirestoreData({
-          boardId: intent.boardId,
-          pendingIntentIds: pendingIdsFrom(
-            indexSnap.exists ? indexSnap.data() : undefined,
-          ).filter((id) => id !== intentId),
-        }),
-      );
-      return structuredClone(next);
-    });
-  }
-
-  async resolvePending(intentId: string, at: number): Promise<CheckoutIntent | null> {
-    assertIntentId(intentId);
-    assertAt(at);
-    const ref = this.intentRef(intentId);
-    return this.db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const intent = intentFrom(snap.exists ? snap.data() : undefined);
-      if (!intent) return null;
-      if (intent.status === "pending" && at >= intent.expiresAt) {
-        const indexRef = this.boardIndexRef(intent.boardId);
-        const indexSnap = await tx.get(indexRef);
-        tx.set(
-          ref,
-          toFirestoreData({ ...intent, status: "expired", closedAt: at }),
-        );
+      if (indexSnap) {
         tx.set(
           indexRef,
           toFirestoreData({
@@ -198,11 +172,8 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
             ).filter((id) => id !== intentId),
           }),
         );
-        return null;
       }
-      return isCheckoutIntentResolvable(intent, at)
-        ? structuredClone(intent)
-        : null;
+      return structuredClone(next);
     });
   }
 
@@ -308,7 +279,7 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
   }
 
   async close(intentId: string, at: number): Promise<CheckoutIntent | null> {
-    return this.transition(intentId, at, "closed", () => true);
+    return this.transition(intentId, at, "closed", (intent) => intent.status !== "closed");
   }
 
   async expire(intentId: string, at: number): Promise<CheckoutIntent | null> {
@@ -316,7 +287,7 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
       intentId,
       at,
       "expired",
-      (intent) => at >= intent.expiresAt,
+      (intent) => intent.status === "pending" && at >= intent.expiresAt,
     );
   }
 }

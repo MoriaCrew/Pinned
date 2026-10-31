@@ -20,7 +20,10 @@ import "server-only";
  * circuits replays across restarts, and underneath it the
  * ledger ops are idempotent by event/purchase/refund/dispute
  * id, so a crash between the ledger write and the processed
- * record still converges on retry.
+ * record still converges on retry. An event that wrote a dead
+ * letter gets no processed record (PIN-178): an operator who
+ * fixed the cause re-runs it with the Dashboard's Resend, and
+ * that ledger idempotency makes the re-run safe.
  *
  * MONEY -> MAKES (the one documented formula). For a pack of
  * `credits` makes sold for `eurCents` (Policy.credits.packs),
@@ -38,8 +41,8 @@ import "server-only";
  * final clawbacks use `makesFloor` on the disputed settled
  * amount; dispute freezes use `makesFreeze` (round up, so the
  * held pool is protected while the dispute is open - any
- * excess over the final floor amount is restored when the
- * dispute closes lost after an earlier final clawback).
+ * excess over the final floor amount is restored by the same
+ * terminal event that claws).
  * Foreign-presentment amounts are never FX-guessed: the
  * settled EUR amount comes from the BalanceTransaction Stripe
  * reports (its amount/currency are the account settlement
@@ -60,9 +63,13 @@ import "server-only";
  * - Disputes debit on creation, `funds_withdrawn` when funds
  *   leave the account, `funds_reinstated` when they return
  *   after a win, and `closed` carries `won`/`lost`/
- *   `warning_closed`. A reinstate arriving after a final
- *   clawback cannot be un-clawed by the ledger, so it
- *   dead-letters as an operator flag rather than pretending.
+ *   `warning_closed`. Card disputes withdraw funds within
+ *   about a second of creation, so `funds_withdrawn` only
+ *   keeps (or establishes) the freeze (PIN-178); the one final
+ *   clawback is `closed` with `lost`. A reinstate arriving
+ *   after a final clawback cannot be un-clawed by the ledger,
+ *   so it dead-letters as an operator flag rather than
+ *   pretending.
  */
 import type { StripeWebhookClientLike } from "../billing/stripe-webhook";
 import type { BoardRepository } from "../domain/board-repository";
@@ -197,6 +204,8 @@ interface HandlerContext {
   event: ParsedEvent;
   /** Ledger `at`: the event's own creation time when it carries one. */
   at: number;
+  /** Set by `deadLetter`: this delivery wrote an operator flag, so it is not recorded as processed (PIN-178). */
+  deadLettered: boolean;
 }
 
 async function policyFor(deps: StripeWebhookDeps, boardId: string): Promise<Policy> {
@@ -224,6 +233,7 @@ async function deadLetter(
   reason: string,
   extra: DeadLetterExtra = {},
 ): Promise<string> {
+  ctx.deadLettered = true;
   await deps.records.addDeadLetter({
     id: deadLetterId(ctx.event.id, reason),
     eventId: ctx.event.id,
@@ -378,7 +388,9 @@ async function persistSessionMapping(
  * The one fulfil path for `checkout.session.completed` and
  * `checkout.session.async_payment_succeeded`. Grants only a
  * `paid` session whose amount/currency + pack cross-check
- * against the intent the session itself names.
+ * against the intent the session itself names, whatever the
+ * intent's status or age, while its ledger purchase is still
+ * pending and the board exists.
  */
 async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Promise<string> {
   let session = ctx.event.object;
@@ -456,8 +468,8 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     });
   }
 
-  // Amount cross-check before the intent liveness check, so a
-  // mismatched amount dead-letters as itself even on a stale intent.
+  // Amount cross-check before the closed-purchase check, so a
+  // mismatched amount dead-letters as itself even on a dead intent.
   const amountTotal = int(session.amount_total);
   if (str(session.currency)?.toLowerCase() === "eur" && amountTotal !== null) {
     if (amountTotal !== pack.eurCents) {
@@ -485,8 +497,12 @@ async function fulfilSession(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     }
   }
 
-  const resolvable = await deps.intents.resolvePending(intent.id, ctx.at);
-  if (!resolvable) {
+  // PIN-178: the intent TTL never refuses a paid session. Lazy
+  // expiry (cap check) only freed the board's cap slot; the ledger
+  // purchase stays pending until a terminal outcome closes it -
+  // Stripe's `expired` / `async_payment_failed`, or a session that
+  // was never created. Only then is the intent dead.
+  if (purchase.state === "closed") {
     return deadLetter(deps, ctx, "dead_intent", {
       intentId: intent.id,
       boardId: intent.boardId,
@@ -743,6 +759,17 @@ async function freezeDispute(
   ids: DeadLetterExtra,
 ): Promise<string> {
   const { intent, account, purchase, pack } = resolved;
+  // `created` and `funds_withdrawn` both land here (PIN-178): the
+  // second one finds the hold (live or deferred) or the dispute
+  // already resolved, and must not dead-letter for lack of
+  // available makes the first freeze just took.
+  if (
+    account.frozenByDispute[disputeId] !== undefined ||
+    purchase.deferredFreezes[disputeId] !== undefined ||
+    purchase.resolvedDisputeIds.includes(disputeId)
+  ) {
+    return "duplicate_freeze";
+  }
   const cents = await disputeSettledEurCents(deps, ctx.event.object);
   if (cents === null || cents < 0) {
     return deadLetter(deps, ctx, "fx_unverifiable", {
@@ -870,14 +897,13 @@ async function finalClawbackDispute(
 ): Promise<string> {
   const { intent, pack } = resolved;
   // Claim the final clawback atomically BEFORE touching the
-  // ledger: whichever terminal event (`funds_withdrawn` or
-  // `closed lost`, in any order, even concurrently) records
-  // the claim owns the one claw; the loser of that race does
-  // not claw at all. A handler that finds a pre-existing
-  // claim still ensures the ledger claw landed (a crash
-  // between claim and claw retries into the entry check
-  // below), then releases the freeze's ceil excess - from
-  // either terminal event, not only `closed`.
+  // ledger: only `closed lost` makes a new claim (PIN-178), and
+  // whichever delivery records it owns the one claw; a
+  // concurrent loser does not claw at all. A handler that finds
+  // a pre-existing claim (a re-delivered `lost`, or a
+  // `funds_withdrawn` landing after it) still ensures the ledger
+  // claw landed (a crash between claim and claw retries into the
+  // entry check below), then releases the freeze's ceil excess.
   const preExistingMakes = intent.finalDisputeClawbacks?.[disputeId];
   let makes: number;
   let claimedNow = false;
@@ -965,7 +991,13 @@ async function handleDispute(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
     case "charge.dispute.funds_reinstated":
       return restoreDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.funds_withdrawn":
-      return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
+      // Freeze only (PIN-178): card disputes withdraw within a
+      // second of `created`, long before the outcome is known.
+      // After a `lost` claim it just completes that one claw.
+      if (resolved.intent.finalDisputeClawbacks?.[disputeId] !== undefined) {
+        return finalClawbackDispute(deps, ctx, resolved, disputeId, ids);
+      }
+      return freezeDispute(deps, ctx, resolved, disputeId, ids);
     case "charge.dispute.closed": {
       const status = str(dispute.status);
       if (status === "won" || status === "warning_closed") {
@@ -987,7 +1019,9 @@ async function handleDispute(deps: StripeWebhookDeps, ctx: HandlerContext): Prom
  * event id, dispatch, and only then write the processed
  * record - so any unexpected failure above it (store, API)
  * propagates, the route answers non-2xx, and Stripe retries
- * into the ledger's own idempotency.
+ * into the ledger's own idempotency. A delivery that wrote a
+ * dead letter still answers 200 but gets no processed record,
+ * so a Dashboard Resend re-runs the handler (PIN-178).
  */
 export async function handleStripeWebhook(
   rawBody: string,
@@ -1014,14 +1048,16 @@ export async function handleStripeWebhook(
   if (processed) return { eventId: event.id, outcome: "duplicate", duplicate: true };
 
   const now = deps.now?.() ?? Date.now();
-  const ctx: HandlerContext = { event, at: event.createdAt ?? now };
+  const ctx: HandlerContext = { event, at: event.createdAt ?? now, deadLettered: false };
   const outcome = await dispatch(deps, ctx);
-  await deps.records.markProcessed({
-    eventId: event.id,
-    eventType: event.type,
-    outcome,
-    processedAt: deps.now?.() ?? Date.now(),
-  });
+  if (!ctx.deadLettered) {
+    await deps.records.markProcessed({
+      eventId: event.id,
+      eventType: event.type,
+      outcome,
+      processedAt: deps.now?.() ?? Date.now(),
+    });
+  }
   return { eventId: event.id, outcome, duplicate: false };
 }
 
@@ -1046,6 +1082,3 @@ async function dispatch(deps: StripeWebhookDeps, ctx: HandlerContext): Promise<s
       return "unhandled";
   }
 }
-
-
-

@@ -163,9 +163,11 @@ export const PolicySchema = z
      * is granted once; paid makes never expire (no TTL knob on
      * purpose). `pendingIntentCapPerBoard` bounds concurrent
      * not-yet-paid purchase intents one board may hold, and
-     * `intentTtlSeconds` is how long such an intent stays payable
-     * before it is closed (30 min, matching a hosted checkout
-     * sitting open in a tab).
+     * `intentTtlSeconds` is how long such an intent holds one of
+     * those cap slots (30 min, matching a hosted checkout sitting
+     * open in a tab). Since PIN-178 it no longer decides whether a
+     * paid session grants: only a terminal Stripe event closes the
+     * purchase.
      */
     credits: z
       .object({
@@ -184,6 +186,8 @@ export const PolicySchema = z
             windowMs: z.number().int().min(1).default(600_000),
           })
           .default({ limit: 20, windowMs: 600_000 }),
+        /** Stripe webhook body cap (PIN-178): a declared content-length above it answers 413 before the body is read. Read from the env-level Policy. */
+        webhookMaxBytes: z.number().int().min(1).default(1_048_576),
       })
       .default({
         enabled: false,
@@ -193,6 +197,7 @@ export const PolicySchema = z
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
         checkoutPerIp: { limit: 20, windowMs: 600_000 },
+        webhookMaxBytes: 1_048_576,
       }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
@@ -413,6 +418,7 @@ export const PolicyOverridesSchema = z.object({
           windowMs: z.number().int().min(1).optional(),
         })
         .optional(),
+      webhookMaxBytes: z.number().int().min(1).optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),

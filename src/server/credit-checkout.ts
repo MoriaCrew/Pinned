@@ -15,7 +15,9 @@ import "server-only";
  * session creation nor the /billing/return redirect below
  * credits anything. The return resolver maps an intent id back
  * to its board server-side; unknown and expired intents get one
- * identical generic answer.
+ * identical generic answer. It is read-only (PIN-178): it never
+ * expires or closes an intent, so a payer's redirect cannot race
+ * the webhook's grant.
  */
 import {
   CreditPriceNotFoundError,
@@ -175,7 +177,8 @@ export async function buyCredits(
 }
 
 export interface BillingReturnDeps {
-  intents: CheckoutIntentStore;
+  /** Read-only on purpose (PIN-178): the return path never writes. */
+  intents: Pick<CheckoutIntentStore, "get">;
   now?: () => number;
 }
 
@@ -192,8 +195,8 @@ const GENERIC_RETURN: BillingReturn = { kind: "generic", location: "/" };
  * unexpired, or already closed by the webhook) goes back to its
  * board: "processing" after a completed payment - the webhook
  * grants, this redirect never does - and "cancelled" after a
- * bail-out. Expired intents are lazily expired and answer
- * exactly like unknown ones.
+ * bail-out. Expired intents (marked or past their TTL) answer
+ * exactly like unknown ones, and nothing is written here.
  */
 export async function resolveBillingReturn(
   intentId: string | null,
@@ -204,10 +207,7 @@ export async function resolveBillingReturn(
   const now = deps.now?.() ?? Date.now();
   const intent = await deps.intents.get(intentId).catch(() => null);
   if (!intent || intent.status === "expired") return GENERIC_RETURN;
-  if (intent.status === "pending" && now >= intent.expiresAt) {
-    await deps.intents.expire(intent.id, now).catch(() => undefined);
-    return GENERIC_RETURN;
-  }
+  if (intent.status === "pending" && now >= intent.expiresAt) return GENERIC_RETURN;
   const flag = result === "cancel" ? "cancelled" : "processing";
   return { kind: "board", location: `/g/${intent.boardId}?billing=${flag}` };
 }

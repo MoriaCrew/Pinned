@@ -144,8 +144,10 @@ export class StripeCreditCheckout implements CreditCheckout {
     // Align the session's death with the intent's: Stripe only
     // accepts 30 minutes to 24 hours out, so floor at 31 minutes
     // (the default intent TTL is exactly 30) and cap under 24h.
-    // Without this a session could be paid a day after its
-    // intent expired and the webhook would refuse the grant.
+    // The intent's cap slot frees at its TTL, so a session that
+    // outlived it by a day would let one board hold more open
+    // checkouts than its cap. A session paid after the TTL
+    // still grants (PIN-178): only Stripe's own expiry closes it.
     const now = this.now();
     const expiresAtMs = Math.min(
       Math.max(request.intentExpiresAt, now + 31 * 60_000),

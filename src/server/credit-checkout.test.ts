@@ -255,17 +255,36 @@ describe("resolveBillingReturn (PIN-149)", () => {
         now: () => NOW,
       }),
     ).toEqual(generic);
-    // Past the TTL: lazily expired, then indistinguishable from unknown.
+    // Past the TTL: indistinguishable from unknown, and read-only
+    // (PIN-178) - the intent stays pending for a late webhook grant.
     expect(
       await resolveBillingReturn(intent.id, "success", {
         intents,
         now: () => NOW + 1_800_000,
       }),
     ).toEqual(generic);
-    expect(await intents.get(intent.id)).toMatchObject({ status: "expired" });
+    expect(await intents.get(intent.id)).toEqual(intent);
+    // An intent a cap check marked expired answers the same.
+    await intents.expire(intent.id, NOW + 1_800_000);
     expect(
       await resolveBillingReturn(intent.id, "success", { intents, now: () => NOW }),
     ).toEqual(generic);
+  });
+
+  it("only ever reads the intent store (PIN-178)", async () => {
+    const { intents, intent } = await seedIntent();
+    const calls: string[] = [];
+    const readOnly = {
+      get: async (id: string) => {
+        calls.push("get");
+        return intents.get(id);
+      },
+    };
+    for (const now of [NOW + 60_000, NOW + 1_800_000, NOW + 2 * 86_400_000]) {
+      await resolveBillingReturn(intent.id, "success", { intents: readOnly, now: () => now });
+    }
+    expect(calls).toEqual(["get", "get", "get"]);
+    expect(await intents.get(intent.id)).toEqual(intent);
   });
 });
 
