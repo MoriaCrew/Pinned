@@ -72,8 +72,15 @@ export interface DecomposeJobStore {
   claim(jobId: string, now: number): Promise<DecomposeJob | null>;
   /** Replace the stored job (progress + terminal states). */
   update(job: DecomposeJob): Promise<void>;
-  /** Remove a job outright (start cleanup when the working-copy write fails after create). Missing job is a no-op. */
-  delete(jobId: string): Promise<void>;
+  /**
+   * Start cleanup when the working-copy write fails after create:
+   * remove the job ONLY if it is still exactly as created (pending,
+   * never claimed or progressed — updatedAt still equals the create
+   * stamp). A concurrent same-id retry may already have claimed or
+   * finished it; that job is never yanked. Resolves whether it
+   * deleted. Missing job resolves false.
+   */
+  deleteIfUntouched(jobId: string, createdAt: number): Promise<boolean>;
   /** All jobs on one board, createdAt-ascending (caps + TTL sweep). */
   listForBoard(boardId: string): Promise<DecomposeJob[]>;
 }
@@ -121,8 +128,11 @@ export class InMemoryDecomposeJobStore implements DecomposeJobStore {
     this.jobs.set(job.id, cloneJob(job));
   }
 
-  async delete(jobId: string): Promise<void> {
+  async deleteIfUntouched(jobId: string, createdAt: number): Promise<boolean> {
+    const job = this.jobs.get(jobId);
+    if (!job || job.status !== "pending" || job.updatedAt !== createdAt) return false;
     this.jobs.delete(jobId);
+    return true;
   }
 }
 
@@ -291,10 +301,12 @@ export async function startDecomposeJob(
   // upload 500s): no orphaned pending job counts against the daily
   // photo cap, and any retry — same id or a fresh pick — starts
   // clean, exactly as when storage failed before create existed.
+  // The removal is guarded: if a concurrent same-id retry already
+  // claimed or finished this job, it is left untouched.
   try {
     await deps.store.put(workingRef, processed.derivative, processed.contentType);
   } catch (error) {
-    await deps.jobs.delete(jobId).catch(() => undefined);
+    await deps.jobs.deleteIfUntouched(jobId, at).catch(() => undefined);
     throw error;
   }
   return runDecomposeJob(jobId, runDeps);

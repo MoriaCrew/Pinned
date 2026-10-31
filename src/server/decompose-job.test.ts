@@ -588,4 +588,28 @@ describe("deterministic upload id (idempotent start)", () => {
     expect(recovered.status).toBe("ready");
     expect(await h.boards.listElements("board-1")).toHaveLength(2);
   });
+
+  it("a failed working-copy write never deletes a job a concurrent retry already claimed (Bugbot #146)", async () => {
+    const h = await makeHarness();
+    class ClaimingFailingStore extends InMemoryDerivativeStore {
+      async put(ref: string, bytes: Uint8Array, contentType: string): Promise<void> {
+        if (ref.endsWith("working.webp")) {
+          // A same-id retry claimed the job while this write was
+          // in flight; the write then reports failure.
+          await h.jobs.claim(UPLOAD_ID, 9_999);
+          throw new Error("ambiguous storage failure");
+        }
+        return super.put(ref, bytes, contentType);
+      }
+    }
+    const deps = { ...h.deps, store: new ClaimingFailingStore() };
+    await expect(
+      startDecomposeJob(
+        { boardId: "board-1", participantId: "p1", bytes: await photoBytes(), jobId: UPLOAD_ID },
+        deps,
+      ),
+    ).rejects.toThrow("ambiguous storage failure");
+    // The claimed job survives the failed start's cleanup.
+    expect((await h.jobs.get(UPLOAD_ID))?.status).toBe("running");
+  });
 });
