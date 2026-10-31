@@ -25,6 +25,7 @@ const { plusErrorResponse } = await import("./plus-shared");
 const { BoardApiError } = await import("../../../server/board-session");
 const { BoardPlusError } = await import("../../../server/board-plus");
 const { userMessage } = await import("../../../i18n/user-message");
+const { PhotoIntakeError } = await import("../../../server/photo-intake");
 
 describe("errorResponse in the request's language (PIN-196)", () => {
   beforeEach(() => {
@@ -83,5 +84,37 @@ describe("errorResponse in the request's language (PIN-196)", () => {
     const response = plusErrorResponse(error, "x");
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "Ce tableau est complet.", code: "host_only" });
+  });
+});
+
+describe("errorResponse code passthrough", () => {
+  it("emits BoardApiError.code so clients can classify 429s (pool-empty never fired client-side before)", async () => {
+    const res = errorResponse(
+      new BoardApiError("This board is out of makes.", 429, "credits_pool_empty"),
+      "fallback",
+    );
+    expect(res.status).toBe(429);
+    await expect(res.json()).resolves.toEqual({
+      error: "This board is out of makes.",
+      code: "credits_pool_empty",
+    });
+  });
+
+  it("omits code when the error carries none (code-less stays code-less)", async () => {
+    const res = errorResponse(new BoardApiError("Bad input.", 400), "fallback");
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Bad input." });
+  });
+
+  it("emits PhotoIntakeError.code", async () => {
+    const res = errorResponse(new PhotoIntakeError("Too big.", "too_large", 413), "fallback");
+    expect(res.status).toBe(413);
+    await expect(res.json()).resolves.toEqual({ error: "Too big.", code: "too_large" });
+  });
+
+  it("404 stays the uniform body with no code (no existence leak)", async () => {
+    const res = errorResponse(new BoardApiError("Job not found.", 404, "job"), "fallback");
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({ error: "Not found." });
   });
 });

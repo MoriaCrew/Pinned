@@ -164,7 +164,7 @@ describe("DELETE /api/boards/{slug}/scenes/{sceneId} (PIN-142)", () => {
       for (const cookie of [robin.cookie, host]) {
         const res = await del(slug, id, cookie);
         expect(res.status).toBe(409);
-        expect(await res.json()).toEqual({ error: t("en", "board.sceneDeleteDeveloping") });
+        expect(await res.json()).toEqual({ error: t("en", "board.sceneDeleteDeveloping"), code: "scene_in_flight" });
       }
       await expect404(await del(slug, id, sam.cookie));
       expect((await repo().getScene(id))?.hidden).toBeUndefined();
