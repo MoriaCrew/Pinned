@@ -5,6 +5,7 @@ import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
 import { t, tf, type Locale } from "../i18n";
 import { getLocale } from "../i18n/server";
 import { ButtonLink, Icon, Sticker, Tag, Wordmark, type IconName } from "../ui";
+import { SiteLinks } from "./_legal/LegalParts";
 import { You } from "./auth/You";
 import { LANDING_SETS, landingSetById } from "./landing-sets.data";
 import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
@@ -183,10 +184,9 @@ export default async function HomePage({
               ))}
             </ul>
           </section>
-          <div className="pn-landing-links">
+          <SiteLinks locale={locale}>
             <a href="https://github.com/MoriaCrew/Pinned/blob/main/docs/19-meta-models.md">{t(locale, "landing.meta.more")}</a>
-            <a href="https://github.com/MoriaCrew/Pinned">{t(locale, "footer.source")}</a>
-          </div>
+          </SiteLinks>
         </footer>
       </div>
     </main>

@@ -30,6 +30,15 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     ).toBeNull();
   });
 
+  it("legal contact email: env only, junk fails closed to null (PIN-26)", () => {
+    expect(parseConfig({}).legalContactEmail).toBeNull();
+    expect(parseConfig({ LEGAL_CONTACT_EMAIL: " " }).legalContactEmail).toBeNull();
+    expect(parseConfig({ LEGAL_CONTACT_EMAIL: " hello@example.org " }).legalContactEmail).toBe("hello@example.org");
+    for (const junk of ["not-an-address", "a@b", "a b@example.org", "<a@example.org>", "a@example.org?subject=x"]) {
+      expect(parseConfig({ LEGAL_CONTACT_EMAIL: junk }).legalContactEmail, junk).toBeNull();
+    }
+  });
+
   it("PLUS_MODE: off by default, mock only on the exact value (PIN-103)", () => {
     expect(parseConfig({}).plusMode).toBe("off");
     expect(parseConfig({ PLUS_MODE: "" }).plusMode).toBe("off");

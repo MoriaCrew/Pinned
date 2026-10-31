@@ -66,6 +66,13 @@ export interface AppConfig {
    */
   demoBoardSlug: string | null;
   /**
+   * Public contact address shown on /privacy and /terms (PIN-26),
+   * from LEGAL_CONTACT_EMAIL. Env only, never committed. Null when
+   * unset or not address-shaped: the pages then point to GitHub
+   * issues instead of inventing an address.
+   */
+  legalContactEmail: string | null;
+  /**
    * Board Plus billing adapter (PIN-103, docs/15). "off" (the
    * default; anything but an exact known value) answers every
    * checkout "unavailable" and writes nothing; "mock" grants the
@@ -156,6 +163,14 @@ function parseDemoBoardSlug(value: string | undefined): string | null {
   return trimmed && DEMO_SLUG_PATTERN.test(trimmed) ? trimmed : null;
 }
 
+/** One address, no spaces or markup: anything else fails closed to null (PIN-26). */
+const CONTACT_EMAIL_PATTERN = /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[A-Za-z]{2,}$/;
+
+function parseContactEmail(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed && CONTACT_EMAIL_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 /**
  * The one place the Stripe API version is pinned (PIN-149).
  * Matches the bundled stripe SDK's ApiVersion; a config test
@@ -237,6 +252,7 @@ export function parseConfig(
       configured: nonEmpty(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
     }),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
+    legalContactEmail: parseContactEmail(env.LEGAL_CONTACT_EMAIL),
     plusMode:
       env.PLUS_MODE === "mock"
         ? "mock"

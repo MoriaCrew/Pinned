@@ -651,7 +651,11 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-meta-list { display: grid; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; font: 500 14px/20px var(--font-ui); }
 .pn-landing-meta-list li { display: flex; align-items: center; gap: var(--space-2); }
 .pn-landing-meta-list .pn-icon { flex: none; }
-.pn-landing-links { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
+/* Footer links (PIN-26): Privacy, Terms, source; each a 44px target. */
+.pn-foot-links { display: flex; flex-wrap: wrap; column-gap: var(--space-5); }
+.pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
+.pn-foot-links a[aria-current="page"] { color: var(--ink); text-decoration: none; }
+.pn-foot-links a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (min-width: 540px) {
   .pn-landing-actions { grid-auto-flow: column; justify-content: start; }
@@ -671,6 +675,24 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .pn-lib-board, .pn-lib-avatar { transition: none; }
 }
+
+/* ---------- Privacy + terms (PIN-26): one readable column of plain text ---------- */
+.pn-lib-page.pn-legal > * { width: min(100%, 720px); }
+.pn-legal-doc { display: grid; gap: var(--space-4); padding: var(--space-3) var(--space-4) 0; }
+.pn-legal-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(36px * var(--display-scale)); line-height: 1.05; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); color: var(--ink); }
+.pn-legal-note { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-sunk); color: var(--ink); font: 650 15px/20px var(--font-ui); }
+.pn-legal-body { display: grid; gap: var(--space-6); color: var(--ink); font: 400 16px/25px var(--font-ui); }
+.pn-legal-meta { margin: 0; color: var(--ink-muted); font: 500 13px/18px var(--font-mono); }
+.pn-legal-section { display: grid; gap: var(--space-3); }
+.pn-legal-h2 { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(22px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); }
+.pn-legal-section p, .pn-legal-section ul, .pn-legal-cookies { margin: 0; }
+.pn-legal-section ul { display: grid; gap: var(--space-2); padding-left: var(--space-5); }
+.pn-legal-body a { color: var(--ink); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.pn-legal-body a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pn-legal-cookies { display: grid; gap: var(--space-3); }
+.pn-legal-cookies dt code { font: 600 14px/20px var(--font-mono); overflow-wrap: anywhere; }
+.pn-legal-cookies dd { margin: 0; color: var(--ink-muted); }
+.pn-legal-foot { margin-top: var(--space-6); padding: var(--space-3) var(--space-4) 0; border-top: 2px dashed var(--line-strong); }
 
 /* ---------- Board Plus ---------- */
 .pn-tryon { display: flex; align-items: center; gap: var(--space-2); padding: 6px 6px 6px var(--space-3); border: var(--edge-w) solid var(--edge); border-radius: var(--dock-radius); background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-dock); }
