@@ -68,6 +68,8 @@ export const PolicySchema = z
     /** Scene prompt length cap (PIN-69). */
     /** Scene image Cache-Control max-age for chat crawlers (PIN-72). */
     sceneImageCacheMaxAgeSeconds: z.number().int().min(0).default(300),
+    /** Board cut-out Cache-Control max-age (PIN-217): the bytes behind an element's URL are written once, at creation (a rename changes only the label), so a day of private browser caching saves every repeat visit's re-download; a deleted pin is simply no longer referenced. 0 turns browser caching off. */
+    elementImageCacheSeconds: z.number().int().min(0).default(86_400),
     /** Strip previews (PIN-133): the WebP the board strip loads; the viewer and share keep the full image. Long side 1024 covers the tallest print (40svh, ~338 CSS px on an 844px phone) at DPR 3. Quality uses sharp's integer 1-100 scale (not uploadJpegQuality's 0.1-1 fraction). */
     scenePreviewMaxPx: z.number().int().positive().default(1024),
     scenePreviewQuality: z.number().int().min(1).max(100).default(80),
@@ -384,6 +386,7 @@ export const PolicyOverridesSchema = z.object({
   scenesPerBoardPerDay: z.number().int().min(0).optional(),
   scenePromptMaxChars: z.number().int().min(1).optional(),
   sceneImageCacheMaxAgeSeconds: z.number().int().min(0).optional(),
+  elementImageCacheSeconds: z.number().int().min(0).optional(),
   scenePreviewMaxPx: z.number().int().positive().optional(),
   scenePreviewQuality: z.number().int().min(1).max(100).optional(),
   workingCopyTtlHours: z.number().positive().optional(),

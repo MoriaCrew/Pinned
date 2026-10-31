@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { emptyBoardCounters } from "../../../domain/board";
 import { generateSlug, isValidSlug } from "../../../domain/tokens";
+import { DEFAULT_POLICY } from "../../../policy/policy";
 import { getBoardRepository } from "../../../server/board-repository";
 import { getDerivativeStore } from "../../../server/derivative-store";
 import { POST as createBoardRoute } from "./route";
@@ -198,5 +199,44 @@ describe("scene image ?size=preview (PIN-133)", () => {
       expect(miss.status).toBe(404);
       expect(await bodyOf(miss)).toEqual({ error: "Not found." });
     }
+  });
+});
+
+describe("cut-out image cache header (PIN-217)", () => {
+  it("a board-link hit is privately cacheable for Policy.elementImageCacheSeconds, a board override wins, misses stay no-store", async () => {
+    const boards = getBoardRepository();
+    const store = getDerivativeStore();
+    const bytes = await sharp({ create: { width: 8, height: 8, channels: 4, background: "#c8785a" } }).png().toBuffer();
+    const seedBoard = async (policyOverrides?: { elementImageCacheSeconds: number }) => {
+      const slug = generateSlug();
+      await boards.createBoard({ slug, title: "Cut-out cache", counters: emptyBoardCounters(), createdAt: 1, version: 1, ...(policyOverrides ? { policyOverrides } : {}) });
+      const cutoutRef = `elements/${slug}/el-1/cutout.png`;
+      const flattenedRef = `elements/${slug}/el-1/flat.jpg`;
+      await store.put(cutoutRef, bytes, "image/png");
+      await store.put(flattenedRef, bytes, "image/jpeg");
+      await boards.createElement({
+        id: `${slug}-el-1`, boardId: slug, ownerId: "p1", label: "teal mug", description: "a teal mug",
+        maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 }, cutoutRef, flattenedRef, sourcePhotoId: "photo-1", faceFlag: false, createdAt: 1,
+      });
+      return { slug, elementId: `${slug}-el-1` };
+    };
+    const get = (slug: string, elementId: string, kind: string) =>
+      imageRoute(req(`http://t/x?kind=${kind}`), { params: Promise.resolve({ slug, elementId }) });
+
+    const { slug, elementId } = await seedBoard();
+    for (const kind of ["cutout", "flattened"]) {
+      const res = await get(slug, elementId, kind);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe(`private, max-age=${DEFAULT_POLICY.elementImageCacheSeconds}`);
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    }
+    // The board-link check still gates every request that reaches the server.
+    for (const miss of [await get(generateSlug(), elementId, "cutout"), await get(slug, "missing", "cutout"), await get(slug, elementId, "working")]) {
+      expect(miss.status).toBe(404);
+      expect(miss.headers.get("cache-control")).toBe("no-store");
+    }
+    // A board's own override wins over the default.
+    const tuned = await seedBoard({ elementImageCacheSeconds: 60 });
+    expect((await get(tuned.slug, tuned.elementId, "cutout")).headers.get("cache-control")).toBe("private, max-age=60");
   });
 });
