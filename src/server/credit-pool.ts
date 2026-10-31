@@ -20,6 +20,7 @@ import "server-only";
  * Enabled-but-unwired (no store in deps) reads as an empty pool
  * and refuses debits: failing closed beats gifting free makes.
  */
+import type { BoardRepository } from "../domain/board-repository";
 import type { CreditBalanceView, CreditLedgerStore } from "../domain/credit-ledger";
 import type { Policy } from "../policy/policy";
 
@@ -32,6 +33,8 @@ export const CREDIT_DEBIT_FAILED = "credit_debit_failed";
 export interface CreditPoolDeps {
   /** Ledger store (PIN-148 selection); absent = fail-closed empty pool while enabled. */
   credits?: CreditLedgerStore;
+  /** Board reads for the lazy starter grant (PIN-205): it grants the amount the board stored at creation. */
+  boards?: Pick<BoardRepository, "getBoard">;
   policy: Policy;
   now?: () => number;
 }
@@ -62,23 +65,32 @@ export function sceneDebitEventId(jobId: string): string {
 }
 
 /**
- * Grant Policy.credits.starterMakes exactly once per board (the
- * ledger's once-only grant under the deterministic event id).
- * Called directly at board creation; later touches reach it only
- * when the head read shows no starter yet (boards that predate
- * the flag). No-op while disabled, so a disabled server writes
- * nothing to the ledger, ever.
+ * Grant the starter pool exactly once per board (the ledger's
+ * once-only grant under the deterministic event id). Board
+ * creation passes the amount it decided for the maker (PIN-205);
+ * later touches reach this only when the head read shows no
+ * starter yet, and then grant what the board stored, falling back
+ * to Policy.credits.starterMakes for boards made before the rule.
+ * No-op while disabled, so a disabled server writes nothing to
+ * the ledger, ever.
  */
 export async function ensureStarterMakes(
   boardId: string,
   deps: CreditPoolDeps,
+  amount?: number,
 ): Promise<void> {
   if (!creditsEnabled(deps.policy) || !deps.credits) return;
   await deps.credits.grantStarter(boardId, {
     eventId: starterEventId(boardId),
-    amount: deps.policy.credits.starterMakes,
+    amount: amount ?? (await storedStarterMakes(boardId, deps)),
     at: (deps.now ?? Date.now)(),
   });
+}
+
+/** The free pool a board was given at creation, or the Policy default when it stored none. */
+async function storedStarterMakes(boardId: string, deps: CreditPoolDeps): Promise<number> {
+  const board = deps.boards ? await deps.boards.getBoard(boardId) : null;
+  return board?.starterMakes ?? deps.policy.credits.starterMakes;
 }
 
 /**

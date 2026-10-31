@@ -194,7 +194,8 @@ Billing (makes credits, "creations" in the UI; design in
 `PLUS_MODE=off|mock|stripe` — `off` sells nothing (the default, and
 prod), `mock` is the no-money demo, `stripe` sells the one Board Plus
 pack (€2.99 once per board: Plus + 20 creations; any joined member can
-buy it for the board; each board starts with 5 free) via hosted
+buy it for the board; a maker's first 3 boards a week start with
+5 free) via hosted
 Checkout with webhook-only grants. Once a board has Plus, any joined
 member can change its look. The dev backend runs
 `stripe` against the pinneds-dev **sandbox** since PIN-153 (including
