@@ -127,11 +127,9 @@ A 66 s cut was produced overnight to test the approach:
 Cost: 198.2 Higgsfield credits including a five-model video
 comparison (≈ 110 for the cut itself) and ≈ $0.22 of Meta Model API
 calls on dev. The throwaway board was deleted afterwards through the
-app. Findings, costs and the model comparison:
-`video/notes/viability.md`. Storyboard of the prototype:
-`video/storyboard/v0-60s-halloween.md`; three-minute outline:
-`video/storyboard/v1-3min-outline.md`. Scripts and cut lists:
-`video/` (PIN-236).
+app. The storyboards, findings, model comparison, cut lists and
+scripts live in the private video repository `MoriaCrew/Pinneds-Video`
+(PIN-236), with media kept outside git.
 
 Open before the three-minute cut: narrator voice, music (no
 standalone music model is available on the Higgsfield account),
@@ -264,9 +262,9 @@ approves.
 
 | # | Item | Owner | Done when |
 | --- | --- | --- | --- |
-| V1 | Record the app clips with the §2 capture rules on `<PROD_URL>`; generate the story shots per the storyboard in `video/storyboard/` | Robin + Agent | Every app clip and story shot in the cut list exists; no slug in any frame or file name |
+| V1 | Record the app clips with the §2 capture rules on `<PROD_URL>`; generate the story shots per the storyboard in the video repository | Robin + Agent | Every app clip and story shot in the cut list exists; no slug in any frame or file name |
 | V2 | Fresh usage numbers captured per §4 on record day → end card | Robin (agent can run the command if given the host) | End-card numbers are dated, real, and reproducible |
-| V3 | Edit to ≤ 3:00 (~170 s target) with `video/build.mjs`; every shortened wait marked on screen; end card discloses AI-generated shots | Robin + Agent | Final cut plays start-to-finish; every shown feature exists on the submitted build |
+| V3 | Edit to ≤ 3:00 (~170 s target) with the video repository's build script; every shortened wait marked on screen; end card discloses AI-generated shots | Robin + Agent | Final cut plays start-to-finish; every shown feature exists on the submitted build |
 | V4 | Upload video; put repo + `<PROD_URL>` in the description; the demo board link **only** if the submission rules ask for it there — never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
 
 ### Submit (Nov 4, before 21:00 ET)
@@ -436,7 +434,7 @@ Risks for Pinneds and how we answer them:
    one at build time; Muse Code is a coding agent, not a model in
    the product; cost figures are estimates.
 4. **Rights.** Music needs licence evidence; generated story media
-   keeps its job ids (`video/`); no real faces; no board link in any
+   keeps its job ids (cost log in the video repository); no real faces; no board link in any
    frame.
 
 ## 8. Submission form fields (read Oct 31, 2026)
