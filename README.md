@@ -166,7 +166,8 @@ With `stripe` the app sells one pack, **Board Plus (€2.99, Stripe)**: once per
 unlocks every board look and foil stickers and adds 20 creations (AI makes). Any member
 can buy it for the board; guests never have to pay. Creations are a Policy switch
 (`credits.enabled`, off in code): when on, a maker's first 3 boards a week start with 5
-free (later ones start at 0), a photo or an AI scene uses one, and a collage is free. Purchases are granted by Stripe webhook only, and
+free (later ones start at 0), each AI scene uses one (photos and cut-outs never do), and a
+collage is free. A board without Plus cuts up to 15 free photos; Plus removes that limit. Purchases are granted by Stripe webhook only, and
 keys come from Secret Manager, never git. Design and runbook:
 [`docs/15-board-plus.md`](docs/15-board-plus.md).
 

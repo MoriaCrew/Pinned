@@ -56,10 +56,12 @@ import { InMemoryChipsCacheStore, type ChipsCacheStore } from "./chips-cache";
 import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
 import type { CreditLedgerStore } from "../domain/credit-ledger";
 import type { StarterAllowanceStore } from "../domain/starter-allowance";
+import { FREE_PHOTOS_USED, countedPhotos, freePhotoAllowance, freePhotosLeft } from "../domain/free-photos";
 import { logServerError } from "./safe-log";
 import {
   CREDITS_POOL_EMPTY,
   creditsEnabled,
+  photosUseMakes,
   ensureStarterMakes,
   photoDebitEventId,
   readAvailableMakes,
@@ -277,32 +279,43 @@ export interface CreateBoardContext {
   makerKey?: string;
 }
 
+/** What a new board starts with while credits are on (PIN-205, PIN-230). */
+interface StarterGift {
+  /** Free creations (AI scenes). */
+  starterMakes: number;
+  /** Free photos while the board has no Plus. */
+  freePhotos: number;
+}
+
 /**
  * Free creations per maker (PIN-205, docs/15): the starter pool
- * this new board gets. Undefined = no per-maker rule applies
- * (credits off, or no maker context), so creation stays exactly
- * as before. Otherwise one maker slot is claimed: the pool on a
- * win, 0 once the maker used up their free boards for the window.
- * A missing store or a store failure also gives 0 — fail closed,
- * never gift a pool. Creation itself is never blocked.
+ * and free photos (PIN-230) this new board gets. Undefined = no
+ * per-maker rule applies (credits off, or no maker context), so
+ * creation stays exactly as before. Otherwise one maker slot is
+ * claimed: the Policy pool and free photos on a win, 0 of both once
+ * the maker used up their free boards for the window (else new
+ * boards would farm free photos). A missing store or a store
+ * failure also gives 0 — fail closed, never gift a pool. Creation
+ * itself is never blocked.
  */
-async function decideStarterMakes(
+async function decideStarter(
   deps: BoardApiDeps,
   context: CreateBoardContext | undefined,
   now: number,
-): Promise<number | undefined> {
+): Promise<StarterGift | undefined> {
   if (!creditsEnabled(deps.policy) || context?.makerKey === undefined) return undefined;
-  if (!deps.starterAllowance) return 0;
-  const { starterMakes, starterBoardsPerMaker, starterMakerWindowMs } = deps.policy.credits;
+  const none: StarterGift = { starterMakes: 0, freePhotos: 0 };
+  if (!deps.starterAllowance) return none;
+  const { starterMakes, freePhotosPerBoard, starterBoardsPerMaker, starterMakerWindowMs } = deps.policy.credits;
   try {
     const won = await deps.starterAllowance.tryClaim(context.makerKey, now, {
       maxBoards: starterBoardsPerMaker,
       windowMs: starterMakerWindowMs,
     });
-    return won ? starterMakes : 0;
+    return won ? { starterMakes, freePhotos: freePhotosPerBoard } : none;
   } catch (error) {
     logServerError("starter allowance claim failed", error);
-    return 0;
+    return none;
   }
 }
 
@@ -321,7 +334,7 @@ export async function createBoardWithHost(
   const theme = getBoardTheme(input.themeId);
   // One claim per request, before the slug loop: a slug retry
   // must not use up a second maker slot.
-  const starterMakes = await decideStarterMakes(deps, context, now);
+  const starter = await decideStarter(deps, context, now);
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const credential = issueHostCredential(now, deps.newHostToken);
     const board: Board = {
@@ -330,7 +343,7 @@ export async function createBoardWithHost(
       ...(input.themeId ? { themeId: input.themeId } : {}),
       ...(theme ? { theme: theme.tokens } : {}),
       host: credential.record,
-      ...(starterMakes !== undefined ? { starterMakes } : {}),
+      ...(starter ?? {}),
       counters: emptyBoardCounters(),
       createdAt: now,
       version: 1,
@@ -344,7 +357,7 @@ export async function createBoardWithHost(
       await ensureStarterMakes(
         board.slug,
         deps,
-        starterMakes ?? deps.policy.credits.starterMakes,
+        starter?.starterMakes ?? deps.policy.credits.starterMakes,
       ).catch(() => undefined);
       return { board, hostToken: credential.token };
     } catch (error) {
@@ -413,7 +426,8 @@ export async function getBoardView(
   const isHost = verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now());
   // PIN-151: the makes pool for the balance UI (PIN-152) — the
   // starter grant lands lazily on this read for boards that
-  // predate the flag. Only `availableMakes` leaves the server
+  // predate the flag. Only counts (`availableMakes`, and
+  // `freePhotosLeft` below since PIN-230) leave the server
   // (no money, no per-person data), and only while credits are
   // enabled; disabled keeps the exact pre-credit shape. A
   // ledger failure omits the field rather than failing the
@@ -425,6 +439,22 @@ export async function getBoardView(
     console.error("Credit balance read failed; omitting makes from the board view.", {
       error: error instanceof Error ? error.name : "unknown",
     });
+  }
+  // PIN-230: free photos left, only for a free board while credits
+  // are on (no field with Plus or credits off). Same count as the
+  // upload gate; a job-list failure omits the field, never the page.
+  let freePhotosLeftNow: number | null = null;
+  const photoAllowance = availableMakes !== null ? boardFreePhotoAllowance(board, deps) : null;
+  if (photoAllowance !== null) {
+    try {
+      const jobs = await deps.jobs.listForBoard(slug);
+      const used = boardCountedPhotos(jobs, deps.now?.() ?? Date.now(), deps.policy);
+      freePhotosLeftNow = freePhotosLeft(photoAllowance, used);
+    } catch (error) {
+      console.error("Photo count read failed; omitting free photos from the board view.", {
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    }
   }
   return {
     board: publicBoard(board),
@@ -448,7 +478,9 @@ export async function getBoardView(
     // latest Policy.activityStripMax, names/labels resolved here.
     activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
     viewer: { isHost, canChangeLook: isHost || (viewer !== null && hasPlus(board, deps.plusMode ?? "off")) },
-    ...(availableMakes !== null ? { credits: { availableMakes } } : {}),
+    ...(availableMakes !== null
+      ? { credits: { availableMakes, ...(freePhotosLeftNow !== null ? { freePhotosLeft: freePhotosLeftNow } : {}) } }
+      : {}),
     plus: plusView(board, deps.plusMode ?? "off"),
   };
 }
@@ -477,8 +509,9 @@ function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
  * 2 x margin a still-live job belongs to a dead request. The transition is
  * CAS on the read status and never debits; a runner that debited
  * just before losing this race sees its guarded finish fail and
- * refunds (decompose-job). With credits on, landed-but-undebited
- * candidates are discarded like every unpaid failure; off, the
+ * refunds (decompose-job). While photos use makes, landed-but-
+ * undebited candidates are discarded like every unpaid failure;
+ * otherwise (credits off, or free photos since PIN-229) the
  * keep-what-landed rule stands. One exception (Bugbot #147): if
  * the debit DID land and the request then died before finishing,
  * the sweep must not eat a paid make — it checks the ledger and
@@ -511,8 +544,8 @@ async function jobIsPaid(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean
 }
 
 /**
- * Discard a stale-failed job's candidates while credits are on and
- * no debit landed for it, persisting the emptied id lists. Paid
+ * Discard a stale-failed job's candidates while photos use makes
+ * and no debit landed for it, persisting the emptied id lists. Paid
  * jobs keep their candidates (jobIsPaid). Idempotent, so it
  * doubles as the retry for a cleanup a dead request left
  * half-done between the fail write and the discard: without the
@@ -524,7 +557,7 @@ async function discardUnpaidStaleCandidates(
   deps: BoardApiDeps,
   now: number,
 ): Promise<DecomposeJob> {
-  if (!creditsEnabled(deps.policy) || failed.pinIds.length === 0) return failed;
+  if (!photosUseMakes(deps.policy) || failed.pinIds.length === 0) return failed;
   if (await jobIsPaid(failed, deps)) return failed;
   const snapshot: DecomposeJob = {
     ...failed,
@@ -542,6 +575,30 @@ async function discardUnpaidStaleCandidates(
   return cleared;
 }
 
+/** Past this age (since its last write) a pending/running job belongs to a dead request: summed Policy timeouts + 2 x staleJobMarginMs. */
+function staleJobBoundMs(policy: Policy): number {
+  return decomposeBoundMs(policy) + 2 * policy.staleJobMarginMs;
+}
+
+/**
+ * The board's free photos (PIN-230), or null when its photos are
+ * not limited: credits off, or Plus that counts under PLUS_MODE.
+ */
+function boardFreePhotoAllowance(board: Board, deps: BoardApiDeps): number | null {
+  return freePhotoAllowance({
+    creditsEnabled: creditsEnabled(deps.policy),
+    hasPlus: hasPlus(board, deps.plusMode ?? "off"),
+    boardOverride: board.policyOverrides?.credits?.freePhotosPerBoard,
+    stored: board.freePhotos,
+    policyDefault: deps.policy.credits.freePhotosPerBoard,
+  });
+}
+
+/** Photos that count against the free photos (PIN-230, domain/free-photos). */
+function boardCountedPhotos(jobs: readonly DecomposeJob[], now: number, policy: Policy): number {
+  return countedPhotos(jobs, now, staleJobBoundMs(policy));
+}
+
 export async function failStaleJobIfNeeded(
   job: DecomposeJob,
   deps: BoardApiDeps,
@@ -553,8 +610,7 @@ export async function failStaleJobIfNeeded(
     return discardUnpaidStaleCandidates(job, deps, now);
   }
   if (job.status !== "pending" && job.status !== "running") return job;
-  const boundMs = decomposeBoundMs(deps.policy) + 2 * deps.policy.staleJobMarginMs;
-  if (now - job.updatedAt <= boundMs) return job;
+  if (now - job.updatedAt <= staleJobBoundMs(deps.policy)) return job;
   const failed: DecomposeJob = {
     ...job,
     status: "failed",
@@ -692,24 +748,39 @@ export async function uploadPhoto(
 
   if (!recoveringPending) {
     const now = deps.now?.() ?? Date.now();
-    const todaysJobs = (await deps.jobs.listForBoard(slug)).filter(
-      (job) =>
-        job.participantId === participant.id &&
-        job.id !== uploadId &&
-        job.createdAt >= startOfUtcDay(now),
+    const boardJobs = (await deps.jobs.listForBoard(slug)).filter((job) => job.id !== uploadId);
+
+    // PIN-230 free photos: a free board (credits on, no Plus) that
+    // used its free photos stops here — before the daily cap, since
+    // waiting a day would not help — with a typed 429 before intake,
+    // any job or any AI spend. Photos still cutting count, so only
+    // truly simultaneous requests (both read before either job
+    // exists) can pass together: at most the upload concurrency
+    // over the limit, like the daily cap below.
+    const allowance = boardFreePhotoAllowance(board, deps);
+    if (allowance !== null && boardCountedPhotos(boardJobs, now, deps.policy) >= allowance) {
+      throw new BoardApiError(userMessage("error.freePhotosUsed"), 429, FREE_PHOTOS_USED);
+    }
+
+    const todaysJobs = boardJobs.filter(
+      (job) => job.participantId === participant.id && job.createdAt >= startOfUtcDay(now),
     );
     if (todaysJobs.length >= deps.policy.photosPerParticipantPerDay) {
       throw new BoardApiError(userMessage("error.photosPerDay"), 429, "photos_per_day");
     }
 
     // PIN-151 preflight (after the Policy daily cap above, which
-    // keeps applying): with credits on and an empty pool the
-    // photo AI path refuses here — the same 429 deny shape as the
-    // cap — before intake, any job or any AI spend. The starter
-    // pool lands lazily inside this read for older boards.
-    const availableMakes = await readAvailableMakes(slug, deps);
-    if (availableMakes !== null && availableMakes < 1) {
-      throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+    // keeps applying): while photos use makes and the pool is
+    // empty the photo AI path refuses here — the same 429 deny
+    // shape as the cap — before intake, any job or any AI spend.
+    // The starter pool lands lazily inside this read for older
+    // boards. Photos that use no make (PIN-229, the default) skip
+    // the pool entirely: a creation is an AI scene.
+    if (photosUseMakes(deps.policy)) {
+      const availableMakes = await readAvailableMakes(slug, deps);
+      if (availableMakes !== null && availableMakes < 1) {
+        throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+      }
     }
   }
 

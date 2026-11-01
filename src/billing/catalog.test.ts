@@ -7,6 +7,7 @@ import {
   CATALOG_VERSION,
   assertValidCatalog,
   buildCatalogPlan,
+  catalogItemsForMode,
   catalogMetadata,
   catalogValidationErrors,
   findCatalogItem,
@@ -77,6 +78,11 @@ describe("catalog manifest (PIN-146, PIN-181)", () => {
         expect(i.name).toContain(`${i.credits} creations`);
         expect(i.description).toContain(`${i.credits} creations`);
         expect(i.description).toContain("Board Plus");
+        // PIN-229/230: a creation is an AI scene and Plus lifts the
+        // photo limit, so Checkout must not say photos use creations.
+        expect(i.description).toContain("unlimited photos");
+        expect(i.description).toContain("(AI scenes)");
+        expect(i.description).not.toMatch(/photos and scenes/);
       }
     }
   });
@@ -175,14 +181,29 @@ describe("catalog convergence plan (PIN-146)", () => {
       { tax_behavior: "exclusive" },
       { tax_behavior: null },
       { recurring: { interval: "month" } }, // one-time pack priced as a sub
-      { active: false }, // archived prices cannot be reused
     ];
     for (const drift of drifts) {
       expect(planPrice(pack, "prod_20", [price(drift)])).toEqual({
         kind: "transfer",
         oldPriceId: "price_20",
       });
+      // Archived and drifted: the key still moves to a new price.
+      expect(planPrice(pack, "prod_20", [price({ ...drift, active: false })])).toEqual({
+        kind: "transfer",
+        oldPriceId: "price_20",
+      });
     }
+  });
+
+  it("price: an archived price still holding the key is reactivated, never planned as a create (PIN-233)", () => {
+    expect(planPrice(pack, "prod_20", [price({ active: false })])).toEqual({
+      kind: "unarchive",
+      priceId: "price_20",
+    });
+    // An active holder wins over an archived one in the same listing.
+    expect(
+      planPrice(pack, "prod_20", [price({ id: "price_old", active: false }), price()]),
+    ).toEqual({ kind: "reuse", priceId: "price_20" });
   });
 
   it("price: the recurring host price reuses only a monthly match", () => {
@@ -250,6 +271,21 @@ describe("catalog convergence plan (PIN-146)", () => {
     ]);
   });
 
+  it("live mode (PIN-210) skips drafts but keeps live and retired items; sandbox takes all", () => {
+    expect(catalogItemsForMode(CATALOG_ITEMS, "sandbox")).toEqual([...CATALOG_ITEMS]);
+    const live = catalogItemsForMode(CATALOG_ITEMS, "live");
+    expect(live.map((i) => i.itemKey)).toEqual(["plus_20", "credits_25", "credits_60", "credits_150"]);
+    // A fresh live account: create the pack, nothing to archive, no host plan.
+    expect(
+      buildCatalogPlan(live, [], []).map((e) => [e.item.itemKey, e.product.kind, e.price.kind]),
+    ).toEqual([
+      ["plus_20", "create", "create"],
+      ["credits_25", "retired", "retired"],
+      ["credits_60", "retired", "retired"],
+      ["credits_150", "retired", "retired"],
+    ]);
+  });
+
   it("buildCatalogPlan refuses an invalid manifest", () => {
     expect(() => buildCatalogPlan([item(), item()], [], [])).toThrow(
       /duplicate lookupKey/,
@@ -271,5 +307,9 @@ describe("seed script mirror (PIN-146)", () => {
     const mirror: unknown = new Function(`return ${literal};`)();
     expect(mirror).toEqual(CATALOG_ITEMS);
     expect(script).toContain('item.status === "retired"');
+    // PIN-210: the same live filter as catalogItemsForMode.
+    expect(script).toContain(
+      'mode === "live" ? items.filter((item) => item.status !== "draft") : [...items]',
+    );
   });
 });

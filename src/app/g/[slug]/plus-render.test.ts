@@ -223,9 +223,11 @@ describe("the one Plus sheet (PIN-182)", () => {
   it("lists the perks in order, with one CTA priced from the pack and a quiet line", () => {
     const out = sheet();
     expect(out).toContain("Anyone on the board can get Plus. Everyone here gets it.");
-    const order = ["+20 creations", "Every skin", "Foil stickers", "Deeper scenes", "Full-size downloads"].map((text) => at(out, text));
+    const order = ["+20 creations", "Unlimited photos", "Every skin", "Foil stickers", "Deeper scenes", "Full-size downloads"].map((text) => at(out, text));
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(out).toContain("For everyone on this board. Photos and scenes.");
+    expect(out).toContain("For everyone on this board. One per AI scene.");
+    // PIN-231: a board without Plus has free photos; Plus has no photo limit.
+    expect(out).toContain("<b>Unlimited photos</b><small>Add as many photos as you like to this board</small>");
     expect(out).toContain("More photos in one scene");
     // The two planned perks say so; nothing else is tagged.
     expect(out.match(/pn-perk-soon/g)).toHaveLength(2);
@@ -251,9 +253,18 @@ describe("the one Plus sheet (PIN-182)", () => {
     expect(out).toContain("Anyone on this board can add creations.");
     expect(out).not.toContain("Every skin");
     expect(out).not.toContain("Foil stickers");
+    // The photo limit is already gone; "Plus is on" stands for it (PIN-231).
+    expect(out).not.toContain("Unlimited photos");
     expect(out).not.toContain("pn-perk-soon");
     expect(out).not.toContain("Once, for this board.");
     expect(out).not.toContain("Get Plus");
+  });
+
+  it("lists Unlimited photos even with nothing to sell, and leads without a pack (PIN-231)", () => {
+    expect(sheet({ available: false })).toContain("Unlimited photos");
+    const noPack = sheet({ pack: null });
+    expect(noPack).toContain("Unlimited photos");
+    expect(noPack.indexOf("Unlimited photos")).toBeLessThan(noPack.indexOf("Every skin"));
   });
 
   it("says Coming soon and sells nothing when billing is not available", () => {

@@ -38,7 +38,7 @@ export function ChangeLookSheet({
   const [selected, setSelected] = useState<SkinId>(tryOn ?? boardSkin);
   const group = `look-${useId()}`;
   const choice = chooseLook(selected, { boardSkin, tryOn, plus });
-  const label = tf(locale, choice.kind === "tryOn" ? "look.try" : "look.use", { skin: skinName(selected) });
+  const label = tf(locale, choice.kind === "tryOn" ? "look.try" : "look.use", { skin: skinName(selected, locale) });
   return (
     <Sheet
       title={t(locale, "look.title")}

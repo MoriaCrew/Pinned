@@ -222,7 +222,7 @@ export function MakeSheet({
         </p>
       </div>
 
-      {ideas.length > 0 ? (
+      {ideas.length > 0 || chipsLoading ? (
         <div className="pn-make-ideas">
           <h3 className="pn-make-ideas-title" id={ideasId}>
             {t(locale, "make.ideasLabel")}

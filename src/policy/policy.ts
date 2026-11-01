@@ -200,12 +200,18 @@ export const PolicySchema = z
         enabled: z.boolean().default(false),
         packs: z.array(CreditPack).min(1).default(DEFAULT_CREDIT_PACKS),
         starterMakes: z.number().int().min(0).default(5),
+        /** PIN-229: does a finished photo (its cut-outs) use a make? false (default) = a creation is an AI scene: photos never touch the pool (no preflight, no debit) and keep the credits-off keep-what-landed rule. true = the PIN-151 rule (1 make per finished photo job). */
+        photosUseMakes: z.boolean().default(false),
+        /** PIN-230: photos a free board may cut while credits are on (a ready photo, or one still cutting, counts; failed/refused never). A board with Plus has no photo limit; the daily caps keep applying. Board creation stores 0 instead once the maker used up their free boards (starterBoardsPerMaker), like starterMakes. 0 = free boards cut no photos. */
+        freePhotosPerBoard: z.number().int().min(0).default(15),
         /** Free creations per maker (PIN-204): only a maker's first `starterBoardsPerMaker` new boards per `starterMakerWindowMs` get the starter pool; later boards start at 0. 0 = no new board gets a pool. A maker is a signed-in user, else the client address (docs/15, "Free creations rule"). */
         starterBoardsPerMaker: z.number().int().min(0).default(3),
         /** Fixed window for starterBoardsPerMaker in ms (default 7 days), anchored at the maker's first counted board. */
         starterMakerWindowMs: z.number().int().min(1).default(604_800_000),
         /** Makes indicator low state (PIN-152): at or under this many makes left the board warns it is running low; 0 disables the low state. */
         lowMakesWarning: z.number().int().min(0).default(2),
+        /** PIN-231: the Add sheet's quiet "N free photos left on this board" line shows at or under this many free photos left (a board without Plus while credits are on); 0 disables the line. At 0 left the sheet offers Plus instead of the photo picker either way. */
+        lowFreePhotosWarning: z.number().int().min(0).default(3),
         /** PIN-181: a webhook-granted purchase also grants the board Plus (`source: "stripe"`). Off = makes only. */
         plusOnPurchase: z.boolean().default(true),
         pendingIntentCapPerBoard: z.number().int().min(1).default(3),
@@ -224,9 +230,12 @@ export const PolicySchema = z
         enabled: false,
         packs: DEFAULT_CREDIT_PACKS,
         starterMakes: 5,
+        photosUseMakes: false,
+        freePhotosPerBoard: 15,
         starterBoardsPerMaker: 3,
         starterMakerWindowMs: 604_800_000,
         lowMakesWarning: 2,
+        lowFreePhotosWarning: 3,
         plusOnPurchase: true,
         pendingIntentCapPerBoard: 3,
         intentTtlSeconds: 1_800,
@@ -463,9 +472,12 @@ export const PolicyOverridesSchema = z.object({
       enabled: z.boolean().optional(),
       packs: z.array(CreditPack).min(1).optional(),
       starterMakes: z.number().int().min(0).optional(),
+      photosUseMakes: z.boolean().optional(),
+      freePhotosPerBoard: z.number().int().min(0).optional(),
       starterBoardsPerMaker: z.number().int().min(0).optional(),
       starterMakerWindowMs: z.number().int().min(1).optional(),
       lowMakesWarning: z.number().int().min(0).optional(),
+      lowFreePhotosWarning: z.number().int().min(0).optional(),
       plusOnPurchase: z.boolean().optional(),
       pendingIntentCapPerBoard: z.number().int().min(1).optional(),
       intentTtlSeconds: z.number().int().min(1).optional(),

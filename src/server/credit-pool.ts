@@ -43,6 +43,16 @@ export function creditsEnabled(policy: Policy): boolean {
   return policy.credits.enabled;
 }
 
+/**
+ * Does a finished photo use a make (PIN-229)? Only while credits are
+ * on AND `credits.photosUseMakes` is set. Off (the default), a
+ * creation is an AI scene: the photo path never preflights or debits
+ * the pool, and its candidates follow the credits-off rules.
+ */
+export function photosUseMakes(policy: Policy): boolean {
+  return creditsEnabled(policy) && policy.credits.photosUseMakes;
+}
+
 /** Once-per-board starter event id: every ensure replays the same id. */
 export function starterEventId(boardId: string): string {
   return `starter:${boardId}`;

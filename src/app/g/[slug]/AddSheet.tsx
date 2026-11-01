@@ -30,8 +30,14 @@ import {
 import { aiBudgetDenial } from "../../../domain/ai-budget";
 import type { BoardViewElement, BoardViewPin } from "../../../domain/board-view";
 import { familiesOnBoard, libraryPinState, libraryStripView } from "../../../domain/library-strip";
-import { isPoolEmptyCode, poolEmptyCopy } from "../../../domain/makes-ui";
-import { formatList, t, tCount, tf, type Locale } from "../../../i18n";
+import {
+  addPickView,
+  freePhotosUsedCopy,
+  isFreePhotosUsedCode,
+  isPoolEmptyCode,
+  poolEmptyCopy,
+} from "../../../domain/makes-ui";
+import { formatList, t, tCount, tf, type Locale, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
 import type { UploadItemStatus } from "../../../domain/upload-queue";
 import { Button, Hint, Icon, Pin, Sheet, Sticker, Tag, cx } from "../../../ui";
@@ -285,6 +291,10 @@ function CutPhoto({
  * review (leftovers): all its candidates kept, the photo shown when
  * this visit still has it, and a one-line note instead of the photo
  * once its working copy is gone; "Pin N things" is the same confirm.
+ * PIN-231: on a board with free photos (`credits.freePhotosLeft`),
+ * the pick step says nothing while plenty are left, one quiet line at
+ * `lowFreePhotosWarning` or fewer, and at none the Plus invitation
+ * takes the picker's place ("From your other boards" stays: no AI).
  */
 export function AddSheet({
   slug,
@@ -295,6 +305,7 @@ export function AddSheet({
   jobPollIntervalMs,
   elementsPerPhotoMax,
   libraryStripMax,
+  lowFreePhotosWarning = 0,
   resumeJobId = null,
   photoMemory,
   onAddMakes,
@@ -311,10 +322,12 @@ export function AddSheet({
   elementsPerPhotoMax: number;
   /** Policy.libraryStripMax (PIN-121). */
   libraryStripMax: number;
+  /** Policy.credits.lowFreePhotosWarning (PIN-231): the quiet "N free photos left" line; 0 = never. */
+  lowFreePhotosWarning?: number;
   /** Open at this photo job's review (PIN-122 leftovers). */
   resumeJobId?: string | null;
   photoMemory?: PhotoMemory;
-  /** PIN-152, PIN-183: out of creations — open the Plus sheet (only passed while buying can work). */
+  /** PIN-152, PIN-183: out of creations (or, PIN-231, of free photos) — open the Plus sheet (only passed while buying can work). */
   onAddMakes?: () => void;
   /** Batch pick: several files go to the BoardClient queue instead of the legacy single upload. */
   onPickFiles?: (files: File[]) => void;
@@ -344,6 +357,8 @@ export function AddSheet({
   const [uploadError, setUploadError] = useState("");
   // PIN-152: the upload stopped at the empty makes pool (429).
   const [uploadPoolEmpty, setUploadPoolEmpty] = useState(false);
+  // PIN-231: the upload stopped at the board's free photos (429 free_photos_used).
+  const [uploadFreePhotosUsed, setUploadFreePhotosUsed] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dropped, setDropped] = useState<ReadonlySet<string>>(new Set());
   const [dismissedFaceJobId, setDismissedFaceJobId] = useState<string | null>(null);
@@ -460,6 +475,7 @@ export function AddSheet({
     mutationFn: async (file: File) => {
       showPreview(file);
       setUploadPoolEmpty(false);
+      setUploadFreePhotosUsed(false);
       setTapError("");
       const blob = await downscalePhoto(file, uploadMaxPx, uploadJpegQuality);
       const form = new FormData();
@@ -470,6 +486,7 @@ export function AddSheet({
       });
       const data = (await response.json()) as { job?: PublicJob; error?: string; code?: string };
       if (!response.ok && isPoolEmptyCode(data.code)) setUploadPoolEmpty(true);
+      if (!response.ok && isFreePhotosUsedCode(data.code)) setUploadFreePhotosUsed(true);
       if (!response.ok || !data.job) throw new Error(data.error || t(locale, "add.failed"));
       return data.job;
     },
@@ -834,9 +851,21 @@ export function AddSheet({
   // the cutter: say so instead of the generic "didn't work".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
   const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  const plusActive = boardView.plus?.active === true;
   // PIN-183: where buying works this is an invitation, not an error.
-  const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive: boardView.plus?.active === true });
+  const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive });
   const batchPoolEmpty = isPoolEmptyCode(batch?.errorCode);
+  // PIN-231: the board's free photos. Nothing while plenty are left, a
+  // quiet line when few are, and at none the Plus invitation replaces
+  // the picker (the board view says 0, or a 429 just did).
+  const pickView = addPickView({
+    freePhotosLeft: boardView.credits?.freePhotosLeft,
+    lowWarning: lowFreePhotosWarning,
+    uploadHitLimit: uploadFreePhotosUsed && uploadError !== "",
+    plusActive,
+  });
+  const freePhotosCopy = freePhotosUsedCopy({ canBuy: Boolean(onAddMakes), plusActive });
+  const batchFreePhotosUsed = isFreePhotosUsedCode(batch?.errorCode);
   const batchCounts = batch
     ? {
         ready: batch.states.filter((s) => s === "ready" || s === "done").length,
@@ -854,16 +883,20 @@ export function AddSheet({
         ].filter((part): part is string => part !== null),
       )
     : "";
-  const outOfMakes = (
+  // One line plus, while buying works, the way into the Plus sheet.
+  const invitation = (copy: { line: MessageKey; action: MessageKey | null }, tone: "info" | "error") => (
     <>
-      <SheetLine tone={poolEmpty.action ? "info" : "error"}>{t(locale, poolEmpty.line)}</SheetLine>
-      {onAddMakes && poolEmpty.action ? (
+      <SheetLine tone={tone}>{t(locale, copy.line)}</SheetLine>
+      {onAddMakes && copy.action ? (
         <Button variant="primary" onClick={onAddMakes}>
-          {t(locale, poolEmpty.action)}
+          {t(locale, copy.action)}
         </Button>
       ) : null}
     </>
   );
+  const outOfMakes = invitation(poolEmpty, poolEmpty.action ? "info" : "error");
+  // A cap, never an error: a status line even with billing off.
+  const freePhotosUsed = invitation(freePhotosCopy, "info");
 
   const photoContent = (
     <>
@@ -877,13 +910,19 @@ export function AddSheet({
         <SheetLine>{tCount(locale, "add.droppedPhotos", batch.droppedCount)}</SheetLine>
       ) : null}
 
-      {stage === "pick" ? (
+      {stage === "pick" && pickView.kind === "freePhotosUsed" ? freePhotosUsed : null}
+      {stage === "pick" && pickView.kind === "picker" ? (
         <PhotoPick
           onFiles={(files) => {
             if (onPickFiles) onPickFiles(files);
             else if (files[0]) upload.mutate(files[0]);
           }}
         />
+      ) : null}
+      {stage === "pick" && pickView.kind === "picker" && pickView.lowLeft !== null ? (
+        <p className="pn-add-help" role="status">
+          {tCount(locale, "makes.freePhotosLeft", pickView.lowLeft)}
+        </p>
       ) : null}
 
       {stage === "pick" && stripView.kind !== "hidden" ? (
@@ -987,11 +1026,22 @@ export function AddSheet({
       {batch && batchEnded && !job && candidatePins.length === 0 ? (
         batchPoolEmpty ? (
           outOfMakes
+        ) : batchFreePhotosUsed ? (
+          freePhotosUsed
         ) : (
           <SheetLine tone="error">{batch.error || t(locale, "add.failed")}</SheetLine>
         )
       ) : null}
-      {uploadError ? (uploadPoolEmpty ? outOfMakes : <SheetLine tone="error">{uploadError}</SheetLine>) : null}
+      {uploadError ? (
+        uploadPoolEmpty ? (
+          outOfMakes
+        ) : uploadFreePhotosUsed ? (
+          // Already in the picker's place; with Plus since, the picker is back and this says the limit is gone.
+          pickView.kind === "freePhotosUsed" ? null : freePhotosUsed
+        ) : (
+          <SheetLine tone="error">{uploadError}</SheetLine>
+        )
+      ) : null}
     </>
   );
 

@@ -854,7 +854,11 @@ async function freezeDispute(
       boardId: intent.boardId,
     });
   }
-  const wanted = makesFreezeForCents(cents, pack);
+  // Never more than this purchase can still lose (PIN-233 F5): after
+  // a partial refund only `credits - clawedCredits` is clawable, and
+  // a bigger hold would lock the starter's or other packs' makes.
+  const clawable = Math.max(0, purchase.credits - purchase.clawedCredits);
+  const wanted = Math.min(makesFreezeForCents(cents, pack), clawable);
   // Granted: freeze only what the pool still holds (the caller
   // freezes what remains, PIN-147). Pre-grant: record the full
   // capped freeze as deferred; the grant caps it for real.

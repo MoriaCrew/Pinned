@@ -88,6 +88,7 @@
     "error.uploadIdInvalid": "8f948d5a6d73a8a3",
     "error.uploadIdConflict": "b903d31d2d971983",
     "error.makesPoolEmpty": "f9ee63439dec27a6",
+    "error.freePhotosUsed": "d73754a94f61dd6d",
     "error.tapMissing": "7e8548d687f71a20",
     "error.keepMissing": "603e695b7c27ac93",
     "error.tooManyPinsPhoto": "7d91d674ad3c4e88",
@@ -450,7 +451,9 @@
     "ui.plusLead": "3bdfc09e3be2811c",
     "ui.plusPerkCreations.one": "9248305b9c1e070c",
     "ui.plusPerkCreations.other": "0b6eb63cae597625",
-    "ui.plusPerkCreationsBody": "e295481182d6fb38",
+    "ui.plusPerkCreationsBody": "9f2446d2fc0182fe",
+    "ui.plusPerkPhotos": "c2a0cbf5bba933f9",
+    "ui.plusPerkPhotosBody": "93be8ad0072cc173",
     "ui.plusPerkSkins": "3de1c5beeb5e9a16",
     "ui.plusPerkSkinsBody": "4b040fea79bcdc3e",
     "ui.plusPerkFoil": "105fd0d63871d1dd",
@@ -515,6 +518,11 @@
     "makes.poolEmpty": "0ee1bc49381ea74b",
     "makes.poolEmptyPlus": "3300ea41e4d7eaad",
     "makes.poolEmptyPhoto": "736ccf1afea591df",
-    "makes.poolEmptyScene": "29ad791dde44c224"
+    "makes.poolEmptyScene": "29ad791dde44c224",
+    "makes.freePhotosLeft.one": "ee0e4e66ae1dac8e",
+    "makes.freePhotosLeft.other": "fe4f056d4c14e628",
+    "makes.freePhotosUsed": "99515974d67e991f",
+    "makes.freePhotosUsedOff": "553df5ce3a8df568",
+    "makes.freePhotosPlusOn": "6d79496853a8f117"
   }
 }

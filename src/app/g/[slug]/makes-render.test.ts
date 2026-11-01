@@ -166,6 +166,14 @@ describe("makes flow wiring guards (PIN-152, PIN-182)", () => {
     expect(source).toMatch(/useEffect\(\(\) => \{\s*const stored = readBaseline\(slug, null\)/);
   });
 
+  it("a failed buy forgets the return look only when this tap stored it (PIN-233 F10)", () => {
+    const source = read("MakesFlow.tsx");
+    // Every write goes through the tap's own decision, never a bare clear.
+    expect(source).not.toMatch(/writeReturnSkin\(/);
+    expect(source).toContain('applyBuyReturnSkinWrite(slug, buyReturnSkinWrite(tryOn, "leaving"))');
+    expect(source.match(/applyBuyReturnSkinWrite\(slug, buyReturnSkinWrite\(tryOn, "failed"\)\)/g)).toHaveLength(2);
+  });
+
   it("takes scene pool-empty from the scene POST job too, not only the disabled-on-terminal poll", () => {
     const source = read("BoardClient.tsx");
     expect(source).toContain("isPoolEmptyCode(data.job?.errorCode)");
@@ -211,11 +219,15 @@ describe("creations copy guardrails (PIN-152, PIN-182)", () => {
       .filter(([key]) => copyFamily(key))
       .map(([, value]) => value);
 
-  it("keeps EN and FR keys in parity for every makes and Plus sheet string", () => {
-    const enKeys = Object.keys(en).filter(copyFamily).sort();
-    const frKeys = Object.keys(fr).filter(copyFamily).sort();
-    expect(frKeys).toEqual(enKeys);
-    expect(enKeys.length).toBeGreaterThan(30);
+  it("keeps every FR makes and Plus sheet key in EN, and FR filled for the keys it has", () => {
+    // docs/18 (PIN-189): new strings land in en.json only and fall back
+    // to English until `npm run i18n:translate` fills the other
+    // languages (`i18n:check --strict` gates promotion), so FR may lag
+    // EN here (PIN-231 added keys) but never holds a key EN dropped.
+    const enKeys = new Set(Object.keys(en).filter(copyFamily));
+    const frKeys = Object.keys(fr).filter(copyFamily);
+    for (const key of frKeys) expect(enKeys.has(key), key).toBe(true);
+    expect(frKeys.length).toBeGreaterThan(30);
     for (const value of copyStrings(fr)) expect(value.length).toBeGreaterThan(0);
   });
 

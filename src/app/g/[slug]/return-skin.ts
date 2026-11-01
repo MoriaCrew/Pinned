@@ -1,3 +1,4 @@
+import type { BuyReturnSkinWrite } from "../../../domain/plus-ui";
 import { isPlusSkinId, isSkinId, type SkinId } from "../../../domain/skins";
 
 /**
@@ -30,7 +31,7 @@ export function readReturnSkin(slug: string): ReturnSkin | null {
   }
 }
 
-/** Store the try-on as "left for Checkout" (not returned yet), or clear it with null. Callers pass null only on a cancelled or failed return, never on a buy. */
+/** Store the try-on as "left for Checkout" (not returned yet), or clear it with null. Callers pass null only on a cancelled or failed return, or when the buy tap that stored it failed (`applyBuyReturnSkinWrite`). */
 export function writeReturnSkin(slug: string, skin: SkinId | null) {
   try {
     if (skin === null) window.sessionStorage.removeItem(returnSkinKey(slug));
@@ -38,6 +39,12 @@ export function writeReturnSkin(slug: string, skin: SkinId | null) {
   } catch {
     // Private mode: the host just picks the look again after the return.
   }
+}
+
+/** Carry out a buy tap's decision (`buyReturnSkinWrite`): "keep" touches nothing. */
+export function applyBuyReturnSkinWrite(slug: string, write: BuyReturnSkinWrite) {
+  if (write.kind === "store") writeReturnSkin(slug, write.skin);
+  else if (write.kind === "clear") writeReturnSkin(slug, null);
 }
 
 /** This tab came back from Checkout: the stored look may now apply, even after a reload. */

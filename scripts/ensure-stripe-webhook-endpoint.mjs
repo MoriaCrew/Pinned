@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * PIN-153 webhook endpoint ensure (operator-run, sandbox only,
- * never CI). Idempotent, dry-run unless --apply (the PIN-146
- * catalog-seed pattern): lists webhook endpoints in the target
- * sandbox, and when none sits at the desired URL creates one
+ * PIN-153 webhook endpoint ensure (operator-run, never CI).
+ * Idempotent, dry-run unless --apply (the PIN-146 catalog-seed
+ * pattern): lists webhook endpoints in the target sandbox (or,
+ * since PIN-210, the live account), and when none sits at the
+ * desired URL creates one
  * with exactly the documented 11 events (PIN-150). Endpoints
  * created via POST /v1/webhook_endpoints deliver snapshot
  * payloads (full resource in data.object - the classic style
@@ -16,12 +17,18 @@
  *   node --env-file=.env.local scripts/ensure-stripe-webhook-endpoint.mjs \
  *     --env-var STRIPE_PINNED_DEV_AGENT_KEY --apply         # create + store
  *
+ * Live (PIN-210): a live key is refused unless --live AND
+ * --i-understand-live are passed (scripts/stripe/operator-mode.mjs);
+ * the URL then defaults to https://pinneds.com/... and the secret
+ * goes to moriacrew-pinned-prod. Sandbox defaults are unchanged
+ * (dev URL, moriacrew-pinned-dev) and neither mode may cross over.
+ *
  * SECRET HYGIENE: Stripe returns the signing secret exactly
  * once, on creation. It stays in this process's memory and is
  * piped to `gcloud secrets ... --data-file=-` over stdin. It is
  * NEVER printed, echoed, written to a file, or placed in a
  * command argument. The API key is read from the env var NAMED
- * by --env-var and is never printed; live keys are refused.
+ * by --env-var and is never printed.
  * When an endpoint already exists the secret cannot be re-read
  * (Stripe never returns it again): the script verifies URL +
  * events + status and reports that an operator must roll the
@@ -31,9 +38,14 @@
  * Mirrors src/billing/webhook-endpoint.ts — keep in sync.
  */
 import { spawn } from "node:child_process";
+import {
+  LIVE_CONFIRM_FLAG,
+  LIVE_FLAG,
+  resolveStripeMode,
+  webhookTarget,
+} from "./stripe/operator-mode.mjs";
 
 // --- Mirrors of src/billing/webhook-endpoint.ts / src/config.ts / src/server/stripe-webhook.ts — keep in sync. ---
-const DEFAULT_URL = "https://dev.pinneds.com/api/billing/stripe/webhook";
 const API_VERSION = "2026-10-28.endive";
 const EVENTS = [
   "checkout.session.completed",
@@ -195,8 +207,6 @@ async function main() {
   };
   const apply = argv.includes("--apply");
   const envName = arg("--env-var") ?? "STRIPE_SECRET_KEY";
-  const url = arg("--url") ?? DEFAULT_URL;
-  const project = arg("--secret-project") ?? "moriacrew-pinned-dev";
   const secretName = arg("--secret-name") ?? "STRIPE_WEBHOOK_SECRET";
   const mirrorFrom = argv.includes("--no-mirror-iam")
     ? ""
@@ -210,16 +220,31 @@ async function main() {
     console.error(`Env var ${envName} is not set; refusing to run.`);
     process.exit(2);
   }
-  if (apiKey.includes("_live_")) {
-    console.error(`Env var ${envName} holds a LIVE key; this script is sandbox-only.`);
+  const gate = resolveStripeMode({
+    key: apiKey,
+    envName,
+    live: argv.includes(LIVE_FLAG),
+    confirmed: argv.includes(LIVE_CONFIRM_FLAG),
+  });
+  if (!gate.ok) {
+    console.error(gate.error);
     process.exit(2);
   }
+  const target = webhookTarget(gate.mode, {
+    url: arg("--url"),
+    project: arg("--secret-project"),
+  });
+  if (!target.ok) {
+    console.error(target.error);
+    process.exit(2);
+  }
+  const { url, project } = target;
   console.log(
-    `webhook-endpoint mode=${apply ? "apply" : "dry-run"} keyEnv=${envName} url=${url} events=${EVENTS.length} apiVersion=${API_VERSION} payload=snapshot(v1)`,
+    `webhook-endpoint mode=${apply ? "apply" : "dry-run"} stripe=${gate.mode} keyEnv=${envName} url=${url} secretProject=${project} events=${EVENTS.length} apiVersion=${API_VERSION} payload=snapshot(v1)`,
   );
 
   const existing = await listEndpoints();
-  console.log(`existing endpoints in sandbox: ${existing.length}`);
+  console.log(`existing endpoints in ${gate.mode}: ${existing.length}`);
   for (const endpoint of existing) {
     console.log(
       `endpoint id=${endpoint.id} url=${endpoint.url} status=${endpoint.status} events=${(endpoint.enabled_events ?? []).length}`,
@@ -291,7 +316,10 @@ async function main() {
         url,
         enabled_events: EVENTS,
         api_version: API_VERSION,
-        description: "Pinneds dev credit packs webhook (PIN-153)",
+        description:
+          gate.mode === "live"
+            ? "Pinneds prod Board Plus webhook (PIN-210)"
+            : "Pinneds dev credit packs webhook (PIN-153)",
       },
       attempt === 0 ? baseIdem : `${baseIdem}-r${Date.now()}`,
     );

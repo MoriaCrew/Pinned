@@ -169,7 +169,14 @@ function makeHarness(
   };
 }
 
+// The PIN-151 suites below keep the paid-photo rule (photos use a
+// make) switched on; PIN-229's default, free photos, has its own block.
 const ENABLED = (starterMakes: number): PolicyOverrides => ({
+  credits: { enabled: true, starterMakes, photosUseMakes: true },
+});
+
+/** Credits on with the shipped PIN-229 default: a creation is an AI scene. */
+const SCENES_ONLY = (starterMakes: number): PolicyOverrides => ({
   credits: { enabled: true, starterMakes },
 });
 
@@ -260,7 +267,7 @@ describe("credits disabled (shipped default, PIN-151)", () => {
 });
 
 describe("starter grant (PIN-151)", () => {
-  it("grants exactly once at creation and exposes only availableMakes in the view", async () => {
+  it("grants exactly once at creation and exposes only the counts in the view", async () => {
     const h = makeHarness(ENABLED(3));
     const { slug, owner } = await boardWithOwner(h);
 
@@ -272,7 +279,8 @@ describe("starter grant (PIN-151)", () => {
 
     for (let i = 0; i < 2; i += 1) {
       const view = await getBoardView(slug, owner, h.api);
-      expect(view?.credits).toEqual({ availableMakes: 3 });
+      // Counts only (no money, no per-person data); free photos since PIN-230.
+      expect(view?.credits).toEqual({ availableMakes: 3, freePhotosLeft: h.policy.credits.freePhotosPerBoard });
     }
     await ensureStarterMakes(slug, h.api);
     expect(await entriesOf(h, slug)).toHaveLength(1);
@@ -290,7 +298,7 @@ describe("starter grant (PIN-151)", () => {
     expect(await h.ledger.getAccount("old-board")).toBeNull();
 
     const view = await getBoardView("old-board", null, h.api);
-    expect(view?.credits).toEqual({ availableMakes: 5 });
+    expect(view?.credits).toEqual({ availableMakes: 5, freePhotosLeft: h.policy.credits.freePhotosPerBoard });
     expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
       starterEventId("old-board"),
     ]);
@@ -304,7 +312,7 @@ describe("cheap balance read (PIN-179)", () => {
     const grant = vi.spyOn(h.ledger, "grantStarter");
     const reads = vi.spyOn(h.ledger, "getBalance");
     for (let i = 0; i < 3; i += 1) {
-      expect((await getBoardView(slug, owner, h.api))?.credits).toEqual({ availableMakes: 3 });
+      expect((await getBoardView(slug, owner, h.api))?.credits).toMatchObject({ availableMakes: 3 });
     }
     expect(grant).not.toHaveBeenCalled();
     expect(reads).toHaveBeenCalledTimes(3);
@@ -322,7 +330,7 @@ describe("cheap balance read (PIN-179)", () => {
     const views = await Promise.all(
       Array.from({ length: 4 }, () => getBoardView("old-board", null, h.api)),
     );
-    expect(views.map((v) => v?.credits)).toEqual(Array(4).fill({ availableMakes: 5 }));
+    expect(views.map((v) => v?.credits?.availableMakes)).toEqual(Array(4).fill(5));
     expect((await entriesOf(h, "old-board")).map((e) => e.id)).toEqual([
       starterEventId("old-board"),
     ]);
@@ -682,6 +690,71 @@ describe("photo debit (PIN-151)", () => {
     expect((await entriesOf(h, slug)).filter((e) => e.type === "debit").map((e) => e.id)).toEqual([
       "drain:other-make",
     ]);
+  });
+});
+
+describe("a creation is an AI scene: photos use no make (PIN-229)", () => {
+  it("photos cut on an empty pool, never touch the ledger, and the AI scene still costs 1", async () => {
+    const h = makeHarness(SCENES_ONLY(1));
+    expect(h.policy.credits.photosUseMakes).toBe(false);
+    const { slug, owner } = await boardWithOwner(h);
+
+    const first = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(first.status).toBe("ready");
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
+    await confirmPins(slug, owner, { jobId: first.id, pinIds: [first.pinIds[0]] }, h.api);
+
+    const { scene } = await requestScene(
+      slug,
+      owner,
+      { elementIds: [first.elementIds[0]], prompt: "on a picnic blanket" },
+      h.api,
+    );
+    expect(scene.status).toBe("ready");
+    expect(scene.kind).toBe("ai");
+    expect((await h.ledger.getBalance(slug)).available).toBe(0);
+
+    // The pool is empty now; photos keep working and stay free.
+    const second = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(second.status).toBe("ready");
+    expect(second.pinIds.length).toBeGreaterThan(0);
+    expect((await entriesOf(h, slug)).map((e) => e.id)).toEqual([
+      starterEventId(slug),
+      sceneDebitEventId(scene.id),
+    ]);
+  });
+
+  it("a board that starts at 0 still adds photos (no 429, no lazy grant on upload)", async () => {
+    const h = makeHarness(SCENES_ONLY(0));
+    const { slug, owner } = await boardWithOwner(h);
+    const job = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(job.status).toBe("ready");
+    expect(h.namerCalls).toBe(1);
+    expect((await entriesOf(h, slug)).filter((e) => e.type === "debit")).toEqual([]);
+  });
+
+  it("a stale unpaid photo keeps what landed (PIN-64 rule), as with credits off", async () => {
+    const h = makeHarness(SCENES_ONLY(3));
+    const { slug, owner } = await boardWithOwner(h);
+    const job = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(job.status).toBe("ready");
+    // The request died before finishing: rewind to a stale `running`.
+    await h.jobs.update({ ...job, status: "running", updatedAt: T0 });
+    const later = { ...h.api, now: () => T0 + 300_000 };
+    expect(await sweepStaleDecomposeJobs(slug, later)).toBe(1);
+    const swept = await h.jobs.get(job.id);
+    expect(swept?.errorCode).toBe("stale_running");
+    expect(swept?.pinIds).toEqual(job.pinIds);
+    expect((await h.boards.listElements(slug)).length).toBe(job.elementIds.length);
+    expect((await entriesOf(h, slug)).map((e) => e.type)).toEqual(["starter_grant"]);
+  });
+
+  it("switching photosUseMakes on restores the PIN-151 photo debit", async () => {
+    const h = makeHarness({ credits: { enabled: true, starterMakes: 2, photosUseMakes: true } });
+    const { slug, owner } = await boardWithOwner(h);
+    const job = await uploadPhoto(slug, owner, await photoBytes(), h.api);
+    expect(job.status).toBe("ready");
+    expect((await h.ledger.getBalance(slug)).available).toBe(1);
   });
 });
 

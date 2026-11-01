@@ -12,7 +12,10 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
   (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
   and the AI budget are unchanged. With credits on, AI makes
   ("creations" in the UI) spend the board pool instead (PIN-151
-  below). A new board starts with a free pool of 5
+  below). **A creation is one AI scene (PIN-229):** adding a photo
+  and its cut-outs never uses one, so discarding cut-outs costs
+  nothing; every AI scene uses one, even one the person does not
+  keep. A new board starts with a free pool of 5
   (`credits.starterMakes`) while its maker still has free boards
   left (the rule below). **Guests never have to pay.**
 
@@ -21,11 +24,13 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 > pool (`credits.starterMakes`, 5) on each of their first
 > `credits.starterBoardsPerMaker` (3) new boards per
 > `credits.starterMakerWindowMs` (7 days, counted from their first
-> board in the window). After that, a new board starts at 0: it
-> still works (people join, signed-in members add things from
-> their other boards, scenes fall back to free collages) and
-> shows the usual Get Plus invitation. Paid creations are never limited
-> by this rule, and creating a board is never blocked by it.
+> board in the window), together with the board's free photos
+> (rule below). After that, a new board starts at 0 creations and
+> 0 free photos: it still works (people join, signed-in members
+> add things from their other boards, scenes fall back to free
+> collages) and shows the usual Get Plus invitation. Paid creations
+> are never limited by this rule, and creating a board is never
+> blocked by it.
 >
 > - **Who is a maker:** the signed-in user when sign-in is on and
 >   the request carries a session, else the client address the
@@ -54,10 +59,61 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   (`dailyBudgetUsd` / `dailyCallLimit`), which free and paid
 >   makes share today (PIN-206 splits it). Tuning ideas after
 >   launch: PIN-207.
+
+> **Free photos rule (PIN-230).** Since a creation is an AI scene
+> (PIN-229), a free board's photo cost (~$0.02 a photo, docs/16)
+> is bounded by a limit, not a meter: while credits are on, a
+> board without Plus cuts `credits.freePhotosPerBoard` (15)
+> photos. **A board with Plus has no photo limit**; the Policy
+> daily caps (`photosPerParticipantPerDay`,
+> `segmentsPerParticipantPerDay`) apply to everyone.
+>
+> - **What counts:** a photo whose job finished `ready` (it gave
+>   cut-outs), or one still pending/running and not yet stale (the
+>   stale sweep's bound), so a photo already cutting holds its slot
+>   and a dead job never does. Only truly simultaneous requests
+>   (both read before either job exists) can pass together, at
+>   most the upload concurrency over the limit, as with the daily
+>   cap. Failed and refused
+>   photos never count. Discarding cut-outs does not give the
+>   photo back: the limit bounds AI cost the photo already spent.
+>   Counted from the board's photo jobs (`listForBoard`), no new
+>   storage.
+> - **How many:** board creation decides it with the maker slot
+>   above and stores it (`Board.freePhotos`, server-only): the
+>   Policy value on a win, 0 past the maker's free boards (else
+>   new boards would farm free photos). Boards without the field
+>   use the Policy value. A board's own override
+>   (`policyOverrides.credits.freePhotosPerBoard`) wins over the
+>   stored amount: an operator's explicit choice for that one
+>   board. (The demo board needs none: it is a normal board and
+>   gets Plus, so no photo limit, once billing is live, DEPLOY
+>   §6.4.)
+> - **At the limit:** `POST /photos` answers a typed 429
+>   `{ code: "free_photos_used" }` before intake, any job or any
+>   AI call — checked before the daily cap, since waiting a day
+>   would not help. The batch queue stops on it like the other
+>   coded 429s. A lost-response replay of a counted photo still
+>   gets its job back.
+> - **Board view:** `credits.freePhotosLeft` while credits are on
+>   and the board has no Plus; absent with Plus (no limit) or
+>   credits off. A failed job-list read omits the field, never
+>   the page.
+> - **In the UI (PIN-231):** a cap people rarely feel, not a meter.
+>   The Add sheet says nothing while plenty are left, one quiet
+>   line at `credits.lowFreePhotosWarning` (3) or fewer, and at 0
+>   invites into the Plus sheet instead of showing the photo
+>   picker; the 429 and a batch photo stopped on the code get the
+>   same invitation, never an error. The Plus sheet lists
+>   "Unlimited photos". Details under "Plus sheet + creations UI".
+> - **Plus that counts:** a Stripe grant always; a demo
+>   (`source: "mock"`) grant only while `PLUS_MODE=mock` (as for
+>   skins).
 - **One purchase (PIN-181).** €2.99 once for this board buys
-  Board Plus (every look, foil stickers) plus 20 creations. Any
-  joined member, or the host, can buy it for the board; it is a
-  gift to the board, not to the buyer. No host plan is sold.
+  Board Plus (every look, foil stickers, unlimited photos) plus 20
+  creations (AI scenes). Any joined member, or the host, can buy it
+  for the board; it is a gift to the board, not to the buyer. No
+  host plan is sold.
 - **Look control.** The host can always change the look (free
   skins; Plus skins once the board has Plus). Once the board has
   Plus, any joined member can change it too.
@@ -217,9 +273,10 @@ host-only but answers every failure with the uniform 404
     the board has Plus; the skin route re-checks)
   - `plus: { active: boolean, plan?: "board" | "host", mode:
     "off" | "mock" | "stripe" }`
-  - `credits: { availableMakes: number }` (PIN-151, only while
-    `Policy.credits.enabled`; absent otherwise, so the disabled
-    shape is unchanged)
+  - `credits: { availableMakes: number, freePhotosLeft?: number }`
+    (PIN-151, only while `Policy.credits.enabled`; absent
+    otherwise, so the disabled shape is unchanged.
+    `freePhotosLeft`, PIN-230: only for a board without Plus)
 
   The entitlement's `source` and `grantedAt` and the host hash
   never leave the server.
@@ -282,7 +339,8 @@ port (`startCheckout({ slug, plan })`, which throws a typed
   **Dev runs `stripe` since PIN-153** (sandbox only: the dev
   backend flips together with `Policy.credits.enabled` and
   the registered webhook endpoint - PIN-153 section below).
-  Prod keeps `off` with no key reference. PIN-149/PIN-150
+  Prod stays `off` until the PIN-210 prod switch turns on live
+  Stripe ("Going live on prod" below). PIN-149/PIN-150
   deliberately shipped reference-only so no backend ever took
   a payment with no fulfilment path.
 
@@ -307,9 +365,12 @@ list.
 | `enabled` | `false` | kill flag for the pool (PIN-151); dev turns it on |
 | `packs` | one pack: `pinneds_plus_20`, 20 makes, 299 cents, label `20 creations · €2.99` | what the buy route offers; a test pins it to the catalog's live items (PIN-181) |
 | `starterMakes` | 5 | free pool granted once per board (PIN-181; was 25) |
+| `freePhotosPerBoard` | 15 | PIN-230: photos a board without Plus cuts while credits are on (ready or in-flight count; failed/refused never). Stored per board at creation with the maker slot (0 past the maker's free boards). 0 = no free photos |
+| `photosUseMakes` | `false` | PIN-229: a creation is an AI scene, so photos never touch the pool. `true` restores the PIN-151 photo debit (1 per finished photo job) |
 | `starterBoardsPerMaker` | 3 | boards per maker per window that get the free pool; 0 = none (PIN-204; read at board creation since PIN-205) |
 | `starterMakerWindowMs` | 604,800,000 (7 days) | fixed window for `starterBoardsPerMaker`, anchored at the maker's first counted board (PIN-204) |
 | `lowMakesWarning` | 2 | low state at or under this many makes; 0 disables (PIN-181; was 5) |
+| `lowFreePhotosWarning` | 3 | PIN-231: the Add sheet's quiet "N free photos left on this board" line at or under this many free photos left; 0 disables the line (the 0-left invitation stays) |
 | `plusOnPurchase` | `true` | a webhook grant also gives the board Plus (PIN-181) |
 | `pendingIntentCapPerBoard` | 3 | open checkout intents per board |
 | `intentTtlSeconds` | 1800 | how long an intent holds a cap slot (PIN-178) |
@@ -334,7 +395,10 @@ object ids from config.
 
 "Creations" is the customer-facing word for makes; code keeps
 `credits`/`makes`. The Checkout page shows the item's name
-"Board Plus · 20 creations" and its description. The lookup key
+"Board Plus · 20 creations" and its description ("…every look,
+foil stickers, unlimited photos and 20 creations (AI scenes)…";
+re-run the seed after changing it, which updates the product in
+place and keeps the price). The lookup key
 (`pinneds_plus_20`, item `plus_20`) names the product; the pack's
 `credits` say what it holds.
 
@@ -354,8 +418,9 @@ when a price is replaced.
 onto the manifest (plain `fetch`, no SDK; it mirrors the
 manifest — a test pins the mirror). It is a dry-run unless
 `--apply` is passed, takes the secret from the env var named by
-`--env-var` (never printed; live keys refused), and prints item
-keys and object ids only:
+`--env-var` (never printed; a live key is refused unless
+`--live --i-understand-live`, PIN-210), and prints item keys and
+object ids only:
 
 ```
 node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_LOCAL_AGENT_KEY
@@ -367,7 +432,12 @@ in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
 recurrence all match — those fields are immutable, so drift
 mints a new price with `transfer_lookup_key=true` and archives
-the old one. A retired item is archived instead: its product
+the old one. The price lookup reads archived prices too (Stripe
+lists only active ones unless asked, paginated like every list):
+an archived price can still hold its lookup key, and creating
+another price for that key is rejected, so a matching archived
+price is reactivated (`unarchive`) and a drifted one transfers
+(PIN-233). A retired item is archived instead: its product
 and every active price under its lookup key get
 `active=false`, nothing is created for it, and an
 already-archived item plans `retired` (a no-op). POSTs carry
@@ -417,8 +487,12 @@ against the pending purchase so grant + clawback net to zero;
 partial refunds apply as per-refund deltas indexed by refund id
 (repeat id = no-op, totals never exceed the pack); disputed makes
 freeze until a restore or the dispute's final clawback (a freeze
-arriving before the grant is deferred and lands with it); debits
-spend only `available`. Persistence sits behind the
+arriving before the grant is deferred and lands with it); a freeze
+holds at most what is still clawable from its own purchase
+(`credits - clawedCredits`, so a dispute after a partial refund
+never locks the starter's or other packs' makes), and a final
+clawback consumes only its own dispute's hold, never another open
+dispute's (PIN-233); debits spend only `available`. Persistence sits behind the
 `CreditLedgerStore` port (in-memory implementation included): each
 operation is one atomic per-board read-modify-write and a refusal
 writes nothing.
@@ -667,7 +741,7 @@ and dispute lifecycle pages):
 
   | Event | Effect |
   | --- | --- |
-  | `created` | freeze (ceil) |
+  | `created` | freeze (ceil, capped at what the purchase still has to claw back after refunds; nothing left dead-letters `freeze_no_available`) |
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
@@ -781,11 +855,16 @@ granted board's poll costs one document read whatever the
 ledger size, and any number of concurrent first touches and
 replays still grant exactly once.
 
-**What a make is.** Exactly one successful AI production:
+**What a make is.** Exactly one successful AI scene (PIN-229).
+Photos use no make by default (`credits.photosUseMakes: false`):
+people pay for the thing they ask for, not for the AI's guesses,
+even though a photo (~$0.02 of naming + SAM calls, docs/16)
+costs us about twice a scene ($0.01). With the switch on, the
+PIN-151 photo row below applies again.
 
 | Flow | Debits 1 | Never debits |
 | --- | --- | --- |
-| Photo (`DecomposeJob`) | the job finishing `ready` (one completed job per photo, any element count) | failures/refusals, cap denies, tap-adds and tap naming on its working copy |
+| Photo (`DecomposeJob`) | only with `photosUseMakes`: the job finishing `ready` (one completed job per photo, any element count) | by default every photo; always failures/refusals, cap denies, tap-adds and tap naming on its working copy |
 | Scene/remix (`SceneJob`) | a ready scene recorded kind `ai` | refusals/failures, any collage (`AI_MOCK`, over-budget fallback, pool-empty lane) |
 | Riders | — | suggestion chips, dictation: still only Policy-capped |
 
@@ -794,12 +873,15 @@ replays still grant exactly once.
 replay of the same job can never double-debit (and the job
 claim gates already refuse a second run).
 
-- Photo: inside `runDecomposeJob`, after at least one
-  candidate pin has landed and before the job may finish
-  `ready`. `uploadPhoto` preflights first (after the Policy
-  daily photo cap): an empty pool gets the board API's typed
-  429 `{ code: "credits_pool_empty" }` before intake or any AI
-  call, so the happy path never starts unpaid.
+- Photo (only with `photosUseMakes`): inside `runDecomposeJob`,
+  after at least one candidate pin has landed and before the
+  job may finish `ready`. `uploadPhoto` preflights first (after
+  the Policy daily photo cap): an empty pool gets the board
+  API's typed 429 `{ code: "credits_pool_empty" }` before intake
+  or any AI call, so the happy path never starts unpaid. With
+  the switch off (the default) neither runs, and a photo's
+  candidates follow the credits-off rules (kept on a failure or
+  stale sweep, PIN-64), exactly as with credits off.
 - Scene: inside `runSceneJob`, after the composed image is
   stored and before the terminal `finish` syncs a `ready`
   Scene — the only state the image route serves.
@@ -839,7 +921,9 @@ the photo run before the seam also discards landed candidates
 while credits are on (off, the keep-what-landed PIN-64 rule
 stands).
 
-**Pool-empty lanes.** Photo: the 429 above, no AI spend.
+**Pool-empty lanes.** Photo (only with `photosUseMakes`): the
+429 above, no AI spend; by default an empty pool never stops a
+photo.
 Scene: the existing free collage lane composes instead (the
 composer port is never called, the scene is honestly kind
 `collage` at $0, nothing debits) — decided inside
@@ -852,7 +936,8 @@ always has.
 **Board API.** `GET /api/boards/{slug}` adds
 `credits: { availableMakes }` while credits are on (the read
 PIN-152 renders; no money or per-person fields ever) and omits
-it while off. A ledger failure on that read omits the field
+it while off. Since PIN-230 it also carries `freePhotosLeft`
+for a board without Plus (Free photos rule above). A ledger failure on that read omits the field
 instead of failing the board page, logged without the slug.
 
 Tests: `src/server/credit-pool.test.ts` (disabled = zero
@@ -868,7 +953,7 @@ concurrent first touches grant once; replay after reload) runs
 against the fake Firestore in
 `src/server/firestore-credit-ledger-store.test.ts`.
 
-## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183)
+## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183, PIN-231)
 
 The user-facing word for makes is **creations** (the code keeps
 `makes` / `credits`). There is exactly one sheet that asks for
@@ -907,14 +992,17 @@ announced (`aria-live="polite"`).
 - **Plus sheet.** Title, lead ("Anyone on the board can get Plus.
   Everyone here gets it."), a perks list and one button. Perks in
   order: "+N creations" (N = `Policy.credits.packs[0].credits`; "For
-  everyone on this board. Photos and scenes."), "Every skin",
-  "Foil stickers", "Deeper scenes" and "Full-size downloads" (both
-  tagged Soon: planned, not built). The button reads "Get Plus ·
-  €2.99" with a quiet "Once, for this board."; the price is
-  `formatEur(pack.eurCents, locale)`, never a label. With Plus
-  already on, the list collapses to the creations line plus "Plus is
-  on", the lead becomes the add-creations lead, and the button reads
-  "Add N creations · €2.99". On the stripe path one more quiet line
+  everyone on this board. One per AI scene.", PIN-229), "Unlimited
+  photos" ("Add as many photos as you like to this board", camera
+  icon, PIN-231), "Every skin", "Foil stickers", "Deeper scenes" and
+  "Full-size downloads" (both tagged Soon: planned, not built). The
+  button reads "Get Plus · €2.99" with a quiet "Once, for this
+  board."; the price is `formatEur(pack.eurCents, locale)`, never a
+  label. With Plus already on, the list collapses to the creations
+  line plus "Plus is on" (no "Unlimited photos": the limit is
+  already gone and this purchase only adds creations, so "Plus is
+  on" stands for every perk), the lead becomes the add-creations
+  lead, and the button reads "Add N creations · €2.99". On the stripe path one more quiet line
   sits under the button: "You may be charged in your local currency.
   Appears as PINNEDS on your statement." (never in mock or off).
   With nothing to buy (billing off, or the
@@ -979,7 +1067,8 @@ announced (`aria-live="polite"`).
   and forgets it. A cancelled or failed return only forgets it.
 - **Pool-empty outcomes (PIN-183).** Running out is an offer, never
   an error. The photo 429 (`credits_pool_empty`, PIN-151) and a
-  photo job failing with that `errorCode` replace the Add sheet's
+  photo job failing with that `errorCode` (both only while
+  `credits.photosUseMakes` is on, PIN-229) replace the Add sheet's
   generic failure with "This board is out of creations. Get Plus to
   keep going." (a neutral status line, not an alert) and a button
   into the Plus sheet. A scene job failing with that code (the
@@ -992,12 +1081,42 @@ announced (`aria-live="polite"`).
   Every other error keeps its old copy. The 429's body carries
   `code: "credits_pool_empty"` (`errorResponse` adds it for this
   code only), which is how the Add sheet tells it from a rate limit.
+- **Free photos in the Add sheet (PIN-231).** A cap people rarely
+  feel, not a meter; it rides `credits.freePhotosLeft` in the board
+  view (PIN-230), so a board with Plus or with credits off never
+  shows any of it. Rules in `src/domain/makes-ui.ts`
+  (`freePhotosState`, `freePhotosUsedCopy`, `addPickView`,
+  `isFreePhotosUsedCode` on the shared `FREE_PHOTOS_USED`).
+  - More than `Policy.credits.lowFreePhotosWarning` (3) left:
+    nothing; the pick step is the credits-off pick step.
+  - At or under it: one quiet status line under the picker, no
+    card, no button: "3 free photos left on this board" (plural
+    pair `makes.freePhotosLeft`). 0 turns the line off.
+  - At 0, before anyone picks: the invitation takes the photo
+    picker's place, "This board used its free photos. Get Plus for
+    unlimited photos." (a status line, never an alert) and the same
+    Get Plus button into the Plus sheet as the pool-empty
+    invitation (`onAddMakes` → `openBuyMakes`). "From your other
+    boards" stays under it: library pins use no AI and no free
+    photo. With billing off (no `onAddMakes`, the `canBuy` rule of
+    `poolEmptyCopy`) the plain fact stays, "This board used its
+    free photos, so new photos can't be added right now.", and no
+    button.
+  - A single upload answering the 429 `free_photos_used` swaps the
+    picker for the same invitation at once (the poll may not have
+    caught up), and a batch photo stopped with that `errorCode`
+    shows it instead of the generic error, keeping Try again /
+    Skip. If the board got Plus meanwhile, the picker comes back
+    and the line says "This board has Plus now, so photos are
+    unlimited. Try again."
 - **My boards.** A card whose board has Plus (`hasPlus` in this
   PLUS_MODE, so a mock grant counts only in `mock`) carries a small
   "Plus" tag under its title (`MyBoardCard.plus`).
 - **Copy.** Strings live under `makes.*` and `ui.plus*` in
-  `src/i18n/messages/{en,fr}.json` in key parity (a test pins
-  it); the components take the page's language (the board passes
+  `src/i18n/messages/en.json`; new ones land there only and fall
+  back to English until `npm run i18n:translate` (docs/18), so a
+  test pins that every FR key in the family is still an EN key
+  (PIN-231 relaxed the old strict EN/FR parity); the components take the page's language (the board passes
   its `locale`, kit parts read `useLocale()`). Whole sentences with
   placeholders, so word order can differ by language: the you
   menu's "Plus is on · N creations left" is one plural pair
@@ -1010,13 +1129,18 @@ announced (`aria-live="polite"`).
 Tests: `src/domain/makes-ui.test.ts` (states, thresholds, the
 Get Plus / Add creations label, pool-empty copy, flag parsing + URL
 strip, banner never claims success without a rise, checkout
-answers, prices), `src/domain/plus-ui.test.ts`
+answers, prices, PIN-231 free-photos state, copy and pick view),
+`src/app/g/[slug]/add-free-photos-render.test.ts` (PIN-231: nothing
+above the threshold or with Plus, the low line, 0 left with and
+without billing, the library strip at 0, the stopped batch step,
+Plus since, other stops untouched, the single-upload 429 wiring),
+`src/domain/plus-ui.test.ts`
 (`plusPurchasePath`, `returnSkinStep`, `shownLook`, the look flow
 reducer), `src/domain/you-menu.test.ts` and
 `src/app/auth/you-render.test.ts` (Board Plus and Change look for
 guest, member, member with Plus and host, the sublines in EN and FR),
 `src/app/g/[slug]/plus-render.test.ts` (the sheet in every mode
-and for a guest, order of the perks, Plus on, Coming soon, FR, a
+and for a guest, order of the perks with Unlimited photos, Plus on, Coming soon, FR, a
 member changing the look) and `src/app/g/[slug]/makes-render.test.ts`
 (nothing above the threshold, the low and empty lines, banner
 states, pool-empty copy, wiring guards, EN/FR parity and copy
@@ -1024,7 +1148,10 @@ guardrails), `src/app/g/[slug]/board-render.test.ts` (the problem
 card's action), `src/app/api/boards/shared.test.ts` (the 429's
 code), `src/server/my-boards.test.ts` and `src/app/me/library-parts.test.ts`
 (the Plus tag), plus `src/ui/kit.test.ts` and the
-`lowMakesWarning` cases in `src/policy/policy.test.ts`. No
+`lowMakesWarning` and `lowFreePhotosWarning` cases in
+`src/policy/policy.test.ts`. Phone screenshots (390 px):
+`eval/screenshots/pin-231-add-low-390.png`,
+`pin-231-add-used-390.png` and `pin-231-plus-perks-390.png`. No
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
 
@@ -1055,6 +1182,11 @@ means anomalies exist; exit 2 is a usage/config error.
 ```
 node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
 ```
+
+The Firestore project is never left to ADC's or gcloud's default
+(PIN-233): a sandbox run reads `moriacrew-pinned-dev` unless
+`--project` names another non-prod project and exits 2 for the prod
+one; a live run needs `--project moriacrew-pinned-prod`.
 
 **Runbook.** Run it daily while dev stripe mode is live and
 after any billing change or deploy, and drain dead letters to
@@ -1120,6 +1252,97 @@ and backfills the mapping; the PIN-147 pre-grant freeze /
 pre-clawback semantics then apply unchanged. A dispute for
 a genuinely unknown charge still dead-letters.
 
+## Going live on prod (PIN-210)
+
+Prod (pinneds.com) sells the Board Plus pack with **live** Stripe
+only once the prod switch (merge order below) reaches `main`, after
+both live secrets exist: App Hosting fails the build when a
+referenced secret does not exist. The operator
+scripts default to sandbox. A live run needs a live key **and**
+`--live --i-understand-live`, touches only `moriacrew-pinned-prod`
+and `https://pinneds.com/api/billing/stripe/webhook`, and prints
+ids, never keys or secrets (`scripts/stripe/operator-mode.mjs`).
+Operator machine only, never CI or a cloud agent.
+
+**Prerequisites (operator gates).** Stripe account activated for
+live payments (business details, bank account, statement
+descriptor; Checkout branding and receipts checked); pinneds.com
+shows terms, refund/withdrawal and contact pages (PIN-26); the
+tax/VAT route is signed off (PIN-154; prices are EUR
+tax-inclusive); `gcloud auth login`,
+`gcloud auth application-default login` and `firebase login` as
+an owner of the prod project. Three live restricted keys
+(Workbench → API keys → Create restricted key; everything not
+listed stays None):
+
+| Key | Kept in | Permissions (from the code) |
+| --- | --- | --- |
+| runtime | prod Secret Manager `STRIPE_SECRET_KEY` | Checkout Sessions: Write (create; the webhook's retrieve and list-by-PaymentIntent) · Prices: Read (lookup-key price) · PaymentIntents: Read · Charges: Read · Balance: Read (settled-EUR balance transactions) |
+| setup | `.env.local` `STRIPE_PINNED_PROD_SETUP_KEY`; delete after go-live | Products: Write · Prices: Write · Webhook Endpoints: Write |
+| read | `.env.local` `STRIPE_PINNED_PROD_READ_KEY` | Checkout Sessions: Read |
+
+Signatures are checked locally and refunds are made in the
+Dashboard, so no key needs Refunds or Disputes. A 403 names the
+missing permission: add read on that one resource only.
+
+**Commands, in order** (`P=moriacrew-pinned-prod`):
+
+1. Runtime key, first (step 3 copies its grants):
+   `firebase apphosting:secrets:set STRIPE_SECRET_KEY --project "$P"`
+   (value typed at the prompt), then
+   `firebase apphosting:secrets:grantaccess STRIPE_SECRET_KEY --backend pinned-web --project "$P"`.
+2. Catalog: `node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINNED_PROD_SETUP_KEY --live --i-understand-live`
+   plans `plus_20 product=create price=create`, the retired packs
+   `retired`, and skips the draft host plan; re-run with
+   `--apply` (ends with `CATALOG_IDS_JSON`); a third run plans
+   only `reuse`.
+3. Webhook: `node --env-file=.env.local scripts/ensure-stripe-webhook-endpoint.mjs --env-var STRIPE_PINNED_PROD_SETUP_KEY --live --i-understand-live --secret-project "$P"`
+   plans `create`; with `--apply` it creates the endpoint with the
+   11 events, pipes the one-time signing secret over gcloud stdin
+   into `STRIPE_WEBHOOK_SECRET` in `$P` and mirrors the
+   `STRIPE_SECRET_KEY` grants onto it. Then (idempotent)
+   `firebase apphosting:secrets:grantaccess STRIPE_WEBHOOK_SECRET --backend pinned-web --project "$P"`.
+4. Both exist (metadata only):
+   `gcloud secrets describe STRIPE_SECRET_KEY --project "$P" --format="value(name)"`,
+   same for `STRIPE_WEBHOOK_SECRET`. Say so on PIN-210.
+
+**Merge order.** Live billing comes in two pieces (Robin, Oct 31):
+
+1. **This runbook and the operator scripts** (PIN-210, #182) merge
+   to `dev` before the Nov 3 freeze. They change nothing on prod or
+   dev: the scripts only run from an operator machine.
+2. **The prod switch** is a separate config-only PR (PIN-210, "turn
+   on live billing on prod"). It adds one block to
+   `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
+   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
+   (the dev backend ignores that file). Merge it only after step 4.
+   If that happens before the freeze, it rides promotion #2. If not,
+   run a config-only promotion as soon as step 4 is done, even during
+   judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
+   then, so that promotion carries only the switch.
+
+**Smoke after the rollout.** `GET https://pinneds.com/api/health`
+shows `plusMode: "stripe"`; a webhook POST with a bad
+`Stripe-Signature` answers 400; a new board shows 5 creations.
+Robin buys the €2.99 pack **on the demo board** with a real card
+and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
+board, and this makes it a paying customer's board). Checkout says
+"Board Plus · 20 creations", the demo board shows Plus and 20 more
+creations, and the endpoint's delivery in Workbench is 200. Refund
+check, on a throwaway board: buy the pack again, then refund it in
+the Dashboard (Payments → the payment → Refund, full). The refund
+events claw back the 20 creations; the board keeps Plus (see
+Follow-ups). Then
+`node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
+exits 0 (`clean=true`), and the setup key is deleted.
+
+**Rollback.** Set `PLUS_MODE` to `off` in `apphosting.prod.yaml`
+and roll out `main`: buying answers "unavailable" and the webhook
+503s, so Stripe retries a delivery for up to three days (a paid
+session grants once billing is back, or refund it). The pool
+stays on; `"enabled":false` in the override stops it too.
+Stopping for good: disable the endpoint in Workbench.
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).
@@ -1177,6 +1400,12 @@ a genuinely unknown charge still dead-letters.
   and `src/billing/webhook-endpoint.test.ts` (exact 11-event
   list + dev URL, create/reuse/drift/wildcard plans,
   ensure-script mirror incl. the pinned API version).
+- PIN-210: `src/billing/stripe-operator-mode.test.ts` (key-prefix
+  and flag matrix; prod URL/project defaults; all three scripts
+  spawned with a fake `fetch` and a fake `gcloud`: refusals make
+  no call, live/sandbox dry-runs only read, live apply pipes the
+  signing secret into prod over stdin and mirrors IAM there) and
+  the live-mode cases in `src/billing/catalog.test.ts`.
 - PIN-178: `src/server/stripe-webhook.test.ts` (paid at 30:30,
   after the return redirect, after a cap check expired the
   intent, async success two days later all grant; paid after

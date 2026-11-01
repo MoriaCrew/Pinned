@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   showTryOnBar,
   activeTryOn,
+  buyReturnSkinWrite,
   canApplyDirectly,
   chooseLook,
   effectiveSkin,
@@ -294,6 +295,18 @@ describe("look after a Stripe return (PIN-182)", () => {
     expect(returnSkinStep({ ...back, flag: "cancelled", plusActive: false })).toEqual({ kind: "clear" });
     expect(returnSkinStep({ ...back, flag: "failed" })).toEqual({ kind: "clear" });
     expect(returnSkinStep({ ...back, boardSkin: "darkroom" })).toEqual({ kind: "clear" });
+  });
+});
+
+describe("the return look a buy tap writes (PIN-233 F10)", () => {
+  it("stores only a look worn now, and its own failure forgets only that", () => {
+    expect(buyReturnSkinWrite("darkroom", "leaving")).toEqual({ kind: "store", skin: "darkroom" });
+    expect(buyReturnSkinWrite("darkroom", "failed")).toEqual({ kind: "clear" });
+  });
+
+  it("a retry tap with no try-on keeps the look an earlier tap stored, even when it fails", () => {
+    expect(buyReturnSkinWrite(null, "leaving")).toEqual({ kind: "keep" });
+    expect(buyReturnSkinWrite(null, "failed")).toEqual({ kind: "keep" });
   });
 });
 

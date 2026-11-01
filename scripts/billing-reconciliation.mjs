@@ -14,14 +14,24 @@
  *     --env-var STRIPE_PINNED_DEV_AGENT_KEY --project moriacrew-pinned-dev
  *
  * The secret is read from the env var NAMED by --env-var
- * (default STRIPE_SECRET_KEY) and is never printed; live keys
- * are refused. Firestore auth is Application Default
- * Credentials. Mirrors buildBillingReconciliationReport in
+ * (default STRIPE_SECRET_KEY) and is never printed. A live key
+ * needs --live --i-understand-live and --project
+ * moriacrew-pinned-prod (PIN-210, scripts/stripe/operator-mode.mjs);
+ * a sandbox run reads moriacrew-pinned-dev unless --project names
+ * another non-prod project, and never prod (PIN-233). The project is
+ * never left to ADC's or gcloud's default; Firestore auth is
+ * Application Default Credentials. Mirrors buildBillingReconciliationReport in
  * src/domain/billing-reconciliation.ts — keep in sync (a test
  * pins the mirror). Runbook: docs/15 (PIN-153 section).
  */
 import { createHash } from "node:crypto";
 import { Firestore } from "@google-cloud/firestore";
+import {
+  LIVE_CONFIRM_FLAG,
+  LIVE_FLAG,
+  reconciliationProject,
+  resolveStripeMode,
+} from "./stripe/operator-mode.mjs";
 
 const args = process.argv.slice(2);
 function arg(name) {
@@ -161,13 +171,25 @@ async function main() {
     console.error(`Env var ${envName} is not set; refusing to run.`);
     process.exit(2);
   }
-  if (apiKey.includes("_live_")) {
-    console.error(`Env var ${envName} holds a LIVE key; reconciliation here is sandbox-only.`);
+  const gate = resolveStripeMode({
+    key: apiKey,
+    envName,
+    live: args.includes(LIVE_FLAG),
+    confirmed: args.includes(LIVE_CONFIRM_FLAG),
+  });
+  if (!gate.ok) {
+    console.error(gate.error);
     process.exit(2);
   }
-  const projectId =
-    arg("--project") || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || undefined;
-  const db = new Firestore(projectId ? { projectId } : {});
+  // Never ADC's, gcloud's or the env's default project (PIN-233): live
+  // names prod explicitly, sandbox defaults to dev and never reads prod.
+  const target = reconciliationProject(gate.mode, arg("--project"));
+  if (!target.ok) {
+    console.error(target.error);
+    process.exit(2);
+  }
+  const projectId = target.project;
+  const db = new Firestore({ projectId });
   try {
     const [paidSessions, intentsSnap, deadLettersSnap, accountsSnap] = await Promise.all([
       listPaidSessions(),
@@ -209,7 +231,7 @@ async function main() {
       boardHash,
     );
     console.log(
-      `billing reconciliation project=${projectId ?? "(adc default)"} keyEnv=${envName} ` +
+      `billing reconciliation stripe=${gate.mode} project=${projectId} keyEnv=${envName} ` +
         `paidSessions=${paidSessions.length} purchases=${purchases.length} intents=${intents.length}`,
     );
     for (const row of report.paidNoGrant) {
