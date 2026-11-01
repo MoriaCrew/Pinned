@@ -1,9 +1,13 @@
+import "server-only";
 /**
  * Public origin for generated share links.
  *
- * App Hosting/Cloud Run can expose an internal request origin such
- * as 0.0.0.0:8080. Prefer the proxy's forwarded public host/proto,
- * then a usable Host header, then the configured APP_BASE_URL.
+ * A configured APP_BASE_URL that points at a real (non-loopback)
+ * deployment always wins — share links must never be built from
+ * request-controlled Host/forwarded headers an attacker can set.
+ * Locally (loopback config) fall back to the proxy's forwarded
+ * host/proto, then a usable Host header, so dev ports keep working.
+ * Internal origins like 0.0.0.0:8080 are never used.
  */
 function firstHeaderValue(value: string | null): string {
   return value?.split(",")[0]?.trim() ?? "";
@@ -11,6 +15,15 @@ function firstHeaderValue(value: string | null): string {
 
 function validProtocol(value: string, fallback: string): string {
   return value === "http" || value === "https" ? value : fallback;
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname.startsWith("127.") ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
 }
 
 function originFromHost(protocol: string, host: string): string | null {
@@ -35,23 +48,54 @@ function cleanFallback(value: string | undefined): string | null {
 
 export function getPublicOrigin(request: Request, fallbackBaseUrl?: string): string {
   const requestUrl = new URL(request.url);
-  const fallbackProtocol = requestUrl.protocol.replace(/:$/, "");
-  const forwardedProtocol = validProtocol(
-    firstHeaderValue(request.headers.get("x-forwarded-proto")),
-    fallbackProtocol,
+  return getPublicOriginFromHeaders(
+    request.headers,
+    fallbackBaseUrl,
+    requestUrl.protocol.replace(/:$/, ""),
+    requestUrl.origin,
   );
+}
+
+/**
+ * Headers-only twin for `generateMetadata` (PIN-72), where Next
+ * gives `headers()` but no Request. Same trust rules: a configured
+ * non-loopback APP_BASE_URL beats request-controlled headers.
+ * Without a forwarded proto, loopback hosts stay http (local dev)
+ * and public hosts default to https.
+ */
+export function getPublicOriginFromHeaders(
+  headers: { get(name: string): string | null },
+  fallbackBaseUrl?: string,
+  fallbackProtocol = "https",
+  lastResortOrigin?: string,
+): string {
+  const forwardedProtoRaw = firstHeaderValue(headers.get("x-forwarded-proto"));
+  const hasForwardedProto = forwardedProtoRaw === "http" || forwardedProtoRaw === "https";
+  const hostForProto =
+    firstHeaderValue(headers.get("x-forwarded-host")) || firstHeaderValue(headers.get("host"));
+  const inferredProtocol = hasForwardedProto
+    ? forwardedProtoRaw
+    : isLoopbackHost(hostForProto.split(":")[0] ?? "")
+      ? "http"
+      : fallbackProtocol;
+  const forwardedProtocol = validProtocol(forwardedProtoRaw, inferredProtocol);
+
+  const configured = cleanFallback(fallbackBaseUrl);
+  if (configured && !isLoopbackHost(new URL(configured).hostname)) {
+    return configured;
+  }
 
   const forwarded = originFromHost(
     forwardedProtocol,
-    firstHeaderValue(request.headers.get("x-forwarded-host")),
+    firstHeaderValue(headers.get("x-forwarded-host")),
   );
   if (forwarded) return forwarded;
 
   const direct = originFromHost(
     forwardedProtocol,
-    firstHeaderValue(request.headers.get("host")),
+    firstHeaderValue(headers.get("host")),
   );
   if (direct) return direct;
 
-  return cleanFallback(fallbackBaseUrl) ?? requestUrl.origin;
+  return configured ?? cleanFallback(lastResortOrigin) ?? "http://localhost:3000";
 }

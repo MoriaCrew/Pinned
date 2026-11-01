@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MetaApiError, MetaGateway, findImageRef, parseModelJson, parseSamOutput } from "./meta-gateway";
+import { MetaApiError, MetaGateway, parseModelJson, parseSamOutput } from "./meta-gateway";
 
 function fakeFetch(handler: (url: string, init: RequestInit) => unknown) {
   return async (url: string | URL | Request, init?: RequestInit) => {
@@ -24,27 +24,61 @@ function gateway(fetchFn: typeof fetch, logs: unknown[] = []) {
     samModel: "sam-3.1",
     imageModel: "muse-image-1.0",
     fetchFn,
-    onLog: (e) => logs.push(e),
+    onLog: (e) => {
+      logs.push(e);
+    },
   });
 }
 
 describe("MetaGateway (contract, fake fetch)", () => {
-  it("parses a persona chat response and logs usage", async () => {
+  it("aborts a hung provider call with a timeout error code (PIN-43)", async () => {
+    const hanging = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "TimeoutError";
+          reject(err);
+        });
+      })) as typeof fetch;
+    const gw = new MetaGateway({
+      apiKey: "test-key",
+      baseUrl: "https://api.meta.ai/v1",
+      sparkModel: "muse-spark-1.3",
+      samModel: "sam-3.1",
+      imageModel: "muse-image-1.0",
+      fetchFn: hanging,
+      timeoutMs: 20,
+    });
+    await expect(gw.nameObject({ imageRef: "x", maxConceptWords: 3 })).rejects.toMatchObject({ code: "timeout" });
+  });
+
+  it("caps chat output tokens (PIN-43)", async () => {
+    let seenBody: Record<string, unknown> = {};
+    const gw = gateway(fakeFetch((_url, init) => {
+      seenBody = JSON.parse(String(init.body));
+      return chat({ objectLabel: "mug", altLabel: "a mug", safetyFlags: {} });
+    }) as typeof fetch);
+    await gw.nameObject({ imageRef: "x", maxConceptWords: 3 });
+    expect(seenBody.max_tokens).toBe(4000);
+  });
+  it("parses a label chat response and logs usage", async () => {
     const logs: unknown[] = [];
     const gw = gateway(
       fakeFetch(() =>
         chat({
-          persona: { name: "Nana", language: "en", voiceRules: ["dry"], catchphrases: [], judgingStyle: "s" },
-          challenge: "Find a mug.",
+          objectLabel: "red mug",
+          altLabel: "A red mug",
+          safetyFlags: { faces: true },
         }),
       ) as typeof fetch,
       logs,
     );
-    const out = await gw.generatePersona("my unimpressed grandmother");
-    expect(out.persona.name).toBe("Nana");
-    expect(out.challenge).toBe("Find a mug.");
+    const out = await gw.nameObject({ imageRef: "https://x.test/a.jpg", maxConceptWords: 3 });
+    expect(out.objectLabel).toBe("red mug");
+    expect(out.safetyFlags.faces).toBe(true);
+    expect(out.safetyFlags.screens).toBe(false);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatchObject({ operation: "generatePersona", outcome: "ok", inputTokens: 10 });
+    expect(logs[0]).toMatchObject({ operation: "nameObject", outcome: "ok", inputTokens: 10 });
   });
 
   it("sends Bearer auth and the pinned model to /chat/completions", async () => {
@@ -55,35 +89,12 @@ describe("MetaGateway (contract, fake fetch)", () => {
       seenUrl = url;
       seenAuth = String((init.headers as Record<string, string>).authorization);
       seenModel = JSON.parse(String(init.body)).model;
-      return chat({ persona: {}, challenge: "c" });
+      return chat({ objectLabel: "mug", altLabel: "a mug", safetyFlags: {} });
     }) as typeof fetch);
-    await gw.generatePersona("x");
+    await gw.nameObject({ imageRef: "x", maxConceptWords: 3 });
     expect(seenUrl).toBe("https://api.meta.ai/v1/chat/completions");
     expect(seenAuth).toBe("Bearer test-key");
     expect(seenModel).toBe("muse-spark-1.3");
-  });
-
-  it("judges a photo and validates rubric ranges", async () => {
-    const gw = gateway(fakeFetch(() =>
-      chat({
-        objectLabel: "red stapler",
-        altLabel: "A desk item",
-        scores: { fit: 4, effort: 3, chaos: 5 },
-        reason: "r",
-        privateJudgement: "j",
-        teaser: "t",
-        safetyFlags: { screens: true },
-      }),
-    ) as typeof fetch);
-    const out = await gw.judgePhoto({ imageRef: "https://x.test/a.jpg", challenge: "c" });
-    expect(out.scores).toEqual({ fit: 4, effort: 3, chaos: 5 });
-    expect(out.safetyFlags.screens).toBe(true);
-    expect(out.safetyFlags.faces).toBe(false);
-  });
-
-  it("rejects out-of-range model scores", async () => {
-    const gw = gateway(fakeFetch(() => chat({ scores: { fit: 9, effort: 0, chaos: 0 } })) as typeof fetch);
-    await expect(gw.judgePhoto({ imageRef: "https://x/a.jpg", challenge: "c" })).rejects.toThrow(RangeError);
   });
 
   it("surfaces API errors with status and code, never the key", async () => {
@@ -92,17 +103,11 @@ describe("MetaGateway (contract, fake fetch)", () => {
         status: 401,
       });
     const gw = gateway(fetchFn as typeof fetch);
-    const err = await gw.generatePersona("x").catch((e) => e);
+    const err = await gw.nameObject({ imageRef: "x", maxConceptWords: 3 }).catch((e) => e);
     expect(err).toBeInstanceOf(MetaApiError);
     expect(err.status).toBe(401);
     expect(err.code).toBe("invalid_api_key");
     expect(String(err.message)).not.toContain("test-key");
-  });
-
-  it("extracts image URLs and base64 from nested shapes", () => {
-    expect(findImageRef({ data: [{ url: "https://cdn.test/x?sig=1" }] })).toBe("https://cdn.test/x?sig=1");
-    expect(findImageRef({ output: [{ b64_json: "AAA" }] })).toBe("data:image/png;base64,AAA");
-    expect(findImageRef({ nothing: true })).toBeNull();
   });
 
   it("parses SAM special-token records (docs grammar)", async () => {
@@ -116,6 +121,40 @@ describe("MetaGateway (contract, fake fetch)", () => {
     const gw = gateway(fakeFetch(() => ({ output: [{ content: [{ type: "output_text", text: line }] }] })) as typeof fetch);
     const out = await gw.segmentObject({ imageRef: "https://x/a.jpg", concept: "button" });
     expect(out.segments).toHaveLength(2);
+  });
+
+  it("SAM body carries no `store` key unless Policy samStore says so (PIN-213)", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const gw = gateway(fakeFetch((_url, init) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return { output_text: "" };
+    }) as typeof fetch);
+    const base = { imageRef: "https://x/a.jpg", concept: "mug", includeConfidence: true };
+
+    // Default: field omitted, wire format unchanged (also with an explicit undefined).
+    await gw.segmentObject(base);
+    await gw.segmentObject({ ...base, store: undefined });
+    for (const body of bodies) expect(Object.keys(body)).not.toContain("store");
+
+    // Flag false / true: sent as given, alongside the existing keys.
+    bodies.length = 0;
+    await gw.segmentObject({ ...base, store: false });
+    await gw.segmentObject({ ...base, store: true });
+    expect(bodies[0]).toMatchObject({
+      model: "sam-3.1",
+      store: false,
+      metadata: { include_confidence: "true" },
+    });
+    expect(bodies[1].store).toBe(true);
+    expect(Array.isArray(bodies[0].input)).toBe(true);
+
+    // Only the `store` key differs from the default body.
+    bodies.length = 0;
+    await gw.segmentObject(base);
+    await gw.segmentObject({ ...base, store: false });
+    const { store: _sent, ...withoutStore } = bodies[1];
+    expect(_sent).toBe(false);
+    expect(withoutStore).toEqual(bodies[0]);
   });
 
   it("SAM empty output_text is a valid no-match, not an error", async () => {

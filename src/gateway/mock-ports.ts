@@ -1,0 +1,136 @@
+import "server-only";
+/**
+ * Mock adapters for the capability ports (PIN-60), used under
+ * AI_MOCK=1. Deterministic, offline, and free of any user-visible
+ * "(mock)" strings (docs/11 section 5.2).
+ */
+import { fixedSceneChips } from "../domain/chips";
+import { mockGateway } from "./mock-gateway";
+import {
+  buildSceneResponsesBody,
+  buildSegmentPromptText,
+  normalizeChips,
+  normalizeElements,
+  normalizeTapName,
+  type ElementNamer,
+  type TapNamer,
+  type SpeechTranscriber,
+  type TapName,
+  type NamedElement,
+  type SceneComposer,
+  type ChipSuggester,
+  type Segmenter,
+} from "./ports";
+
+const MOCK_ELEMENTS: NamedElement[] = [
+  {
+    label: "Teal Mug",
+    concept: "teal mug",
+    description: "distressed turquoise glaze with worn white base",
+    faceFlag: false,
+  },
+  {
+    label: "Rubber Duck",
+    concept: "rubber duck",
+    description: "small yellow duck wearing black sunglasses",
+    faceFlag: false,
+  },
+  {
+    label: "Potted Succulent",
+    concept: "potted succulent",
+    description: "green rosette succulent in speckled white pot",
+    faceFlag: false,
+  },
+];
+
+export const mockElementNamer: ElementNamer = {
+  async nameElements(input) {
+    return {
+      status: "ready",
+      value: {
+        elements: normalizeElements(MOCK_ELEMENTS, input),
+        promptVersion: input.promptVersion,
+      },
+    };
+  },
+};
+
+/** Stable synthetic tap name (PIN-117): same crop in, same name out. */
+export const MOCK_TAP_NAME: TapName = {
+  label: "Little Treasure",
+  description: "a favourite thing, tapped to pin it",
+  faceFlag: false,
+};
+
+export const mockTapNamer: TapNamer = {
+  async nameOne(input) {
+    return {
+      status: "ready",
+      value: { name: normalizeTapName(MOCK_TAP_NAME, input)!, promptVersion: input.promptVersion },
+    };
+  },
+};
+
+/** Stable synthetic dictation (PIN-119): any clip in, same idea out. */
+export const MOCK_TRANSCRIPT = "a tiny picnic on the lawn";
+
+export const mockSpeechTranscriber: SpeechTranscriber = {
+  async transcribe(input) {
+    return {
+      status: "ready",
+      value: {
+        text: [...MOCK_TRANSCRIPT].slice(0, input.maxChars).join(""),
+        audioDurationMs: Math.round(input.durationSeconds * 1000),
+      },
+    };
+  },
+};
+
+export const mockSegmenter: Segmenter = {
+  async segment(input) {
+    const promptText = buildSegmentPromptText(input.prompt);
+    if (promptText.status !== "ready") return promptText;
+    const { segments } = await mockGateway.segmentObject({
+      imageRef: input.imageRef,
+      concept: promptText.value,
+    });
+    return { status: "ready", value: { segments } };
+  },
+};
+
+/** Deterministic 1x1 PNG returned as the composed scene (PIN-68). */
+export const MOCK_SCENE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+
+/**
+ * Offline chips follow the request's language like the real ones
+ * (PIN-214): the fixed idea chips in `input.locale`, capped and
+ * normalized like generated chips.
+ */
+export const mockChipSuggester: ChipSuggester = {
+  async suggestChips(input) {
+    return {
+      status: "ready",
+      value: {
+        chips: normalizeChips(fixedSceneChips(input.locale, input.maxChips), input),
+        promptVersion: input.promptVersion,
+      },
+    };
+  },
+};
+
+export const mockSceneComposer: SceneComposer = {
+  async composeScene(input) {
+    // Same validation as the Meta builder (model id is a dummy here:
+    // the mock never sends the body anywhere).
+    const built = buildSceneResponsesBody(input, "mock-image");
+    if (built.status !== "ready") return built;
+    return {
+      status: "ready",
+      value: {
+        imageBase64: MOCK_SCENE_PNG_BASE64,
+        promptVersion: input.promptVersion,
+      },
+    };
+  },
+};

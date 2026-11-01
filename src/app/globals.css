@@ -1,146 +1,22 @@
-:root {
-  --ink: #1a1712;
-  --paper: #ffffff;
-  --muted: #57503f;
-  --accent: #c8450a;
-  --accent-ink: #ffffff;
-  --line: #d8d2c4;
-}
+/* The only global rules (PIN-114). Look, type and components live in
+   src/ui/tokens.css and src/ui/pinneds.css (docs/14); screen-local
+   styles live in CSS modules next to the screen. Do not add classes,
+   colours or bare-element styles here. */
 
-* { box-sizing: border-box; }
+/* pinneds.css only boxes `pn-*` elements; module classes and plain tags need it too. */
+*, *::before, *::after { box-sizing: border-box; }
 
+/* <html data-theme> carries the default skin's tokens; the body wears them so
+   anything outside a skin root (overscroll, the gap behind a short page) matches. */
 body {
   margin: 0;
-  background: var(--paper);
+  background: var(--surface);
   color: var(--ink);
-  font-family: ui-sans-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
-  line-height: 1.55;
+  font-family: var(--font-ui);
 }
 
-main {
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 3.5rem 1.25rem 4rem;
-}
-
-h1 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(3rem, 12vw, 4.75rem);
-  line-height: 0.95;
-  margin: 0 0 0.75rem;
-  letter-spacing: -0.01em;
-}
-
-.tagline {
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
-  font-size: 1.35rem;
-  margin: 0 0 1rem;
-}
-
-.lede { max-width: 34rem; margin: 0 0 2rem; }
-
-.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem; }
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0.65rem 1.35rem;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  font-weight: 650;
-  font-size: 1rem;
-  text-decoration: none;
-  color: var(--ink);
-  background: var(--paper);
-}
-
-.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-
-.btn:focus-visible, a:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.soon { color: var(--muted); font-size: 0.9rem; margin: 0 0 2.5rem; }
-
-h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
-
-ol.steps { margin: 0; padding-left: 1.4rem; max-width: 34rem; }
-ol.steps li { margin-bottom: 0.6rem; }
-
-footer {
-  margin-top: 3rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-footer a { color: inherit; }
-
-.page-title { font-size: clamp(2.4rem, 9vw, 4rem); }
-.eyebrow { font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.78rem; }
-.eyebrow a { color: inherit; text-decoration: none; }
-
-.card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 1.4rem;
-  margin: 1.25rem 0;
-  background: #fffdf8;
-}
-.card h2 { font-size: 1.45rem; margin-bottom: 0.5rem; }
-.card h3 { margin-bottom: 0.35rem; }
-.persona-card {
-  border-left: 4px solid var(--accent);
-  padding-left: 1rem;
-  margin: 1.25rem 0;
-}
-.challenge { font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; line-height: 1.25; }
-
-.field { display: block; margin: 0 0 1.25rem; border: 0; padding: 0; }
-.field label, .field legend { display: block; font-weight: 700; margin-bottom: 0.45rem; }
-.field input[type="text"], .field input:not([type]), .field input[type="number"], .field textarea {
-  width: 100%;
-  border: 1.5px solid var(--line);
-  border-radius: 8px;
-  padding: 0.75rem;
-  font: inherit;
-  background: white;
-}
-.field textarea { resize: vertical; }
-.field-meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: 0.88rem; margin-top: 0.35rem; }
-.choice { display: flex !important; gap: 0.6rem; align-items: center; font-weight: 500 !important; min-height: 44px; }
-.choice input { width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }
-.copy-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: start; }
-.btn-small { min-height: 44px; padding-inline: 0.9rem; }
-.btn:disabled { opacity: 0.55; cursor: wait; }
-.error { color: #9b1c1c; font-weight: 650; }
-.notice { background: #f3ead7; border-radius: 8px; padding: 0.75rem; }
-.state-pill {
-  display: inline-block;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  border-radius: 999px;
-  padding: 0.15rem 0.65rem;
-  font-weight: 800;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-}
-.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem; }
-.facts dt { color: var(--muted); font-size: 0.85rem; }
-.facts dd { margin: 0.15rem 0 0; font-weight: 700; }
-.plain-list { padding-left: 1.25rem; }
-.plain-list li { margin-bottom: 0.45rem; }
-
-@media (max-width: 560px) {
-  .copy-row { grid-template-columns: 1fr; }
-  .copy-row .btn { justify-content: center; }
-  .field-meta { flex-direction: column; gap: 0.15rem; }
-}
-
+/* Blanket guard: pinneds.css switches its own animations off per component;
+   this catches any transition or animation that has no block of its own. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

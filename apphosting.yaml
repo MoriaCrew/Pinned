@@ -8,9 +8,29 @@ runConfig:
   maxInstances: 2
   cpu: 1
   memoryMiB: 512
+  # Explicit ceiling (never the platform default): each decompose request
+  # holds sharp buffers + a base64 working image on 512 MiB. The client
+  # uploads serially and Policy.maxConcurrentDecomposeJobs brakes per
+  # instance; this is the second line. Validate against dev memory.
+  concurrency: 10
 
 env:
   - variable: AI_MOCK
     value: "1"
+  # PIN-57: sign-in stays link-only by default; a backend opts in
+  # with AUTH_MODE=optional in its own env file. The Firebase web
+  # config (public identifiers) lives in Secret Manager under the
+  # same names in every project, referenced here - never literals
+  # in git (docs/13-auth.md).
   - variable: AUTH_MODE
     value: link-only
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    availability:
+      - BUILD
+      - RUNTIME

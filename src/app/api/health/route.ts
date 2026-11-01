@@ -9,5 +9,6 @@ export function GET() {
     service: "pinned",
     authMode: cfg.authMode,
     aiMock: cfg.aiMock,
+    plusMode: cfg.plusMode,
   });
 }

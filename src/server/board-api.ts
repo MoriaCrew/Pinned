@@ -1,0 +1,1570 @@
+import "server-only";
+/**
+ * Boards API service (PIN-65, docs/11 sections 5.3-5.5 + A6a).
+ * Route handlers under src/app/api/boards stay thin: slug
+ * validation first (404), session/rate-limit plumbing, then these
+ * functions. Everything user-visible that could leak board or
+ * element existence collapses to one 404 (resolveElementImage and
+ * the job lookups return null for every kind of miss).
+ *
+ * A6a working-copy lifecycle: the stripped `tmp/` derivative is
+ * deleted when the uploader confirms pins ("Pin selected"), and
+ * an opportunistic per-board sweep deletes anything past
+ * Policy.workingCopyTtlHours. Originals are never persisted
+ * (photo-intake, PIN-64). The bucket 1-day lifecycle backstop is
+ * an operator step; until it lands no copy may claim 24h deletion.
+ */
+import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
+import { activityLines } from "../domain/board-activity";
+import { normalizeElementLabel } from "../domain/element-label";
+import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
+import { getBoardTheme, isBoardThemeId } from "../domain/board-themes";
+import { hasPlus, isPlusSkin, plusView, type PlusMode } from "../domain/plus";
+import { validSceneSize } from "../domain/scene-ratio";
+import { startOfUtcDay } from "../domain/time";
+import { generateSlug } from "../domain/tokens";
+import type { ChipSuggester, ElementNamer, SceneComposer, Segmenter, TapNamer } from "../gateway/ports";
+import type { Policy } from "../policy/policy";
+import { BoardApiError, publicParticipant } from "./board-session";
+import { plusRequiredError } from "./board-plus";
+import { issueHostCredential, verifyHostToken } from "./host-session";
+import type { Locale } from "../i18n/locales";
+import { isMessageKey, userMessage } from "../i18n/user-message";
+import {
+  addTapElement,
+  decomposeBoundMs,
+  discardJobCandidates,
+  startDecomposeJob,
+  tapFallbackLabel,
+  STALE_JOB_ERROR,
+  type DecomposeDeps,
+  type DecomposeJobStore,
+  type StartedDecomposeJob,
+  type TapPoint,
+} from "./decompose-job";
+import type { DerivativeStore } from "./derivative-store";
+import { elementBytesStillNeeded, sweepDeletedBoardStorage } from "./board-storage";
+import {
+  SCENE_PREVIEW_FILE,
+  SceneJobRequestError,
+  buildScenePreviewRef,
+  renderScenePreview,
+  startSceneJob,
+  type SceneJobStore,
+} from "./scene-job";
+import { InMemoryChipsCacheStore, type ChipsCacheStore } from "./chips-cache";
+import { resolveSceneChips, type SceneChipsResult } from "./scene-chips";
+import type { CreditLedgerStore } from "../domain/credit-ledger";
+import type { StarterAllowanceStore } from "../domain/starter-allowance";
+import { FREE_PHOTOS_USED, countedPhotos, freePhotoAllowance, freePhotosLeft } from "../domain/free-photos";
+import { logServerError } from "./safe-log";
+import {
+  CREDITS_POOL_EMPTY,
+  creditsEnabled,
+  photosUseMakes,
+  ensureStarterMakes,
+  photoDebitEventId,
+  readAvailableMakes,
+} from "./credit-pool";
+
+export interface BoardApiDeps {
+  boards: BoardRepository;
+  jobs: DecomposeJobStore;
+  store: DerivativeStore;
+  namer: ElementNamer;
+  segmenter: Segmenter;
+  /** Scene slice (PIN-69); scene functions 503 cleanly without them. */
+  sceneJobs?: SceneJobStore;
+  composer?: SceneComposer;
+  /** Generated chips (PIN-75); absent port/cache = fixed-list fallback. */
+  chipSuggester?: ChipSuggester;
+  /** Tap naming (PIN-117); absent port = generic-label fallback. */
+  tapNamer?: TapNamer;
+  chipsCache?: ChipsCacheStore;
+  /** AI_MOCK=1 (PIN-71): scenes are sharp collages, kind "collage". */
+  collageMode?: boolean;
+  /** Makes ledger (PIN-151); only touched while Policy.credits.enabled. */
+  credits?: CreditLedgerStore;
+  /** Free creations per maker (PIN-205); only touched at board creation while Policy.credits.enabled. */
+  starterAllowance?: StarterAllowanceStore;
+  policy: Policy;
+  /** PLUS_MODE (PIN-103): Plus offer in the view + which grants count. Default "off". */
+  plusMode?: PlusMode;
+  now?: () => number;
+  createSlug?: () => string;
+  newId?: () => string;
+  /** Host token source (PIN-103); default generateAdminToken. */
+  newHostToken?: () => string;
+}
+
+/** Element image route URL (board-link-checked; never a raw ref). */
+export function elementImageUrl(slug: string, elementId: string, kind: string): string {
+  return `/api/boards/${encodeURIComponent(slug)}/elements/${encodeURIComponent(elementId)}/image?kind=${kind}`;
+}
+
+/** Scene image route URL (board-link-checked; never a raw ref). */
+export function sceneImageUrl(slug: string, sceneId: string): string {
+  return `/api/boards/${encodeURIComponent(slug)}/scenes/${encodeURIComponent(sceneId)}/image`;
+}
+
+/**
+ * PIN-196: refusals store the catalog key, which the view leaves out
+ * so the client shows its own line in the reader's language. Older
+ * docs hold English text and pass through as-is (no migration).
+ */
+function refusalReasonView(stored: string | undefined): { refusalReason?: string } {
+  return stored && !isMessageKey(stored) ? { refusalReason: stored } : {};
+}
+
+export function publicScene(slug: string, scene: Scene) {
+  const imageUrl = scene.status === "ready" && scene.imageRef ? sceneImageUrl(slug, scene.id) : null;
+  return {
+    id: scene.id,
+    boardId: scene.boardId,
+    createdBy: scene.createdBy,
+    elementIds: scene.elementIds,
+    prompt: scene.prompt,
+    status: scene.status,
+    // Pre-PIN-71 scenes are all AI composes; collages say so.
+    kind: scene.kind ?? "ai",
+    ...(scene.collageReason ? { collageReason: scene.collageReason } : {}),
+    promptVersion: scene.promptVersion,
+    ...(scene.parentSceneId ? { parentSceneId: scene.parentSceneId } : {}),
+    ...refusalReasonView(scene.refusalReason),
+    // Stored pixel size (PIN-129): the print frame takes this shape.
+    ...(validSceneSize(scene) ?? {}),
+    imageUrl,
+    // Phone-sized strip image (PIN-133); viewer, share and og:image keep imageUrl.
+    previewUrl: imageUrl ? `${imageUrl}?size=preview` : null,
+    createdAt: scene.createdAt,
+  };
+}
+
+export function publicSceneJob(job: SceneJob) {
+  return {
+    id: job.id,
+    sceneId: job.id,
+    boardId: job.boardId,
+    status: job.status,
+    elementIds: job.elementIds,
+    prompt: job.prompt,
+    kind: job.kind ?? "ai",
+    ...(job.collageReason ? { collageReason: job.collageReason } : {}),
+    ...(job.parentSceneId ? { parentSceneId: job.parentSceneId } : {}),
+    promptVersion: job.promptVersion,
+    ...(job.errorCode ? { errorCode: job.errorCode } : {}),
+    ...refusalReasonView(job.refusalReason),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+export function publicBoard(board: Board) {
+  const theme = getBoardTheme(board.themeId);
+  return {
+    slug: board.slug,
+    title: board.title,
+    themeId: board.themeId ?? null,
+    theme: theme
+      ? { id: theme.id, label: theme.label, motif: theme.motif, image: theme.image, tokens: theme.tokens }
+      : board.theme ?? null,
+    counters: board.counters,
+    createdAt: board.createdAt,
+  };
+}
+
+export function publicElement(slug: string, element: Element) {
+  return {
+    id: element.id,
+    boardId: element.boardId,
+    ownerId: element.ownerId,
+    label: element.label,
+    description: element.description,
+    maskBox: element.maskBox,
+    faceFlag: element.faceFlag,
+    createdAt: element.createdAt,
+    imageUrl: elementImageUrl(slug, element.id, "cutout"),
+    flattenedUrl: elementImageUrl(slug, element.id, "flattened"),
+  };
+}
+
+export function publicPin(pin: Pin) {
+  return {
+    id: pin.id,
+    boardId: pin.boardId,
+    elementId: pin.elementId,
+    pinnedBy: pin.pinnedBy,
+    status: pin.status,
+    createdAt: pin.createdAt,
+  };
+}
+
+/**
+ * The photo job a viewer's own candidate pin came from (PIN-122),
+ * so the board can offer "Pin them" / "Clear" for leftovers. The
+ * DecomposeJob stores its id on every element it cuts
+ * (Element.sourcePhotoId, concept and tap-add alike), so no extra
+ * read and no new stored field. Undefined for pinned pins and for
+ * anyone else's pin: only the uploader ever sees a candidate, and
+ * nobody needs the job of a pinned thing.
+ */
+export function ownCandidateJobId(
+  pin: Pin,
+  viewer: Participant | null,
+  elementsById: ReadonlyMap<string, Element>,
+): string | undefined {
+  if (pin.status !== "candidate" || viewer === null || pin.pinnedBy !== viewer.id) return undefined;
+  const element = elementsById.get(pin.elementId);
+  if (!element || element.boardId !== pin.boardId) return undefined;
+  return element.sourcePhotoId || undefined;
+}
+
+export function publicJob(job: DecomposeJob) {
+  return {
+    id: job.id,
+    boardId: job.boardId,
+    status: job.status,
+    faceNote: job.faceNote,
+    failedConceptCount: job.failedConceptCount,
+    // Tap-to-add window (PIN-78): the Add sheet hides the tap
+    // surface once the A6a working copy is deleted (confirm/TTL).
+    workingCopyGone: job.workingDeletedAt !== undefined,
+    elementIds: job.elementIds,
+    pinIds: job.pinIds,
+    ...(job.errorCode ? { errorCode: job.errorCode } : {}),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+export interface CreateBoardInput {
+  title: string;
+  themeId?: string;
+}
+
+export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoardInput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError(userMessage("error.titleMissing"));
+  }
+  const body = value as Record<string, unknown>;
+  const rawTitle = typeof body.title === "string" ? body.title : "";
+  const title = rawTitle.trim().replace(/\s+/g, " ");
+  if (!title || [...title].length > policy.boardTitleMaxChars || /[\u0000-\u001f\u007f]/.test(title)) {
+    throw new BoardApiError(userMessage("error.titleTooLong", { max: policy.boardTitleMaxChars }));
+  }
+  let themeId: string | undefined;
+  if (body.themeId !== undefined && body.themeId !== null && body.themeId !== "") {
+    if (!isBoardThemeId(body.themeId)) {
+      throw new BoardApiError(userMessage("error.themeUnknown"));
+    }
+    // PIN-103: a new board holds no entitlement, so a Plus skin
+    // here would bypass the skin gate; the host buys Plus first.
+    if (isPlusSkin(body.themeId)) throw plusRequiredError();
+    themeId = body.themeId;
+  }
+  return { title, ...(themeId ? { themeId } : {}) };
+}
+
+const MAX_SLUG_ATTEMPTS = 5;
+
+export interface CreatedBoard {
+  board: Board;
+  /** Raw host token for the creator's cookie; only its hash is stored. */
+  hostToken: string;
+}
+
+/** Per-request facts board creation needs (PIN-205). */
+export interface CreateBoardContext {
+  /** Opaque maker key (src/domain/maker-key.ts); absent = no per-maker rule (internal callers). */
+  makerKey?: string;
+}
+
+/** What a new board starts with while credits are on (PIN-205, PIN-230). */
+interface StarterGift {
+  /** Free creations (AI scenes). */
+  starterMakes: number;
+  /** Free photos while the board has no Plus. */
+  freePhotos: number;
+}
+
+/**
+ * Free creations per maker (PIN-205, docs/15): the starter pool
+ * and free photos (PIN-230) this new board gets. Undefined = no
+ * per-maker rule applies (credits off, or no maker context), so
+ * creation stays exactly as before. Otherwise one maker slot is
+ * claimed: the Policy pool and free photos on a win, 0 of both once
+ * the maker used up their free boards for the window (else new
+ * boards would farm free photos). A missing store or a store
+ * failure also gives 0 — fail closed, never gift a pool. Creation
+ * itself is never blocked.
+ */
+async function decideStarter(
+  deps: BoardApiDeps,
+  context: CreateBoardContext | undefined,
+  now: number,
+): Promise<StarterGift | undefined> {
+  if (!creditsEnabled(deps.policy) || context?.makerKey === undefined) return undefined;
+  const none: StarterGift = { starterMakes: 0, freePhotos: 0 };
+  if (!deps.starterAllowance) return none;
+  const { starterMakes, freePhotosPerBoard, starterBoardsPerMaker, starterMakerWindowMs } = deps.policy.credits;
+  try {
+    const won = await deps.starterAllowance.tryClaim(context.makerKey, now, {
+      maxBoards: starterBoardsPerMaker,
+      windowMs: starterMakerWindowMs,
+    });
+    return won ? { starterMakes, freePhotos: freePhotosPerBoard } : none;
+  } catch (error) {
+    logServerError("starter allowance claim failed", error);
+    return none;
+  }
+}
+
+/**
+ * Create a board with its host credential (PIN-103) in the same
+ * initial write: the Board stores the token hash + issue time,
+ * the caller gets the raw token once, for the creator's cookie.
+ */
+export async function createBoardWithHost(
+  rawInput: unknown,
+  deps: BoardApiDeps,
+  context?: CreateBoardContext,
+): Promise<CreatedBoard> {
+  const input = parseCreateBoardInput(rawInput, deps.policy);
+  const now = deps.now?.() ?? Date.now();
+  const theme = getBoardTheme(input.themeId);
+  // One claim per request, before the slug loop: a slug retry
+  // must not use up a second maker slot.
+  const starter = await decideStarter(deps, context, now);
+  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const credential = issueHostCredential(now, deps.newHostToken);
+    const board: Board = {
+      slug: deps.createSlug?.() ?? generateSlug(),
+      title: input.title,
+      ...(input.themeId ? { themeId: input.themeId } : {}),
+      ...(theme ? { theme: theme.tokens } : {}),
+      host: credential.record,
+      ...(starter ?? {}),
+      counters: emptyBoardCounters(),
+      createdAt: now,
+      version: 1,
+    };
+    try {
+      await deps.boards.createBoard(board);
+      // PIN-151: with credits on, a new board's starter pool
+      // lands with it. Never blocks creation — the same
+      // once-only grant retries lazily on the first credit touch,
+      // with the amount stored on the board (PIN-205).
+      await ensureStarterMakes(
+        board.slug,
+        deps,
+        starter?.starterMakes ?? deps.policy.credits.starterMakes,
+      ).catch(() => undefined);
+      return { board, hostToken: credential.token };
+    } catch (error) {
+      if (error instanceof RangeError && attempt < MAX_SLUG_ATTEMPTS - 1) continue;
+      throw error;
+    }
+  }
+  throw new BoardApiError(userMessage("error.createBoardFailed"), 503);
+}
+
+/** createBoardWithHost for callers that do not hand out the host cookie. */
+export async function createBoard(rawInput: unknown, deps: BoardApiDeps): Promise<Board> {
+  return (await createBoardWithHost(rawInput, deps)).board;
+}
+
+/** Per-request facts the board view needs beyond the participant (PIN-103). */
+export interface BoardViewAccess {
+  /**
+   * The request's host token (shape-checked, from the Path-scoped
+   * host cookie). Absent = not host: the server-rendered board
+   * page never sees that cookie, so its first view says
+   * isHost:false and the client's first poll of the board view
+   * API (under the cookie path) corrects it.
+   */
+  hostToken?: string | null;
+}
+
+/**
+ * Board view for the polling board page: pinned pins are public to
+ * anyone holding the link; candidate pins only to their uploader.
+ * Returns null when the board does not exist. PIN-103 adds, purely
+ * additively, `viewer.isHost` (host token verified against the
+ * stored hash + age) and `plus` (entitlement state under
+ * deps.plusMode, mode, Policy price labels — no billing source,
+ * time or secret; the host hash never leaves the server). PIN-122:
+ * the viewer's own candidate pins carry `jobId` (ownCandidateJobId).
+ * PIN-181: `viewer.canChangeLook` = host, or joined while Plus
+ * counts (the skin route's rule; the route re-checks).
+ */
+export async function getBoardView(
+  slug: string,
+  viewer: Participant | null,
+  deps: BoardApiDeps,
+  access: BoardViewAccess = {},
+) {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const [participants, allPins, elements, allScenes, events] = await Promise.all([
+    deps.boards.listParticipants(slug),
+    deps.boards.listPins(slug),
+    deps.boards.listElements(slug),
+    deps.boards.listScenes(slug, { includeHidden: true }),
+    deps.boards.listEvents(slug),
+  ]);
+  const scenes = allScenes.filter((scene) => !scene.hidden);
+  // PIN-142: a deleted scene's lines leave the strip before it is cut to max.
+  const deletedSceneIds = new Set(
+    allScenes.filter((scene) => scene.deletedAt !== undefined).map((scene) => scene.id),
+  );
+  const liveEvents = events.filter((event) => !event.sceneId || !deletedSceneIds.has(event.sceneId));
+  const pins = allPins.filter(
+    (pin) => pin.status === "pinned" || (viewer !== null && pin.pinnedBy === viewer.id),
+  );
+  const visibleElementIds = new Set(pins.map((pin) => pin.elementId));
+  const elementsById = new Map(elements.map((element) => [element.id, element]));
+  const isHost = verifyHostToken(board, access.hostToken ?? null, deps.policy, deps.now?.() ?? Date.now());
+  // PIN-151: the makes pool for the balance UI (PIN-152) — the
+  // starter grant lands lazily on this read for boards that
+  // predate the flag. Only counts (`availableMakes`, and
+  // `freePhotosLeft` below since PIN-230) leave the server
+  // (no money, no per-person data), and only while credits are
+  // enabled; disabled keeps the exact pre-credit shape. A
+  // ledger failure omits the field rather than failing the
+  // board page (logged without the slug, a capability secret).
+  let availableMakes: number | null = null;
+  try {
+    availableMakes = await readAvailableMakes(slug, deps);
+  } catch (error) {
+    console.error("Credit balance read failed; omitting makes from the board view.", {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+  // PIN-230: free photos left, only for a free board while credits
+  // are on (no field with Plus or credits off). Same count as the
+  // upload gate; a job-list failure omits the field, never the page.
+  let freePhotosLeftNow: number | null = null;
+  const photoAllowance = availableMakes !== null ? boardFreePhotoAllowance(board, deps) : null;
+  if (photoAllowance !== null) {
+    try {
+      const jobs = await deps.jobs.listForBoard(slug);
+      const used = boardCountedPhotos(jobs, deps.now?.() ?? Date.now(), deps.policy);
+      freePhotosLeftNow = freePhotosLeft(photoAllowance, used);
+    } catch (error) {
+      console.error("Photo count read failed; omitting free photos from the board view.", {
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
+  return {
+    board: publicBoard(board),
+    me: viewer ? publicParticipant(viewer) : null,
+    participants: participants.map(publicParticipant),
+    pins: pins.map((pin) => {
+      const jobId = ownCandidateJobId(pin, viewer, elementsById);
+      return jobId ? { ...publicPin(pin), jobId } : publicPin(pin);
+    }),
+    elements: elements
+      .filter((element) => visibleElementIds.has(element.id))
+      .map((element) => publicElement(slug, element)),
+    // PIN-143: canDelete only shows Delete (the DELETE route re-checks);
+    // parentDeleted: a remix whose parent is a tombstone.
+    scenes: scenes.map((scene) => ({
+      ...publicScene(slug, scene),
+      canDelete: isHost || (viewer !== null && scene.createdBy === viewer.id),
+      ...(scene.parentSceneId && deletedSceneIds.has(scene.parentSceneId) ? { parentDeleted: true } : {}),
+    })),
+    // Activity strip (PIN-74): board-visible BoardEvent lines,
+    // latest Policy.activityStripMax, names/labels resolved here.
+    activity: activityLines(liveEvents, participants, elements, deps.policy.activityStripMax),
+    viewer: { isHost, canChangeLook: isHost || (viewer !== null && hasPlus(board, deps.plusMode ?? "off")) },
+    ...(availableMakes !== null
+      ? { credits: { availableMakes, ...(freePhotosLeftNow !== null ? { freePhotosLeft: freePhotosLeftNow } : {}) } }
+      : {}),
+    plus: plusView(board, deps.plusMode ?? "off"),
+  };
+}
+
+/** BoardApiDeps narrowed to the decompose service's deps. */
+function decomposeDeps(deps: BoardApiDeps): DecomposeDeps {
+  return {
+    boards: deps.boards,
+    jobs: deps.jobs,
+    store: deps.store,
+    namer: deps.namer,
+    segmenter: deps.segmenter,
+    ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
+    ...(deps.credits ? { credits: deps.credits } : {}),
+    policy: deps.policy,
+    now: deps.now,
+    newId: deps.newId,
+  };
+}
+
+/**
+ * Fail one pending/running job that outlived the summed Policy
+ * timeouts bound + 2 x Policy.staleJobMarginMs. The runner checks
+ * its own deadline at bound + margin before debiting (the margin
+ * covers its non-AI render/store/persist tail), so by bound +
+ * 2 x margin a still-live job belongs to a dead request. The transition is
+ * CAS on the read status and never debits; a runner that debited
+ * just before losing this race sees its guarded finish fail and
+ * refunds (decompose-job). While photos use makes, landed-but-
+ * undebited candidates are discarded like every unpaid failure;
+ * otherwise (credits off, or free photos since PIN-229) the
+ * keep-what-landed rule stands. One exception (Bugbot #147): if
+ * the debit DID land and the request then died before finishing,
+ * the sweep must not eat a paid make — it checks the ledger and
+ * keeps a paid job's candidates confirmable (no refund either:
+ * the user gets exactly what they paid for, via leftovers).
+ */
+/**
+ * Is this job's photo make currently paid for — a debit landed
+ * and was not refunded? Only consulted when a stale transition
+ * was just written (rare), so a ledger scan is fine. No store
+ * while credits are on means no debit could have landed
+ * (tryDebitMake pool-empties); a read error also answers
+ * "paid" — preserving possibly-paid candidates beats discarding
+ * them on a transient failure. A refunded debit answers unpaid:
+ * after a lost finish refunds the make, leftover candidates must
+ * not stay confirmable for free (Bugbot #147).
+ */
+async function jobIsPaid(job: DecomposeJob, deps: BoardApiDeps): Promise<boolean> {
+  if (!deps.credits) return false;
+  const entries = await deps.credits.listEntries(job.boardId).catch(() => null);
+  if (entries === null) return true;
+  const debitEventId = photoDebitEventId(job.id);
+  const debited = entries.some(
+    (entry) => entry.type === "debit" && entry.id === debitEventId,
+  );
+  if (!debited) return false;
+  return !entries.some(
+    (entry) => entry.type === "debit_refund" && entry.debitEventId === debitEventId,
+  );
+}
+
+/**
+ * Discard a stale-failed job's candidates while photos use makes
+ * and no debit landed for it, persisting the emptied id lists. Paid
+ * jobs keep their candidates (jobIsPaid). Idempotent, so it
+ * doubles as the retry for a cleanup a dead request left
+ * half-done between the fail write and the discard: without the
+ * retry an unpaid `stale_running` job would stay confirmable
+ * forever (Bugbot #147).
+ */
+async function discardUnpaidStaleCandidates(
+  failed: DecomposeJob,
+  deps: BoardApiDeps,
+  now: number,
+): Promise<DecomposeJob> {
+  if (!photosUseMakes(deps.policy) || failed.pinIds.length === 0) return failed;
+  if (await jobIsPaid(failed, deps)) return failed;
+  const snapshot: DecomposeJob = {
+    ...failed,
+    elementIds: [...failed.elementIds],
+    pinIds: [...failed.pinIds],
+  };
+  await discardJobCandidates(decomposeDeps(deps), snapshot);
+  const cleared: DecomposeJob = {
+    ...failed,
+    elementIds: snapshot.elementIds,
+    pinIds: snapshot.pinIds,
+    updatedAt: now,
+  };
+  await deps.jobs.update(cleared, "failed").catch(() => false);
+  return cleared;
+}
+
+/** Past this age (since its last write) a pending/running job belongs to a dead request: summed Policy timeouts + 2 x staleJobMarginMs. */
+function staleJobBoundMs(policy: Policy): number {
+  return decomposeBoundMs(policy) + 2 * policy.staleJobMarginMs;
+}
+
+/**
+ * The board's free photos (PIN-230), or null when its photos are
+ * not limited: credits off, or Plus that counts under PLUS_MODE.
+ */
+function boardFreePhotoAllowance(board: Board, deps: BoardApiDeps): number | null {
+  return freePhotoAllowance({
+    creditsEnabled: creditsEnabled(deps.policy),
+    hasPlus: hasPlus(board, deps.plusMode ?? "off"),
+    boardOverride: board.policyOverrides?.credits?.freePhotosPerBoard,
+    stored: board.freePhotos,
+    policyDefault: deps.policy.credits.freePhotosPerBoard,
+  });
+}
+
+/** Photos that count against the free photos (PIN-230, domain/free-photos). */
+function boardCountedPhotos(jobs: readonly DecomposeJob[], now: number, policy: Policy): number {
+  return countedPhotos(jobs, now, staleJobBoundMs(policy));
+}
+
+export async function failStaleJobIfNeeded(
+  job: DecomposeJob,
+  deps: BoardApiDeps,
+  now: number,
+): Promise<DecomposeJob> {
+  // Already stale-failed: retry an unpaid cleanup that may have
+  // died between the fail write and the discard.
+  if (job.status === "failed" && job.errorCode === STALE_JOB_ERROR) {
+    return discardUnpaidStaleCandidates(job, deps, now);
+  }
+  if (job.status !== "pending" && job.status !== "running") return job;
+  if (now - job.updatedAt <= staleJobBoundMs(deps.policy)) return job;
+  const failed: DecomposeJob = {
+    ...job,
+    status: "failed",
+    errorCode: STALE_JOB_ERROR,
+    updatedAt: now,
+  };
+  const written = await deps.jobs.update(failed, job.status);
+  if (!written) {
+    const stored = (await deps.jobs.get(job.id).catch(() => null)) ?? failed;
+    // Losing the CAS to another sweeper does not skip the unpaid
+    // cleanup: that sweeper may not have discarded yet (or died
+    // trying), and callers like confirmPins act on what this
+    // returns. The discard is idempotent, so running it here too
+    // is safe. A job that finished instead is returned untouched.
+    if (stored.status === "failed" && stored.errorCode === STALE_JOB_ERROR) {
+      return discardUnpaidStaleCandidates(stored, deps, now);
+    }
+    return stored;
+  }
+  return discardUnpaidStaleCandidates(failed, deps, now);
+}
+
+/** Sweep every stale pending/running decompose job on one board. Returns failures written. */
+export async function sweepStaleDecomposeJobs(
+  boardId: string,
+  deps: BoardApiDeps,
+): Promise<number> {
+  const now = deps.now?.() ?? Date.now();
+  const jobs = await deps.jobs.listForBoard(boardId);
+  let failedCount = 0;
+  for (const job of jobs) {
+    const after = await failStaleJobIfNeeded(job, deps, now);
+    if (after.status === "failed" && job.status !== "failed") failedCount += 1;
+  }
+  return failedCount;
+}
+
+/**
+ * A6a TTL half: delete working copies older than
+ * Policy.workingCopyTtlHours on one board. Returns deletes made.
+ * Called opportunistically on upload/confirm (no cron in slices
+ * 1-2); also exported for a future scheduled sweeper.
+ */
+export async function sweepExpiredWorkingCopies(
+  boardId: string,
+  deps: BoardApiDeps,
+): Promise<number> {
+  const now = deps.now?.() ?? Date.now();
+  const ttlMs = deps.policy.workingCopyTtlHours * 60 * 60 * 1000;
+  const jobs = await deps.jobs.listForBoard(boardId);
+  let deleted = 0;
+  for (const job of jobs) {
+    if (job.workingDeletedAt !== undefined) continue;
+    if (now - job.createdAt < ttlMs) continue;
+    await deps.store.delete(job.workingRef);
+    await deps.jobs.update({ ...job, workingDeletedAt: now, updatedAt: now }, job.status);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+/**
+ * Delete the A6a working copy and mark the job. The mark is
+ * always written on top of the FRESHEST job read (before and
+ * after the store delete), never the caller's snapshot, so a
+ * tap-add (PIN-78) that appended ids meanwhile is not clobbered
+ * by this whole-job replace (Bugbot PIN-78 finding).
+ */
+async function deleteWorkingCopy(job: DecomposeJob, deps: BoardApiDeps): Promise<DecomposeJob> {
+  const fresh = (await deps.jobs.get(job.id)) ?? job;
+  if (fresh.workingDeletedAt !== undefined) return fresh;
+  job = fresh;
+  const now = deps.now?.() ?? Date.now();
+  await deps.store.delete(job.workingRef);
+  const latest = (await deps.jobs.get(job.id)) ?? job;
+  if (latest.workingDeletedAt !== undefined) return latest;
+  const updated: DecomposeJob = { ...latest, workingDeletedAt: now, updatedAt: now };
+  await deps.jobs.update(updated, latest.status);
+  return updated;
+}
+
+const UPLOAD_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * In-process running-decompose count (Policy.maxConcurrentDecomposeJobs):
+ * the memory brake in front of sharp + base64 working images. Busy
+ * answers a code-less 429, the shape the batch client backs off on;
+ * the App Hosting runConfig concurrency is the second line.
+ */
+let runningDecomposeJobs = 0;
+
+/**
+ * Upload one photo and run its DecomposeJob in-request (A4: the
+ * request does the work; the client also polls the job route for
+ * pop-in/retry). Enforces Policy.photosPerParticipantPerDay at the
+ * API edge (the PIN-61 budget decorator enforces the same cap at
+ * the namer port as a second line). PhotoIntakeError propagates.
+ *
+ * With `uploadId` (the client's deterministic per-file UUID, which
+ * becomes the job id) the call is idempotent: an existing own job
+ * is returned marked `replayed` BEFORE the daily cap, the credit
+ * preflight, intake or any AI spend — a lost-response retry can
+ * never double-debit. A still-pending own job falls through to
+ * startDecomposeJob's pending recovery (its first attempt already
+ * passed the cap and preflight). Another participant's id is a
+ * generic 409.
+ */
+export async function uploadPhoto(
+  slug: string,
+  participant: Participant,
+  bytes: Uint8Array,
+  deps: BoardApiDeps,
+  uploadId?: string,
+): Promise<StartedDecomposeJob> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Board not found.", 404);
+
+  let recoveringPending = false;
+  if (uploadId !== undefined) {
+    if (!UPLOAD_ID_PATTERN.test(uploadId)) {
+      throw new BoardApiError(userMessage("error.uploadIdInvalid"), 400, "bad_upload_id");
+    }
+    const existing = await deps.jobs.get(uploadId).catch(() => null);
+    if (existing) {
+      if (existing.boardId !== slug || existing.participantId !== participant.id) {
+        throw new BoardApiError(userMessage("error.uploadIdConflict"), 409, "upload_conflict");
+      }
+      if (existing.status !== "pending") {
+        return { ...existing, replayed: true };
+      }
+      recoveringPending = true;
+    }
+  }
+
+  if (!recoveringPending) {
+    const now = deps.now?.() ?? Date.now();
+    const boardJobs = (await deps.jobs.listForBoard(slug)).filter((job) => job.id !== uploadId);
+
+    // PIN-230 free photos: a free board (credits on, no Plus) that
+    // used its free photos stops here — before the daily cap, since
+    // waiting a day would not help — with a typed 429 before intake,
+    // any job or any AI spend. Photos still cutting count, so only
+    // truly simultaneous requests (both read before either job
+    // exists) can pass together: at most the upload concurrency
+    // over the limit, like the daily cap below.
+    const allowance = boardFreePhotoAllowance(board, deps);
+    if (allowance !== null && boardCountedPhotos(boardJobs, now, deps.policy) >= allowance) {
+      throw new BoardApiError(userMessage("error.freePhotosUsed"), 429, FREE_PHOTOS_USED);
+    }
+
+    const todaysJobs = boardJobs.filter(
+      (job) => job.participantId === participant.id && job.createdAt >= startOfUtcDay(now),
+    );
+    if (todaysJobs.length >= deps.policy.photosPerParticipantPerDay) {
+      throw new BoardApiError(userMessage("error.photosPerDay"), 429, "photos_per_day");
+    }
+
+    // PIN-151 preflight (after the Policy daily cap above, which
+    // keeps applying): while photos use makes and the pool is
+    // empty the photo AI path refuses here — the same 429 deny
+    // shape as the cap — before intake, any job or any AI spend.
+    // The starter pool lands lazily inside this read for older
+    // boards. Photos that use no make (PIN-229, the default) skip
+    // the pool entirely: a creation is an AI scene.
+    if (photosUseMakes(deps.policy)) {
+      const availableMakes = await readAvailableMakes(slug, deps);
+      if (availableMakes !== null && availableMakes < 1) {
+        throw new BoardApiError(userMessage("error.makesPoolEmpty"), 429, CREDITS_POOL_EMPTY);
+      }
+    }
+  }
+
+  // Opportunistic A6a + stale-job sweeps; never block the upload.
+  await sweepExpiredWorkingCopies(slug, deps).catch(() => undefined);
+  await sweepStaleDecomposeJobs(slug, deps).catch(() => undefined);
+
+  if (runningDecomposeJobs >= deps.policy.maxConcurrentDecomposeJobs) {
+    // Deliberately NO code: transient busy is the client's backoff
+    // signal, distinct from the coded pool-empty/per-day stops.
+    throw new BoardApiError(userMessage("error.cuttingBusy"), 429);
+  }
+  runningDecomposeJobs += 1;
+  let job: StartedDecomposeJob;
+  try {
+    job = await startDecomposeJob(
+      {
+        boardId: slug,
+        participantId: participant.id,
+        bytes,
+        ...(uploadId !== undefined ? { jobId: uploadId } : {}),
+      },
+      decomposeDeps(deps),
+    );
+  } catch (error) {
+    // PIN-167: deleted between this request's board read and the
+    // job's own — the unknown-board 404, not a 500 (as requestScene).
+    if (error instanceof RangeError && !(await isLiveBoard(deps.boards, slug))) {
+      throw new BoardApiError("Board not found.", 404);
+    }
+    throw error;
+  } finally {
+    runningDecomposeJobs -= 1;
+  }
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
+  return job;
+}
+
+/**
+ * Job poll view, uploader-only (candidate pins are private until
+ * confirmed). Null for a missing job, a job on another board, or
+ * any viewer who is not the uploader — one uniform 404 at the
+ * route, no existence leak. Candidate pins/elements ride along
+ * so the Add sheet can pop in.
+ */
+export async function getJobView(
+  slug: string,
+  jobId: string,
+  viewer: Participant | null,
+  deps: BoardApiDeps,
+) {
+  if (!viewer) return null;
+  const found = await deps.jobs.get(jobId);
+  if (!found || found.boardId !== slug || found.participantId !== viewer.id) return null;
+  // A poller of a dead run sees the stale failure, not `running` forever.
+  const job = await failStaleJobIfNeeded(found, deps, deps.now?.() ?? Date.now());
+  const pins: Pin[] = [];
+  const elements: Element[] = [];
+  for (const pinId of job.pinIds) {
+    const pin = await deps.boards.getPin(pinId);
+    if (pin) pins.push(pin);
+  }
+  for (const elementId of job.elementIds) {
+    const element = await deps.boards.getElement(elementId);
+    if (element) elements.push(element);
+  }
+  return {
+    job: publicJob(job),
+    pins: pins.map(publicPin),
+    elements: elements.map((element) => publicElement(slug, element)),
+  };
+}
+
+export function parseTapAddInput(value: unknown): TapPoint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError(userMessage("error.tapMissing"));
+  }
+  const body = value as Record<string, unknown>;
+  const { x, y } = body;
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < 0 ||
+    x > 1 ||
+    y < 0 ||
+    y > 1
+  ) {
+    throw new BoardApiError(userMessage("error.tapMissing"));
+  }
+  return { x, y };
+}
+
+/**
+ * Tap-to-add (PIN-78): uploader-only, like the job poll and
+ * confirm — a missing job, another board's job, a non-uploader
+ * and no participant at all are the same 404 (no existence
+ * leak). PIN-117 names the crop via TapNamer; the i18n label
+ * (add.tapLabel) is only the typed fallback. The service
+ * enforces the working-copy lifetime, the usable-mask
+ * gate and elementsPerPhoto.max. Typed service outcomes map to
+ * friendly lines — an expired/deleted working copy is a 409
+ * the sheet shows as "photo copy gone", never a 500.
+ */
+export async function tapAddPin(
+  slug: string,
+  participant: Participant | null,
+  jobId: string,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+) {
+  if (!participant) throw new BoardApiError("Job not found.", 404);
+  const point = parseTapAddInput(rawInput);
+  const job = await deps.jobs.get(jobId);
+  if (!job || job.boardId !== slug || job.participantId !== participant.id) {
+    throw new BoardApiError("Job not found.", 404);
+  }
+  const outcome = await addTapElement(jobId, point, tapFallbackLabel(), {
+    userIdAtCall: participant.userId ?? null,
+    ...(deps.tapNamer ? { tapNamer: deps.tapNamer } : {}),
+    boards: deps.boards,
+    jobs: deps.jobs,
+    store: deps.store,
+    namer: deps.namer,
+    segmenter: deps.segmenter,
+    policy: deps.policy,
+    now: deps.now,
+    newId: deps.newId,
+  });
+  switch (outcome.status) {
+    case "ready":
+      return {
+        job: publicJob(outcome.job),
+        pin: publicPin(outcome.pin),
+        element: publicElement(slug, outcome.element),
+      };
+    case "not_found":
+      throw new BoardApiError("Job not found.", 404);
+    case "working_copy_gone":
+      throw new BoardApiError(userMessage("add.tapGone"), 409, "working_copy_gone");
+    case "cap_reached":
+      throw new BoardApiError(userMessage("add.tapCap"), 409, "elements_per_photo_max");
+    case "job_not_ready":
+      throw new BoardApiError(userMessage("add.finding"), 409, "job_not_ready");
+    case "no_usable_mask":
+      throw new BoardApiError(userMessage("add.tapNone"), 400, "no_usable_mask");
+    case "refused":
+      throw new BoardApiError(userMessage("add.refused"), 400, "refused");
+    case "failed":
+      throw new BoardApiError(userMessage("add.failed"), 503, outcome.errorCode ?? "tap_add_failed");
+  }
+}
+
+export interface ConfirmPinsInput {
+  jobId: string;
+  pinIds: string[];
+}
+
+/**
+ * An empty `pinIds` is allowed (PIN-122 "Clear"): it keeps none, so
+ * every candidate of the job is dropped and the working copy is
+ * deleted, exactly like dropping each one in the review.
+ */
+export function parseConfirmPinsInput(value: unknown, policy: Policy): ConfirmPinsInput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError(userMessage("error.keepMissing"));
+  }
+  const body = value as Record<string, unknown>;
+  if (typeof body.jobId !== "string" || !body.jobId) {
+    throw new BoardApiError(userMessage("error.keepMissing"));
+  }
+  if (!Array.isArray(body.pinIds) || body.pinIds.some((id) => typeof id !== "string" || !id)) {
+    throw new BoardApiError(userMessage("error.keepMissing"));
+  }
+  const pinIds = [...new Set(body.pinIds as string[])];
+  if (pinIds.length > policy.elementsPerPhoto.max) {
+    throw new BoardApiError(userMessage("error.tooManyPinsPhoto"));
+  }
+  return { jobId: body.jobId, pinIds };
+}
+
+/**
+ * "Pin N ->": selected candidate pins become pinned, the job's
+ * other candidates are dropped, and the A6a working copy is
+ * deleted. Only the uploader can confirm their own job; anyone
+ * else's job id is a 404 (no existence leak). Idempotent: an
+ * already-pinned selected pin stays pinned and re-confirming
+ * after the working copy is gone is a no-op delete. A working
+ * copy that is already gone (confirmed, TTL-swept or missing)
+ * never blocks the pins: the delete is skipped or a no-op.
+ * Keeping none (PIN-122 "Clear") drops every candidate.
+ */
+export async function confirmPins(
+  slug: string,
+  participant: Participant,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+): Promise<{ pinnedPinIds: string[]; droppedPinIds: string[]; workingCopyDeleted: boolean }> {
+  const input = parseConfirmPinsInput(rawInput, deps.policy);
+  const foundJob = await deps.jobs.get(input.jobId);
+  if (!foundJob || foundJob.boardId !== slug || foundJob.participantId !== participant.id) {
+    throw new BoardApiError("Job not found.", 404);
+  }
+  // Run the stale check (and its unpaid-candidate cleanup) before
+  // accepting anything: a confirm must never slip into the window
+  // between a sweep's fail write and its discard, and this retries
+  // a cleanup a dead request left half-done. A paid stale job
+  // keeps its candidates and stays confirmable; an unpaid one's
+  // pin ids are cleared, so the pin check below refuses them.
+  const job = await failStaleJobIfNeeded(foundJob, deps, deps.now?.() ?? Date.now());
+  // Only a finished photo can be confirmed (PIN-122 Bugbot): a job
+  // still cutting keeps adding candidates from its in-memory photo,
+  // so a Clear (or pin) now would not stick. The review only offers
+  // Pin once the job is ready; the leftovers line says "still
+  // cutting" on this 409 and the next poll brings the rest.
+  if (job.status === "pending" || job.status === "running") {
+    throw new BoardApiError(userMessage("error.stillCutting"), 409);
+  }
+  const now = deps.now?.() ?? Date.now();
+  const jobPinIds = new Set(job.pinIds);
+
+  const pinnedPinIds: string[] = [];
+  for (const pinId of input.pinIds) {
+    if (!jobPinIds.has(pinId)) {
+      throw new BoardApiError(userMessage("error.pinNotInPhoto"));
+    }
+    const pin = await deps.boards.getPin(pinId);
+    if (!pin || pin.boardId !== slug || pin.pinnedBy !== participant.id) {
+      throw new BoardApiError(userMessage("error.pinNotInPhoto"));
+    }
+    if (pin.status === "candidate") {
+      await deps.boards.setPinStatus(pinId, "pinned", now);
+    }
+    pinnedPinIds.push(pinId);
+  }
+
+  // Delete the working copy BEFORE dropping unselected pins
+  // (after validation/pinning, so a failed confirm keeps it):
+  // from the delete mark on, a racing tap-add's fresh check
+  // sees the copy gone and cleans itself up, and the drop loop
+  // below runs over the FRESHEST pin list, so a tap appended
+  // mid-confirm is dropped here instead of orphaned (Bugbot
+  // PIN-78 finding; the Add sheet also disables Pin during a
+  // tap + refetch, closing the UI path).
+  const updated = await deleteWorkingCopy(job, deps);
+  const freshJob = (await deps.jobs.get(job.id)) ?? updated;
+  const droppedPinIds: string[] = [];
+  for (const pinId of freshJob.pinIds) {
+    if (pinnedPinIds.includes(pinId)) continue;
+    const pin = await deps.boards.getPin(pinId);
+    if (pin && pin.status === "candidate") {
+      await deps.boards.deletePin(pinId);
+      droppedPinIds.push(pinId);
+    }
+  }
+
+  return {
+    pinnedPinIds,
+    droppedPinIds,
+    workingCopyDeleted: updated.workingDeletedAt !== undefined,
+  };
+}
+
+export interface DeleteMyElementResult {
+  deleted: boolean;
+  unpinnedOnly: boolean;
+  removedPinIds: string[];
+  hiddenSceneIds: string[];
+  storageDeleted: boolean;
+}
+
+/**
+ * The owner-only gate of delete (PIN-77) and rename (PIN-156): no
+ * participant, no board, an unknown id, another board's element or
+ * someone else's is the one uniform 404 (no existence leak).
+ */
+async function myElementOr404(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  deps: BoardApiDeps,
+): Promise<Element> {
+  if (!participant) throw new BoardApiError("Element not found.", 404);
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Element not found.", 404);
+  const element = await deps.boards.getElement(elementId);
+  if (!element || element.boardId !== slug || element.ownerId !== participant.id) {
+    throw new BoardApiError("Element not found.", 404);
+  }
+  return element;
+}
+
+/**
+ * Rename my element (PIN-156): the owner gate runs BEFORE the label
+ * check, so anyone else gets the uniform 404 whatever they send; then
+ * normalizeElementLabel (Policy.elementLabelMaxChars) or 400. No AI
+ * call and no BoardEvent (as delete). Scenes store only elementIds,
+ * so their credits read the new name; library copies keep their own.
+ */
+export async function renameMyElement(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  body: unknown,
+  deps: BoardApiDeps,
+): Promise<{ element: ReturnType<typeof publicElement> }> {
+  await myElementOr404(slug, participant, elementId, deps);
+  const raw = typeof body === "object" && body !== null ? (body as { label?: unknown }).label : undefined;
+  const checked = normalizeElementLabel(raw, deps.policy.elementLabelMaxChars);
+  if (!checked.ok) {
+    throw new BoardApiError(userMessage("board.renameInvalid", { max: deps.policy.elementLabelMaxChars }));
+  }
+  const renamed = await deps.boards.renameElement(elementId, checked.label);
+  if (!renamed) throw new BoardApiError("Element not found.", 404);
+  return { element: publicElement(slug, renamed) };
+}
+
+/**
+ * Delete my element (PIN-77, docs/11 section 5.4 Deletes):
+ * owner-only. Missing board/element, an element from another
+ * board, a non-owner participant and no participant at all all
+ * throw the same 404 BoardApiError, which the route renders as
+ * the one uniform body — no existence leak (candidate elements
+ * are private pre-confirm, so a non-owner must not learn one
+ * exists). The repository cascade (PIN-62) removes the element
+ * and its pins, hides scenes that used it and fixes counters.
+ *
+ * Cross-board guard (PIN-77 stop rule): createPin enforces
+ * same-board pins today, but if pins on OTHER boards ever
+ * reference this element the element record and its stored
+ * objects must survive for them — delete only this board's
+ * pins, hide only this board's scenes, leave the element's
+ * storage alone.
+ *
+ * Storage cleanup is best-effort AFTER the cascade: only the
+ * element's own persistent `elements/` refs (cutout/flattened)
+ * are deleted, each in its own try/catch so one missing object
+ * cannot block the other or fail the request (the records are
+ * already gone; an orphaned object is unreachable through any
+ * route). Forged element refs outside `elements/` are never
+ * touched — never a `tmp/` working copy. The scenes the cascade
+ * hid lose their stored objects too (PIN-133), through
+ * deleteSceneObjects: only this board's, only inside each
+ * scene's own folder. An in-flight remix of such a scene fails
+ * typed `parent_missing` (request time already refuses it).
+ *
+ * No BoardEvent is written and no activity line added (PIN-77
+ * decision): docs/11 section 5.4 fixes the event vocabulary
+ * (only PIN-49 edits docs/11), and activityLines resolves a
+ * pin's label from live elements, so a deleted pin's
+ * "pinned" line already drops out of the strip honestly
+ * instead of showing a snapshotted label the owner removed.
+ * Suggestion chips are cached by label SET (PIN-75), never by
+ * element id, so a delete cannot poison the cache: a future
+ * selection with the same labels gets still-apt chips.
+ */
+export async function deleteMyElement(
+  slug: string,
+  participant: Participant | null,
+  elementId: string,
+  deps: BoardApiDeps,
+): Promise<DeleteMyElementResult> {
+  const element = await myElementOr404(slug, participant, elementId, deps);
+
+  const pins = await deps.boards.listPinsForElement(elementId);
+  const pinsElsewhere = pins.filter((pin) => pin.boardId !== slug);
+  if (pinsElsewhere.length > 0) {
+    const removedPinIds: string[] = [];
+    for (const pin of pins.filter((p) => p.boardId === slug)) {
+      if (await deps.boards.deletePin(pin.id)) removedPinIds.push(pin.id);
+    }
+    const hiddenSceneIds: string[] = [];
+    for (const scene of await deps.boards.listScenes(slug)) {
+      if (!scene.elementIds.includes(elementId)) continue;
+      await deps.boards.putScene({ ...scene, hidden: true });
+      hiddenSceneIds.push(scene.id);
+    }
+    await deleteHiddenSceneObjects(slug, hiddenSceneIds, deps);
+    return { deleted: false, unpinnedOnly: true, removedPinIds, hiddenSceneIds, storageDeleted: false };
+  }
+
+  const result = await deps.boards.deleteElement(elementId);
+  if (!result.deleted) {
+    // Deleted concurrently after the ownership check: the end
+    // state is the requested one, so report a no-op success.
+    return { deleted: false, unpinnedOnly: false, removedPinIds: [], hiddenSceneIds: [], storageDeleted: false };
+  }
+
+  // Shared-asset guard (PIN-85): a library copy shares its
+  // source's cutout/flattened objects (sourceElementId). Deleting
+  // either record must leave storage alone while a live element
+  // on the other side still points at the same refs — the copy
+  // (and its scenes on its board) keeps working, and the last
+  // record out deletes the objects. Records on a deleted board
+  // never count (PIN-169): they would keep the bytes forever.
+  const sharedRefs: string[] = (await elementBytesStillNeeded(element.cutoutRef, deps.boards, elementId))
+    ? []
+    : [element.cutoutRef, element.flattenedRef];
+
+  let storageDeleted = false;
+  for (const ref of sharedRefs) {
+    if (!ref.startsWith("elements/")) continue;
+    try {
+      await deps.store.delete(ref);
+      storageDeleted = true;
+    } catch {
+      // Best-effort: records are gone, object is unreachable.
+    }
+  }
+  await deleteHiddenSceneObjects(slug, result.hiddenSceneIds, deps);
+  return {
+    deleted: true,
+    unpinnedOnly: false,
+    removedPinIds: result.removedPinIds,
+    hiddenSceneIds: result.hiddenSceneIds,
+    storageDeleted,
+  };
+}
+
+/** Stored objects of the scenes a delete cascade hid (PIN-133): best-effort, this board's only. */
+async function deleteHiddenSceneObjects(slug: string, sceneIds: readonly string[], deps: BoardApiDeps): Promise<void> {
+  for (const id of sceneIds) {
+    try {
+      const scene = await deps.boards.getScene(id);
+      if (scene?.boardId === slug) await deleteSceneObjects(scene, deps.store);
+    } catch {
+      // The scene is hidden and never served; an orphan is unreachable.
+    }
+  }
+}
+
+export type ElementImageKind = "cutout" | "flattened";
+
+/**
+ * Board-link-checked image serving with NO existence leak: bad
+ * kind, missing board, missing element, an element from another
+ * board, a non-elements/ ref and a missing stored object all
+ * return null, which the route renders as one uniform 404. The
+ * slug in the URL is the 128-bit capability link (docs/11
+ * section 5.5): holding it is what authorizes the read, exactly
+ * like the board page itself, so no participant cookie is needed
+ * for a second phone to see pins. Only persistent derived refs
+ * under elements/ are ever served — never a tmp/ working copy.
+ */
+export async function resolveElementImage(
+  slug: string,
+  elementId: string,
+  kind: string | null,
+  deps: BoardApiDeps,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  if (kind !== "cutout" && kind !== "flattened") return null;
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const element = await deps.boards.getElement(elementId);
+  if (!element || element.boardId !== slug) return null;
+  const ref = kind === "cutout" ? element.cutoutRef : element.flattenedRef;
+  if (!ref.startsWith("elements/")) return null;
+  const bytes = await deps.store.get(ref);
+  if (!bytes) return null;
+  return {
+    bytes,
+    contentType: kind === "cutout" ? "image/png" : "image/jpeg",
+  };
+}
+
+export interface RequestSceneInput {
+  /** Remix parent Scene id (PIN-79, §5.7); elementIds stay the NEW pins. */
+  parentSceneId?: string;
+  elementIds: string[];
+  prompt: string;
+  sceneId?: string;
+}
+
+export function parseRequestSceneInput(value: unknown): RequestSceneInput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new BoardApiError(userMessage("error.sceneInputMissing"));
+  }
+  const body = value as Record<string, unknown>;
+  if (
+    !Array.isArray(body.elementIds) ||
+    body.elementIds.length === 0 ||
+    body.elementIds.some((id) => typeof id !== "string" || !id)
+  ) {
+    throw new BoardApiError(userMessage("error.scenePinsMissing"));
+  }
+  if (typeof body.prompt !== "string" || !body.prompt.trim()) {
+    throw new BoardApiError(userMessage("error.scenePromptMissing"));
+  }
+  let parentSceneId: string | undefined;
+  if (body.parentSceneId !== undefined && body.parentSceneId !== null && body.parentSceneId !== "") {
+    if (typeof body.parentSceneId !== "string") {
+      throw new BoardApiError(userMessage("error.remixNotReady"));
+    }
+    parentSceneId = body.parentSceneId;
+  }
+  let sceneId: string | undefined;
+  if (body.sceneId !== undefined && body.sceneId !== null && body.sceneId !== "") {
+    if (typeof body.sceneId !== "string") {
+      throw new BoardApiError(userMessage("error.sceneIdInvalid"));
+    }
+    sceneId = body.sceneId;
+  }
+  return {
+    elementIds: body.elementIds as string[],
+    prompt: body.prompt,
+    ...(parentSceneId ? { parentSceneId } : {}),
+    ...(sceneId ? { sceneId } : {}),
+  };
+}
+
+function requireSceneDeps(deps: BoardApiDeps): {
+  sceneJobs: SceneJobStore;
+  composer: SceneComposer;
+} {
+  if (!deps.sceneJobs || !deps.composer) {
+    throw new BoardApiError(userMessage("error.scenesOff"), 503);
+  }
+  return { sceneJobs: deps.sceneJobs, composer: deps.composer };
+}
+
+/**
+ * POST a scene (PIN-69): run its SceneJob in-request, client polls
+ * the scene. Friendly terminal states (ready/refused/failed) ride
+ * in the returned job+scene — a refused prompt is a 201 with
+ * status "refused", never a 500. Request-time cap/validation
+ * denies are BoardApiErrors (429/409/400) before any spend.
+ */
+export async function requestScene(
+  slug: string,
+  participant: Participant,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+): Promise<{ job: SceneJob; scene: Scene }> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) throw new BoardApiError("Board not found.", 404);
+  const input = parseRequestSceneInput(rawInput);
+  const { sceneJobs, composer } = requireSceneDeps(deps);
+  let job: SceneJob;
+  try {
+    job = await startSceneJob(
+      {
+        boardId: slug,
+        participantId: participant.id,
+        elementIds: input.elementIds,
+        prompt: input.prompt,
+        ...(input.sceneId ? { sceneId: input.sceneId } : {}),
+        ...(input.parentSceneId ? { parentSceneId: input.parentSceneId } : {}),
+      },
+      {
+        boards: deps.boards,
+        jobs: sceneJobs,
+        store: deps.store,
+        composer,
+        collageMode: deps.collageMode ?? false,
+        ...(deps.credits ? { credits: deps.credits } : {}),
+        policy: deps.policy,
+        now: deps.now,
+        newId: deps.newId,
+      },
+    );
+  } catch (error) {
+    if (error instanceof SceneJobRequestError) {
+      const status =
+        error.code === "scenes_per_participant_day" ||
+        error.code === "scenes_per_board_day"
+          ? 429
+          : error.code === "scene_id_conflict"
+            ? 409
+            : error.code === "element_not_found" ||
+                error.code === "parent_not_found"
+              ? 404
+              : 400;
+      throw new BoardApiError(error.userMessage ?? error.message, status, error.code);
+    }
+    if (error instanceof RangeError) {
+      throw new BoardApiError("Board not found.", 404);
+    }
+    throw error;
+  }
+  // PIN-167: a board deleted while the job ran answers like an unknown board.
+  if (!(await isLiveBoard(deps.boards, slug))) throw new BoardApiError("Board not found.", 404);
+  const scene = await deps.boards.getScene(job.id);
+  // A repeat POST of a hidden or deleted scene's id: 404, like its GET (PIN-142).
+  if (!scene || scene.hidden) throw new BoardApiError("Scene not found.", 404);
+  return { job, scene };
+}
+
+/**
+ * Gallery poll: every non-hidden scene on the board (hidden =
+ * a used element was deleted, section 5.4), link-public like the
+ * board view. Null when the board does not exist.
+ */
+export async function getScenesView(slug: string, deps: BoardApiDeps) {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scenes = await deps.boards.listScenes(slug);
+  return { scenes: scenes.map((scene) => publicScene(slug, scene)) };
+}
+
+/**
+ * One scene's status card. Missing board, missing scene, a scene
+ * from another board and a hidden scene all return null — one
+ * uniform 404 at the route.
+ */
+export async function getSceneView(
+  slug: string,
+  sceneId: string,
+  deps: BoardApiDeps,
+) {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scene = await deps.boards.getScene(sceneId);
+  if (!scene || scene.boardId !== slug || scene.hidden) return null;
+  const job = deps.sceneJobs
+    ? await deps.sceneJobs.get(slug, sceneId)
+    : null;
+  return {
+    scene: publicScene(slug, scene),
+    job: job ? publicSceneJob(job) : null,
+  };
+}
+
+function isInFlight(status: Scene["status"]): boolean {
+  return status === "pending" || status === "running";
+}
+
+/**
+ * Delete a scene (PIN-142): its maker or the board host. Every miss
+ * (unknown board or scene, another board's scene, anyone else) is the
+ * same 404, decided before the scene's state is looked at. Only then:
+ * 409 while it or its job is in flight; else it becomes a tombstone
+ * (the repository never rewrites one) and its objects are deleted. A
+ * repeat by the maker or host is a no-op that retries the storage.
+ */
+export async function deleteScene(
+  slug: string,
+  sceneId: string,
+  viewer: Participant | null,
+  access: { hostToken: string | null },
+  deps: BoardApiDeps,
+): Promise<void> {
+  const board = await deps.boards.getBoard(slug);
+  const scene = board ? await deps.boards.getScene(sceneId) : null;
+  const now = deps.now?.() ?? Date.now();
+  let role: "maker" | "host" | null = null;
+  if (board && scene && scene.boardId === slug) {
+    if (viewer !== null && scene.createdBy === viewer.id) role = "maker";
+    else if (verifyHostToken(board, access.hostToken, deps.policy, now)) role = "host";
+  }
+  if (!scene || role === null) throw new BoardApiError("Scene not found.", 404);
+
+  if (scene.deletedAt === undefined) {
+    const job = deps.sceneJobs ? await deps.sceneJobs.get(slug, scene.id) : null;
+    if (isInFlight(scene.status) || (job !== null && isInFlight(job.status))) {
+      throw new BoardApiError(userMessage("board.sceneDeleteDeveloping"), 409, "scene_in_flight");
+    }
+    await deps.boards.putScene({ ...scene, hidden: true, deletedAt: now, deletedBy: role });
+  }
+  await deleteSceneObjects(scene, deps.store);
+}
+
+/**
+ * The one place that knows a scene's stored objects: its full image
+ * and its strip preview (PIN-133). Only refs inside the scene's own
+ * folder (the store's assertDerivativeRef also refuses `..`).
+ * Best-effort: the scene is already hidden, so a failure is logged by
+ * scene id only (no ref, URL or env).
+ */
+export async function deleteSceneObjects(scene: Scene, store: DerivativeStore): Promise<void> {
+  const folder = `scenes/boards/${scene.boardId}/${scene.id}/`;
+  for (const ref of [scene.imageRef, `${folder}${SCENE_PREVIEW_FILE}`]) {
+    if (!ref || !ref.startsWith(folder)) continue;
+    try {
+      await store.delete(ref);
+    } catch (error) {
+      console.error("Scene image delete failed; the tombstone stands.", {
+        sceneId: scene.id,
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
+}
+
+/**
+ * Suggestion chips for the picked pins (PIN-75): generated via the
+ * decorated ChipSuggester, cached per language and label set, the
+ * fixed idea chips on any non-ready outcome, all in `locale`, the
+ * request's UI language (PIN-214). Validation errors (missing
+ * board/pin) keep the API's uniform 404 discipline.
+ */
+export async function getSceneChips(
+  slug: string,
+  participant: Participant,
+  rawInput: unknown,
+  deps: BoardApiDeps,
+  locale: Locale,
+): Promise<SceneChipsResult> {
+  return resolveSceneChips(
+    slug,
+    participant,
+    rawInput,
+    {
+      boards: deps.boards,
+      ...(deps.chipSuggester ? { suggester: deps.chipSuggester } : {}),
+      cache: deps.chipsCache ?? new InMemoryChipsCacheStore(),
+      policy: deps.policy,
+      now: deps.now,
+    },
+    locale,
+  );
+}
+
+const SCENE_IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  webp: "image/webp",
+};
+
+/**
+ * Board-link-checked scene image, same uniform-miss discipline as
+ * resolveElementImage: missing board/scene, another board's
+ * scene, a hidden (element-deleted) scene, a not-ready scene, a
+ * non-scenes/ ref and a missing object all return null -> 404.
+ * "preview" (PIN-133) passes the same checks first, then serves the
+ * strip preview; any preview failure serves the full image.
+ */
+export async function resolveSceneImage(
+  slug: string,
+  sceneId: string,
+  deps: BoardApiDeps,
+  size: "full" | "preview" = "full",
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const board = await deps.boards.getBoard(slug);
+  if (!board) return null;
+  const scene = await deps.boards.getScene(sceneId);
+  if (
+    !scene ||
+    scene.boardId !== slug ||
+    scene.hidden ||
+    scene.status !== "ready" ||
+    !scene.imageRef
+  ) {
+    return null;
+  }
+  if (!scene.imageRef.startsWith("scenes/")) return null;
+  const ext = scene.imageRef.split(".").at(-1) ?? "";
+  const contentType = SCENE_IMAGE_TYPES[ext.toLowerCase()];
+  if (!contentType) return null;
+  if (size === "preview") {
+    const preview = await scenePreview(scene, scene.imageRef, deps);
+    if (preview) return { bytes: preview, contentType: "image/webp" };
+  }
+  const bytes = await deps.store.get(scene.imageRef);
+  if (!bytes) return null;
+  return { bytes, contentType };
+}
+
+/**
+ * The stored preview, or — for a scene stored before previews
+ * existed — made once from the full image, stored and returned.
+ * Only reached past resolveSceneImage's checks, so a hidden or
+ * deleted scene never gets one. Two concurrent first requests render
+ * identical bytes, so the second put is a harmless overwrite (no
+ * precondition needed). Any failure is null: serve the full image.
+ */
+async function scenePreview(scene: Scene, imageRef: string, deps: BoardApiDeps): Promise<Buffer | null> {
+  try {
+    const ref = buildScenePreviewRef(scene.boardId, scene.id);
+    const stored = await deps.store.get(ref);
+    if (stored) return stored;
+    const full = await deps.store.get(imageRef);
+    if (!full) return null;
+    const preview = await renderScenePreview(full, deps.policy);
+    await deps.store.put(ref, preview, "image/webp");
+    // PIN-169: a board deleted since the check above loses this put too.
+    await sweepDeletedBoardStorage(scene.boardId, deps);
+    return preview;
+  } catch (error) {
+    console.error("Scene preview failed; serving the full image.", {
+      sceneId: scene.id,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    return null;
+  }
+}

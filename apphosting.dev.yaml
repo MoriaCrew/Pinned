@@ -1,17 +1,75 @@
 # App Hosting environment overrides: DEV backend (PIN-28).
 # Merged over apphosting.yaml when the dev backend builds the `dev`
-# branch. AI_MOCK stays on until the PIN-3 Meta secret exists in
+# branch. PIN-32: live Meta is enabled on dev only; the key is in
 # Secret Manager and is referenced here by name (never by value).
 env:
   - variable: AI_MOCK
+    value: "0"
+  - variable: META_API_KEY
+    secret: META_API_KEY
+    availability:
+      - RUNTIME
+  - variable: SESSION_SECRET
+    secret: SESSION_SECRET
+    availability:
+      - RUNTIME
+  - variable: PINNED_LAB
     value: "1"
+  - variable: AI_DAILY_BUDGET_USD
+    value: "5"
+  - variable: AI_DAILY_CALL_LIMIT
+    value: "500"
   - variable: APP_BASE_URL
-    value: https://pinned-web--moriacrew-pinned-dev.europe-west4.hosted.app
+    value: https://dev.pinneds.com
+  # PIN-26: public contact on /privacy and /terms. A plain value: the
+  # address is printed on both pages, so it is not a secret.
+  - variable: LEGAL_CONTACT_EMAIL
+    value: contact@moriacrew.com
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID
     value: moriacrew-pinned-dev
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: moriacrew-pinned-dev
+  # PIN-57: dev opts into sign-in. The web config itself is
+  # inherited from apphosting.yaml as Secret Manager references.
+  - variable: AUTH_MODE
+    value: optional
+  # PIN-163: sign-in on the app's own domain. Proxies /__/auth/* to
+  # the project's firebaseapp host and makes APP_BASE_URL's host the
+  # web authDomain. Requires the OAuth redirect URI
+  # https://<APP_BASE_URL host>/__/auth/handler on the web client.
+  # Read at BUILD (rewrites) and RUNTIME: a plain value is both.
+  - variable: AUTH_SAME_ORIGIN
+    value: "1"
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: moriacrew-pinned-dev.firebasestorage.app
+  # PIN-153: dev runs real (sandbox) Stripe credit packs. The
+  # webhook grants (PIN-150) + endpoint/secret (PIN-153) landed,
+  # so dev may take sandbox payments it can fulfil. PIN-103's
+  # instant mock grant retires on dev; prod keeps code "off".
+  - variable: PLUS_MODE
+    value: stripe
+  # PIN-149/PIN-153: Stripe keys for the dev runtime only,
+  # referenced from Secret Manager (values never in git). The
+  # webhook signing secret belongs to the dev endpoint created
+  # by scripts/ensure-stripe-webhook-endpoint.mjs (PIN-153).
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+    availability:
+      - RUNTIME
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+  # PIN-153: enable the makes pool on dev only (PIN-151 shipped
+  # credits default-off; prod keeps the default until promotion).
+  - variable: POLICY_OVERRIDES_JSON
+    value: '{"credits":{"enabled":true}}'
+  # PIN-199: dev turns on the translated UI (fr, es, pt-BR, de, it,
+  # id) next to English. Prod stays English until Robin signs off the
+  # French (docs/18-i18n.md, "Turning prod on"). Read at BUILD (a
+  # page prerendered with English only stays English) and RUNTIME:
+  # a plain value is both.
+  - variable: UI_LOCALES
+    value: en,fr,es,pt-BR,de,it,id

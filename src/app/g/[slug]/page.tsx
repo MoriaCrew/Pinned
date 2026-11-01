@@ -1,84 +1,158 @@
 import type { Metadata } from "next";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { buildBoardPreview } from "../../../domain/board-preview";
+import { fixedSceneChips } from "../../../domain/chips";
+import { parseSceneParam } from "../../../domain/scene-viewer";
+import { isSkinId } from "../../../domain/skins";
+import { isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
-import { getGameRepository } from "../../../server/repository";
+import { getLocale } from "../../../i18n/server";
+import { getPolicy } from "../../../policy/server";
+import { getBoardView } from "../../../server/board-api";
+import { getBoardRepository } from "../../../server/board-repository";
+import {
+  playerCookieName,
+  resolveParticipantSession,
+} from "../../../server/board-session";
+import { getPublicOriginFromHeaders } from "../../../server/public-origin";
+import { getConfig } from "../../../config";
+import { boardApiDeps, policyForBoard } from "../../api/boards/shared";
+import { BoardClient, type BoardClientView } from "./BoardClient";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Pinned game",
-  robots: { index: false, follow: false },
-};
-
-function formatDeadline(value: number): string {
-  // Server-rendered for every player, so use one explicit timezone.
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(value);
-}
-
-export default async function GamePage({
+/**
+ * Link preview (PIN-72, docs/11 section 6): title/description
+ * here; since PIN-102 the OG/Twitter image is the board card
+ * (opengraph-image.tsx), resolved against the public origin. The slug
+ * capability link is what a chat crawler already holds when it
+ * fetches this page, so the card leaks nothing beyond board-visible
+ * pins — never candidate elements or tmp/ refs. noindex is
+ * preserved. Any failure degrades to the branded fallback instead
+ * of breaking the page.
+ */
+export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  // The public origin goes on every path, the fallback included, so
+  // the card URL never resolves against an internal request host.
+  const origin = await publicOrigin();
+  const locale = await getLocale();
+  const fallback: Metadata = {
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
+    title: t(locale, "board.pageTitle"),
+    description: t(locale, "board.previewDescription"),
+    robots: { index: false, follow: false },
+  };
+  try {
+    const { slug } = await params;
+    if (!isValidSlug(slug)) return fallback;
+    const boards = getBoardRepository();
+    const board = await boards.getBoard(slug);
+    if (!board) return fallback;
+    if (!origin) return fallback;
+    const scenes = await boards.listScenes(slug);
+    const preview = buildBoardPreview({
+      boardTitle: board.title,
+      slug,
+      origin,
+      scenes,
+      fallbackDescription: t(locale, "board.previewDescription"),
+    });
+    return {
+      // PIN-102: og:image / twitter:image come from the board card
+      // (opengraph-image.tsx, twitter-image.tsx). Next only uses the
+      // file convention when no `images` are set here, and resolves
+      // its URL against metadataBase (the public origin).
+      metadataBase: new URL(origin),
+      title: preview.title,
+      description: preview.description,
+      robots: { index: false, follow: false },
+      openGraph: {
+        title: preview.title,
+        description: preview.description,
+        url: preview.pageUrl,
+        type: "website",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: preview.title,
+        description: preview.description,
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/** The public origin for metadata, or null when it can't be resolved. */
+async function publicOrigin(): Promise<string | null> {
+  try {
+    const origin = getPublicOriginFromHeaders(await headers(), getConfig().appBaseUrl);
+    new URL(origin);
+    return origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Studio board page (PIN-66, docs/11 section 6). Replaces the
+ * game read-path: boards live in `boards/` (PIN-62/63), so an
+ * old game slug with no Studio board is a plain 404 here (the
+ * accepted post-PIN-52 break). Slug shape is checked before any
+ * repository read, mirroring the API slug gate.
+ *
+ * PIN-98: the board renders in its skin (docs/14): the client root
+ * carries `data-theme` from `skinForTheme(board.themeId)`, so
+ * first-generation theme ids map onto a free skin. PIN-111:
+ * `?tryon=<skin>` becomes the host's Plus try-on once the first poll
+ * confirms the host (guests ignore it). PIN-131: `?scene=<id>` opens
+ * the scene viewer on that print (the client checks it is viewable).
+ */
+export default async function BoardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug } = await params;
-  const game = await getGameRepository().getGame(slug);
-  if (!game) notFound();
+  if (!isValidSlug(slug)) notFound();
 
+  const boards = getBoardRepository();
+  const board = await boards.getBoard(slug);
+  if (!board) notFound();
+
+  const policy = await policyForBoard(slug);
+  const cookieStore = await cookies();
+  const viewer = await resolveParticipantSession(
+    slug,
+    cookieStore.get(playerCookieName(slug))?.value ?? null,
+    { boards, sessionSecret: getConfig().sessionSecret, policy },
+  ).catch(() => null);
+  const view = await getBoardView(slug, viewer, boardApiDeps(policy));
+  if (!view) notFound();
+
+  const resolved = getPolicy(board.policyOverrides ?? null);
+  // PIN-214: the instant idea chips arrive in the viewer's language.
+  const sceneChips = fixedSceneChips(await getLocale(), resolved.sceneChipsCount);
+  const query = await searchParams;
+  const tryOnSkin = isSkinId(query.tryon) ? query.tryon : null;
+
+  // The client renders the skin root (data-theme from the board's
+  // themeId), so a look change or a host try-on switches it at once.
   return (
-    <main>
-      <p className="eyebrow"><a href="/">Pinned</a></p>
-      <p className="state-pill">{game.state}</p>
-      <h1 className="page-title">{game.persona.name}</h1>
-      <p className="tagline">{game.persona.judgingStyle}</p>
-
-      <section className="card">
-        <p className="eyebrow">{t("en", "game.challenge")}</p>
-        <p className="challenge">“{game.challenge}”</p>
-        <dl className="facts">
-          <div>
-            <dt>{t("en", "game.deadline")}</dt>
-            <dd><time dateTime={new Date(game.deadlineAt).toISOString()}>{formatDeadline(game.deadlineAt)} UTC</time></dd>
-          </div>
-          <div>
-            <dt>{t("en", "game.entries")}</dt>
-            <dd>{game.entryCount}</dd>
-          </div>
-          <div>
-            <dt>{t("en", "game.state")}</dt>
-            <dd>{game.state}</dd>
-          </div>
-        </dl>
-        <p className="notice">{t("en", "game.next")}</p>
-      </section>
-
-      <section className="card">
-        <h2>{t("en", "game.rubricTitle")}</h2>
-        <ul className="plain-list">
-          <li>{t("en", "game.rubricFit")}</li>
-          <li>{t("en", "game.rubricEffort")}</li>
-          <li>{t("en", "game.rubricChaos")}</li>
-        </ul>
-        <p>{t("en", "game.rubricNote")}</p>
-      </section>
-
-      <section className="card">
-        <h2>{t("en", "game.voice")}</h2>
-        <ul className="plain-list">
-          {game.persona.voiceRules.map((rule) => <li key={rule}>{rule}</li>)}
-        </ul>
-        {game.persona.catchphrases.length > 0 ? (
-          <>
-            <h3>{t("en", "game.catchphrases")}</h3>
-            <ul className="plain-list">
-              {game.persona.catchphrases.map((phrase) => <li key={phrase}>{phrase}</li>)}
-            </ul>
-          </>
-        ) : null}
-      </section>
-    </main>
+    <BoardClient
+      slug={slug}
+      initialView={view as BoardClientView}
+      tryOnSkin={tryOnSkin}
+      initialSceneId={parseSceneParam(query.scene)}
+      initialBilling={query.billing ?? null}
+      policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementLabelMaxChars: resolved.elementLabelMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, photosPerBatch: resolved.photosPerBatch, batchUploadConcurrency: resolved.batchUploadConcurrency, uploadRetryMaxAttempts: resolved.uploadRetryMaxAttempts, uploadRetryBackoffMs: resolved.uploadRetryBackoffMs, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0, makes: { packs: resolved.credits.packs, lowMakesWarning: resolved.credits.lowMakesWarning, lowFreePhotosWarning: resolved.credits.lowFreePhotosWarning } }}
+    />
   );
 }

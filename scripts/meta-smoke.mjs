@@ -8,8 +8,8 @@
  *
  * Without a key it verifies endpoint reachability only (expects the
  * OpenAI-style 401 invalid_api_key envelope) and exits 2.
- * With a key it runs, in order: GET /models, persona chat, Muse
- * Image generation, Spark vision judging on the generated (or given)
+ * With a key it runs, in order: GET /models, Spark chat, Muse
+ * Image generation, Spark vision labelling on the generated (or given)
  * image, then SAM 3.1 segmentation via /responses. It prints shapes,
  * latencies and usage — never the key, never full image payloads.
  */
@@ -83,6 +83,45 @@ function findImageRef(value, depth = 0) {
   return null;
 }
 
+function imageFormatFromBase64(payload, preferred) {
+  if (payload.startsWith("/9j/")) return "jpeg";
+  if (payload.startsWith("iVBORw0KGgo")) return "png";
+  if (payload.startsWith("UklGR")) return "webp";
+  if (payload.startsWith("R0lGOD")) return "gif";
+  const normalized = String(preferred || "").toLowerCase().replace(/^\./, "");
+  if (normalized === "jpg") return "jpeg";
+  return ["png", "jpeg", "webp", "gif"].includes(normalized) ? normalized : "png";
+}
+
+function findBase64Payload(value, depth = 0) {
+  if (depth > 6 || value == null || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = findBase64Payload(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "string" && (key === "b64_json" || key === "base64")) return item;
+    const hit = findBase64Payload(item, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function usableGeneratedImage(json) {
+  const display = findImageRef(json);
+  if (display && /^https?:\/\//.test(display)) return { usable: display, display };
+  const payload = findBase64Payload(json);
+  if (!payload) return display ? { usable: null, display } : null;
+  const format = imageFormatFromBase64(payload, json.output_format);
+  return {
+    usable: `data:image/${format};base64,${payload}`,
+    display: `base64(${payload.length} chars, image/${format})`,
+  };
+}
+
 async function main() {
   if (!KEY) {
     const { res, json, ms } = await call("models-unauth", "/models");
@@ -109,20 +148,20 @@ async function main() {
   }
 
   try {
-    const { res, json, ms } = await call("persona", "/chat/completions", {
+    const { res, json, ms } = await call("spark-chat", "/chat/completions", {
       method: "POST",
       body: JSON.stringify({
         model: SPARK,
         messages: [
-          { role: "system", content: "Return ONLY JSON {persona:{name,language,voiceRules,catchphrases,judgingStyle},challenge} for a photo game host. Roast photos, never people." },
-          { role: "user", content: JSON.stringify({ brief: "a passive-aggressive IT helpdesk" }) },
+          { role: "system", content: "Return ONLY JSON {ok:true}." },
+          { role: "user", content: "ping" },
         ],
       }),
     });
     const content = json?.choices?.[0]?.message?.content || "";
-    record("Spark persona chat", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} content[0:120]=${content.slice(0, 120)}`);
+    record("Spark chat", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} content[0:120]=${content.slice(0, 120)}`);
   } catch (e) {
-    record("Spark persona chat", false, String(e));
+    record("Spark chat", false, String(e));
   }
 
   try {
@@ -130,9 +169,9 @@ async function main() {
       method: "POST",
       body: JSON.stringify({ model: IMAGE, prompt: "Photograph of a red stapler on a cluttered desk, daylight" }),
     });
-    const ref = findImageRef(json);
-    if (!imageUrl && ref && /^https?:\/\//.test(ref)) imageUrl = ref;
-    record("Muse Image generation", res.ok && !!ref, `${ms}ms ref=${ref} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
+    const generated = usableGeneratedImage(json);
+    if (!imageUrl && generated?.usable) imageUrl = generated.usable;
+    record("Muse Image generation", res.ok && !!generated?.usable, `${ms}ms ref=${generated?.display} output_format=${json.output_format || "?"} usage=${JSON.stringify(json.usage || {})} keys=${Object.keys(json).join(",")} bytes=${rawLen}`);
   } catch (e) {
     record("Muse Image generation", false, String(e));
   }
@@ -141,12 +180,12 @@ async function main() {
     record("Spark vision + SAM", false, "no image URL available (pass --image-url)");
   } else {
     try {
-      const { res, json, ms } = await call("judge", "/chat/completions", {
+      const { res, json, ms } = await call("label", "/chat/completions", {
         method: "POST",
         body: JSON.stringify({
           model: SPARK,
           messages: [
-            { role: "system", content: "Return ONLY JSON {objectLabel,scores:{fit,effort,chaos},teaser} for this photo vs the challenge." },
+            { role: "system", content: "Return ONLY JSON {objectLabel,altLabel,safetyFlags} naming the main object in this photo." },
             {
               role: "user",
               content: [
@@ -164,9 +203,9 @@ async function main() {
       } catch {
         /* keep default concept */
       }
-      record("Spark vision judge", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} concept=${concept} content[0:120]=${content.slice(0, 120)}`);
+      record("Spark vision label", res.ok && content.length > 0, `${ms}ms usage=${JSON.stringify(json.usage || {})} concept=${concept} content[0:120]=${content.slice(0, 120)}`);
     } catch (e) {
-      record("Spark vision judge", false, String(e));
+      record("Spark vision label", false, String(e));
     }
 
     try {
