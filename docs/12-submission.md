@@ -17,6 +17,11 @@ models, budgets and the TTL story; test and PR counts are marked
 "recount at freeze". If code and this packet disagree at freeze,
 the code wins — re-run §4 and the test command before submitting.
 
+Nov 1 refresh (PIN-235): §2 now holds the chosen video direction
+and the overnight prototype (the older 170 s storyboard is in git
+history); §7 adds the event's rules and judging brief with sources;
+§8 maps the submission form's fields.
+
 ## 1. One-page pitch
 
 **Pinneds Studio — your stuff, pinned together.**
@@ -69,49 +74,87 @@ Notes for whoever fills this in:
   committed to this repo or shown in the video (§2, capture
   notes).
 - `<VIDEO_URL>`: the unlisted/public host URL of the §2 cut.
+- The submission form has no field for the product URL or a
+  demo board (§8). `<PROD_URL>` and `<DEMO_BOARD_URL from Linear>`
+  go into the Project Description text, and the description is
+  the only place the demo board link appears.
 
-## 2. Video: storyboard + narration script (~170 s)
+## 2. Video: direction, prototype and capture rules
 
-Total runtime target: **170 seconds (2:50)**, inside the
-~3-minute limit (`docs/11` §1). Robin records; shots are
-captured on a **real phone** (per PIN-82), not an emulator.
-Narration lines are written to be read at a calm pace — if a
-take runs long, trim pauses, not shots.
+The video is the artifact judges watch twice: Stage 2 scores it
+next to the code and the live product, and the Stage 3 finalists'
+videos are watched live (§7). Limit: three minutes; target 2:50.
 
-Global capture rules (every shot):
+### Direction (chosen Oct 31)
 
-- Real phone, portrait, screen recording at native resolution;
-  a second real phone for the two-friends shots (S4). Charge
-  both; Do Not Disturb on; notifications off.
-- Never show the address bar with the board slug, a tracker
-  page, an API key, or a hosting console. Crop or cut before
-  any URL is legible.
-- Pre-warm the board: one photo already decomposed, one scene
-  already in the gallery, so no shot waits on a cold model
-  call. Live waits that remain (S2, S5) are cut with a visible
-  "cooking…" beat, not faked — timings in §3 are the honest
-  numbers behind the cuts.
-- Use synthetic or consenting-friend photos only. If a face
-  appears, keep the consent-note beat in frame (S2 note).
+Story **"Made from"**: a friend group's Halloween. Their real
+things become pins, and anyone mixes anyone's pins into a new
+scene that says whose things are in it, and that the owner can
+take back. Each step names the Meta model doing it on screen
+(Muse Spark names, SAM 3.1 cuts, Muse Voice Transcribe takes the
+idea, Muse Image composes; the UI languages came from Muse Spark
+Open). The business is one short beat (free to play, Board Plus
+€2.99 once per board, guests never pay), not the story.
 
-| # | Time | s | Screen action | Narration line | Capture notes |
-| --- | --- | --- | --- | --- | --- |
-| S1 | 0:00–0:15 | 15 | Hook: a real photo on the phone (desk with a mug, a duck, a lamp). Open the board; the same things are already there as cut-out pins. Quick zoom from photo → pins. Alternative open: a landing showcase set (`docs/17`), friends' things landing in one scene. | "This is my desk. These are my actual things — cut out of one photo, pinned to a board I share with friends. Watch what happens when we remix them." | Real phone in hand over the real desk if possible; end on the board full-screen. No URL in frame. Showcase photos are synthetic (Muse Image made them, SAM 3.1 cut them); the older landing set and `/start` samples are Higgsfield images, so say so if asked (§6). |
-| S2 | 0:15–0:40 | 25 | Tap Add photo, pick a fresh photo. "Looking for what to cut out…" then pins pop in one by one, pre-selected, each labelled. Tap "Pin 3" (the count); pins land on the board with the owner's name. | "Anyone with the board link adds a photo. Muse Spark names the things in it, SAM 3.1 cuts each one out, and they land on the board as pins — with your name on them." | One continuous take; if decomposition runs past ~15 s, jump-cut on the first pin popping in (measured mean 10.6 s, §3). If the photo has a person, hold 1 s on the face note ("There's a face in this photo. Pin it if they're happy to be here."). |
-| S3 | 0:40–0:55 | 15 | Tap-add miss: point at something naming missed in the same photo (e.g. a small plant). Tap it on the photo; a new cut-out appears as a candidate pin. Pin it. | "Missed something? Tap it. A point prompt to SAM cuts out exactly the thing you touched, and Spark names it." | Finger tap must be visible — record the phone in hand, or enable touch indicators. A tapped cut-out gets a Spark name and a face flag like any other pin (PIN-117, `tap-name.v1`); only if that pass fails does it keep the label "My find". |
-| S4 | 0:55–1:20 | 25 | Two friends, one board: second phone opens the same board link, joins with a name, pins a photo of their cat. First phone's board updates (polling) — the cat pin appears with the friend's name. The friend's phone is set to Spanish or French, so her UI reads in that language (translated by Muse Spark Open). | "There's no sign-up — the link is the invitation. My friend opened it on her phone, in Spanish, pinned her cat, and it showed up on my board, credited to her." | Two real phones side by side on a table, single wide shot or split-screen edit. Set the friend's phone language beforehand (the app follows the browser language, `docs/18`). Keep both address bars out of frame. Board polls every 5 s (Policy `boardPollIntervalMs`); hold the shot until the pin lands. |
-| S5 | 1:20–1:55 | 35 | Make a scene: select 3 pins from two different people. Spark's generated idea chips appear; tap one, then dictate a tweak with the mic ("Say it instead", Muse Voice) and tap "Make it". "Cooking…" card, then the composed image lands in the gallery. Zoom the credit line ("made from …'s mug + …'s cat"). | "Now anyone picks a few pins — mine, hers, anyone's. Spark suggests ideas, or just say it and Muse Voice writes it down. Muse Image composes a brand-new scene and credits the people whose things are in it." | Open the Make sheet once beforehand so the chips are cached; keep the dictated clip short (the audio is never stored). Cut the compose wait to ~3 s of "cooking…" (measured scene mean 14.4 s, §3). End the shot holding the finished scene + credits for a full 2 s. |
-| S6 | 1:55–2:15 | 20 | Remix: tap Remix on that scene, add one new pin, new prompt ("…now at a birthday party"). New scene lands next to the parent; credits now include the new contributor too. | "Every scene can be remixed: the original image plus new pins go back in as references — statelessly — and the credits carry everyone who's in it now." | Show parent → child side by side at the end so continuity reads. Same wait-cut as S5. |
-| S7 | 2:15–2:25 | 10 | Share: tap Share on a scene (system share sheet), send the board link to a chat; the chat preview shows the latest scene as the link image. | "Scenes share straight to the group chat, and the board link previews with the latest scene." | Use a private test chat; blur names/avatars if real people appear. The OG/Twitter preview is the latest ready scene (`src/app/g/[slug]/opengraph-image.tsx`); let the preview card fully load before cutting. |
-| S8 | 2:25–2:35 | 10 | Trust beat: on the second phone, the pin's owner deletes their element. Its pin disappears from the board and the scene that used it is hidden. | "And it's yours to take back: delete your element and its scenes are hidden." | Delete from the *owner's* phone (owner-only). Cut to the first phone to show the board after the delete. This destroys the demo scene — record S8 last, or use a throwaway board. |
-| S9 | 2:35–2:50 | 15 | Close: back to the full board (pins + gallery), then end card: product name, repo URL, `<PROD_URL>`, the models (Muse Spark, SAM 3.1, Muse Image, Muse Voice at runtime; Muse Spark Open at build time). On screen, the usage line from §4 (people / pins / scenes, real counts). | "Built in one week for the Meta hackathon with Muse Spark, SAM 3.1, Muse Image and Muse Voice, and already played by real friends and family: `<N>` people, `<N>` pins, `<N>` scenes. Pinneds — pin your world." | Fill the three counts from a fresh §4 run on record day; never reuse stale numbers. End card shows no board link — the demo link lives in the submission form only. |
+Rules for every cut:
 
-Shot total: 15 + 25 + 15 + 25 + 35 + 20 + 10 + 10 + 15 =
-**170 s**.
+- **Never fake the product.** Every shot of the app working is a
+  real recording of the real app. AI-generated story shots show
+  the people and places only: no phone screen in a generated shot
+  may show an interface (re-roll the shot if it does).
+- **Mark every edit of a model wait.** A shortened wait or a
+  sped-up clip carries an on-screen note ("real scene wait 27 s,
+  shortened").
+- **Disclose on the end card:** which shots are AI-generated
+  (Higgsfield) and where the app footage was recorded.
+- **Synthetic people and things only.** The cast and the photos
+  of their things are generated; no real faces, no board link on
+  screen, no slug in any file name or log.
 
-Record order tip: S8 (delete) is destructive — shoot it last
-or on a second board. S2/S3 need the same photo; shoot them
-back-to-back.
+### Prototype (Nov 1)
+
+A 66 s cut was produced overnight to test the approach:
+
+- six story shots (GPT Image 2.5 stills from one cast anchor,
+  animated with Kling 3.0 pro);
+- real recordings of dev.pinneds.com with live models: four
+  people, ten pins, two scenes (the hero scene and a remix),
+  dictation transcribed by Muse Voice Transcribe from a fake
+  microphone fed with a generated voice;
+- narration in two candidate voices (Seed Audio), captions, an
+  end card in the app's own fonts.
+
+Cost: 198.2 Higgsfield credits including a five-model video
+comparison (≈ 110 for the cut itself) and ≈ $0.22 of Meta Model API
+calls on dev. The throwaway board was deleted afterwards through the
+app. Findings, costs and the model comparison:
+`video/notes/viability.md`. Storyboard of the prototype:
+`video/storyboard/v0-60s-halloween.md`; three-minute outline:
+`video/storyboard/v1-3min-outline.md`. Scripts and cut lists:
+`video/` (PIN-236).
+
+Open before the three-minute cut: narrator voice, music (no
+standalone music model is available on the Higgsfield account),
+the story structure (pre-party in separate places, then the party,
+the late arrival and the close), and re-recording the app on
+`<PROD_URL>` after the promotion.
+
+### Capture rules (app footage)
+
+- Scripted capture at a phone viewport (390x844 CSS px at 3x,
+  1170x2532 frames, 30 fps) through a CDP screencast; Chromium
+  needs `--force-device-scale-factor=3` for sharp frames. Only
+  overlay: a touch dot at each tap.
+- Each person is a separate browser context joining by the board
+  link; one context per language where the language matters.
+- The board link lives only in a private file outside the repo;
+  scripts sanitise every log line. The app never renders the link
+  as text, and page-only frames carry no address bar.
+- Real waits seen: photo to pins 13–17 s, scene 17–27 s,
+  transcript ~4 s. Hold dictation at least 12 s: a headless
+  recorder can stop early and cut the sentence.
+- Record on the submitted host (`<PROD_URL>` after the Nov 1
+  promotion). Delete throwaway boards afterwards through the app.
 
 ## 3. Evidence table (every number with its source)
 
@@ -132,7 +175,7 @@ synthetic images.
 | Cost per scene (T5, **estimate**) | **≈ $0.01**/scene (bar ≤ $0.10). Meta's published Muse Image price is a flat $0.01 per generated image, whatever the tokens; the PIN-50 spike had priced tokens at Spark rates (≈ $0.022). Provider dashboard is authoritative | `src/gateway/costs.ts`; `docs/16-ai-usage.md`; `eval/studio-findings.md` (T5) |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
 | Automated tests | **1,507 passed / 2 skipped** (133 files), `AI_MOCK=1`, as of Oct 31, 2026 on `dev` (tip `f010eb7`). **Recount at freeze**; CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
-| Pull requests | **About 170** as of Oct 31, 2026 (highest PR number #173) — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
+| Pull requests | **203 merged** (212 opened) as of Nov 1, 2026 — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
 | Repo public | `MoriaCrew/Pinned`, visibility PUBLIC, AGPL-3.0 | `gh repo view` (Oct 29); `LICENSE`, `README.md` |
 | UI languages | Six translated by Muse Spark Open plus a reviewer pass; first pass **$0.98** in total. No native-speaker review yet | `docs/18-i18n.md` ("Costs", "Who reviewed what") |
 | Usage (people / pins / scenes) | Not a fixed number — captured fresh per §4 on record and submit days | `scripts/usage-report.mjs` (`npm run usage:report`) |
@@ -153,7 +196,7 @@ models `muse-spark-1.3` / `sam-3.1` / `muse-image-1.0` /
 the defaults in `src/policy/policy.ts` — one object the UI,
 validators and prompts all read (`docs/11` §5.1).
 
-## 4. Usage capture (the numbers in S9 and the submission form)
+## 4. Usage capture (the numbers on the end card and in the form)
 
 The report reads the **public boards API only** — there is no
 board list by design, because slugs are capability secrets —
@@ -185,7 +228,7 @@ submitting):
    `$env:USAGE_BOARD_SLUGS` first, then run the npm command.)
 4. Read the per-board lines (`title: people=… elements=…
    pins=… scenes=…`) and the final `TOTAL:` line. Those are
-   the S9 / submission numbers. Date-stamp them wherever they
+   the end-card / submission numbers. Date-stamp them wherever they
    are quoted ("as of Nov 4").
 5. If a board 404s or returns malformed counters, the script
    reports it on stderr, excludes it from totals, and exits 1
@@ -221,9 +264,9 @@ approves.
 
 | # | Item | Owner | Done when |
 | --- | --- | --- | --- |
-| V1 | Record §2 shots on a real phone (two phones for S4), DND on, slugs never in frame | Robin | Raw takes for S1–S9 exist |
-| V2 | Fresh usage numbers captured per §4 on record day → S9 line + end card | Robin (agent can run the command if given the host) | S9 numbers are dated, real, and reproducible |
-| V3 | Edit to ≤ 3:00 (~170 s target), narration per §2 script, waits cut honestly (no faked instant results) | Robin | Final cut plays start-to-finish; every shown feature exists on the submitted build |
+| V1 | Record the app clips with the §2 capture rules on `<PROD_URL>`; generate the story shots per the storyboard in `video/storyboard/` | Robin + Agent | Every app clip and story shot in the cut list exists; no slug in any frame or file name |
+| V2 | Fresh usage numbers captured per §4 on record day → end card | Robin (agent can run the command if given the host) | End-card numbers are dated, real, and reproducible |
+| V3 | Edit to ≤ 3:00 (~170 s target) with `video/build.mjs`; every shortened wait marked on screen; end card discloses AI-generated shots | Robin + Agent | Final cut plays start-to-finish; every shown feature exists on the submitted build |
 | V4 | Upload video; put repo + `<PROD_URL>` in the description; the demo board link **only** if the submission rules ask for it there — never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
 
 ### Submit (Nov 4, before 21:00 ET)
@@ -351,3 +394,68 @@ limits. Optional sign-in (PIN-57) shipped — elements follow
 their owner via the My pins library, as the owned `Element` /
 board `Pin` split anticipated (`docs/11` §5.4). Next: iterate
 on real family feedback.
+
+## 7. Rules and judging brief (read Oct 31, 2026)
+
+Sources: the participant guide (**G**,
+https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details),
+the Official Rules on the event waiver page (**R**,
+https://cerebralvalley.ai/e/meta-ai-developer-hackathon/waiver)
+and the event overview (**O**,
+https://cerebralvalley.ai/e/meta-ai-developer-hackathon).
+
+| Topic | What it says | Source |
+| --- | --- | --- |
+| Deadline | Wed Nov 4, 9:00 PM ET, through the Cerebral Valley portal; late entries are not considered | G §3, §7; R |
+| Video | "a three minute demo video highlighting the specific features, code, and functionality you built during the Hackathon"; a primary judging artifact with the code and the live product | G §7 |
+| Repository | Must be public; repo and video links must open without login; everyone who worked on it is listed | G §4, §7 |
+| New work | Judges must be able to tell what was built during the event; failing to identify it means "immediate disqualification" | G §4 |
+| Rights | No code, data or assets without rights; the entry is original and infringes no copyright, privacy or other rights; open source allowed under its licence | G §4; R "Hackathon Submission" |
+| Licence to organisers | Perpetual, non-exclusive, royalty-free, including marketing use | R |
+| Stage 1 | Pass/fail: fits the theme and reasonably uses the Meta Model API and/or Meta open-weight models | G §8 |
+| Stage 2 | 0–10 per criterion: **Impact 30 %**, **Use of Meta AI Tooling 25 %**, **Technical Depth & Execution 20 %**, **Demo 25 %** ("does the product hold up live? Is the demo video genuinely cool to watch?") | G §8; R |
+| Stage 3 | Top 5 per track; final judges watch the videos live and rank with the same rubric; closing ceremony Mon Nov 9, 12:00 PM ET | G §3, §8 |
+| Indie track | "Judged on creativity, technical ambition, and whether it works" | O |
+| Theme | Build for Your World: "Solve a problem you know firsthand … make something possible that wasn't before" | G §1 |
+| Bonus prizes in reach | Best Creative Build ($5K, Muse Image or Muse Wonder); Most Viral ($20K, an X post, engagement counted to Nov 8 EOD, link in the form); Community Vote ($10K) | G §9 |
+| Anti-projects | Includes "Simple Image Analyzers": the video must not open on photo → labels | G §4 |
+
+Risks for Pinneds and how we answer them:
+
+1. **New work.** The repository's first five commits (Oct 26,
+   10:43–11:40 ET) came before the 12:00 ET kickoff and hold only
+   the licence, planning docs and secret-scanner configuration; the
+   app scaffold landed at 15:09 ET. Say so in the README and in one
+   line of the video.
+2. **The product must hold up live.** A judge's new board gets the
+   free tier; the demo board holds a fixed number of AI scenes once
+   Plus is bought; judges behind one shared office address share the
+   free-board allowance while signed out (`docs/15`). Size the demo
+   board's headroom for judging week before Nov 4.
+3. **Claims must match the repo.** Four Meta models at runtime and
+   one at build time; Muse Code is a coding agent, not a model in
+   the product; cost figures are estimates.
+4. **Rights.** Music needs licence evidence; generated story media
+   keeps its job ids (`video/`); no real faces; no board link in any
+   frame.
+
+## 8. Submission form fields (read Oct 31, 2026)
+
+The form is a side panel on the event page (sign-in required).
+Starred fields are required.
+
+| Field | Answer from |
+| --- | --- |
+| Team Name * | team name |
+| Team Members | pre-filled with the submitter; solo entry |
+| Track * | Indie Developer Track |
+| Problem statement * | Build for Your World |
+| Most Viral: X post link | the X post of the short cut, if posted before submitting |
+| Project Description * | §1 pitch + `<PROD_URL>` + `<DEMO_BOARD_URL from Linear>` (no other field takes a URL to the product) |
+| Public GitHub Repository | https://github.com/MoriaCrew/Pinned |
+| 3-Minute Demo Video | `<VIDEO_URL>` (the placeholder suggests YouTube) |
+| Use of Meta products to build the project | `docs/19-meta-models.md` summary |
+| Why Meta's models are important | §6 "Why Meta's models" |
+| Partner technology feedback | Baseten (Muse Spark Open for the UI translations) |
+| Survey items (Meta Model API, Muse Code, obstacles, comparisons) | the submitter's own answers |
+| Consent checkbox (use, publish, share …) | read in full before ticking |
