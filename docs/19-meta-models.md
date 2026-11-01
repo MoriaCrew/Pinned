@@ -5,6 +5,9 @@ Pinneds uses five Meta models. Four run inside the app, behind six capability po
 what comes out, which Policy keys govern it, what happens when it fails, and what we
 measured. Spec: `docs/11-studio.md` §3 and §5.2; decisions:
 `docs/adr/003-studio-architecture.md`; cost accounting: `docs/16-ai-usage.md`.
+Visitors get the plain-language version in the app at `/models` (PIN-237): the cat
+showcase set step by step, then what each model sees and never sees. Its claims follow
+this page: change both together.
 
 | Model | Runtime ID (env) | Port or entry point | Prompt | Billing unit (estimate) |
 | --- | --- | --- | --- | --- |
