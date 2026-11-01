@@ -59,10 +59,11 @@ export function ModelsWalkthrough() {
             <img src={EXAMPLE.photo.src} alt={tf(locale, "models.photoAlt", { owner })} />
             {EXAMPLE.things.map((thing) => {
               const { left, top, width, height } = thing.box;
+              const box = { left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` };
               return (
                 <Fragment key={thing.sticker}>
-                  <span className={styles.outline} style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }} />
-                  <span className={styles.cut} style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}>
+                  <span className={styles.outline} style={box} />
+                  <span className={styles.cut} style={box}>
                     <Sticker src={thing.src} tilt={0} />
                   </span>
                   <span className="pn-cut-label" style={{ left: `${left + width / 2}%`, top: `${top}%` }}>
