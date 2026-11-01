@@ -19,6 +19,7 @@
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "spike:studio": "node scripts/studio-spike.mjs",
     "seed:demo": "node scripts/seed-demo-board.mjs",
+    "showcase": "node scripts/showcase-build.mjs",
     "seed:stripe-catalog": "node scripts/seed-stripe-catalog.mjs",
     "usage:report": "node scripts/usage-report.mjs",
     "usage:costs": "node scripts/usage-costs.mjs",

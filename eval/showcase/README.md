@@ -137,7 +137,7 @@ metadata (PIN-174).
 
 - Original photos, raw cut-outs and scenes stay outside git.
 - This note and the contact sheet are the only spike files in the repo.
-- The scratch driver becomes `scripts/showcase-build.mjs` in PIN-173.
+- The scratch driver became `scripts/showcase-build.mjs` (PIN-173).
 - The living step-by-step recipe for making, adding or changing a set
   is `docs/17-showcase-sets.md` (PIN-175); this note stays as the
   spike's record.
