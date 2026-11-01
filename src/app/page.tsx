@@ -170,7 +170,7 @@ export default async function HomePage({
         </section>
 
         <footer className="pn-landing-foot">
-          {/* PIN-222: which Meta model does what, one quiet line each. */}
+          {/* PIN-222: which Meta model does what, one quiet line each; PIN-237: the link opens /models. */}
           <section className="pn-landing-meta" aria-labelledby="made-with-meta">
             <h2 className="pn-landing-meta-title" id="made-with-meta">
               {t(locale, "landing.meta.title")}
@@ -185,7 +185,7 @@ export default async function HomePage({
             </ul>
           </section>
           <SiteLinks locale={locale}>
-            <a href="https://github.com/MoriaCrew/Pinned/blob/main/docs/19-meta-models.md">{t(locale, "landing.meta.more")}</a>
+            <a href="/models">{t(locale, "landing.meta.more")}</a>
           </SiteLinks>
         </footer>
       </div>
