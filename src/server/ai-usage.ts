@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
 import { aiCallCostUsdEst, isDeniedOutcome, type AiCallLog } from "../domain/types";
 import { DEFAULT_POLICY, type Policy } from "../policy/policy";
-import { dayBucketFor, type BudgetStore } from "../gateway/budget";
+import { dayBucketFor, hourBucketFor, type BudgetStore } from "../gateway/budget";
 import { estimateMetaCostUsd, estimateReserveUsd } from "../gateway/costs";
 import type { MetaCallLog } from "../gateway/meta-gateway";
 
@@ -103,7 +103,7 @@ export function createMetaLogSink(
  */
 export async function reserveSamLabBudget(
   budget: BudgetStore,
-  policy: Pick<Policy, "dailyBudgetUsd" | "dailyCallLimit" | "maxTokens">,
+  policy: Pick<Policy, "dailyBudgetUsd" | "dailyCallLimit" | "hourlyBudgetUsd" | "maxTokens">,
   opts: { autoLabel: boolean },
   now: number = Date.now(),
 ): Promise<boolean> {
@@ -122,6 +122,10 @@ export async function reserveSamLabBudget(
         dayBucket,
         estimatedCostUsd: estimateReserveUsd(operation, reserveLimits),
         budgetUsd: policy.dailyBudgetUsd,
+        // Stacked on PIN-240: lab spend counts toward the hourly
+        // sub-cap too, exactly like decorated Studio reserves.
+        hourBucket: hourBucketFor(now),
+        hourlyBudgetUsd: policy.hourlyBudgetUsd,
         callLimit: policy.dailyCallLimit,
       });
       if (!result.ok) return false;
