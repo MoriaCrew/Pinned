@@ -111,6 +111,28 @@ describe("capped JSON bodies (PIN-241)", () => {
     expect((await chipsRoute(post("{nope", ip()), slugParams(slug))).status).toBe(400);
     expect((await tapAddRoute(post("{nope", ip()), tapParams(slug))).status).toBe(400);
   });
+
+  it("a body that fails mid-read (client abort, bad chunked body) is the same 400, not a 500", async () => {
+    const slug = await newBoard();
+    // A stream that yields one chunk, then errors like an aborted upload.
+    const broken = (): Request => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"elementIds":'));
+          controller.error(new Error("client aborted"));
+        },
+      });
+      return new Request("http://t/x", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": ip() },
+        body,
+        duplex: "half",
+      } as RequestInit & { duplex: "half" });
+    };
+    expect((await scenesRoute(broken(), slugParams(slug))).status).toBe(400);
+    expect((await chipsRoute(broken(), slugParams(slug))).status).toBe(400);
+    expect((await tapAddRoute(broken(), tapParams(slug))).status).toBe(400);
+  });
 });
 
 describe("tap-add rate limit (PIN-241)", () => {

@@ -7,7 +7,8 @@ import { JSON_HEADERS } from "./shared";
  * Request guards for state-changing JSON routes (PIN-103). Opt-in:
  * each returns a ready error response or null, so a route chains
  * the ones it needs before any I/O. The host-only Plus routes use
- * the full set; PIN-241 adopted readJsonCapped on the scenes, * chips and tap-add POSTs. Other routes can adopt them one by one.
+ * the full set; PIN-241 adopted readJsonCapped on the scenes,
+ * chips and tap-add POSTs. Other routes can adopt them one by one.
  * Bodies are `{ error, code }` like the rest of the board API.
  */
 function refuse(
@@ -62,8 +63,9 @@ export type CappedJson = { ok: true; value: unknown } | { ok: false; response: N
 /**
  * Read a JSON body of at most `maxBytes` (413 when the declared
  * length or the streamed bytes exceed it — reading stops there).
- * Unparseable or empty JSON is `value: null`: the service then
- * answers its own 400 for missing input.
+ * Unparseable, empty or unreadable (failed mid-read) JSON is
+ * `value: null`: the service then answers its own 400 for missing
+ * input.
  */
 export async function readJsonCapped(
   request: Request,
@@ -80,15 +82,22 @@ export async function readJsonCapped(
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => undefined);
-      return tooLarge();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return tooLarge();
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    // A body that fails mid-read (client abort, broken chunked
+    // encoding) is unreadable input like malformed JSON: the route
+    // answers its own 400, never an unhandled 500.
+    return { ok: true, value: null };
   }
   try {
     return { ok: true, value: JSON.parse(Buffer.concat(chunks).toString("utf8")) };
