@@ -81,7 +81,13 @@ import {
   type CreditLedgerStore,
   type CreditPurchase,
 } from "../domain/credit-ledger";
-import { decidePurchasePlusGrant, type PlusMode } from "../domain/plus";
+import {
+  decidePlusRestore,
+  decidePlusRevocation,
+  decidePurchasePlusGrant,
+  type PlusMode,
+  type PlusRevocationReason,
+} from "../domain/plus";
 import type { Policy, PolicyCreditPack } from "../policy/policy";
 import type {
   CheckoutIntent,
@@ -440,6 +446,12 @@ async function grantPurchasePlus(
   sessionId: string | null,
 ): Promise<void> {
   if (!(await policyFor(deps, intent.boardId)).credits.plusOnPurchase) return;
+  // PIN-242: a purchase already clawed all the way back (a full
+  // refund or lost dispute recorded before its grant landed, so the
+  // grant just netted to zero) never grants Plus either.
+  const grantedAccount = await deps.ledger.getAccount(intent.boardId);
+  const grantedPurchase = grantedAccount?.purchases[intent.purchaseId];
+  if (grantedPurchase && grantedPurchase.clawedCredits >= grantedPurchase.credits) return;
   if (!deps.boards) {
     await deadLetter(deps, ctx, "plus_grant_unavailable", {
       intentId: intent.id,
@@ -448,8 +460,84 @@ async function grantPurchasePlus(
     });
     return;
   }
+  await deps.boards.updateBoardSettings(intent.boardId, (board) => {
+    const decision = decidePurchasePlusGrant(board, ctx.at);
+    if (!decision) return null;
+    // A fresh grant supersedes any revocation tombstone (PIN-242).
+    return board.plusRevocation ? { ...decision, plusRevocation: null } : decision;
+  });
+}
+
+/** Another granted purchase on the board still live (not fully clawed back): it grants Plus too, so Plus stays (PIN-242 (c)). */
+function hasOtherLiveGrant(account: BoardCreditAccount, purchaseId: string): boolean {
+  return Object.values(account.purchases).some(
+    (purchase) =>
+      purchase.purchaseId !== purchaseId &&
+      purchase.grantedCredits > 0 &&
+      purchase.clawedCredits < purchase.credits,
+  );
+}
+
+/**
+ * PIN-242: take Plus back when the purchase that granted it is
+ * fully taken back - a cumulative full refund, or a dispute
+ * closed lost that clawed the purchase all the way. Runs after
+ * the makes clawback AND on duplicate deliveries, so a crash
+ * between the claw and this write (it propagates: 500, Stripe
+ * retries) is repaired by the next delivery; the decision inside
+ * the board write makes a replay a no-op, and a mock grant is
+ * never touched. No board repository: operator flag like the
+ * Plus grant, only when a revoke is actually due.
+ */
+async function revokePurchasePlus(
+  deps: StripeWebhookDeps,
+  ctx: HandlerContext,
+  intent: CheckoutIntent,
+  reason: PlusRevocationReason,
+  disputeId: string | undefined,
+  stripeObjectId: string | undefined,
+): Promise<void> {
+  const account = await deps.ledger.getAccount(intent.boardId);
+  const purchase = account?.purchases[intent.purchaseId];
+  if (!account || !purchase || purchase.grantedCredits === 0) return;
+  const otherLive = hasOtherLiveGrant(account, intent.purchaseId);
+  if (!deps.boards) {
+    if (!otherLive) {
+      await deadLetter(deps, ctx, "plus_revoke_unavailable", {
+        intentId: intent.id,
+        boardId: intent.boardId,
+        stripeObjectId,
+        ...(disputeId ? { disputeId } : {}),
+      });
+    }
+    return;
+  }
   await deps.boards.updateBoardSettings(intent.boardId, (board) =>
-    decidePurchasePlusGrant(board, ctx.at),
+    decidePlusRevocation(board, {
+      purchaseId: intent.purchaseId,
+      reason,
+      disputeId,
+      at: ctx.at,
+      hasOtherLiveGrant: otherLive,
+    }),
+  );
+}
+
+/**
+ * PIN-242: a dispute won or reinstated restores the Plus its own
+ * loss revoked (the tombstone decides; any other case writes
+ * nothing). Runs before the makes restore, whose
+ * reinstated_after_final_clawback dead letter still flags the
+ * makes a human must settle while Plus comes back on its own.
+ */
+async function restorePurchasePlus(
+  deps: StripeWebhookDeps,
+  intent: CheckoutIntent,
+  disputeId: string,
+): Promise<void> {
+  if (!deps.boards) return;
+  await deps.boards.updateBoardSettings(intent.boardId, (board) =>
+    decidePlusRestore(board, disputeId),
   );
 }
 
@@ -804,6 +892,14 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
       throw error;
     }
   }
+  // PIN-242: a cumulative FULL refund of this purchase also
+  // revokes the Plus it granted (partials never do). Runs on the
+  // duplicate path too, so a crash between the claw and the
+  // revoke is repaired by the retry; the revoke itself is a
+  // no-op once the grant is gone.
+  if ((counted.intent.refundedEurCents ?? 0) >= pack.eurCents) {
+    await revokePurchasePlus(deps, ctx, intent, "full_refund", undefined, refundId);
+  }
   if (!counted.applied) return "duplicate_refund";
   return delta > 0 ? "refund_clawed" : "refund_recorded_zero_makes";
 }
@@ -899,6 +995,9 @@ async function restoreDispute(
   ids: DeadLetterExtra,
 ): Promise<string> {
   const { intent } = resolved;
+  // PIN-242: bring Plus back if this dispute's loss revoked it,
+  // even when the makes below can no longer be un-clawed.
+  await restorePurchasePlus(deps, intent, disputeId);
   if (intent.finalDisputeClawbacks && disputeId in intent.finalDisputeClawbacks) {
     // Funds came back after the makes were finally clawed:
     // the ledger cannot un-claw, so flag it for a human.
@@ -1044,6 +1143,15 @@ async function finalClawbackDispute(
 
   const excess = await restoreFreezeExcess(deps, ctx, intent, disputeId, ids);
   if (typeof excess === "string") return excess;
+  // PIN-242: a lost dispute that clawed the purchase all the way
+  // back also revokes its Plus. Runs on the duplicate paths too
+  // (a re-delivered lost, a late funds_withdrawn), so a crash
+  // between the claw and the revoke is repaired by the retry.
+  const afterClaw = await deps.ledger.getAccount(intent.boardId);
+  const clawedPurchase = afterClaw?.purchases[intent.purchaseId];
+  if (clawedPurchase && clawedPurchase.clawedCredits >= clawedPurchase.credits) {
+    await revokePurchasePlus(deps, ctx, intent, "dispute_lost", disputeId, disputeId);
+  }
   if (claimedNow) return "dispute_final_clawed";
   return excess.restored ? "final_clawback_duplicate_excess_restored" : "duplicate_final_clawback";
 }
