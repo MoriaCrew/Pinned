@@ -49,19 +49,19 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ PLUS_MODE: "mock" }).plusMode).toBe("mock");
   });
 
-  it("PLUS_MODE=stripe requires STRIPE_SECRET_KEY, else fails closed to off (PIN-149)", () => {
+  it("PLUS_MODE=stripe requires STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET, else fails closed to off (PIN-149)", () => {
     expect(parseConfig({}).stripeSecretKey).toBeNull();
     expect(
       parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "   " }).plusMode,
     ).toBe("off");
-    const cfg = parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: " rk_test_x " });
+    const cfg = parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: " rk_test_x ", STRIPE_WEBHOOK_SECRET: "whsec_test_x" });
     expect(cfg.plusMode).toBe("stripe");
     expect(cfg.stripeSecretKey).toBe("rk_test_x");
     expect(cfg.stripeApiVersion).toBe(STRIPE_API_VERSION);
     expect(STRIPE_API_VERSION).toBe("2026-10-28.endive");
     // Webhook signing secret (PIN-150): trimmed passthrough,
     // null when unset/empty, and never enables stripe by itself.
-    expect(cfg.stripeWebhookSecret).toBeNull();
+    expect(cfg.stripeWebhookSecret).toBe("whsec_test_x");
     expect(
       parseConfig({ STRIPE_WEBHOOK_SECRET: " whsec_test_x " }).stripeWebhookSecret,
     ).toBe("whsec_test_x");
@@ -71,6 +71,17 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ STRIPE_SECRET_KEY: "rk_test_x" }).plusMode).toBe("off");
   });
 
+  it("PLUS_MODE=stripe needs key + webhook secret, and honours STRIPE_EXPECTED_LIVEMODE", () => {
+    const both = { PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "rk_test_x", STRIPE_WEBHOOK_SECRET: "whsec_test_x" };
+    expect(parseConfig(both).plusMode).toBe("stripe");
+    // Key without the webhook secret can sell but never fulfil: off.
+    expect(parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "rk_test_x" }).plusMode).toBe("off");
+    expect(parseConfig({ ...both, STRIPE_EXPECTED_LIVEMODE: "test" }).plusMode).toBe("stripe");
+    expect(parseConfig({ ...both, STRIPE_EXPECTED_LIVEMODE: "live" }).plusMode).toBe("off");
+    expect(parseConfig({ ...both, STRIPE_SECRET_KEY: "rk_live_x", STRIPE_EXPECTED_LIVEMODE: "live" }).plusMode).toBe("stripe");
+    expect(parseConfig({ ...both, STRIPE_SECRET_KEY: "opaque", STRIPE_EXPECTED_LIVEMODE: "live" }).plusMode).toBe("off");
+    expect(parseConfig({ ...both, STRIPE_EXPECTED_LIVEMODE: "Live" }).plusMode).toBe("off");
+  });
   it("passes Firebase web config through, empty fails to null (PIN-83)", () => {
     expect(parseConfig({}).firebaseWebApiKey).toBeNull();
     expect(parseConfig({}).firebaseWebAuthDomain).toBeNull();

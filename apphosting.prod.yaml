@@ -93,3 +93,12 @@ env:
   - variable: POLICY_OVERRIDES_JSON
     value: '{"credits":{"enabled":true,"starterMakes":5}}'
   # /PIN-210
+  # Security review (PIN-112): same App Hosting forwarding layout
+  # as dev (lab-measured fahIndexFromRight=2); key per-IP limits on
+  # the platform-appended entry, not the first XFF entry.
+  - variable: CLIENT_IP_TRUSTED_HOPS
+    value: "2"
+  # Security review: prod billing (PIN-210) must only ever run
+  # live-mode Stripe; a test key here parses PLUS_MODE to off.
+  - variable: STRIPE_EXPECTED_LIVEMODE
+    value: live
