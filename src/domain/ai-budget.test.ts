@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { aiBudgetDenial } from "./ai-budget";
 
 describe("aiBudgetDenial (PIN-180)", () => {
-  it("maps the budget and call-limit denials to 'used up' and the switch to 'off'", () => {
+  it("maps the budget and call-limit denials to 'used up', the hourly sub-cap to 'hourly' and the switch to 'off'", () => {
     expect(aiBudgetDenial("budget")).toBe("exhausted");
     expect(aiBudgetDenial("call_limit")).toBe("exhausted");
+    expect(aiBudgetDenial("hourly_budget")).toBe("hourly");
     expect(aiBudgetDenial("budget_off")).toBe("off");
   });
 
