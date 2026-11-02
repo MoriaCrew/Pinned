@@ -234,7 +234,7 @@ describe("hourly sub-cap (PIN-240)", () => {
     expect((await store.reserve(req({ hourBucket: H1, estimatedCostUsd: 0.5 }))).ok).toBe(true);
   });
 
-  it("evaluateReserve denies hourly_budget at the cap; a stale bucket counts as 0", () => {
+  it("evaluateReserve denies hourly_budget at the cap; a later hour starts from 0", () => {
     const state = { ...emptyBudgetDay(), hourBucket: H1, hourReservedMicroUsd: 900_000 };
     expect(
       evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.2 })),
@@ -272,6 +272,33 @@ describe("hourly sub-cap (PIN-240)", () => {
       reservedMicroUsd: 40_000,
       calls: 4,
     });
+  });
+
+  it("an older hour counts against the stored hour instead of wiping it", async () => {
+    const store = new InMemoryBudgetStore();
+    const call = (hourBucket: string, estimatedCostUsd = 0.01) =>
+      req({ hourBucket, hourlyBudgetUsd: 0.03, estimatedCostUsd });
+    expect((await store.reserve(call(H2))).ok).toBe(true);
+    // A late reserve stamped with the previous hour (retry / skew).
+    expect((await store.reserve(call(H1))).ok).toBe(true);
+    expect(store.snapshot(DAY)).toMatchObject({ hourBucket: H2, hourReservedMicroUsd: 20_000, calls: 2 });
+    // A stale reserve that would bust the stored hour is denied, not reset.
+    expect(await store.reserve(call(H1, 0.02))).toEqual({ ok: false, reason: "hourly_budget" });
+    expect(store.snapshot(DAY)).toMatchObject({ hourBucket: H2, hourReservedMicroUsd: 20_000, calls: 2 });
+    // Forward roll still resets to this reserve's estimate.
+    const H3 = "2026-10-29T12";
+    expect((await store.reserve(call(H3, 0.02))).ok).toBe(true);
+    expect(store.snapshot(DAY)).toMatchObject({ hourBucket: H3, hourReservedMicroUsd: 20_000, calls: 3 });
+  });
+
+  it("evaluateReserve checks an older hour against the stored accumulator", () => {
+    const state = { ...emptyBudgetDay(), hourBucket: H2, hourReservedMicroUsd: 900_000 };
+    expect(
+      evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.2 })),
+    ).toMatchObject({ ok: false, reason: "hourly_budget" });
+    expect(
+      evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.1 })).ok,
+    ).toBe(true);
   });
 });
 

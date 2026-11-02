@@ -17,6 +17,7 @@ import {
   applyReserve,
   emptyBudgetDay,
   evaluateReserve,
+  hourWindow,
   type BudgetDayState,
   type BudgetStore,
   type ReserveRequest,
@@ -103,14 +104,17 @@ export class FirestoreBudgetStore implements BudgetStore {
         updates[`participantTapNames.${request.participantId}`] =
           FieldValue.increment(1);
       }
-      // PIN-240: same hour increments; a rolled hour resets the
-      // accumulator in the same transaction (never increment across buckets).
+      // PIN-240: the stored hour only moves forward (`hourWindow`). A
+      // later hour resets the accumulator in the same transaction; the
+      // same or an older hour increments the stored hour, never
+      // rewriting the bucket back.
       if (request.hourBucket) {
-        if (state.hourBucket === request.hourBucket) {
-          updates.hourReservedMicroUsd = FieldValue.increment(result.estimatedMicroUsd);
-        } else {
-          updates.hourBucket = request.hourBucket;
+        const hour = hourWindow(state, request.hourBucket);
+        if (hour.rolled) {
+          updates.hourBucket = hour.hourBucket;
           updates.hourReservedMicroUsd = result.estimatedMicroUsd;
+        } else {
+          updates.hourReservedMicroUsd = FieldValue.increment(result.estimatedMicroUsd);
         }
       }
       transaction.update(ref, updates);

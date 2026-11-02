@@ -13,7 +13,11 @@ import "server-only";
  * float drift in counters.
  */
 
-/** PIN-240: UTC hour bucket, e.g. "2026-10-29T23" (inside one day bucket). */
+/**
+ * PIN-240: UTC hour bucket, e.g. "2026-10-29T23" (inside one day
+ * bucket). Fixed-width and zero-padded, so string order is time
+ * order (`hourWindow` relies on that; "" sorts before every hour).
+ */
 export function hourBucketFor(now: number): string {
   return new Date(now).toISOString().slice(0, 13);
 }
@@ -95,6 +99,28 @@ export function toMicroUsd(usd: number): number {
 }
 
 /**
+ * PIN-240: the hour a reserve counts against. The stored hour only
+ * moves forward: a later hour rolls over (accumulator restarts at 0
+ * before this reserve), while the same or an OLDER hour (a Segmenter
+ * retry reusing its start hour, a transaction retry, clock skew
+ * between instances) counts against the stored hour instead of
+ * wiping its accumulator.
+ */
+export function hourWindow(
+  state: BudgetDayState,
+  requestHour: string,
+): { hourBucket: string; hourReservedMicroUsd: number; rolled: boolean } {
+  if (requestHour > state.hourBucket) {
+    return { hourBucket: requestHour, hourReservedMicroUsd: 0, rolled: true };
+  }
+  return {
+    hourBucket: state.hourBucket,
+    hourReservedMicroUsd: state.hourReservedMicroUsd,
+    rolled: false,
+  };
+}
+
+/**
  * Pure check against a day state. Returns the micro-USD to add when
  * allowed; callers apply the increment atomically in their backend.
  */
@@ -112,10 +138,11 @@ export function evaluateReserve(
   if (state.reservedMicroUsd + estimatedMicroUsd > toMicroUsd(request.budgetUsd)) {
     return { ok: false, reason: "budget" };
   }
-  // PIN-240: hourly sub-cap (opt-in). Spend from a stale hour
-  // bucket counts as 0; the daily check above stays authoritative.
+  // PIN-240: hourly sub-cap (opt-in). A later hour starts from 0; the
+  // same or an older hour counts against the stored hour
+  // (`hourWindow`). The daily check above stays authoritative.
   if (request.hourBucket && request.hourlyBudgetUsd !== undefined && request.hourlyBudgetUsd > 0) {
-    const hourReserved = state.hourBucket === request.hourBucket ? state.hourReservedMicroUsd : 0;
+    const hourReserved = hourWindow(state, request.hourBucket).hourReservedMicroUsd;
     if (hourReserved + estimatedMicroUsd > toMicroUsd(request.hourlyBudgetUsd)) {
       return { ok: false, reason: "hourly_budget" };
     }
@@ -164,6 +191,9 @@ export function applyReserve(
   request: ReserveRequest,
   estimatedMicroUsd: number,
 ): BudgetDayState {
+  // PIN-240: no hour on the request (legacy callers) leaves the hour
+  // fields untouched; otherwise add to the forward-only window.
+  const hour = request.hourBucket ? hourWindow(state, request.hourBucket) : null;
   const next: BudgetDayState = {
     calls: state.calls + 1,
     reservedMicroUsd: state.reservedMicroUsd + estimatedMicroUsd,
@@ -173,12 +203,10 @@ export function applyReserve(
     participantSegments: { ...state.participantSegments },
     participantTapNames: { ...state.participantTapNames },
     participantTranscriptions: { ...state.participantTranscriptions },
-    hourBucket: request.hourBucket ?? state.hourBucket,
-    hourReservedMicroUsd: !request.hourBucket
-      ? state.hourReservedMicroUsd
-      : state.hourBucket === request.hourBucket
-        ? state.hourReservedMicroUsd + estimatedMicroUsd
-        : estimatedMicroUsd,
+    hourBucket: hour ? hour.hourBucket : state.hourBucket,
+    hourReservedMicroUsd: hour
+      ? hour.hourReservedMicroUsd + estimatedMicroUsd
+      : state.hourReservedMicroUsd,
     photos: { ...state.photos },
   };
   if (request.participantId && request.participantPhotoCap !== undefined) {
