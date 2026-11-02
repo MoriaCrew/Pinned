@@ -4,7 +4,7 @@
  * carry only the opaque report reference (`boardReportRef` in
  * tokens.ts, server-computed) — never the capability slug, so a
  * report never puts the board link in mail or logs. The operator
- * maps a reference back to a board with the same hash
+ * maps a reference back to a board with scripts/find-report-ref.mjs
  * (docs/20-abuse-runbook.md).
  */
 export function reportBoardHref(
