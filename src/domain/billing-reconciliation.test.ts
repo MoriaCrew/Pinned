@@ -226,17 +226,91 @@ describe("buildBillingReconciliationReport (PIN-153)", () => {
     });
   });
 
-  it("PIN-243 scheduled workflow exists, is guarded, and names its secrets", () => {
+  it("PIN-243 summary carries counts and booleans only - no id, hash or timestamp", () => {
+    // Every row kind populated with distinctive ids, so a leak would show.
+    const report = buildBillingReconciliationReport(
+      input({
+        paidSessions: [
+          { sessionId: "cs_LEAK_1", paymentIntentId: "pi_LEAK_1", intentId: "ci_LEAK_1" },
+        ],
+        purchases: [{ boardId: "slug_LEAK_2", purchaseId: "ci_LEAK_2", granted: true }],
+        intents: [
+          { intentId: "ci_LEAK_1", boardId: "slug_LEAK_1", status: "pending", expiresAt: NOW - 777 },
+        ],
+        deadLetters: [{ reason: "reason_LEAK", boardId: "slug_LEAK_3" }],
+      }),
+      boardHash,
+    );
+    expect(report.anomalyCount).toBe(4);
+    const summary = summarizeBillingReconciliation(report, {
+      refundsLast30Days: 1,
+      disputesLast30Days: 0,
+      openDisputes: 0,
+    });
+    expect(Object.keys(summary).sort()).toEqual(
+      [
+        "anomalyCount",
+        "clean",
+        "deadLetterTotal",
+        "disputesLast30Days",
+        "grantNoPaymentCount",
+        "needsAttention",
+        "openDisputes",
+        "paidNoGrantCount",
+        "pendingPastTtlCount",
+        "refundsLast30Days",
+      ].sort(),
+    );
+    for (const value of Object.values(summary)) {
+      expect(["number", "boolean"]).toContain(typeof value);
+    }
+    const printed = JSON.stringify(summary);
+    for (const leak of ["LEAK", "cs_", "pi_", "ci_", "slug", "board:", String(NOW - 777)]) {
+      expect(printed).not.toContain(leak);
+    }
+  });
+
+  it("PIN-243 scheduled workflow: environments, keyless WIF, summary-only output", () => {
     const workflow = readFileSync(
       path.resolve(__dirname, "../../.github/workflows/billing-reconciliation.yml"),
       "utf8",
-    );
+    ).replace(/\r\n/g, "\n");
     expect(workflow).toContain("cron:");
     expect(workflow).toContain("workflow_dispatch");
-    expect(workflow).toContain("PINNED_RECONCILE_STRIPE_READ_KEY");
-    expect(workflow).toContain("PINNED_RECONCILE_GCP_CREDENTIALS_JSON");
     expect(workflow).toContain("enabled=false");
-    expect(workflow).toContain("billing-reconciliation.mjs");
+    // Environment-scoped inputs: one secret, two variables, no key JSON.
+    expect(workflow).toContain("secrets.PINNED_RECONCILE_STRIPE_READ_KEY");
+    expect(workflow).toContain("vars.PINNED_RECONCILE_WIF_PROVIDER");
+    expect(workflow).toContain("vars.PINNED_RECONCILE_SERVICE_ACCOUNT");
+    expect(workflow).not.toContain("GCP_CREDENTIALS");
+    expect(workflow).not.toContain("credentials_json");
+    expect(workflow).toContain("workload_identity_provider: ${{ vars.PINNED_RECONCILE_WIF_PROVIDER }}");
+    expect(workflow).toContain("service_account: ${{ vars.PINNED_RECONCILE_SERVICE_ACCOUNT }}");
+    expect(workflow).toMatch(/permissions:\n\s+contents: read\n\s+id-token: write/);
+    // Only "prod" selects reconcile-prod; anything else is reconcile-dev.
+    expect(workflow).toContain(
+      "environment: ${{ (inputs.environment || vars.PINNED_RECONCILE_ENV) == 'prod' && 'reconcile-prod' || 'reconcile-dev' }}",
+    );
+    expect(workflow).toContain('assertion.repository == "MoriaCrew/Pinned"');
+    expect(workflow).toContain('assertion.ref == "refs/heads/main"');
+    expect(workflow).toContain("roles/datastore.viewer");
+    // Every script run is --summary-only (public log), never --json.
+    const runs = workflow.split("\n").filter((l) => l.trim().startsWith("node scripts/billing-reconciliation.mjs"));
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(run).toContain("--summary-only");
+      expect(run).not.toContain("--json");
+    }
+    // Dependencies install without lifecycle scripts, before any credential exists.
+    const install = workflow.indexOf("npm ci --ignore-scripts");
+    expect(install).toBeGreaterThan(0);
+    expect(install).toBeLessThan(workflow.indexOf("uses: google-github-actions/auth@"));
+    // Every action is pinned to a full commit SHA with its version noted.
+    const uses = workflow.split("\n").filter((l) => /^\s*(- )?uses:/.test(l));
+    expect(uses.length).toBeGreaterThanOrEqual(3);
+    for (const line of uses) {
+      expect(line).toMatch(/uses: [\w.-]+\/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/);
+    }
   });
 
   it("the operator script carries the same report builder (mirror)", () => {
@@ -254,6 +328,23 @@ describe("buildBillingReconciliationReport (PIN-153)", () => {
     expect(script).toContain("billingReconciliationExitCode");
     expect(script).toContain("RECONCILIATION_JSON:");
     expect(script).toContain("--json");
+    expect(script).toContain("--summary-only");
+    // The summary-only payload is exactly {stripe, project, summary}.
+    expect(script).toContain("JSON.stringify({ stripe: gate.mode, project: projectId, summary })");
+    // The script's summary mirror emits the same keys as the domain one.
+    for (const key of [
+      "paidNoGrantCount",
+      "grantNoPaymentCount",
+      "deadLetterTotal",
+      "pendingPastTtlCount",
+      "anomalyCount",
+      "needsAttention",
+      "refundsLast30Days",
+      "disputesLast30Days",
+      "openDisputes",
+    ]) {
+      expect(script).toContain(`${key}:`);
+    }
     expect(script).toContain("listRefundDisputeVisibility");
     expect(script).toContain("/refunds");
     expect(script).toContain("/disputes");

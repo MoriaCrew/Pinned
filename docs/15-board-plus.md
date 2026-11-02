@@ -1250,30 +1250,98 @@ demonstrate the gate and report the pending request, they do
 not chase approval.
 
 **Scheduled reconciliation + dead-letter alerting (PIN-243).**
-The script is automation-ready: human mode keeps the lines above
-and ends with one parseable `RECONCILIATION_JSON:{...}` line;
-`--json` sends the human lines to stderr and prints only the JSON
-payload (`{stripe, project, summary, report}`) on stdout. The
+The script is automation-ready, in three output modes. Human mode
+(operator terminal) keeps the lines above and ends with one
+parseable `RECONCILIATION_JSON:{...}` line. `--json` sends the
+human lines to stderr and prints only the full payload
+(`{stripe, project, summary, report}`) on stdout — operator
+terminal only, since the report carries ids. `--summary-only` is
+the public-log mode: stdout is only `{stripe, project, summary}`,
+stderr only the aggregate `billing reconciliation …`, `SUMMARY …`
+and `refunds-disputes …` lines, and an error prints the Stripe
+status and code, never Stripe's message. No session,
+payment-intent or checkout-intent id, board hash or timestamp is
+printed: a checkout-intent id is a board link
+(`/billing/return?intent=<id>` redirects to the board). The
 summary (`summarizeBillingReconciliation` in
-`src/domain/billing-reconciliation.ts`, mirrored in the script)
-carries `paidNoGrantCount`, `grantNoPaymentCount`,
-`deadLetterTotal`, `pendingPastTtlCount`, `anomalyCount`,
-`clean`, and `needsAttention` — true exactly when
-paid-no-grant > 0 or `deadLetterTotal > 0`, the alert condition.
-Exit stays 1 for any non-clean report (a superset of the alert
-condition), 0 clean, 2 usage/config.
-`.github/workflows/billing-reconciliation.yml` runs it daily
-(06:17 UTC) and on `workflow_dispatch`, but does nothing until
-the operator adds the repository secrets named in its header —
-`PINNED_RECONCILE_STRIPE_READ_KEY` (restricted read key for the
-target environment) and `PINNED_RECONCILE_GCP_CREDENTIALS_JSON`
-(read-only Firestore service account for ADC) — plus optional
-variable `PINNED_RECONCILE_ENV` (`dev` default; `prod` only at
-go-live). Without both secrets the run succeeds as a documented
-skip; with them, a non-clean report fails the run and lands in
-the step summary — that failed run is the dead-letter alert, so
-watch Actions notifications for the workflow and drain dead
-letters per the runbook above before calling a billing change
+`src/domain/billing-reconciliation.ts`, mirrored in the script;
+counts and booleans only, pinned by tests) carries
+`paidNoGrantCount`, `grantNoPaymentCount`, `deadLetterTotal`,
+`pendingPastTtlCount`, `anomalyCount`, `clean`, and
+`needsAttention` — true exactly when paid-no-grant > 0 or
+`deadLetterTotal > 0`, the alert condition. Exit stays 1 for any
+non-clean report (a superset of the alert condition) or a runtime
+error, 0 clean, 2 usage/config.
+
+`.github/workflows/billing-reconciliation.yml` runs it with
+`--summary-only` daily (06:17 UTC; GitHub runs the cron from the
+default branch, `main`) and on `workflow_dispatch`. The repo is
+public, so its log and step summary are too: the step summary is
+the heading `## Billing reconciliation (<env>) — exit <code>` and
+the summary JSON only. For the rows behind a red run, run the
+script in an operator terminal (command above). The job runs in
+GitHub Environment `reconcile-dev` or `reconcile-prod`: the
+dispatch input picks it, else repository variable
+`PINNED_RECONCILE_ENV` (`prod` selects `reconcile-prod`; unset or
+anything else is `reconcile-dev`; keep it unset until go-live). It
+authenticates to Google Cloud by Workload Identity Federation — no
+service-account key exists anywhere — and installs dependencies
+with `npm ci --ignore-scripts` before that auth step, so no
+install-time code runs next to a credential. Every action is
+pinned to a full commit SHA.
+
+Operator setup (never by an agent; values are placeholders, never
+paste them into issues, PRs or logs):
+
+1. **Environments.** Settings → Environments: create
+   `reconcile-dev` and `reconcile-prod`. Restrict `reconcile-prod`
+   deployment branches to `main` only (`reconcile-dev`: `main` and
+   `dev`). No required reviewers — they would hold the cron.
+2. **Per environment** (not at repository level): secret
+   `PINNED_RECONCILE_STRIPE_READ_KEY` (restricted read key:
+   `rk_test_` in dev, `rk_live_` in prod; Checkout Sessions: Read,
+   plus Refunds/Disputes: Read for the counts below), variable
+   `PINNED_RECONCILE_WIF_PROVIDER`
+   (`projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>`)
+   and variable `PINNED_RECONCILE_SERVICE_ACCOUNT`
+   (`<SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com`). Until all
+   three exist the run succeeds as a documented skip with a
+   warning.
+3. **Google Cloud, once per project** (`moriacrew-pinned-dev` for
+   `reconcile-dev`, `moriacrew-pinned-prod` for `reconcile-prod`):
+   a workload identity pool with a GitHub OIDC provider whose
+   attribute condition pins the repository (prod also pins
+   `refs/heads/main`), a dedicated service account with
+   `roles/datastore.viewer` only, and `roles/iam.workloadIdentityUser`
+   on that account for this repository's principal set only.
+
+```
+P=<PROJECT_ID> N=<PROJECT_NUMBER> POOL=<POOL_ID> PROVIDER=<PROVIDER_ID> SA=<SA_NAME>
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com --project "$P"
+gcloud iam workload-identity-pools create "$POOL" --project "$P" --location global \
+  --display-name "GitHub Actions billing reconciliation"
+gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" --project "$P" \
+  --location global --workload-identity-pool "$POOL" \
+  --issuer-uri "https://token.actions.githubusercontent.com" \
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment" \
+  --attribute-condition 'assertion.repository == "MoriaCrew/Pinned" && assertion.environment == "reconcile-dev"'
+# prod instead: --attribute-condition 'assertion.repository == "MoriaCrew/Pinned" && assertion.ref == "refs/heads/main" && assertion.environment == "reconcile-prod"'
+gcloud iam service-accounts create "$SA" --project "$P" \
+  --display-name "Billing reconciliation (read-only)"
+gcloud projects add-iam-policy-binding "$P" \
+  --member "serviceAccount:$SA@$P.iam.gserviceaccount.com" \
+  --role roles/datastore.viewer --condition=None
+gcloud iam service-accounts add-iam-policy-binding "$SA@$P.iam.gserviceaccount.com" \
+  --project "$P" --role roles/iam.workloadIdentityUser \
+  --member "principalSet://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/$POOL/attribute.repository/MoriaCrew/Pinned"
+```
+
+`<PROJECT_NUMBER>` comes from
+`gcloud projects describe "$P" --format="value(projectNumber)"`.
+Once enabled, a non-clean report or an error fails the run and
+lands in the step summary — that failed run is the dead-letter
+alert, so watch Actions notifications for the workflow and drain
+dead letters per the runbook above before calling a billing change
 done. Never paste secret values into the workflow, issues or PRs.
 
 **Refunds/disputes visibility (PIN-243).** Each run also lists
@@ -1462,12 +1530,22 @@ around the prod-switch merge above; this is Checklist B of
    re-enabling grants them (or refund in the Dashboard). Time the
    rollout once before relying on it; disabling the endpoint in
    Workbench is the stop-for-good switch.
-5. **Turn the schedule on.** Add the two
-   `PINNED_RECONCILE_*` repository secrets (PIN-243 section
-   above), set `PINNED_RECONCILE_ENV=prod` only now, run the
-   workflow once by hand (`workflow_dispatch`, environment
-   `prod`), and confirm a green run with the JSON summary in its
-   step summary before trusting the daily cron as the
+5. **Turn the schedule on.** In the `reconcile-prod` GitHub
+   Environment (deployment branches: `main` only), add secret
+   `PINNED_RECONCILE_STRIPE_READ_KEY` (the live restricted read
+   key) and variables `PINNED_RECONCILE_WIF_PROVIDER` and
+   `PINNED_RECONCILE_SERVICE_ACCOUNT`, after running the
+   PIN-243 section's `gcloud` commands against
+   `moriacrew-pinned-prod` with the prod attribute condition
+   (`assertion.repository == "MoriaCrew/Pinned" && assertion.ref == "refs/heads/main" && assertion.environment == "reconcile-prod"`),
+   a dedicated service account with `roles/datastore.viewer`
+   only, and the `roles/iam.workloadIdentityUser` binding scoped
+   to `attribute.repository/MoriaCrew/Pinned`. No service-account
+   key. Set repository variable `PINNED_RECONCILE_ENV=prod` only
+   now, run the workflow once by hand from `main`
+   (`workflow_dispatch`, environment `prod`), and confirm a green
+   run whose step summary shows only the `{stripe, project, summary}`
+   JSON (no ids) before trusting the daily cron as the
    dead-letter alert.
 
 ## Follow-ups
@@ -1530,6 +1608,15 @@ around the prod-switch merge above; this is Checklist B of
   no call, live/sandbox dry-runs only read, live apply pipes the
   signing secret into prod over stdin and mirrors IAM there) and
   the live-mode cases in `src/billing/catalog.test.ts`.
+- PIN-243: `src/domain/billing-reconciliation.test.ts` (summary is
+  counts and booleans only; the workflow runs `--summary-only` in
+  `reconcile-dev`/`reconcile-prod` with keyless WIF, installs with
+  `--ignore-scripts` before auth, pins every action to a SHA) and
+  `src/billing/stripe-operator-mode.test.ts` (`--summary-only` on a
+  fixture with every anomaly kind prints only
+  `{stripe, project, summary}` plus three aggregate lines, matches
+  the domain summary, and a Stripe error prints status and code,
+  never the message).
 - PIN-178: `src/server/stripe-webhook.test.ts` (paid at 30:30,
   after the return redirect, after a cap check expired the
   intent, async success two days later all grant; paid after
