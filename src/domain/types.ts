@@ -24,6 +24,7 @@ export type AiCallDenialOutcome =
   | "denied_off"
   | "denied_call_limit"
   | "denied_budget"
+  | "denied_hourly_budget"
   | "denied_participant_cap"
   | "denied_board_cap"
   | "denied_photo_cap"

@@ -96,6 +96,7 @@ export interface DictationDeps {
 
 /** Outcome messages the decorator already phrased for players. */
 const FRIENDLY_CODES = new Set([
+  "hourly_budget",
   "budget_off",
   "call_limit",
   "budget",
@@ -172,6 +173,7 @@ export async function transcribeDictation(
   // Budget denials are a friendly 429, never a 5xx (live-AI
   // budget contract); only genuine provider failures stay 503.
   const BUDGET_CODES = new Set([
+    "hourly_budget",
     "participant_cap",
     "board_cap",
     "budget",

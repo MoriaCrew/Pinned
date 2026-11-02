@@ -216,6 +216,16 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ POLICY_OVERRIDES_JSON: " {} " }).policyOverridesJson).toBe("{}");
   });
 
+  it("AI_HOURLY_BUDGET_USD: off (0) by default, explicit value honoured (PIN-240)", () => {
+    expect(parseConfig({}).aiHourlyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "" }).aiHourlyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "0" }).aiHourlyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "15" }).aiHourlyBudgetUsd).toBe(15);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "0.5" }).aiHourlyBudgetUsd).toBe(0.5);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "-1" }).aiHourlyBudgetUsd).toBe(0);
+    expect(parseConfig({ AI_HOURLY_BUDGET_USD: "no" }).aiHourlyBudgetUsd).toBe(0);
+  });
+
   it("throws on unknown DATA_BACKEND in production only (PIN-59)", () => {
     expect(parseConfig({ DATA_BACKEND: "bogus" }).dataBackend).toBe("memory");
     expect(() =>
