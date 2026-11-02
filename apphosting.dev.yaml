@@ -19,6 +19,11 @@ env:
     value: "5"
   - variable: AI_DAILY_CALL_LIMIT
     value: "500"
+  # PIN-240: hourly sub-cap inside the $5/day cap. Operator-tunable;
+  # "0" switches the sub-cap off (daily cap only, NOT a kill switch -
+  # for a kill use AI_DAILY_BUDGET_USD=0, docs/launch-ops-runbook.md).
+  - variable: AI_HOURLY_BUDGET_USD
+    value: "2"
   - variable: APP_BASE_URL
     value: https://dev.pinneds.com
   # PIN-26: public contact on /privacy and /terms. A plain value: the
@@ -73,3 +78,11 @@ env:
   # a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
+  # Security review (PIN-112): lab probe on this backend measured
+  # fahIndexFromRight=2, so key per-IP limits on the platform-
+  # appended entry, not the client-spoofable first XFF entry.
+  - variable: CLIENT_IP_TRUSTED_HOPS
+    value: "2"
+  # Security review: dev must only ever run test-mode Stripe.
+  - variable: STRIPE_EXPECTED_LIVEMODE
+    value: test

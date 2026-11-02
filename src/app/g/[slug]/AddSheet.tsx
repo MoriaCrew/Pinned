@@ -848,9 +848,11 @@ export function AddSheet({
   // button opens the buy sheet while buying can work.
   const jobPoolEmpty = job?.status === "failed" && isPoolEmptyCode(job.errorCode);
   // PIN-180: the day's AI budget / call limit / switch closed the namer or
-  // the cutter: say so instead of the generic "didn't work".
+  // the cutter: say so instead of the generic "didn't work". PIN-240:
+  // the hourly sub-cap says "this hour", not "tomorrow".
   const budgetDenial = job?.status === "failed" ? aiBudgetDenial(job.errorCode) : null;
-  const failedLine = t(locale, budgetDenial === "off" ? "ai.budgetOff" : budgetDenial === "exhausted" ? "ai.budgetExhausted" : "add.failed");
+  const budgetDenialLine = { off: "ai.budgetOff", exhausted: "ai.budgetExhausted", hourly: "ai.budgetHourly" } as const;
+  const failedLine = t(locale, budgetDenial ? budgetDenialLine[budgetDenial] : "add.failed");
   const plusActive = boardView.plus?.active === true;
   // PIN-183: where buying works this is an invitation, not an error.
   const poolEmpty = poolEmptyCopy("photo", { canBuy: Boolean(onAddMakes), plusActive });
@@ -1004,6 +1006,7 @@ export function AddSheet({
                   src={element.imageUrl}
                   label={element.label}
                   owner={{ id: meId, name: t(locale, "add.you") }}
+                  speakOwner={false}
                   seed={pin.elementId}
                   state={dropped.has(pin.id) ? "dropped" : "rest"}
                   onToggle={() => toggle(pin.id)}

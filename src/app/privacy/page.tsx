@@ -97,6 +97,11 @@ export default async function PrivacyPage() {
               : null}{" "}
             Our hosting provider, Google Cloud, also keeps standard request logs.
           </li>
+          <li>
+            <strong>Reports.</strong> When content is reported to us, we may keep it while we handle the report,
+            even after it is deleted from the board, and share it with the competent authorities where the law
+            requires.
+          </li>
           {payments ? (
             <li>
               <strong>Payments.</strong> Board Plus is paid on Stripe&apos;s own checkout page. We never see or

@@ -139,7 +139,10 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       boards: { b1: 2 },
       participantSegments: {},
       participantTapNames: {},
+      participantChips: {},
       participantTranscriptions: {},
+      hourBucket: "",
+      hourReservedMicroUsd: 0,
       photos: {},
     });
   });
@@ -204,6 +207,21 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     expect(doc?.participantTapNames).toEqual({ p1: 1, p2: 1 });
   });
 
+  it("chips caps (PIN-241): counted in their own map, denied at cap", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const chips = req({ participantId: "p1", participantChipsCap: 1 });
+    expect((await store.reserve(chips)).ok).toBe(true);
+    expect(await store.reserve(chips)).toEqual({ ok: false, reason: "participant_cap" });
+    expect(
+      (await store.reserve(req({ participantId: "p2", participantChipsCap: 1 }))).ok,
+    ).toBe(true);
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(2);
+    expect(doc?.participantPhotos).toEqual({});
+    expect(doc?.participantChips).toEqual({ p1: 1, p2: 1 });
+  });
+
   it("transcription caps (PIN-119): counted in their own map, denied at cap", async () => {
     const fake = new FakeFirestore();
     const store = new FirestoreBudgetStore(fake as unknown as Firestore);
@@ -254,6 +272,74 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     expect(doc?.participants).toEqual({ p1: 20 }); // legacy field left untouched
     expect(doc?.participantPhotos).toEqual({ p1: 1 });
     expect(doc?.participantScenes).toEqual({ p1: 1 });
+  });
+
+  it("hourly sub-cap (PIN-240): denied at the cap in one doc, reset on hour rollover", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const call = (hourBucket: string) => req({ hourBucket, hourlyBudgetUsd: 0.02, estimatedCostUsd: 0.01 });
+    expect((await store.reserve(call("2026-10-29T10"))).ok).toBe(true);
+    expect((await store.reserve(call("2026-10-29T10"))).ok).toBe(true);
+    expect(await store.reserve(call("2026-10-29T10"))).toEqual({ ok: false, reason: "hourly_budget" });
+    expect([...fake.store.keys()]).toEqual([`aiBudget/${DAY}`]);
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({
+      hourBucket: "2026-10-29T10",
+      hourReservedMicroUsd: 20_000,
+      reservedMicroUsd: 20_000,
+      calls: 2,
+    });
+    // Rolled hour resets in the same transaction/doc; daily total keeps climbing.
+    expect((await store.reserve(call("2026-10-29T11"))).ok).toBe(true);
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({
+      hourBucket: "2026-10-29T11",
+      hourReservedMicroUsd: 10_000,
+      reservedMicroUsd: 30_000,
+      calls: 3,
+    });
+    // Off (0) never denies on the hour.
+    expect((await store.reserve(req({ hourBucket: "2026-10-29T11", hourlyBudgetUsd: 0, estimatedCostUsd: 0.5 }))).ok).toBe(true);
+  });
+
+  it("hourly sub-cap (PIN-240): an older hour counts against the stored hour, never rewinds it", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const H1 = "2026-10-29T10";
+    const H2 = "2026-10-29T11";
+    const H3 = "2026-10-29T12";
+    const call = (hourBucket: string, estimatedCostUsd = 0.01) =>
+      req({ hourBucket, hourlyBudgetUsd: 0.03, estimatedCostUsd });
+    expect((await store.reserve(call(H2))).ok).toBe(true);
+    // A late reserve stamped with the previous hour (retry / skew).
+    expect((await store.reserve(call(H1))).ok).toBe(true);
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({
+      hourBucket: H2,
+      hourReservedMicroUsd: 20_000,
+      reservedMicroUsd: 20_000,
+      calls: 2,
+    });
+    // A stale reserve that would bust the stored hour is denied, not reset.
+    expect(await store.reserve(call(H1, 0.02))).toEqual({ ok: false, reason: "hourly_budget" });
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({ hourBucket: H2, hourReservedMicroUsd: 20_000, calls: 2 });
+    // Forward roll still resets to this reserve's estimate.
+    expect((await store.reserve(call(H3, 0.02))).ok).toBe(true);
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({
+      hourBucket: H3,
+      hourReservedMicroUsd: 20_000,
+      reservedMicroUsd: 40_000,
+      calls: 3,
+    });
+  });
+
+  it("legacy day doc (PIN-240): missing hour fields read as none, then start tracking", async () => {
+    const fake = new FakeFirestore();
+    fake.store.set(`aiBudget/${DAY}`, { dayBucket: DAY, calls: 1, reservedMicroUsd: 10_000, boards: {} });
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    expect((await store.reserve(req({ hourBucket: "2026-10-29T10", hourlyBudgetUsd: 0.02 }))).ok).toBe(true);
+    expect(await store.reserve(req({ hourBucket: "2026-10-29T10", hourlyBudgetUsd: 0.02, estimatedCostUsd: 0.02 }))).toEqual({
+      ok: false,
+      reason: "hourly_budget",
+    });
+    expect(fake.store.get(`aiBudget/${DAY}`)).toMatchObject({ hourBucket: "2026-10-29T10", hourReservedMicroUsd: 10_000 });
   });
 
   it("parity with the memory store: off, budget and caps deny identically", async () => {

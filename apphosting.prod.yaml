@@ -40,6 +40,12 @@ env:
     value: "50"
   - variable: AI_DAILY_CALL_LIMIT
     value: "10000"
+  # PIN-240: hourly sub-cap inside the $50/day cap, so hour 1 cannot
+  # burn the judges' whole day. Operator-tunable: raise/lower freely,
+  # or set "0" to switch the sub-cap off (daily cap only, NOT a kill
+  # switch - for a kill use AI_DAILY_BUDGET_USD=0, docs/launch-ops-runbook.md).
+  - variable: AI_HOURLY_BUDGET_USD
+    value: "15"
   - variable: APP_BASE_URL
     value: https://pinneds.com
   # PIN-26: public contact on /privacy and /terms. A plain value: the
@@ -67,3 +73,50 @@ env:
   # (prerendered pages) and RUNTIME: a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
+  # PIN-73/PIN-246: the judges' demo board is a normal prod board (the
+  # one recorded for the submission video). The landing page shows its
+  # "demo" button only while this is set (read at RUNTIME). The secret
+  # exists in moriacrew-pinned-prod with access for pinned-web (set
+  # 2026-11-02); the backup board's slug is kept outside git. Never
+  # post the board link publicly (docs/DEPLOY.md §6.3, §8).
+  - variable: DEMO_BOARD_SLUG
+    secret: DEMO_BOARD_SLUG
+    availability:
+      - RUNTIME
+  # PIN-210: live billing (merge only after the operator confirms both live secrets exist in prod Secret Manager)
+  # Sells the Board Plus pack (EUR 2.99: Plus + 20 creations) through
+  # LIVE Stripe Checkout; grants land by webhook only. A referenced
+  # secret that is missing fails the App Hosting build, so this block
+  # must not reach `main` before STRIPE_SECRET_KEY and
+  # STRIPE_WEBHOOK_SECRET exist in moriacrew-pinned-prod with access
+  # for pinned-web (docs/15-board-plus.md, "Going live on prod").
+  # Rollback: PLUS_MODE=off, then a rollout.
+  - variable: PLUS_MODE
+    value: stripe
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+    availability:
+      - RUNTIME
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+  # Creations pool on (code default is off). Robin (Nov 2): during
+  # judging week a new board starts with 20 free creations (a one-time
+  # pool per board, PIN-181; was 5), so judges are never stopped short;
+  # Board Plus adds 20 more. The demo board is a normal board; Robin
+  # buys Plus on it with a real card (docs/DEPLOY.md §6.4). Spend stays
+  # bounded by AI_DAILY_BUDGET_USD, AI_HOURLY_BUDGET_USD and
+  # AI_DAILY_CALL_LIMIT whatever this value is. After judging: back to 5.
+  - variable: POLICY_OVERRIDES_JSON
+    value: '{"credits":{"enabled":true,"starterMakes":20}}'
+  # /PIN-210
+  # Security review (PIN-112): same App Hosting forwarding layout
+  # as dev (lab-measured fahIndexFromRight=2); key per-IP limits on
+  # the platform-appended entry, not the first XFF entry.
+  - variable: CLIENT_IP_TRUSTED_HOPS
+    value: "2"
+  # Security review: prod billing (PIN-210) must only ever run
+  # live-mode Stripe; a test key here parses PLUS_MODE to off.
+  - variable: STRIPE_EXPECTED_LIVEMODE
+    value: live

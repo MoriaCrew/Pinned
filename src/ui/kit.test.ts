@@ -40,8 +40,9 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 23 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(23);
+  it("ships 24 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(24);
+    expect(ICON_NAMES).toContain("globe");
     expect(ICON_NAMES).toContain("mic");
     expect(ICON_NAMES).toContain("stop");
     expect(html(h(Icon, { name: "camera" }))).toContain('aria-hidden="true"');
@@ -70,6 +71,23 @@ describe("UI kit components (PIN-97)", () => {
     );
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('aria-label="Robin&#x27;s Teal mug, picked 1"');
+  });
+
+  it("names your own add-sheet pin by the thing alone, never \"You's\" (PIN-247)", () => {
+    const mine = html(
+      h(Pin, {
+        src: "/a.webp",
+        label: "Teal mug",
+        owner: { id: "p1", name: "You" },
+        speakOwner: false,
+        onToggle: () => {},
+        pressedWhenRest: true,
+      }),
+    );
+    expect(mine).toContain('aria-label="Teal mug"');
+    expect(mine).not.toContain("You&#x27;s");
+    // The owner line still shows under the sticker.
+    expect(mine).toContain('class="pn-pin-owner-name">You<');
   });
 
   it("keeps add-sheet pins pressed at rest and unpressed when left out", () => {

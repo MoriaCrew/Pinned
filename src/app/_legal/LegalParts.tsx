@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { DEFAULT_LOCALE, t, type Locale } from "../../i18n";
 import { Wordmark } from "../../ui";
+import { LanguageLink } from "../auth/LanguageMenu";
 
 /**
  * Shared parts of /privacy and /terms (PIN-26). The `_legal` folder is
@@ -14,7 +15,7 @@ import { Wordmark } from "../../ui";
 export const SOURCE_URL = "https://github.com/MoriaCrew/Pinned";
 export const ISSUES_URL = `${SOURCE_URL}/issues`;
 /** Date shown under the title; change it whenever the text changes (history lives in git). */
-export const LEGAL_UPDATED = "31 October 2026";
+export const LEGAL_UPDATED = "2 November 2026";
 
 /** "1 day" / "30 days": the English body's own plural. */
 export function plural(n: number, unit: string): string {
@@ -41,6 +42,7 @@ export function SiteLinks({
         {t(locale, "footer.terms")}
       </a>
       <a href={SOURCE_URL}>{t(locale, "footer.source")}</a>
+      <LanguageLink />
     </nav>
   );
 }

@@ -24,6 +24,7 @@ import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
 import {
   dayBucketFor,
+  hourBucketFor,
   type BudgetStore,
   type ReserveDenyReason,
   type ReserveResult,
@@ -88,6 +89,8 @@ interface CallMeta {
   boardCap?: number;
   /** PIN-117: TapNamer-only per-participant cap (own counter). */
   participantTapNameCap?: number;
+  /** PIN-241: ChipSuggester-only per-participant cap (own counter). */
+  participantChipsCap?: number;
   /** PIN-119: SpeechTranscriber-only cap + clip seconds for pricing. */
   participantTranscriptionCap?: number;
   audioSeconds?: number;
@@ -111,6 +114,7 @@ function deniedOutcome<T>(reason: ReserveDenyReason | "budget_unavailable"): Por
     off: t("en", "ai.budgetOff"),
     call_limit: t("en", "ai.budgetExhausted"),
     budget: t("en", "ai.budgetExhausted"),
+    hourly_budget: t("en", "ai.budgetHourly"),
     participant_cap: t("en", "ai.participantCap"),
     board_cap: t("en", "ai.boardCap"),
     photo_cap: t("en", "ai.photoCap"),
@@ -178,6 +182,7 @@ async function runDecorated<T>(
   const { policy } = deps;
   const startedAt = deps.now();
   const dayBucket = dayBucketFor(startedAt);
+  const hourBucket = hourBucketFor(startedAt);
   const boardId = safeId(meta.boardId);
   const participantId = safeId(meta.participantId);
   const photoId = safeId(meta.photoId);
@@ -248,6 +253,8 @@ async function runDecorated<T>(
         dayBucket,
         estimatedCostUsd: estimateReserveUsd(meta.operation, reserveLimits),
         budgetUsd: policy.dailyBudgetUsd,
+        hourBucket,
+        hourlyBudgetUsd: policy.hourlyBudgetUsd,
         callLimit: policy.dailyCallLimit,
         participantId,
         participantPhotoCap: participantId ? meta.participantPhotoCap : undefined,
@@ -256,6 +263,7 @@ async function runDecorated<T>(
         boardCap: boardId ? meta.boardCap : undefined,
         participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
         participantTapNameCap: participantId ? meta.participantTapNameCap : undefined,
+        participantChipsCap: participantId ? meta.participantChipsCap : undefined,
         participantTranscriptionCap: participantId ? meta.participantTranscriptionCap : undefined,
         photoId,
         photoCap: photoId ? meta.photoCap : undefined,
@@ -429,6 +437,7 @@ export function decoratePorts(
             boardId: input.boardId,
             participantId: input.participantId,
             userIdAtCall: input.userIdAtCall,
+            participantChipsCap: policy.chipsPerParticipantPerDay,
           },
           () => suggester.suggestChips(input),
         ),

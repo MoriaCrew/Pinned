@@ -110,10 +110,12 @@ describe("landing Made with Meta AI credit (PIN-222)", () => {
     expect(footer).not.toMatch(/<svg[^>]*role="img"/);
   });
 
-  it("keeps the model names as product names and links the models doc and the source", async () => {
+  it("keeps the model names as product names and links the models page and the source", async () => {
     const html = await landing({ set: "classic" });
     for (const name of ["Muse Spark", "SAM 3.1", "Muse Image", "Muse Voice"]) expect(html).toContain(name);
-    expect(html).toContain('href="https://github.com/MoriaCrew/Pinned/blob/main/docs/19-meta-models.md"');
+    // PIN-237: the in-app explainer, not the developer doc on GitHub.
+    expect(html).toContain(`<a href="/models">${en["landing.meta.more"]}</a>`);
+    expect(html).not.toContain("docs/19-meta-models.md");
     expect(html).toContain(`>${en["footer.source"]}</a>`);
   });
 });

@@ -1,0 +1,68 @@
+/* /models (PIN-237): one readable column on the Paper skin, like the legal
+   pages. Tokens only; the global reduced-motion guard (globals.css) turns
+   every transition here off, so the walk-through just changes state. */
+
+.page { min-height: 100dvh; padding-bottom: var(--space-7); }
+.page > * { width: min(100%, 720px); margin-inline: auto; }
+.doc { display: grid; gap: var(--space-7); padding: var(--space-3) var(--space-4) 0; }
+.intro, .section { display: grid; gap: var(--space-4); }
+.title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(clamp(32px, 8vw, 44px) * var(--display-scale)); line-height: 1.05; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); text-wrap: balance; color: var(--ink); }
+.lead { margin: 0; max-width: 40ch; font: 400 18px/27px var(--font-ui); color: var(--ink); }
+.section > p { margin: 0; color: var(--ink-muted); font: 400 16px/24px var(--font-ui); }
+
+/* Walk-through: the stage and the texts each stack their layers in one cell, so the controls never move. */
+.walk { display: grid; gap: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent), 0 14px 24px -20px var(--shade); }
+.stage, .texts { display: grid; }
+.stage { width: min(100%, 340px); margin-inline: auto; }
+.layer, .text { grid-area: 1 / 1; min-width: 0; opacity: 0; visibility: hidden; transition: opacity .3s ease, translate .45s var(--spring), visibility 0s linear .3s; }
+.layer { align-self: center; translate: 0 12px; }
+.layer[data-active], .text[data-active] { opacity: 1; visibility: visible; translate: 0 0; transition-delay: 0s; }
+
+.photo { position: relative; aspect-ratio: 1; }
+.photo > img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md); background: var(--surface-sunk); transition: filter .4s ease; }
+.photo[data-cut] > img { filter: saturate(.2) brightness(1.08) opacity(.45); }
+.outline { position: absolute; border: 2px dashed var(--surface-raised); border-radius: var(--radius-md); box-shadow: 0 0 0 1px var(--shade), inset 0 0 0 1px var(--shade); transition: opacity .3s ease; }
+.photo[data-cut] .outline { opacity: 0; }
+.cut { position: absolute; display: grid; opacity: 0; transition: opacity .3s ease, translate .45s var(--spring), scale .45s var(--spring); }
+.photo[data-cut] .cut { opacity: 1; translate: 0 -6px; scale: 1.06; }
+.cut :global(.pn-sticker) { width: 100%; height: 100%; aspect-ratio: auto; }
+.cut :global(.pn-sticker img) { inset: 0; width: 100%; height: 100%; filter: drop-shadow(var(--kw) 0 0 var(--keyline)) drop-shadow(calc(-1 * var(--kw)) 0 0 var(--keyline)) drop-shadow(0 var(--kw) 0 var(--keyline)) drop-shadow(0 calc(-1 * var(--kw)) 0 var(--keyline)) var(--lift-picked); }
+
+.picks { --sticker: 72px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.idea { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line-strong); color: var(--ink); font: 650 15px/20px var(--font-ui); }
+.idea > :global(.pn-icon) { flex: none; color: var(--accent); }
+.print { width: min(74%, 240px); margin-inline: auto; }
+
+.text { display: grid; align-content: start; gap: var(--space-2); }
+.count { margin: 0; font: 500 13px/18px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+.tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
+.stepTitle { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(24px * var(--display-scale)); line-height: 1.15; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); text-wrap: balance; color: var(--ink); }
+.body { margin: 0; font: 400 16px/24px var(--font-ui); color: var(--ink); }
+
+.dots { display: flex; justify-content: center; margin: 0; padding: 0; list-style: none; }
+.dot { display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dot > span { width: 10px; height: 10px; border-radius: var(--radius-pill); background: var(--line-strong); transition: width .25s var(--spring), background-color .25s ease; }
+.dot[aria-current] > span { width: 24px; background: var(--ink); }
+.nav { display: flex; justify-content: space-between; gap: var(--space-3); }
+.nav [aria-disabled="true"] { opacity: .4; cursor: default; }
+
+/* Model cards. */
+.cards { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.card { display: grid; align-content: start; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-raised); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
+.cardHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.cardHead > :global(.pn-icon) { flex: none; color: var(--accent); }
+.cardName { margin: 0; font: 700 19px/24px var(--font-ui); color: var(--ink); }
+.card > p { margin: 0; font: 400 16px/24px var(--font-ui); color: var(--ink); }
+.facts { display: grid; gap: var(--space-2); margin: 0; padding-top: var(--space-3); border-top: 1.5px dashed var(--line-strong); }
+.facts dt { font: 650 11px/14px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+.facts dd { margin: 0 0 var(--space-1); font: 400 15px/22px var(--font-ui); color: var(--ink); }
+.privacy { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunk); }
+.privacy > p { margin: 0; font: 400 15px/22px var(--font-ui); color: var(--ink); }
+
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.foot { margin-top: var(--space-7); padding: var(--space-3) var(--space-4) 0; border-top: 2px dashed var(--line-strong); }
+
+@media (min-width: 720px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .walk { padding: var(--space-5) var(--space-6); }
+}
