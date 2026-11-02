@@ -17,6 +17,10 @@ import {
   stripeKeyKind,
   webhookTarget,
 } from "../../scripts/stripe/operator-mode.mjs";
+import {
+  buildBillingReconciliationReport,
+  summarizeBillingReconciliation,
+} from "../domain/billing-reconciliation";
 import { STRIPE_WEBHOOK_EVENT_TYPES } from "../server/stripe-webhook";
 import { CATALOG_ITEMS, catalogMetadata, type CatalogItem } from "./catalog";
 
@@ -196,6 +200,7 @@ function runScript(
   return {
     code: result.status,
     stdout: result.stdout,
+    stderr: result.stderr,
     output,
     stripeCalls,
     gcloudCalls: read(files.gcloudLog).split("\n").filter(Boolean),
@@ -401,19 +406,30 @@ describe("catalog seed sees archived prices (PIN-233 F3)", () => {
 /**
  * The default fake Stripe plus a resolve hook that swaps
  * `@google-cloud/firestore` for a recording fake: it logs the options
- * each Firestore is built with and holds no documents, so a full
- * reconciliation run makes no network or ADC call.
+ * each Firestore is built with and holds no documents (unless
+ * FAKE_FIRESTORE_STATE names a JSON file of collections, PIN-243), so
+ * a full reconciliation run makes no network or ADC call.
  */
 const FAKE_FIRESTORE = path.join(WORK, "fake-firestore.mjs");
 writeFileSync(
   FAKE_FIRESTORE,
-  `import { appendFileSync } from "node:fs";
+  `import { appendFileSync, readFileSync } from "node:fs";
+const state = process.env.FAKE_FIRESTORE_STATE
+  ? JSON.parse(readFileSync(process.env.FAKE_FIRESTORE_STATE, "utf8"))
+  : {};
+const snapshot = (rows = []) => ({
+  docs: rows.map((row) => ({
+    id: row.id,
+    data: () => row.data ?? {},
+    ref: { collection: (name) => ({ get: async () => snapshot(row.sub?.[name]) }) },
+  })),
+});
 export class Firestore {
   constructor(options) {
     appendFileSync(process.env.FAKE_FIRESTORE_LOG, JSON.stringify(options ?? null) + "\\n");
   }
-  collection() {
-    return { get: async () => ({ docs: [] }) };
+  collection(name) {
+    return { get: async () => snapshot(state[name]) };
   }
   async terminate() {}
 }
@@ -439,11 +455,35 @@ register(${JSON.stringify(pathToFileURL(FIRESTORE_HOOKS).href)});
 `,
 );
 
-function runReconciliation(args: string[]) {
+/**
+ * PIN-243: the reconciliation fakes above, plus paid Checkout Sessions
+ * from FAKE_STRIPE_SESSIONS_JSON and, when FAKE_STRIPE_ERROR_JSON is
+ * set, a Stripe error body (HTTP 401) on every call.
+ */
+const RECON_DATA_PRELOAD = path.join(WORK, "fake-stripe-firestore-data.mjs");
+writeFileSync(
+  RECON_DATA_PRELOAD,
+  `import ${JSON.stringify(pathToFileURL(RECON_PRELOAD).href)};
+const base = globalThis.fetch;
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+globalThis.fetch = async (input, init = {}) => {
+  const logged = await base(input, init);
+  if (process.env.FAKE_STRIPE_ERROR_JSON) return json({ error: JSON.parse(process.env.FAKE_STRIPE_ERROR_JSON) }, 401);
+  const url = new URL(String(input));
+  if (url.pathname === "/v1/checkout/sessions" && process.env.FAKE_STRIPE_SESSIONS_JSON) {
+    return json({ object: "list", data: JSON.parse(process.env.FAKE_STRIPE_SESSIONS_JSON), has_more: false });
+  }
+  return logged;
+};
+`,
+);
+
+function runReconciliation(args: string[], env: Record<string, string> = {}) {
   const firestoreLog = path.join(WORK, `firestore-${runs + 1}.log`);
   const run = runScript("billing-reconciliation.mjs", TEST_KEY, args, {
-    preload: RECON_PRELOAD,
-    env: { FAKE_FIRESTORE_LOG: firestoreLog },
+    preload: Object.keys(env).length ? RECON_DATA_PRELOAD : RECON_PRELOAD,
+    env: { FAKE_FIRESTORE_LOG: firestoreLog, ...env },
   });
   const firestores = existsSync(firestoreLog)
     ? readFileSync(firestoreLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as unknown)
@@ -466,6 +506,112 @@ describe("billing reconciliation project (PIN-233 F15)", () => {
     expect(run.output).toMatch(/Sandbox mode never targets moriacrew-pinned-prod/);
     expect(run.stripeCalls).toEqual([]);
     expect(run.firestores).toEqual([]);
+  });
+});
+
+// --- Reconciliation --summary-only for public CI logs (PIN-243). ---
+
+/**
+ * One row of every anomaly kind, each carrying a FIXTURE id: a paid
+ * session whose pending intent expired with no grant (paid-no-grant +
+ * pending-past-ttl), a grant with no payment, and one dead letter.
+ */
+const RECON_FIXTURE_STATE = path.join(WORK, "recon-fixture-state.json");
+writeFileSync(
+  RECON_FIXTURE_STATE,
+  JSON.stringify({
+    checkoutIntents: [
+      { id: "ci_FIXTURE_paid", data: { boardId: "slug-FIXTURE-paid", status: "pending", expiresAt: 1234567 } },
+    ],
+    creditAccounts: [
+      {
+        id: "slug-FIXTURE-granted",
+        data: {},
+        sub: { purchases: [{ id: "ci_FIXTURE_granted", data: { grantedCredits: 20 } }] },
+      },
+    ],
+    billingDeadLetters: [
+      { id: "evt_FIXTURE_dead", data: { reason: "unknown_intent", boardId: "slug-FIXTURE-dead" } },
+    ],
+  }),
+);
+const RECON_FIXTURE_ENV = {
+  FAKE_FIRESTORE_STATE: RECON_FIXTURE_STATE,
+  FAKE_STRIPE_SESSIONS_JSON: JSON.stringify([
+    {
+      id: "cs_FIXTURE_paid",
+      payment_status: "paid",
+      payment_intent: "pi_FIXTURE_paid",
+      metadata: { checkout_intent_id: "ci_FIXTURE_paid" },
+    },
+  ]),
+};
+const ROW_LINE_PREFIXES = ["paid-no-grant", "grant-no-payment", "dead-letters", "pending-past-ttl"];
+
+describe("billing reconciliation --summary-only (PIN-243)", () => {
+  it("human mode still prints every row (the fixture hits each anomaly kind)", () => {
+    const run = runReconciliation([], RECON_FIXTURE_ENV);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain("paid-no-grant session=cs_FIXTURE_paid paymentIntent=pi_FIXTURE_paid intent=ci_FIXTURE_paid");
+    expect(run.stdout).toContain("grant-no-payment purchase=ci_FIXTURE_granted");
+    expect(run.stdout).toContain("dead-letters reason=unknown_intent count=1");
+    expect(run.stdout).toContain("pending-past-ttl intent=ci_FIXTURE_paid expiresAt=1234567");
+    expect(run.stdout).toContain("RECONCILIATION_JSON:");
+  });
+
+  it.each([[["--summary-only"]], [["--json", "--summary-only"]]])(
+    "%j prints only {stripe, project, summary} and three aggregate lines, no id",
+    (args) => {
+      const run = runReconciliation(args, RECON_FIXTURE_ENV);
+      expect(run.code).toBe(1);
+      const stdoutLines = run.stdout.split("\n").filter(Boolean);
+      expect(stdoutLines).toHaveLength(1);
+      const payload = JSON.parse(stdoutLines[0]) as Record<string, unknown>;
+      expect(Object.keys(payload)).toEqual(["stripe", "project", "summary"]);
+      expect(payload.stripe).toBe("sandbox");
+      expect(payload.project).toBe(DEV_PROJECT_ID);
+      // The script's mirror agrees with the domain report + summary.
+      const expected = summarizeBillingReconciliation(
+        buildBillingReconciliationReport(
+          {
+            paidSessions: [{ sessionId: "cs_FIXTURE_paid", paymentIntentId: "pi_FIXTURE_paid", intentId: "ci_FIXTURE_paid" }],
+            purchases: [{ boardId: "slug-FIXTURE-granted", purchaseId: "ci_FIXTURE_granted", granted: true }],
+            intents: [{ intentId: "ci_FIXTURE_paid", boardId: "slug-FIXTURE-paid", status: "pending", expiresAt: 1234567 }],
+            deadLetters: [{ reason: "unknown_intent", boardId: "slug-FIXTURE-dead" }],
+            now: Date.now(),
+          },
+          (boardId) => boardId,
+        ),
+        { refundsLast30Days: 0, disputesLast30Days: 0, openDisputes: 0 },
+      );
+      expect(payload.summary).toEqual(expected);
+      expect(payload.summary).toMatchObject({ anomalyCount: 4, needsAttention: true, clean: false });
+      const stderrLines = run.stderr.split("\n").filter(Boolean);
+      expect(stderrLines).toHaveLength(3);
+      expect(stderrLines[0]).toMatch(/^billing reconciliation stripe=sandbox project=moriacrew-pinned-dev /);
+      expect(stderrLines[1]).toMatch(/^SUMMARY paidNoGrant=1 grantNoPayment=1 deadLetters=1 pendingPastTtl=1 /);
+      expect(stderrLines[2]).toMatch(/^refunds-disputes last30d /);
+      for (const leak of ["FIXTURE", "board:", "1234567", "RECONCILIATION_JSON", ...ROW_LINE_PREFIXES]) {
+        expect(run.output).not.toContain(leak);
+      }
+    },
+  );
+
+  it("a Stripe error prints status and code only, never the provider message", () => {
+    const error = { code: "api_key_expired", message: "Expired API Key provided: FIXTURE-masked-key" };
+    const publicRun = runReconciliation(["--summary-only"], {
+      ...RECON_FIXTURE_ENV,
+      FAKE_STRIPE_ERROR_JSON: JSON.stringify(error),
+    });
+    expect(publicRun.code).toBe(1);
+    expect(publicRun.stdout).toBe("");
+    expect(publicRun.stderr).toContain("Stripe GET /checkout/sessions failed: HTTP 401 api_key_expired");
+    expect(publicRun.output).not.toContain("FIXTURE");
+    expect(publicRun.output).not.toContain("Expired API Key");
+    // The operator terminal keeps the full message.
+    const humanRun = runReconciliation([], { ...RECON_FIXTURE_ENV, FAKE_STRIPE_ERROR_JSON: JSON.stringify(error) });
+    expect(humanRun.code).toBe(1);
+    expect(humanRun.output).toContain("Expired API Key provided: FIXTURE-masked-key");
   });
 });
 

@@ -213,9 +213,10 @@ element; delete the throwaway board.
    board with a real card and keeps it. That purchase is the live
    go-live check (`docs/15-board-plus.md`, "Going live on prod"), and
    it makes the demo board a paying customer's board: every skin,
-   foil stickers, no photo limit and 5 + 20 AI scenes. Each judge's
-   own new board shows the free tier (5 AI scenes) and the Plus
-   offer. Spend stays bounded by the global daily budget. If the
+   foil stickers, no photo limit and 20 + 20 AI scenes. Each judge's
+   own new board shows the free tier (20 AI scenes during judging
+   week, `starterMakes` in `apphosting.prod.yaml`; 5 after) and the
+   Plus offer. Spend stays bounded by the global daily budget. If the
    demo board needs headroom during judging, raise its daily caps
    here (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`); do
    not give it a free pool.

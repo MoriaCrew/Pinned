@@ -1,0 +1,168 @@
+# PIN-243 scheduled billing reconciliation + dead-letter alerting surface.
+#
+# PUBLIC REPO: anyone can read this job's log and step summary. The
+# script runs with --summary-only, so both carry counts and booleans
+# only - never a Stripe session, payment-intent or checkout-intent id,
+# board hash or timestamp (a checkout-intent id resolves to a board
+# link through /billing/return). For the rows, run the script in an
+# operator terminal (docs/15, PIN-153 section).
+#
+# Triggers: a daily cron and workflow_dispatch. GitHub runs scheduled
+# workflows from the default branch (main) only, so the cron always
+# uses main's copy of this file and of the script.
+#
+# Environments: the job runs in GitHub Environment reconcile-dev or
+# reconcile-prod, picked by the dispatch input, else by the REPOSITORY
+# variable PINNED_RECONCILE_ENV ("prod" -> reconcile-prod; unset or any
+# other value -> reconcile-dev, so a typo never names a third
+# environment). PINNED_RECONCILE_ENV must be a repository variable: the
+# environment is chosen before its own variables load. Keep it unset
+# (dev) until go-live (docs/15 PIN-243 go-live ops runbook, step 5).
+#
+# WHAT THE OPERATOR MUST ADD before this does anything (never invent
+# values; never paste them into issues, PRs or logs):
+#   1. Settings -> Environments: create reconcile-dev and reconcile-prod.
+#      reconcile-prod: Deployment branches and tags -> Selected branches
+#      -> main only. reconcile-dev: main and dev. No required reviewers
+#      (they would hold the cron).
+#   2. In EACH environment (not at repository level):
+#      Secret   PINNED_RECONCILE_STRIPE_READ_KEY
+#        Restricted Stripe read key for that environment (rk_test_ in
+#        reconcile-dev, rk_live_ in reconcile-prod; Checkout Sessions:
+#        Read. Add Refunds: Read + Disputes: Read only for the
+#        refunds/disputes counts; without them the summary omits them).
+#      Variable PINNED_RECONCILE_WIF_PROVIDER
+#        projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>
+#      Variable PINNED_RECONCILE_SERVICE_ACCOUNT
+#        <SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com
+#   3. Google Cloud, Workload Identity Federation - no service-account
+#      key anywhere. Once per project (moriacrew-pinned-dev for
+#      reconcile-dev, moriacrew-pinned-prod for reconcile-prod), from an
+#      operator machine; placeholders in <>:
+#        P=<PROJECT_ID> N=<PROJECT_NUMBER> POOL=<POOL_ID> PROVIDER=<PROVIDER_ID> SA=<SA_NAME>
+#        gcloud services enable iamcredentials.googleapis.com sts.googleapis.com --project "$P"
+#        gcloud iam workload-identity-pools create "$POOL" --project "$P" --location global \
+#          --display-name "GitHub Actions billing reconciliation"
+#        gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" --project "$P" \
+#          --location global --workload-identity-pool "$POOL" \
+#          --issuer-uri "https://token.actions.githubusercontent.com" \
+#          --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment" \
+#          --attribute-condition 'assertion.repository == "MoriaCrew/Pinned" && assertion.environment == "reconcile-dev"'
+#          # prod instead: 'assertion.repository == "MoriaCrew/Pinned" && assertion.ref == "refs/heads/main" && assertion.environment == "reconcile-prod"'
+#        gcloud iam service-accounts create "$SA" --project "$P" \
+#          --display-name "Billing reconciliation (read-only)"
+#        gcloud projects add-iam-policy-binding "$P" \
+#          --member "serviceAccount:$SA@$P.iam.gserviceaccount.com" \
+#          --role roles/datastore.viewer --condition=None
+#        gcloud iam service-accounts add-iam-policy-binding "$SA@$P.iam.gserviceaccount.com" \
+#          --project "$P" --role roles/iam.workloadIdentityUser \
+#          --member "principalSet://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/$POOL/attribute.repository/MoriaCrew/Pinned"
+#      The service account gets roles/datastore.viewer only - nothing else.
+#
+# Until the environment holds the secret AND both variables, every step
+# after the guard is skipped and the run succeeds with a warning (no
+# daily red noise). Once enabled, a non-clean report (exit 1:
+# paid-no-grant, deadLetterTotal > 0, grant-no-payment, pending-past-TTL)
+# or an error FAILS the run - that failure, plus the step summary, is the
+# alerting surface. Watch Actions notifications for this workflow. The
+# script is read-only and never prints the key
+# (scripts/billing-reconciliation.mjs).
+
+name: Billing reconciliation
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily 06:17 UTC, from the default branch (main)
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (runs in reconcile-dev or reconcile-prod)"
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: ${{ (inputs.environment || vars.PINNED_RECONCILE_ENV) == 'prod' && 'reconcile-prod' || 'reconcile-dev' }}
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation token; no key in a secret
+    env:
+      RECONCILE_ENV: ${{ (inputs.environment || vars.PINNED_RECONCILE_ENV) == 'prod' && 'prod' || 'dev' }}
+    steps:
+      - name: Guard — skip until the environment is configured
+        id: guard
+        env:
+          HAS_STRIPE_KEY: ${{ secrets.PINNED_RECONCILE_STRIPE_READ_KEY != '' }}
+          HAS_WIF_PROVIDER: ${{ vars.PINNED_RECONCILE_WIF_PROVIDER != '' }}
+          HAS_SERVICE_ACCOUNT: ${{ vars.PINNED_RECONCILE_SERVICE_ACCOUNT != '' }}
+        run: |
+          if [ "$HAS_STRIPE_KEY" = "true" ] && [ "$HAS_WIF_PROVIDER" = "true" ] && [ "$HAS_SERVICE_ACCOUNT" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Billing reconciliation skipped::Environment reconcile-$RECONCILE_ENV needs secret PINNED_RECONCILE_STRIPE_READ_KEY and variables PINNED_RECONCILE_WIF_PROVIDER and PINNED_RECONCILE_SERVICE_ACCOUNT (see the header of this workflow) to enable."
+            {
+              echo "## Billing reconciliation ($RECONCILE_ENV) — skipped (PIN-243)"
+              echo "Environment \`reconcile-$RECONCILE_ENV\` is not configured yet. See the header of \`.github/workflows/billing-reconciliation.yml\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          persist-credentials: false
+
+      # No npm cache: this job holds credentials, so it installs fresh from
+      # the lockfile rather than restoring cache entries other runs wrote.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      # Before the auth step and without lifecycle scripts, so no
+      # dependency install code runs while a Google credential exists. The
+      # script needs none: it imports only @google-cloud/firestore, whose
+      # tree has no install script it relies on at runtime.
+      - name: Install (no lifecycle scripts)
+        if: steps.guard.outputs.enabled == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation, read-only SA)
+        if: steps.guard.outputs.enabled == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PINNED_RECONCILE_WIF_PROVIDER }}
+          service_account: ${{ vars.PINNED_RECONCILE_SERVICE_ACCOUNT }}
+
+      - name: Reconcile (fail = alert)
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          STRIPE_RECONCILE_KEY: ${{ secrets.PINNED_RECONCILE_STRIPE_READ_KEY }}
+        run: |
+          set +e
+          if [ "$RECONCILE_ENV" = "prod" ]; then
+            node scripts/billing-reconciliation.mjs --summary-only --env-var STRIPE_RECONCILE_KEY --live --i-understand-live --project moriacrew-pinned-prod > reconcile-summary.json
+          else
+            node scripts/billing-reconciliation.mjs --summary-only --env-var STRIPE_RECONCILE_KEY --project moriacrew-pinned-dev > reconcile-summary.json
+          fi
+          code=$?
+          {
+            echo "## Billing reconciliation ($RECONCILE_ENV) — exit $code"
+            if [ -s reconcile-summary.json ]; then
+              echo '```json'
+              cat reconcile-summary.json
+              echo '```'
+            else
+              echo "No summary: the run stopped before reporting (exit 2 = config refusal, 1 = error). See the job log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            echo "::error title=Billing reconciliation needs attention::Reconcile exited $code (paid-no-grant / dead letters / other anomaly or error). See the step summary, then run the script in an operator terminal for the rows (docs/15 PIN-243 runbook)."
+          fi
+          exit "$code"
