@@ -223,10 +223,15 @@ async function listRefundDisputeVisibility(nowMs) {
       stripeGet("/disputes", { limit: "100", "created[gte]": String(sinceSec) }),
     ]);
     const disputeRows = disputes.data ?? [];
+    // Stripe closes a dispute as won, lost, charge_refunded (the charge was
+    // refunded before a decision) or warning_closed (an inquiry that ended);
+    // everything else (needs_response, under_review and their warning_*
+    // forms) still wants attention.
+    const closed = new Set(["won", "lost", "charge_refunded", "warning_closed"]);
     return {
       refundsLast30Days: (refunds.data ?? []).length,
       disputesLast30Days: disputeRows.length,
-      openDisputes: disputeRows.filter((d) => d.status !== "won" && d.status !== "lost").length,
+      openDisputes: disputeRows.filter((d) => !closed.has(d.status)).length,
     };
   } catch {
     return undefined;
