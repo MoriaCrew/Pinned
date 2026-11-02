@@ -148,6 +148,7 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
      git fetch origin main dev
      git checkout -b promote/$(date +%Y-%m-%d) origin/main
      git restore --source=origin/dev --staged --worktree -- .   # also applies deletions
+     pre-commit run --all-files   # the commit runs the hooks: a file that reached dev without them (promotion #2: a missing trailing newline) is rewritten here, so land that fix on dev first and re-cut
      git commit -m "Promote dev to prod ($(git rev-parse --short origin/dev))"
      git diff --stat origin/dev   # must print nothing: tree == dev
      git push -u origin HEAD
@@ -166,10 +167,12 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
 ## 5. Smoke (prod or dev)
 
 ```sh
-curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"optional", plusMode:"off"
+curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"optional", plusMode:"stripe" (since promotion #2, Nov 2; "off" = billing rolled back)
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked
+curl -s https://pinneds.com/ | grep -c 'href="/g/'   # 1: the landing demo link (DEMO_BOARD_SLUG); 0 on dev
 # Languages (PIN-227): French browser → French, saved English wins, unknown → English
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
