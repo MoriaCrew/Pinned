@@ -1004,6 +1004,7 @@ export function AddSheet({
                   src={element.imageUrl}
                   label={element.label}
                   owner={{ id: meId, name: t(locale, "add.you") }}
+                  speakOwner={false}
                   seed={pin.elementId}
                   state={dropped.has(pin.id) ? "dropped" : "rest"}
                   onToggle={() => toggle(pin.id)}
