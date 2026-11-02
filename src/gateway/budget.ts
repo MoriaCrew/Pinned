@@ -13,6 +13,11 @@ import "server-only";
  * float drift in counters.
  */
 
+/** PIN-240: UTC hour bucket, e.g. "2026-10-29T23" (inside one day bucket). */
+export function hourBucketFor(now: number): string {
+  return new Date(now).toISOString().slice(0, 13);
+}
+
 export function dayBucketFor(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
 }
@@ -31,12 +36,16 @@ export interface BudgetDayState {
   participantTapNames: Record<string, number>;
   /** SpeechTranscriber-only per-participant counts (PIN-119): kept apart exactly like participantTapNames. */
   participantTranscriptions: Record<string, number>;
+  /** PIN-240: current UTC hour bucket tracked in this day doc; "" = none yet / legacy doc. */
+  hourBucket: string;
+  /** PIN-240: micro-USD reserved inside `hourBucket`; resets when the hour rolls. */
+  hourReservedMicroUsd: number;
   /** Segmenter counts per photo (job id) for the day (PIN-92). */
   photos: Record<string, number>;
 }
 
 export function emptyBudgetDay(): BudgetDayState {
-  return { calls: 0, reservedMicroUsd: 0, participantPhotos: {}, participantScenes: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantTranscriptions: {}, photos: {} };
+  return { calls: 0, reservedMicroUsd: 0, participantPhotos: {}, participantScenes: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantTranscriptions: {}, hourBucket: "", hourReservedMicroUsd: 0, photos: {} };
 }
 
 export interface ReserveRequest {
@@ -44,6 +53,10 @@ export interface ReserveRequest {
   estimatedCostUsd: number;
   /** Policy dailyBudgetUsd; 0 means OFF. */
   budgetUsd: number;
+  /** PIN-240: UTC hour bucket for this reserve (hourBucketFor); absent = no hour tracking (legacy callers/tests). */
+  hourBucket?: string;
+  /** PIN-240: Policy hourlyBudgetUsd sub-cap; undefined or 0 = off (daily cap only). */
+  hourlyBudgetUsd?: number;
   /** Policy dailyCallLimit; 0 means OFF. */
   callLimit: number;
   participantId?: string;
@@ -68,6 +81,7 @@ export type ReserveDenyReason =
   | "off"
   | "call_limit"
   | "budget"
+  | "hourly_budget"
   | "participant_cap"
   | "board_cap"
   | "photo_cap";
@@ -97,6 +111,14 @@ export function evaluateReserve(
   const estimatedMicroUsd = toMicroUsd(request.estimatedCostUsd);
   if (state.reservedMicroUsd + estimatedMicroUsd > toMicroUsd(request.budgetUsd)) {
     return { ok: false, reason: "budget" };
+  }
+  // PIN-240: hourly sub-cap (opt-in). Spend from a stale hour
+  // bucket counts as 0; the daily check above stays authoritative.
+  if (request.hourBucket && request.hourlyBudgetUsd !== undefined && request.hourlyBudgetUsd > 0) {
+    const hourReserved = state.hourBucket === request.hourBucket ? state.hourReservedMicroUsd : 0;
+    if (hourReserved + estimatedMicroUsd > toMicroUsd(request.hourlyBudgetUsd)) {
+      return { ok: false, reason: "hourly_budget" };
+    }
   }
   if (request.participantId && request.participantPhotoCap !== undefined) {
     if ((state.participantPhotos[request.participantId] ?? 0) >= request.participantPhotoCap) {
@@ -151,6 +173,12 @@ export function applyReserve(
     participantSegments: { ...state.participantSegments },
     participantTapNames: { ...state.participantTapNames },
     participantTranscriptions: { ...state.participantTranscriptions },
+    hourBucket: request.hourBucket ?? state.hourBucket,
+    hourReservedMicroUsd: !request.hourBucket
+      ? state.hourReservedMicroUsd
+      : state.hourBucket === request.hourBucket
+        ? state.hourReservedMicroUsd + estimatedMicroUsd
+        : estimatedMicroUsd,
     photos: { ...state.photos },
   };
   if (request.participantId && request.participantPhotoCap !== undefined) {

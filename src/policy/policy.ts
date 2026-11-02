@@ -311,6 +311,8 @@ export const PolicySchema = z
     /** 0 means OFF (PIN-59); never a silent fallback. */
     aiCallLogRetentionDays: z.number().int().min(1).default(90),
     dailyBudgetUsd: z.number().min(0).default(5),
+    /** PIN-240: hourly sub-cap inside the daily cap; 0 (default) = off, daily cap only. The daily cap stays authoritative. */
+    hourlyBudgetUsd: z.number().min(0).default(0),
     dailyCallLimit: z.number().int().min(0).default(500),
     models: z
       .object({
@@ -524,6 +526,7 @@ export const PolicyOverridesSchema = z.object({
     .optional(),
   aiCallLogRetentionDays: z.number().int().min(1).optional(),
   dailyBudgetUsd: z.number().min(0).optional(),
+  hourlyBudgetUsd: z.number().min(0).optional(),
   dailyCallLimit: z.number().int().min(0).optional(),
   models: z
     .object({

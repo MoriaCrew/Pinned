@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   InMemoryBudgetStore,
   dayBucketFor,
+  hourBucketFor,
   emptyBudgetDay,
   evaluateReserve,
   type ReserveRequest,
@@ -41,6 +42,8 @@ describe("evaluateReserve (PIN-61)", () => {
       participantSegments: {},
       participantTapNames: {},
       participantTranscriptions: {},
+      hourBucket: "",
+      hourReservedMicroUsd: 0,
       photos: {},
     };
     expect(evaluateReserve(state, req())).toMatchObject({
@@ -213,6 +216,65 @@ describe("photo/scene cap independence (PIN-136)", () => {
   });
 });
 
+describe("hourly sub-cap (PIN-240)", () => {
+  const H1 = "2026-10-29T10";
+  const H2 = "2026-10-29T11";
+
+  it("hourBucketFor is the UTC hour", () => {
+    expect(hourBucketFor(Date.UTC(2026, 9, 29, 23, 59))).toBe("2026-10-29T23");
+    expect(hourBucketFor(Date.UTC(2026, 9, 30, 0, 0))).toBe("2026-10-30T00");
+  });
+
+  it("off by default: no hourly cap means the daily cap alone decides", async () => {
+    const store = new InMemoryBudgetStore();
+    // No hourBucket/hourlyBudgetUsd at all (legacy caller): many calls in one hour pass.
+    for (let i = 0; i < 5; i += 1) expect((await store.reserve(req())).ok).toBe(true);
+    // Explicitly 0 / unset hourly cap is also off, even past any hourly amount.
+    expect((await store.reserve(req({ hourBucket: H1, hourlyBudgetUsd: 0, estimatedCostUsd: 0.5 }))).ok).toBe(true);
+    expect((await store.reserve(req({ hourBucket: H1, estimatedCostUsd: 0.5 }))).ok).toBe(true);
+  });
+
+  it("evaluateReserve denies hourly_budget at the cap; a stale bucket counts as 0", () => {
+    const state = { ...emptyBudgetDay(), hourBucket: H1, hourReservedMicroUsd: 900_000 };
+    expect(
+      evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.2 })),
+    ).toMatchObject({ ok: false, reason: "hourly_budget" });
+    // Exactly at the boundary is allowed.
+    expect(
+      evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.1 })).ok,
+    ).toBe(true);
+    // Next hour resets: prior hour spend does not carry over.
+    expect(
+      evaluateReserve(state, req({ hourBucket: H2, hourlyBudgetUsd: 1, estimatedCostUsd: 0.2 })).ok,
+    ).toBe(true);
+  });
+
+  it("daily cap stays authoritative over the hourly sub-cap", () => {
+    const state = { ...emptyBudgetDay(), reservedMicroUsd: 1_900_000, hourBucket: H1, hourReservedMicroUsd: 0 };
+    // Fits the hourly cap (1) but busts the daily cap (2): daily reason wins.
+    expect(
+      evaluateReserve(state, req({ hourBucket: H1, hourlyBudgetUsd: 1, estimatedCostUsd: 0.2 })),
+    ).toMatchObject({ ok: false, reason: "budget" });
+  });
+
+  it("store accepts until the hourly cap, denies, then accepts in the next hour", async () => {
+    const store = new InMemoryBudgetStore();
+    const call = (hourBucket: string) => req({ hourBucket, hourlyBudgetUsd: 0.03, estimatedCostUsd: 0.01 });
+    expect((await store.reserve(call(H1))).ok).toBe(true);
+    expect((await store.reserve(call(H1))).ok).toBe(true);
+    expect((await store.reserve(call(H1))).ok).toBe(true);
+    expect(await store.reserve(call(H1))).toEqual({ ok: false, reason: "hourly_budget" });
+    expect(store.snapshot(DAY)).toMatchObject({ hourBucket: H1, hourReservedMicroUsd: 30_000, calls: 3 });
+    expect((await store.reserve(call(H2))).ok).toBe(true);
+    expect(store.snapshot(DAY)).toMatchObject({
+      hourBucket: H2,
+      hourReservedMicroUsd: 10_000,
+      reservedMicroUsd: 40_000,
+      calls: 4,
+    });
+  });
+});
+
 describe("InMemoryBudgetStore (PIN-61)", () => {
   it("counts calls, reserved micro-USD and per-id counters per day", async () => {
     const store = new InMemoryBudgetStore();
@@ -229,6 +291,8 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
       participantSegments: {},
       participantTapNames: {},
       participantTranscriptions: {},
+      hourBucket: "",
+      hourReservedMicroUsd: 0,
       photos: {},
     });
     expect(store.snapshot("2026-10-30").calls).toBe(0);
