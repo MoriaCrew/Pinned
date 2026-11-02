@@ -25,6 +25,7 @@ for how each Meta model is used. Numbers 01, 02 and 05 are archived with the dro
 | [`18-i18n.md`](18-i18n.md) | UI languages: how a request picks one, `UI_LOCALES`, adding strings, translation runs |
 | [`19-meta-models.md`](19-meta-models.md) | Each Meta model: prompt and version, Policy keys, inputs, fallbacks, cost, evidence |
 | [`DEPLOY.md`](DEPLOY.md) | Prod runbook and env matrix (lands with PIN-209) |
+| [`launch-ops-runbook.md`](launch-ops-runbook.md) | Launch ops: hourly AI sub-cap, GCP budget alerts, soft-kill drill, demo-board protection (PIN-240) |
 
 ## Decisions (`docs/adr/`)
 

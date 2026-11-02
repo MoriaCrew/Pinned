@@ -18,6 +18,7 @@ function envLayer(): PolicyOverrides {
     // Config (host env) wins for budget + models unless the JSON
     // layer explicitly overrides that exact field.
     dailyBudgetUsd: jsonLayer?.dailyBudgetUsd ?? cfg.aiDailyBudgetUsd,
+    hourlyBudgetUsd: jsonLayer?.hourlyBudgetUsd ?? cfg.aiHourlyBudgetUsd,
     dailyCallLimit: jsonLayer?.dailyCallLimit ?? cfg.aiDailyCallLimit,
     models: {
       spark: jsonLayer?.models?.spark ?? cfg.meta.sparkModel,

@@ -102,6 +102,23 @@ describe("decorator chain: budget (PIN-61)", () => {
     expect(logs).toMatchObject([{ outcome: "denied_off", denialReason: "off", attempts: 0, reservedMicroUsd: 0 }]);
   });
 
+  it("hourly sub-cap (PIN-240): denies hourly_budget before the provider, logged denied_hourly_budget", async () => {
+    let calls = 0;
+    const { ports, logs } = setup(
+      {
+        async nameElements() {
+          calls += 1;
+          return READY;
+        },
+      },
+      { policy: resolvePolicy({ hourlyBudgetUsd: 0.000001 }) },
+    );
+    const out = await ports.elementNamer.nameElements(namerInput());
+    expect(out.status).toBe("failed");
+    if (out.status === "failed") expect(out.errorCode).toBe("hourly_budget");
+    expect(calls).toBe(0);
+    expect(logs).toMatchObject([{ outcome: "denied_hourly_budget", denialReason: "hourly_budget", attempts: 0, reservedMicroUsd: 0 }]);
+  });
   it("fail closed when the budget store errors: no provider call", async () => {
     let calls = 0;
     const broken: BudgetStore = {

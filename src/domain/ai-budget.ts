@@ -11,7 +11,7 @@
 export type AiBudgetDenial = "exhausted" | "off";
 
 export function aiBudgetDenial(code: unknown): AiBudgetDenial | null {
-  if (code === "budget" || code === "call_limit") return "exhausted";
+  if (code === "budget" || code === "call_limit" || code === "hourly_budget") return "exhausted";
   if (code === "budget_off") return "off";
   return null;
 }

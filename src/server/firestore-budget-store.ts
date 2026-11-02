@@ -48,6 +48,10 @@ function stateFrom(data: DocumentData | undefined): BudgetDayState {
     participantSegments: numRecord(data.participantSegments),
     participantTapNames: numRecord(data.participantTapNames),
     participantTranscriptions: numRecord(data.participantTranscriptions),
+    // PIN-240: legacy day docs have no hour fields; "" / 0 = no hour tracked yet.
+    hourBucket: typeof data.hourBucket === "string" ? data.hourBucket : "",
+    hourReservedMicroUsd:
+      typeof data.hourReservedMicroUsd === "number" ? data.hourReservedMicroUsd : 0,
     photos: numRecord(data.photos),
   };
 }
@@ -98,6 +102,16 @@ export class FirestoreBudgetStore implements BudgetStore {
       if (request.participantId && request.participantTapNameCap !== undefined) {
         updates[`participantTapNames.${request.participantId}`] =
           FieldValue.increment(1);
+      }
+      // PIN-240: same hour increments; a rolled hour resets the
+      // accumulator in the same transaction (never increment across buckets).
+      if (request.hourBucket) {
+        if (state.hourBucket === request.hourBucket) {
+          updates.hourReservedMicroUsd = FieldValue.increment(result.estimatedMicroUsd);
+        } else {
+          updates.hourBucket = request.hourBucket;
+          updates.hourReservedMicroUsd = result.estimatedMicroUsd;
+        }
       }
       transaction.update(ref, updates);
       return result;
