@@ -266,12 +266,20 @@ function describeCheckoutIntentStore(
         intent: null,
         applied: false,
       });
-      expect(await store.recordFinalDisputeClawback(intent.id, "du_test_fake_1", 12)).toMatchObject({
+      // Already fully refunded: a lost dispute adds its cents but no makes.
+      expect(await store.countFinalDisputeClawback(intent.id, "du_test_fake_1", 100, 499, 25)).toMatchObject({
         applied: true,
-        intent: { finalDisputeClawbacks: { du_test_fake_1: 12 } },
+        makes: 0,
+        intent: { finalDisputeClawbacks: { du_test_fake_1: 0 }, finalDisputeEurCents: { du_test_fake_1: 100 } },
       });
-      expect(await store.recordFinalDisputeClawback(intent.id, "du_test_fake_1", 12)).toMatchObject({
+      expect(await store.countFinalDisputeClawback(intent.id, "du_test_fake_1", 100, 499, 25)).toMatchObject({
         applied: false,
+        makes: 0,
+      });
+      expect(await store.countFinalDisputeClawback("nope", "du_x", 1, 499, 25)).toEqual({
+        intent: null,
+        applied: false,
+        makes: 0,
       });
       await expect(store.applyRefundAccounting(intent.id, "re_bad", -1, 0)).rejects.toThrow(
         RangeError,
@@ -303,6 +311,39 @@ function describeCheckoutIntentStore(
         applied: false,
         deltaMakes: 0,
       });
+    });
+
+    it("refunds and lost disputes price from one cumulative take-back figure (PIN-242)", async () => {
+      // The shipped pack terms: 20 makes for 299 cents.
+      const { store } = make();
+      // Refund 150 (floor 10.03 = 10), then lose a dispute on the
+      // other 149: the money is all back, so it claws the last 10.
+      const full = await store.create(createInput({ credits: 20, eurCents: 299 }));
+      expect(await store.countRefund(full.id, "re_test_fake_a", 150, 299, 20)).toMatchObject({ deltaMakes: 10 });
+      expect(await store.countFinalDisputeClawback(full.id, "du_test_fake_1", 149, 299, 20)).toMatchObject({
+        applied: true,
+        makes: 10,
+        intent: { finalDisputeClawbacks: { du_test_fake_1: 10 }, finalDisputeEurCents: { du_test_fake_1: 149 } },
+      });
+      expect(await store.countFinalDisputeClawback(full.id, "du_test_fake_1", 149, 299, 20)).toMatchObject({
+        applied: false,
+        makes: 10,
+      });
+      // Refund 100 + lost 100 = 200 cents: floor(13.38) = 13 in all.
+      const partial = await store.create(createInput({ credits: 20, eurCents: 299 }));
+      expect(await store.countRefund(partial.id, "re_test_fake_b", 100, 299, 20)).toMatchObject({ deltaMakes: 6 });
+      expect(await store.countFinalDisputeClawback(partial.id, "du_test_fake_2", 100, 299, 20)).toMatchObject({
+        makes: 7,
+      });
+      // Either order: a refund after a lost dispute prices from the same cumulative.
+      const reversed = await store.create(createInput({ credits: 20, eurCents: 299 }));
+      expect(await store.countFinalDisputeClawback(reversed.id, "du_test_fake_3", 149, 299, 20)).toMatchObject({
+        makes: 9,
+      });
+      expect(await store.countRefund(reversed.id, "re_test_fake_c", 150, 299, 20)).toMatchObject({ deltaMakes: 11 });
+      await expect(store.countFinalDisputeClawback(reversed.id, "du_bad", -1, 299, 20)).rejects.toThrow(
+        RangeError,
+      );
     });
 
     it("rejects invalid create inputs with RangeError and stores nothing resolvable", async () => {

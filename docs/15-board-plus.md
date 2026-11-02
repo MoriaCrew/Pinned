@@ -731,9 +731,11 @@ and dispute lifecycle pages):
   money, mirroring the makes claw: once the makes clawback has
   landed, the webhook clears `Board.plus`
   (`decidePlusRevocation`) when a purchase is taken all the way
-  back — a cumulative settled refund reaching the pack price
-  (`refundedEurCents >= eurCents`; partial refunds never), or a
-  dispute closed `lost` that clawed the purchase in full — and
+  back — the money taken back on it (cumulative settled refunds
+  plus lost disputes, `takenBackEurCents`) reaching the pack
+  price; partial refunds and partial losses never. The event
+  that gets there claws the remainder and names the reason
+  (`full_refund`, or `dispute_lost` with its dispute id) — and
   leaves a `Board.plusRevocation` tombstone with the removed
   grant. If another granted purchase on the board is still live
   (not fully clawed back), Plus stays: it grants it too. A
@@ -770,7 +772,7 @@ and dispute lifecycle pages):
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
-  | `closed` `lost` | the one final clawback (floor), then restore the ceil excess |
+  | `closed` `lost` | the one final clawback (cumulative floor, below), then restore the ceil excess |
 
   Funds reinstated after a final clawback cannot be
   un-clawed by the ledger, so that case dead-letters as
@@ -793,12 +795,18 @@ the board's Policy pack by lookup key, and dead-letter
 Money -> makes (one documented formula): for a pack of
 `credits` makes at `eurCents`, clawbacks use
 `min(credits, floor(cents * credits / eurCents))` on the
-CUMULATIVE settled-EUR amount - the intent stores cumulative
-refunded EUR cents + makes already clawed for refunds, and
-each refund claws the difference, so partial refunds sum to
-exactly the pack with no rounding drift. Dispute freezes use
-the same ratio with `ceil` (round up protects the pool; the
-excess over the final floor amount is restored by the
+CUMULATIVE settled-EUR amount taken back - the intent stores
+refunded EUR cents and each lost dispute's EUR cents (PIN-242)
+plus the makes already clawed for both, and each succeeded
+refund or `lost` close claws the difference, so any mix of
+partial refunds and lost disputes sums to exactly the pack
+once the money reaches `eurCents`, with no per-event rounding
+drift. At 20 makes for 299: refund 150 claws 10 and a lost
+149 dispute then claws the last 10 (per-event floors would
+stop at 19); refund 100 + lost 100 is 200 cents, 13 in all.
+Dispute freezes use the same ratio with `ceil` on the
+disputed amount (round up protects the pool and always
+covers the cumulative delta; the excess is restored by the
 `lost` close that claws).
 Foreign-presentment refund/dispute amounts are never
 FX-guessed: settled EUR comes from the reported
@@ -814,8 +822,9 @@ or a missing one, dead-letters `fx_unverifiable` (PIN-181).
 Refund
 counting is atomic in the intent store (`countRefund`
 prices the delta from the stored cumulative inside the
-write), and a dispute's final clawback is claimed
-atomically by the `lost` close, so a re-delivery or a
+write), and a dispute's final clawback is claimed and priced
+the same way by the `lost` close
+(`countFinalDisputeClawback`), so a re-delivery or a
 `funds_withdrawn` after it, in any order, never claws
 twice. When none of that reads as EUR the
 event dead-letters (`fx_unverifiable`).

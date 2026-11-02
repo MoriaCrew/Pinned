@@ -27,9 +27,9 @@ import {
 } from "@google-cloud/firestore";
 import {
   applyRefundAccountingToIntent,
+  countFinalDisputeClawbackOnIntent,
   countRefundOnIntent,
   mergeStripeMapping,
-  recordFinalDisputeClawbackOnIntent,
   assertCreateCheckoutIntentInput,
   buildCheckoutIntent,
   capExceededError,
@@ -257,21 +257,29 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
     });
   }
 
-  async recordFinalDisputeClawback(
+  async countFinalDisputeClawback(
     intentId: string,
     disputeId: string,
-    makes: number,
-  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    disputeEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; makes: number }> {
     assertIntentId(intentId);
     const ref = this.intentRef(intentId);
     return this.db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       const intent = intentFrom(snap.exists ? snap.data() : undefined);
-      if (!intent) return { intent: null, applied: false };
-      const next = recordFinalDisputeClawbackOnIntent(intent, disputeId, makes);
-      if (!next) return { intent: structuredClone(intent), applied: false };
+      if (!intent) return { intent: null, applied: false, makes: 0 };
+      const { next, makes } = countFinalDisputeClawbackOnIntent(
+        intent,
+        disputeId,
+        disputeEurCents,
+        packEurCents,
+        packCredits,
+      );
+      if (!next) return { intent: structuredClone(intent), applied: false, makes };
       tx.set(ref, toFirestoreData(next));
-      return { intent: structuredClone(next), applied: true };
+      return { intent: structuredClone(next), applied: true, makes };
     });
   }
 

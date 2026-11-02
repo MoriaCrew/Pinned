@@ -34,17 +34,24 @@ import "server-only";
  *     makesFloor(c)  = min(credits, floor(c * credits / eurCents))
  *     makesFreeze(c) = min(credits, ceil (c * credits / eurCents))
  *
- * Refund clawbacks track the cumulative refunded EUR cents on
- * the intent: each succeeded per-refund delta adds its cents
- * to the cumulative, and claws back
- * `makesFloor(newCumulative) - makesAlreadyClawedForRefunds`,
- * so any split of partial refunds sums to exactly the pack at
- * a full refund, with no per-delta rounding drift. Dispute
- * final clawbacks use `makesFloor` on the disputed settled
- * amount; dispute freezes use `makesFreeze` (round up, so the
- * held pool is protected while the dispute is open - any
- * excess over the final floor amount is restored by the same
- * terminal event that claws).
+ * Clawbacks track the money taken back on the intent: the
+ * cumulative refunded EUR cents plus every lost dispute's
+ * settled EUR cents (PIN-242). Each succeeded per-refund delta
+ * and each dispute closed `lost` adds its cents to that one
+ * cumulative inside the atomic intent write, and claws back
+ * `makesFloor(newCumulative) - makesAlreadyClawed` (refunds
+ * and lost disputes together), so any mix of partial refunds
+ * and lost disputes sums to exactly the pack once the money
+ * reaches `eurCents` (the claw that gets there takes the
+ * remainder, and the purchase's Plus is revoked), with no
+ * per-event rounding drift. Example at 20 makes for 299: a
+ * 150 refund claws 10, a lost 149 dispute then claws the last
+ * 10; refund 100 + lost 100 is 200 cents, 13 makes in all,
+ * Plus kept. Dispute freezes use `makesFreeze` on the disputed
+ * amount (round up, so the held pool is protected while the
+ * dispute is open - it always covers the final cumulative
+ * delta, and any excess is restored by the same terminal event
+ * that claws).
  * Foreign-presentment amounts are never FX-guessed: the
  * settled EUR amount comes from the BalanceTransaction Stripe
  * reports (its amount/currency are the account settlement
@@ -89,10 +96,11 @@ import {
   type PlusRevocationReason,
 } from "../domain/plus";
 import type { Policy, PolicyCreditPack } from "../policy/policy";
-import type {
-  CheckoutIntent,
-  CheckoutIntentStore,
-  StripeIntentMapping,
+import {
+  takenBackEurCents,
+  type CheckoutIntent,
+  type CheckoutIntentStore,
+  type StripeIntentMapping,
 } from "./checkout-intent";
 import {
   deadLetterId,
@@ -133,7 +141,7 @@ export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
 /** The price terms one purchase is held to (PIN-181): its stored intent terms, or the Policy pack for a legacy intent. */
 export type PackTerms = Pick<PolicyCreditPack, "credits" | "eurCents">;
 
-/** `min(credits, floor(cents * credits / eurCents))` - refund + final-clawback conversion (see module note). */
+/** `min(credits, floor(cents * credits / eurCents))` - the claw conversion, applied to the cumulative money taken back inside the intent store's atomic count (see module note). */
 export function makesFloorForCents(cents: number, pack: PackTerms): number {
   if (!Number.isInteger(cents) || cents <= 0) return 0;
   return Math.min(pack.credits, Math.floor((cents * pack.credits) / pack.eurCents));
@@ -892,12 +900,13 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
       throw error;
     }
   }
-  // PIN-242: a cumulative FULL refund of this purchase also
-  // revokes the Plus it granted (partials never do). Runs on the
-  // duplicate path too, so a crash between the claw and the
-  // revoke is repaired by the retry; the revoke itself is a
-  // no-op once the grant is gone.
-  if ((counted.intent.refundedEurCents ?? 0) >= pack.eurCents) {
+  // PIN-242: once the money taken back on this purchase (refunds
+  // plus lost disputes) reaches the pack price, the claw above was
+  // the remainder and the Plus it granted goes too (partials never
+  // do). Runs on the duplicate path too, so a crash between the
+  // claw and the revoke is repaired by the retry; the revoke
+  // itself is a no-op once the grant is gone.
+  if (takenBackEurCents(counted.intent) >= pack.eurCents) {
     await revokePurchasePlus(deps, ctx, intent, "full_refund", undefined, refundId);
   }
   if (!counted.applied) return "duplicate_refund";
@@ -1086,6 +1095,7 @@ async function finalClawbackDispute(
   const preExistingMakes = intent.finalDisputeClawbacks?.[disputeId];
   let makes: number;
   let claimedNow = false;
+  let claimed: CheckoutIntent = intent;
   if (preExistingMakes !== undefined) {
     makes = preExistingMakes;
   } else {
@@ -1097,9 +1107,19 @@ async function finalClawbackDispute(
         boardId: intent.boardId,
       });
     }
-    makes = makesFloorForCents(cents, pack);
-    const claim = await deps.intents.recordFinalDisputeClawback(intent.id, disputeId, makes);
-    if (!claim.applied) return "duplicate_final_clawback";
+    // PIN-242: priced inside the claim from the cumulative money
+    // taken back (refunds plus lost disputes), so a lost dispute
+    // that completes a partial refund claws exactly the remainder.
+    const claim = await deps.intents.countFinalDisputeClawback(
+      intent.id,
+      disputeId,
+      cents,
+      pack.eurCents,
+      pack.credits,
+    );
+    if (!claim.applied || !claim.intent) return "duplicate_final_clawback";
+    makes = claim.makes;
+    claimed = claim.intent;
     claimedNow = true;
   }
 
@@ -1143,13 +1163,12 @@ async function finalClawbackDispute(
 
   const excess = await restoreFreezeExcess(deps, ctx, intent, disputeId, ids);
   if (typeof excess === "string") return excess;
-  // PIN-242: a lost dispute that clawed the purchase all the way
-  // back also revokes its Plus. Runs on the duplicate paths too
-  // (a re-delivered lost, a late funds_withdrawn), so a crash
+  // PIN-242: a lost dispute that brings the money taken back on
+  // the purchase (refunds plus lost disputes) to the pack price
+  // also revokes its Plus. Runs on the duplicate paths too (a
+  // re-delivered lost, a late funds_withdrawn), so a crash
   // between the claw and the revoke is repaired by the retry.
-  const afterClaw = await deps.ledger.getAccount(intent.boardId);
-  const clawedPurchase = afterClaw?.purchases[intent.purchaseId];
-  if (clawedPurchase && clawedPurchase.clawedCredits >= clawedPurchase.credits) {
+  if (takenBackEurCents(claimed) >= pack.eurCents) {
     await revokePurchasePlus(deps, ctx, intent, "dispute_lost", disputeId, disputeId);
   }
   if (claimedNow) return "dispute_final_clawed";

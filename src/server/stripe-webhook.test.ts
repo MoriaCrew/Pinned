@@ -6,7 +6,7 @@ import { STRIPE_API_VERSION } from "../config";
 import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import { hasPlus, type BoardPlus } from "../domain/plus";
-import { resolvePolicy, DEFAULT_POLICY } from "../policy/policy";
+import { resolvePolicy, DEFAULT_POLICY, type PolicyCreditPack } from "../policy/policy";
 import { InMemoryCheckoutIntentStore, type CheckoutIntent } from "./checkout-intent";
 import { resolveBillingReturn } from "./credit-checkout";
 import {
@@ -77,7 +77,7 @@ class FakeWebhookClient implements StripeWebhookClientLike {
   }
 }
 
-async function harness() {
+async function harness(pack: PolicyCreditPack = TEST_PACK) {
   const boards = new InMemoryBoardRepository();
   await seedBoard(boards);
   const intents = new InMemoryCheckoutIntentStore();
@@ -93,20 +93,20 @@ async function harness() {
     ledger,
     records,
     boards,
-    policy: resolvePolicy({ credits: { packs: [TEST_PACK] } }),
+    policy: resolvePolicy({ credits: { packs: [pack] } }),
     now: () => nowMs,
   };
   async function createIntent(): Promise<CheckoutIntent> {
     const intent = await intents.create({
       boardId: SLUG,
-      packLookupKey: PACK,
-      credits: 25,
-      eurCents: 499,
+      packLookupKey: pack.lookupKey,
+      credits: pack.credits,
+      eurCents: pack.eurCents,
       at: NOW,
       intentTtlSeconds: 1_800,
       pendingIntentCapPerBoard: 10,
     });
-    await ledger.recordPurchase(SLUG, { purchaseId: intent.purchaseId, credits: 25 });
+    await ledger.recordPurchase(SLUG, { purchaseId: intent.purchaseId, credits: pack.credits });
     return intent;
   }
   async function deliver(event: unknown, secret = SECRET) {
@@ -1264,5 +1264,204 @@ describe("Plus revocation (PIN-242)", () => {
     ).toBe("granted");
     expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
     expect((await h.boards.getBoard(SLUG))!.plus ?? null).toBeNull();
+  });
+});
+
+describe("refunds + lost disputes share one cumulative take-back (PIN-242)", () => {
+  // The shipped pack (pinned above): 20 makes for 299 cents.
+  const SHIPPED = DEFAULT_POLICY.credits.packs[0];
+  const AT = NOW + 60_000;
+  const PAID_BOARD: BoardPlus = { plan: "board", source: "stripe", grantedAt: AT };
+
+  async function granted() {
+    const h = await harness(SHIPPED);
+    const intent = await h.createIntent();
+    const paid = session(intent.id, {
+      amount_total: SHIPPED.eurCents,
+      metadata: {
+        checkout_intent_id: intent.id,
+        pack_lookup_key: SHIPPED.lookupKey,
+        credits: String(SHIPPED.credits),
+      },
+    });
+    expect((await h.deliver(evt("evt_paid", "checkout.session.completed", paid))).outcome).toBe("granted");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 20 });
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+    return { h, intent };
+  }
+
+  async function clawedMakes(h: Awaited<ReturnType<typeof harness>>): Promise<number> {
+    return (await h.ledger.listEntries(SLUG))
+      .filter((e) => e.type === "clawback")
+      .reduce((sum, e) => sum + e.amount, 0);
+  }
+
+  /** Refund 150 (floor 10.03 = 10), then lose a dispute on the other 149: the merchant holds nothing. */
+  async function refundThenLose() {
+    const { h, intent } = await granted();
+    expect((await h.deliver(evt("evt_re", "refund.created", refund({ amount: 150 })))).outcome).toBe(
+      "refund_clawed",
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 10 });
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+    // ceil(149 * 20 / 299) = 10 frozen: all this purchase can still lose.
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 149 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 10, frozen: 10, available: 0 });
+    const lost = evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 149, status: "lost" }));
+    expect((await h.deliver(lost)).outcome).toBe("dispute_final_clawed");
+    return { h, intent, lost };
+  }
+
+  it("refund 150 then a lost 149 dispute claws the remainder (20 in all) and revokes Plus", async () => {
+    const { h, intent } = await refundThenLose();
+    // Per-event floors would stop at 10 + floor(9.97) = 19.
+    expect(await clawedMakes(h)).toBe(20);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
+    expect((await h.ledger.getAccount(SLUG))?.purchases[intent.purchaseId]).toMatchObject({
+      clawedCredits: 20,
+    });
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus ?? null).toBeNull();
+    expect(board.plusRevocation).toMatchObject({
+      purchaseId: intent.purchaseId,
+      reason: "dispute_lost",
+      disputeId: "du_test_fake_1",
+      revokedPlus: PAID_BOARD,
+    });
+    expect(await h.intents.get(intent.id)).toMatchObject({
+      refundedEurCents: 150,
+      refundClawedMakes: 10,
+      finalDisputeEurCents: { du_test_fake_1: 149 },
+      finalDisputeClawbacks: { du_test_fake_1: 10 },
+    });
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("refund 100 + a lost 100 dispute is 200 cents: 13 clawed in all, Plus kept", async () => {
+    const { h } = await granted();
+    // floor(100 * 20 / 299) = 6.
+    expect((await h.deliver(evt("evt_re", "refund.created", refund({ amount: 100 })))).outcome).toBe(
+      "refund_clawed",
+    );
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 14 });
+    // ceil(100 * 20 / 299) = 7 frozen; the cumulative floor(200 * 20 / 299) = 13 claws 7 more.
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 100 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 14, frozen: 7, available: 7 });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 100, status: "lost" }))))
+        .outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await clawedMakes(h)).toBe(13);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 7, frozen: 0, available: 7 });
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus).toEqual(PAID_BOARD);
+    expect(board.plusRevocation ?? null).toBeNull();
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("a lost dispute on the whole 299 alone claws all 20 and revokes Plus", async () => {
+    const { h, intent } = await granted();
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 299 })))).outcome,
+    ).toBe("frozen");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 20, frozen: 20, available: 0 });
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 299, status: "lost" }))))
+        .outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await clawedMakes(h)).toBe(20);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0, available: 0 });
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus ?? null).toBeNull();
+    expect(board.plusRevocation).toMatchObject({
+      purchaseId: intent.purchaseId,
+      reason: "dispute_lost",
+      disputeId: "du_test_fake_1",
+    });
+  });
+
+  it("redelivering the lost dispute, a late funds_withdrawn and the refund again change nothing", async () => {
+    const { h, lost } = await refundThenLose();
+    const board = (await h.boards.getBoard(SLUG))!;
+    const entries = await h.ledger.listEntries(SLUG);
+    expect(await h.deliver(lost)).toMatchObject({ outcome: "duplicate", duplicate: true });
+    expect(
+      (await h.deliver(evt("evt_du_lost2", "charge.dispute.closed", dispute({ amount: 149, status: "lost" }))))
+        .outcome,
+    ).toBe("duplicate_final_clawback");
+    expect(
+      (await h.deliver(evt("evt_du_wd", "charge.dispute.funds_withdrawn", dispute({ amount: 149 })))).outcome,
+    ).toBe("duplicate_final_clawback");
+    expect(
+      (await h.deliver(evt("evt_re_again", "refund.updated", refund({ amount: 150 })))).outcome,
+    ).toBe("duplicate_refund");
+    expect(await h.boards.getBoard(SLUG)).toEqual(board);
+    expect(await h.ledger.listEntries(SLUG)).toEqual(entries);
+    expect(await clawedMakes(h)).toBe(20);
+    expect(await h.records.listDeadLetters()).toEqual([]);
+  });
+
+  it("the lost dispute won afterwards restores Plus; the makes half still flags an operator", async () => {
+    const { h } = await refundThenLose();
+    expect(
+      (await h.deliver(evt("evt_du_won", "charge.dispute.closed", dispute({ amount: 149, status: "won" }))))
+        .outcome,
+    ).toBe("dead_letter");
+    expect((await h.records.listDeadLetters()).map((d) => d.reason)).toEqual([
+      "reinstated_after_final_clawback",
+    ]);
+    const restored = (await h.boards.getBoard(SLUG))!;
+    expect(restored.plus).toEqual(PAID_BOARD);
+    expect(restored.plusRevocation ?? null).toBeNull();
+    // The ledger cannot un-claw: the 20 makes stay clawed.
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0, frozen: 0 });
+    expect(await clawedMakes(h)).toBe(20);
+    // A late funds_reinstated restores nothing more.
+    await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute({ amount: 149 })));
+    expect(await h.boards.getBoard(SLUG)).toEqual(restored);
+  });
+
+  it("a dispute won after a partial refund restores its freeze and never touches Plus", async () => {
+    const { h, intent } = await granted();
+    await h.deliver(evt("evt_re", "refund.created", refund({ amount: 150 })));
+    const before = (await h.boards.getBoard(SLUG))!;
+    expect(
+      (await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 149 })))).outcome,
+    ).toBe("frozen");
+    expect(
+      (await h.deliver(evt("evt_du_back", "charge.dispute.funds_reinstated", dispute({ amount: 149 })))).outcome,
+    ).toBe("restored");
+    expect(
+      (await h.deliver(evt("evt_du_won", "charge.dispute.closed", dispute({ amount: 149, status: "won" }))))
+        .outcome,
+    ).toBe("duplicate_restore");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 10, frozen: 0, available: 10 });
+    expect(await clawedMakes(h)).toBe(10);
+    expect(await h.boards.getBoard(SLUG)).toEqual(before);
+    expect((await h.intents.get(intent.id))?.finalDisputeEurCents).toBeUndefined();
+  });
+
+  it("a refund that completes the take-back after a lost dispute claws the rest and revokes as full_refund", async () => {
+    const { h, intent } = await granted();
+    await h.deliver(evt("evt_du", "charge.dispute.created", dispute({ amount: 149 })));
+    // Alone, the lost 149 claws floor(9.97) = 9 and frees the ceil excess.
+    expect(
+      (await h.deliver(evt("evt_du_lost", "charge.dispute.closed", dispute({ amount: 149, status: "lost" }))))
+        .outcome,
+    ).toBe("dispute_final_clawed");
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 11, frozen: 0, available: 11 });
+    expect((await h.boards.getBoard(SLUG))!.plus).toEqual(PAID_BOARD);
+    expect((await h.deliver(evt("evt_re", "refund.created", refund({ amount: 150 })))).outcome).toBe(
+      "refund_clawed",
+    );
+    expect(await clawedMakes(h)).toBe(20);
+    expect(await h.ledger.getBalance(SLUG)).toMatchObject({ balance: 0 });
+    const board = (await h.boards.getBoard(SLUG))!;
+    expect(board.plus ?? null).toBeNull();
+    expect(board.plusRevocation).toMatchObject({ purchaseId: intent.purchaseId, reason: "full_refund" });
   });
 });

@@ -75,8 +75,9 @@ export interface CheckoutIntent {
    * Cumulative settled-EUR refund accounting (PIN-150): minor
    * units refunded across every counted per-refund delta, and
    * the makes those refunds have clawed back so far. The
-   * webhook's cumulative money->makes formula reads both, so
-   * partial refunds sum to the whole pack without drift.
+   * cumulative money->makes formula reads both (with the
+   * lost-dispute figures below, PIN-242), so partial refunds
+   * and lost disputes sum to the whole pack without drift.
    */
   refundedEurCents?: number;
   refundClawedMakes?: number;
@@ -86,6 +87,13 @@ export interface CheckoutIntent {
   refundMakesById?: Record<string, number>;
   /** Makes finally clawed back per dispute id (PIN-150): a second final-clawback event for the same dispute is a no-op. */
   finalDisputeClawbacks?: Record<string, number>;
+  /**
+   * Settled EUR cents each lost dispute took back, by dispute id
+   * (PIN-242). With `refundedEurCents` it is the money taken back
+   * on this purchase (`takenBackEurCents`), the one cumulative
+   * figure refund and final-dispute claws are both priced from.
+   */
+  finalDisputeEurCents?: Record<string, number>;
 }
 
 /** Everything a checkout/browser surface may see. No board identifier beyond the opaque `id`. */
@@ -181,8 +189,9 @@ export interface CheckoutIntentStore {
   /**
    * Atomically count one refund AND compute its make delta
    * inside the same read-modify-write (PIN-150): the cumulative
-   * floor formula `min(packCredits, floor(cumulativeCents *
-   * packCredits / packEurCents)) - refundClawedMakes` must be
+   * floor formula `min(packCredits, floor(takenBackCents *
+   * packCredits / packEurCents)) - makesClawedSoFar` (both
+   * figures span refunds AND lost disputes, PIN-242) must be
    * evaluated against the stored cumulative, never a caller
    * snapshot, or two concurrent refunds would both price
    * themselves as the first increment. A repeat refund id
@@ -197,12 +206,22 @@ export interface CheckoutIntentStore {
     packEurCents: number,
     packCredits: number,
   ): Promise<{ intent: CheckoutIntent | null; applied: boolean; deltaMakes: number }>;
-  /** Record a dispute's final clawback makes once per dispute id (PIN-150); a repeat returns `applied: false`. */
-  recordFinalDisputeClawback(
+  /**
+   * Claim a dispute's final clawback once per dispute id and
+   * price it in the same read-modify-write (PIN-150, PIN-242):
+   * its EUR cents join the money taken back, and its makes are
+   * the same cumulative floor delta `countRefund` uses, so a
+   * refund and a lost dispute that together reach the pack
+   * price claw exactly the pack. A repeat returns `applied:
+   * false` with the originally claimed `makes`.
+   */
+  countFinalDisputeClawback(
     intentId: string,
     disputeId: string,
-    makes: number,
-  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }>;
+    disputeEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; makes: number }>;
 }
 
 export interface CheckoutIntentStoreOptions {
@@ -337,6 +356,50 @@ export function applyRefundAccountingToIntent(
   };
 }
 
+function sumValues(record: Record<string, number> | undefined): number {
+  let total = 0;
+  for (const value of Object.values(record ?? {})) total += value;
+  return total;
+}
+
+/**
+ * The money taken back on a purchase (PIN-242): cumulative
+ * refunded EUR cents plus every lost dispute's settled EUR
+ * cents. Reaching the pack price means the purchase is fully
+ * taken back (its makes all clawed, its Plus revoked).
+ */
+export function takenBackEurCents(intent: CheckoutIntent): number {
+  return (intent.refundedEurCents ?? 0) + sumValues(intent.finalDisputeEurCents);
+}
+
+/**
+ * The make delta for `addedCents` more taken back (PIN-150,
+ * PIN-242): `min(packCredits, floor(total * packCredits /
+ * packEurCents))` on the new cumulative total, minus every make
+ * refunds and lost disputes already clawed - one figure, so any
+ * mix of partial refunds and lost disputes sums to exactly the
+ * pack with no per-event rounding drift.
+ */
+function cumulativeClawDelta(
+  intent: CheckoutIntent,
+  addedCents: number,
+  packEurCents: number,
+  packCredits: number,
+): number {
+  const totalCents = takenBackEurCents(intent) + addedCents;
+  const targetMakes = Math.min(packCredits, Math.floor((totalCents * packCredits) / packEurCents));
+  const clawedMakes = (intent.refundClawedMakes ?? 0) + sumValues(intent.finalDisputeClawbacks);
+  return Math.max(0, targetMakes - clawedMakes);
+}
+
+function assertPricing(cents: number, name: string, packEurCents: number, packCredits: number): void {
+  if (!Number.isInteger(cents) || cents < 0) {
+    throw new RangeError(`${name} must be a non-negative integer, got ${cents}`);
+  }
+  assertPositiveInt(packEurCents, "packEurCents");
+  assertPositiveInt(packCredits, "packCredits");
+}
+
 /**
  * Count one refund and price its make delta from the stored
  * cumulative (PIN-150, see countRefund on the port). Returns
@@ -352,38 +415,43 @@ export function countRefundOnIntent(
   packCredits: number,
 ): { next: CheckoutIntent | null; deltaMakes: number } {
   assertId(refundId, "refundId");
-  if (!Number.isInteger(refundEurCents) || refundEurCents < 0) {
-    throw new RangeError(`refundEurCents must be a non-negative integer, got ${refundEurCents}`);
-  }
-  assertPositiveInt(packEurCents, "packEurCents");
-  assertPositiveInt(packCredits, "packCredits");
+  assertPricing(refundEurCents, "refundEurCents", packEurCents, packCredits);
   if ((intent.countedRefundIds ?? []).includes(refundId)) {
     return { next: null, deltaMakes: intent.refundMakesById?.[refundId] ?? 0 };
   }
-  const cumulativeCents = (intent.refundedEurCents ?? 0) + refundEurCents;
-  const targetMakes = Math.min(
-    packCredits,
-    Math.floor((cumulativeCents * packCredits) / packEurCents),
-  );
-  const deltaMakes = Math.max(0, targetMakes - (intent.refundClawedMakes ?? 0));
+  const deltaMakes = cumulativeClawDelta(intent, refundEurCents, packEurCents, packCredits);
   const next = applyRefundAccountingToIntent(intent, refundId, refundEurCents, deltaMakes);
   if (!next) return { next: null, deltaMakes: intent.refundMakesById?.[refundId] ?? 0 };
   return { next, deltaMakes };
 }
 
-/** Record a dispute final clawback on a clone (PIN-150). Returns null when that dispute is already recorded. Shared by both stores. */
-export function recordFinalDisputeClawbackOnIntent(
+/**
+ * Claim and price a dispute's final clawback on a clone
+ * (PIN-150, PIN-242, see countFinalDisputeClawback on the
+ * port). Returns `next: null` with the originally claimed
+ * makes when that dispute is already recorded. Shared by both
+ * stores.
+ */
+export function countFinalDisputeClawbackOnIntent(
   intent: CheckoutIntent,
   disputeId: string,
-  makes: number,
-): CheckoutIntent | null {
+  disputeEurCents: number,
+  packEurCents: number,
+  packCredits: number,
+): { next: CheckoutIntent | null; makes: number } {
   assertId(disputeId, "disputeId");
-  if (!Number.isInteger(makes) || makes < 0) {
-    throw new RangeError(`makes must be a non-negative integer, got ${makes}`);
-  }
+  assertPricing(disputeEurCents, "disputeEurCents", packEurCents, packCredits);
   const finals = intent.finalDisputeClawbacks ?? {};
-  if (disputeId in finals) return null;
-  return { ...intent, finalDisputeClawbacks: { ...finals, [disputeId]: makes } };
+  if (disputeId in finals) return { next: null, makes: finals[disputeId] };
+  const makes = cumulativeClawDelta(intent, disputeEurCents, packEurCents, packCredits);
+  return {
+    next: {
+      ...intent,
+      finalDisputeClawbacks: { ...finals, [disputeId]: makes },
+      finalDisputeEurCents: { ...(intent.finalDisputeEurCents ?? {}), [disputeId]: disputeEurCents },
+    },
+    makes,
+  };
 }
 
 export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
@@ -495,18 +563,26 @@ export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
     return { intent: structuredClone(next), applied: true, deltaMakes };
   }
 
-  async recordFinalDisputeClawback(
+  async countFinalDisputeClawback(
     intentId: string,
     disputeId: string,
-    makes: number,
-  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    disputeEurCents: number,
+    packEurCents: number,
+    packCredits: number,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean; makes: number }> {
     assertId(intentId, "intentId");
     const intent = this.intents.get(intentId);
-    if (!intent) return { intent: null, applied: false };
-    const next = recordFinalDisputeClawbackOnIntent(intent, disputeId, makes);
-    if (!next) return { intent: structuredClone(intent), applied: false };
+    if (!intent) return { intent: null, applied: false, makes: 0 };
+    const { next, makes } = countFinalDisputeClawbackOnIntent(
+      intent,
+      disputeId,
+      disputeEurCents,
+      packEurCents,
+      packCredits,
+    );
+    if (!next) return { intent: structuredClone(intent), applied: false, makes };
     this.intents.set(intentId, structuredClone(next));
-    return { intent: structuredClone(next), applied: true };
+    return { intent: structuredClone(next), applied: true, makes };
   }
 
   async expire(intentId: string, at: number): Promise<CheckoutIntent | null> {
