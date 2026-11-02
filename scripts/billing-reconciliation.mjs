@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * PIN-153 billing reconciliation (read-only; PIN-243: also the
- * scheduled workflow .github/workflows/billing-reconciliation.yml).
- * CI). Joins paid Stripe Checkout Sessions (read-only listing
+ * PIN-153 billing reconciliation (read-only; PIN-243: also run by
+ * the scheduled workflow .github/workflows/billing-reconciliation.yml).
+ * Joins paid Stripe Checkout Sessions (read-only listing
  * with the runtime key) against Firestore ledger purchases,
  * checkout intents and PIN-150 dead letters, and reports:
  * paid-no-grant, grant-no-payment, dead-letters by reason, and
@@ -24,6 +24,19 @@
  * Application Default Credentials. Mirrors buildBillingReconciliationReport in
  * src/domain/billing-reconciliation.ts — keep in sync (a test
  * pins the mirror). Runbook: docs/15 (PIN-153 section).
+ *
+ * Output modes (PIN-243):
+ *   (default)       operator terminal: one line per anomaly row, then a
+ *                   RECONCILIATION_JSON:{stripe,project,summary,report} line.
+ *   --json          row lines on stderr; stdout is only the full payload
+ *                   {stripe,project,summary,report}. Operator terminal only.
+ *   --summary-only  for public logs (CI): stdout is only {stripe,project,summary}
+ *                   (counts and booleans), stderr only the aggregate,
+ *                   SUMMARY and refunds-disputes lines, and an error prints
+ *                   no Stripe message. No session, payment-intent or
+ *                   checkout-intent id, board hash or timestamp is printed:
+ *                   a checkout-intent id resolves to a board link through
+ *                   /billing/return. Wins over --json.
  */
 import { createHash } from "node:crypto";
 import { Firestore } from "@google-cloud/firestore";
@@ -39,6 +52,8 @@ function arg(name) {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 }
+const SUMMARY_ONLY = args.includes("--summary-only");
+const JSON_MODE = SUMMARY_ONLY || args.includes("--json");
 
 function boardHash(boardId) {
   return `board:${createHash("sha256").update(boardId).digest("hex").slice(0, 12)}`;
@@ -150,11 +165,23 @@ async function stripeGet(path, params) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = json?.error ?? {};
-    throw new Error(
-      `Stripe GET ${path} failed: HTTP ${res.status} ${err.code ?? ""} ${err.message ?? ""}`.trim(),
-    );
+    // Stripe's message can echo a masked key or an object id: only the
+    // status and the error code reach a --summary-only (public) log.
+    const publicMessage = `Stripe GET ${path} failed: HTTP ${res.status} ${err.code ?? ""}`.trim();
+    const error = new Error(`${publicMessage} ${err.message ?? ""}`.trim());
+    error.publicMessage = publicMessage;
+    throw error;
   }
   return json;
+}
+
+/** The one error line a --summary-only run may print: never a provider message. */
+function publicErrorLine(error) {
+  if (typeof error?.publicMessage === "string") return error.publicMessage;
+  const raw = error?.code === undefined ? "" : String(error.code);
+  const code = /^[A-Za-z0-9_.-]{1,40}$/.test(raw) ? ` code=${raw}` : "";
+  const name = /^[A-Za-z]{1,40}$/.test(String(error?.name)) ? error.name : "Error";
+  return `billing reconciliation failed (${name}${code}); rerun it in an operator terminal without --summary-only for the detail (docs/15 PIN-243).`;
 }
 
 async function listPaidSessions() {
@@ -209,7 +236,9 @@ async function listRefundDisputeVisibility(nowMs) {
 async function main() {
   const envName = arg("--env-var") ?? "STRIPE_SECRET_KEY";
   if (!envName || envName.startsWith("--")) {
-    console.error("usage: billing-reconciliation.mjs --env-var <ENV_VAR_NAME> [--project <id>]");
+    console.error(
+      "usage: billing-reconciliation.mjs --env-var <ENV_VAR_NAME> [--project <id>] [--json | --summary-only]",
+    );
     process.exit(2);
   }
   apiKey = process.env[envName] ?? "";
@@ -272,50 +301,53 @@ async function main() {
         });
       }
     }
-    if (args.includes("--json")) console.log = console.error.bind(console);
+    // Human mode prints every line on stdout; --json and --summary-only keep
+    // stdout for the one JSON document. Row lines carry ids, so
+    // --summary-only drops them (`row` is a no-op there).
+    const line = JSON_MODE ? (text) => console.error(text) : (text) => console.log(text);
+    const row = SUMMARY_ONLY ? () => {} : line;
     const visibility = await listRefundDisputeVisibility(Date.now());
     const report = buildBillingReconciliationReport(
       { paidSessions, purchases, intents, deadLetters, now: Date.now() },
       boardHash,
     );
-    console.log(
+    line(
       `billing reconciliation stripe=${gate.mode} project=${projectId} keyEnv=${envName} ` +
         `paidSessions=${paidSessions.length} purchases=${purchases.length} intents=${intents.length}`,
     );
-    for (const row of report.paidNoGrant) {
-      console.log(
-        `paid-no-grant session=${row.sessionId} paymentIntent=${row.paymentIntentId ?? "-"} intent=${row.intentId ?? "-"} ${row.board}`,
+    for (const r of report.paidNoGrant) {
+      row(
+        `paid-no-grant session=${r.sessionId} paymentIntent=${r.paymentIntentId ?? "-"} intent=${r.intentId ?? "-"} ${r.board}`,
       );
     }
-    for (const row of report.grantNoPayment) {
-      console.log(`grant-no-payment purchase=${row.purchaseId} ${row.board}`);
+    for (const r of report.grantNoPayment) {
+      row(`grant-no-payment purchase=${r.purchaseId} ${r.board}`);
     }
-    for (const row of report.deadLettersByReason) {
-      console.log(`dead-letters reason=${row.reason} count=${row.count}`);
+    for (const r of report.deadLettersByReason) {
+      row(`dead-letters reason=${r.reason} count=${r.count}`);
     }
-    for (const row of report.pendingPastTtl) {
-      console.log(`pending-past-ttl intent=${row.intentId} expiresAt=${row.expiresAt} ${row.board}`);
+    for (const r of report.pendingPastTtl) {
+      row(`pending-past-ttl intent=${r.intentId} expiresAt=${r.expiresAt} ${r.board}`);
     }
-    console.log(
+    line(
       `SUMMARY paidNoGrant=${report.paidNoGrant.length} grantNoPayment=${report.grantNoPayment.length} ` +
         `deadLetters=${report.deadLetterTotal} pendingPastTtl=${report.pendingPastTtl.length} ` +
         `anomalies=${report.anomalyCount} clean=${report.clean}`,
     );
     const summary = summarizeBillingReconciliation(report, visibility);
-    console.log(
+    line(
       visibility
         ? `refunds-disputes last30d refunds=${summary.refundsLast30Days} disputes=${summary.disputesLast30Days} openDisputes=${summary.openDisputes}`
         : `refunds-disputes unavailable (read key lacks Refunds/Disputes read; check Stripe Dashboard Payments, docs/15 PIN-243)`,
     );
-    // PIN-243 machine-readable summary for automation. `--json` prints the
-    // full payload as the only stdout JSON document; human mode keeps the
-    // lines above and adds this one parseable line.
-    const payload = { stripe: gate.mode, project: projectId, summary, report };
-    if (args.includes("--json")) {
-      process.stdout.write(`${JSON.stringify(payload)}\n`);
-    } else {
-      process.stdout.write(`RECONCILIATION_JSON:${JSON.stringify(payload)}\n`);
-    }
+    // PIN-243 machine-readable summary for automation. `--summary-only`
+    // prints {stripe, project, summary} - counts and booleans, never an id -
+    // as the only stdout document (public CI logs); `--json` prints the full
+    // payload with the report; human mode adds one parseable line.
+    const payload = SUMMARY_ONLY
+      ? JSON.stringify({ stripe: gate.mode, project: projectId, summary })
+      : JSON.stringify({ stripe: gate.mode, project: projectId, summary, report });
+    process.stdout.write(JSON_MODE ? `${payload}\n` : `RECONCILIATION_JSON:${payload}\n`);
     process.exitCode = billingReconciliationExitCode(report);
   } finally {
     await db.terminate();
@@ -323,6 +355,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  if (SUMMARY_ONLY) console.error(publicErrorLine(error));
+  else console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

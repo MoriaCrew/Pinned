@@ -93,8 +93,12 @@ export interface RefundDisputeVisibility {
 
 /**
  * Machine-readable reconciliation summary (PIN-243), the shape the
- * operator script prints as its `RECONCILIATION_JSON:` line / `--json`
- * payload and the scheduled workflow keys its alert on.
+ * operator script prints in its `RECONCILIATION_JSON:` line / `--json`
+ * payload and, alone, as the `--summary-only` payload
+ * `{stripe, project, summary}` the scheduled workflow prints to its
+ * public log and step summary. Counts and booleans only: never add an
+ * id, board hash or timestamp here (a checkout-intent id resolves to a
+ * board link through `/billing/return`); a test pins that.
  * `needsAttention` is the alert condition: paid money with no grant
  * (`paidNoGrantCount > 0`) or any dead letter (`deadLetterTotal > 0`).
  */
