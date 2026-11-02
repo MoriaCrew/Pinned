@@ -13,6 +13,10 @@ import styles from "./board.module.css";
  * content never spreads the board link. Without a configured
  * address it points at the Terms contact section instead, and
  * without a reference (renders that predate PIN-239) it is absent.
+ *
+ * In-app browsers often have no mail handler, so the address and the
+ * reference also show as plain, selectable text under the link: a
+ * reporter can copy them into any mail app. Still never the slug.
  */
 export function ReportBoardLink({
   email,
@@ -33,6 +37,19 @@ export function ReportBoardLink({
   return (
     <footer className={styles.reportFoot}>
       <a href={href}>{t(locale, "board.report")}</a>
+      {email ? <p className={styles.reportManual}>{t(locale, "board.reportManual")}</p> : null}
+      <dl className={styles.reportFacts}>
+        {email ? (
+          <div>
+            <dt>{t(locale, "board.reportAddress")}</dt>
+            <dd>{email}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>{t(locale, "board.reportRef")}</dt>
+          <dd>{reportRef}</dd>
+        </div>
+      </dl>
     </footer>
   );
 }

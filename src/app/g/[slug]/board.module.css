@@ -61,6 +61,27 @@
   border-radius: var(--radius-xs);
 }
 
+/* No mail app (in-app browsers): the address and reference as plain, selectable text. */
+.reportManual,
+.reportFacts {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 13px/18px var(--font-ui);
+}
+
+.reportFacts dt,
+.reportFacts dd {
+  display: inline;
+}
+
+.reportFacts dd {
+  margin: 0 0 0 var(--space-1);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
 /* One quiet line under a collage print (PIN-180). */
 .collageNote {
   margin: 0;
