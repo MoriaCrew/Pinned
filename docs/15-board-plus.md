@@ -738,15 +738,21 @@ and dispute lifecycle pages):
   (`full_refund`, or `dispute_lost` with its dispute id) — and
   leaves a `Board.plusRevocation` tombstone with the removed
   grant. If another granted purchase on the board is still live
-  (not fully clawed back), Plus stays: it grants it too. A
+  (its take-back below its price, even with its makes clawed
+  after a won-after-lost dispute), Plus stays: it grants it too. A
   `source: "mock"` grant is never touched by a Stripe event, a
   purchase clawed all the way back before its grant landed
-  never grants Plus at all, and a lost dispute's win/restore
-  (`decidePlusRestore`, the freeze/restore mirror) brings the
-  tombstoned grant back — only that dispute can, a new purchase
+  never grants Plus at all, and a lost dispute won or reinstated
+  after all gives its money back: its cents and makes leave the
+  take-back (`reinstateFinalDispute`; the claim stays, so a
+  redelivered `lost` or `funds_withdrawn` claws nothing), and once
+  the take-back is below the price `decidePlusRestore` (the
+  freeze/restore mirror) brings the tombstoned grant back,
+  whichever refund or lost dispute completed it. A new purchase
   meanwhile supersedes it, and the makes half of a reinstate
   after the final claw still dead-letters for an operator as
-  before. It runs on the duplicate paths too, so a crash
+  before (those makes stay clawed; later refunds claw from their
+  own cents). It runs on the duplicate paths too, so a crash
   between claw and revoke (propagated, Stripe retries) is
   repaired by the next delivery; with no board repository an
   actually-due revoke dead-letters `plus_revoke_unavailable`.
@@ -797,7 +803,8 @@ Money -> makes (one documented formula): for a pack of
 `min(credits, floor(cents * credits / eurCents))` on the
 CUMULATIVE settled-EUR amount taken back - the intent stores
 refunded EUR cents and each lost dispute's EUR cents (PIN-242)
-plus the makes already clawed for both, and each succeeded
+plus the makes already clawed for both (a lost dispute later won
+or reinstated drops out of both figures), and each succeeded
 refund or `lost` close claws the difference, so any mix of
 partial refunds and lost disputes sums to exactly the pack
 once the money reaches `eurCents`, with no per-event rounding

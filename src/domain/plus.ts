@@ -40,8 +40,9 @@ export type PlusRevocationReason = "full_refund" | "dispute_lost";
 /**
  * Tombstone left by a revocation (PIN-242), stored on
  * `Board.plusRevocation` (server-only, never in a view): the grant
- * that was removed, so a dispute that is later won or reinstated
- * can restore exactly it — and nothing else can.
+ * that was removed, so a dispute later won or reinstated that
+ * makes its purchase live again can restore exactly it — and
+ * nothing else can.
  */
 export interface BoardPlusRevocation {
   purchaseId: string;
@@ -166,8 +167,8 @@ export interface PlusRevocationInput {
  * The revocation decision (PIN-242), run inside the repository
  * write by the Stripe webhook on a cumulative full refund or a
  * dispute closed lost. `hasOtherLiveGrant` comes from the caller
- * (the credit ledger: another granted purchase not fully clawed
- * back); Plus then stays. A mock grant is never touched by a
+ * (another granted purchase whose take-back is below its price);
+ * Plus then stays. A mock grant is never touched by a
  * Stripe event, and a replay after the revoke writes nothing.
  */
 export function decidePlusRevocation(
@@ -193,17 +194,22 @@ export function decidePlusRevocation(
 
 /**
  * The dispute-win restore (PIN-242), mirroring the makes
- * freeze/restore symmetry: only the very dispute whose loss
- * revoked the grant brings it back. A grant written since (a new
- * purchase) is never overwritten - the tombstone just clears.
+ * freeze/restore symmetry, run inside the repository write by the
+ * Stripe webhook on a dispute won or reinstated. The money decides,
+ * not the tombstone's reason: `purchaseLive` (from the caller: the
+ * purchase is granted and, with this dispute's money back, its
+ * take-back is below its price) brings the tombstoned grant back,
+ * whichever refund or lost dispute completed the take-back - a
+ * live purchase is exactly what keeps Plus on revocation. A grant
+ * written since (a new purchase) is never overwritten - the
+ * tombstone just clears.
  */
 export function decidePlusRestore(
   board: Pick<Board, "plus" | "plusRevocation">,
-  disputeId: string,
+  input: { purchaseLive: boolean },
 ): { plus: BoardPlus; plusRevocation: null } | { plusRevocation: null } | null {
   const revocation = board.plusRevocation;
-  if (revocation == null || revocation.reason !== "dispute_lost") return null;
-  if (revocation.disputeId !== disputeId) return null;
+  if (revocation == null || !input.purchaseLive) return null;
   if (board.plus != null) return { plusRevocation: null };
   return { plus: { ...revocation.revokedPlus }, plusRevocation: null };
 }

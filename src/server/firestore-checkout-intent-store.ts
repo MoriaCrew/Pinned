@@ -30,6 +30,7 @@ import {
   countFinalDisputeClawbackOnIntent,
   countRefundOnIntent,
   mergeStripeMapping,
+  reinstateFinalDisputeOnIntent,
   assertCreateCheckoutIntentInput,
   buildCheckoutIntent,
   capExceededError,
@@ -280,6 +281,23 @@ export class FirestoreCheckoutIntentStore implements CheckoutIntentStore {
       if (!next) return { intent: structuredClone(intent), applied: false, makes };
       tx.set(ref, toFirestoreData(next));
       return { intent: structuredClone(next), applied: true, makes };
+    });
+  }
+
+  async reinstateFinalDispute(
+    intentId: string,
+    disputeId: string,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertIntentId(intentId);
+    const ref = this.intentRef(intentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const intent = intentFrom(snap.exists ? snap.data() : undefined);
+      if (!intent) return { intent: null, applied: false };
+      const next = reinstateFinalDisputeOnIntent(intent, disputeId);
+      if (!next) return { intent: structuredClone(intent), applied: false };
+      tx.set(ref, toFirestoreData(next));
+      return { intent: structuredClone(next), applied: true };
     });
   }
 

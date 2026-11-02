@@ -134,25 +134,30 @@ describe("Board Plus domain (PIN-103)", () => {
     expect(decidePlusRevocation({ plus: { ...PAID, plan: "gold" as never } }, noOther)).toBeNull();
   });
 
-  it("restore (PIN-242): only the dispute whose loss revoked the grant brings it back", () => {
+  it("restore (PIN-242): the money decides - a purchase live again brings the grant back, whatever the reason", () => {
     const revoked = decidePlusRevocation(
       { plus: PAID },
       { purchaseId: "pur_1", reason: "dispute_lost", disputeId: "du_1", at: 9, hasOtherLiveGrant: false },
     )!;
+    const live = { purchaseLive: true };
     const board = { plus: null, plusRevocation: revoked.plusRevocation };
-    expect(decidePlusRestore(board, "du_1")).toEqual({ plus: PAID, plusRevocation: null });
-    expect(decidePlusRestore(board, "du_other")).toBeNull();
+    expect(decidePlusRestore(board, live)).toEqual({ plus: PAID, plusRevocation: null });
+    // Still taken back at the price (e.g. a refund also covers it): no restore.
+    expect(decidePlusRestore(board, { purchaseLive: false })).toBeNull();
     // A second restore after the first (tombstone cleared) is a no-op.
-    expect(decidePlusRestore({ plus: PAID, plusRevocation: null }, "du_1")).toBeNull();
-    // A refund revocation never restores.
+    expect(decidePlusRestore({ plus: PAID, plusRevocation: null }, live)).toBeNull();
+    // A refund completed the take-back: a later win of a lost dispute still restores.
     const refunded = decidePlusRevocation(
       { plus: PAID },
       { purchaseId: "pur_1", reason: "full_refund", at: 9, hasOtherLiveGrant: false },
     )!;
-    expect(decidePlusRestore({ plus: null, plusRevocation: refunded.plusRevocation }, "du_1")).toBeNull();
+    expect(decidePlusRestore({ plus: null, plusRevocation: refunded.plusRevocation }, live)).toEqual({
+      plus: PAID,
+      plusRevocation: null,
+    });
     // A grant written since (a new purchase) is kept; the tombstone just clears.
     const newer = grantPlus("board", "stripe", 20);
-    expect(decidePlusRestore({ plus: newer, plusRevocation: revoked.plusRevocation }, "du_1")).toEqual({
+    expect(decidePlusRestore({ plus: newer, plusRevocation: revoked.plusRevocation }, live)).toEqual({
       plusRevocation: null,
     });
   });

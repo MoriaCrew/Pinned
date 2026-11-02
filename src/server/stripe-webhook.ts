@@ -39,7 +39,7 @@ import "server-only";
  * settled EUR cents (PIN-242). Each succeeded per-refund delta
  * and each dispute closed `lost` adds its cents to that one
  * cumulative inside the atomic intent write, and claws back
- * `makesFloor(newCumulative) - makesAlreadyClawed` (refunds
+ * `max(0, makesFloor(newCumulative) - makesAlreadyClawed)` (refunds
  * and lost disputes together), so any mix of partial refunds
  * and lost disputes sums to exactly the pack once the money
  * reaches `eurCents` (the claw that gets there takes the
@@ -47,7 +47,14 @@ import "server-only";
  * per-event rounding drift. Example at 20 makes for 299: a
  * 150 refund claws 10, a lost 149 dispute then claws the last
  * 10; refund 100 + lost 100 is 200 cents, 13 makes in all,
- * Plus kept. Dispute freezes use `makesFreeze` on the disputed
+ * Plus kept. A lost dispute later won or reinstated gave its
+ * money back: the intent marks it reinstated and its cents
+ * and makes leave both sides (its makes stay clawed in the
+ * ledger for an operator), so later refunds claw from their
+ * own cents, and Plus comes back once the take-back is below
+ * the price - a purchase is live (grants Plus, and keeps it on
+ * another's revocation) exactly then, makes clawed or not.
+ * Dispute freezes use `makesFreeze` on the disputed
  * amount (round up, so the held pool is protected while the
  * dispute is open - it always covers the final cumulative
  * delta, and any excess is restored by the same terminal event
@@ -77,8 +84,8 @@ import "server-only";
  *   keeps (or establishes) the freeze (PIN-178); the one final
  *   clawback is `closed` with `lost`. A reinstate arriving
  *   after a final clawback cannot be un-clawed by the ledger,
- *   so it dead-letters as an operator flag rather than
- *   pretending.
+ *   so its makes dead-letter as an operator flag rather than
+ *   pretending (its money still leaves the take-back, above).
  */
 import type { StripeWebhookClientLike } from "../billing/stripe-webhook";
 import type { BoardRepository } from "../domain/board-repository";
@@ -476,14 +483,28 @@ async function grantPurchasePlus(
   });
 }
 
-/** Another granted purchase on the board still live (not fully clawed back): it grants Plus too, so Plus stays (PIN-242 (c)). */
-function hasOtherLiveGrant(account: BoardCreditAccount, purchaseId: string): boolean {
-  return Object.values(account.purchases).some(
-    (purchase) =>
-      purchase.purchaseId !== purchaseId &&
-      purchase.grantedCredits > 0 &&
-      purchase.clawedCredits < purchase.credits,
-  );
+/**
+ * Another granted purchase on the board still live - its take-back
+ * below its price - grants Plus too, so Plus stays (PIN-242 (c)).
+ * Not fully clawed reads off the ledger alone; a fully clawed one
+ * is live only when its intent records a won-after-lost dispute
+ * and the take-back left is below its price: the win restored its
+ * Plus but cannot un-claw its makes.
+ */
+async function hasOtherLiveGrant(
+  deps: StripeWebhookDeps,
+  account: BoardCreditAccount,
+  purchaseId: string,
+): Promise<boolean> {
+  for (const purchase of Object.values(account.purchases)) {
+    if (purchase.purchaseId === purchaseId || purchase.grantedCredits <= 0) continue;
+    if (purchase.clawedCredits < purchase.credits) return true;
+    const other = await deps.intents.get(purchase.purchaseId);
+    if (!other?.reinstatedDisputeIds?.length) continue;
+    const pack = await packFor(deps, other);
+    if (pack && takenBackEurCents(other) < pack.eurCents) return true;
+  }
+  return false;
 }
 
 /**
@@ -508,7 +529,7 @@ async function revokePurchasePlus(
   const account = await deps.ledger.getAccount(intent.boardId);
   const purchase = account?.purchases[intent.purchaseId];
   if (!account || !purchase || purchase.grantedCredits === 0) return;
-  const otherLive = hasOtherLiveGrant(account, intent.purchaseId);
+  const otherLive = await hasOtherLiveGrant(deps, account, intent.purchaseId);
   if (!deps.boards) {
     if (!otherLive) {
       await deadLetter(deps, ctx, "plus_revoke_unavailable", {
@@ -532,20 +553,25 @@ async function revokePurchasePlus(
 }
 
 /**
- * PIN-242: a dispute won or reinstated restores the Plus its own
- * loss revoked (the tombstone decides; any other case writes
- * nothing). Runs before the makes restore, whose
- * reinstated_after_final_clawback dead letter still flags the
- * makes a human must settle while Plus comes back on its own.
+ * PIN-242: a dispute won or reinstated restores the revoked Plus
+ * once the money says the purchase is live again: granted, and
+ * its take-back (`intent` already has this dispute's money back)
+ * below its price - whichever refund or lost dispute completed
+ * the take-back. Any other case writes nothing. Runs before the
+ * makes restore, whose reinstated_after_final_clawback dead letter
+ * still flags the makes a human must settle while Plus comes back
+ * on its own.
  */
 async function restorePurchasePlus(
   deps: StripeWebhookDeps,
+  resolved: ResolvedPurchase,
   intent: CheckoutIntent,
-  disputeId: string,
 ): Promise<void> {
   if (!deps.boards) return;
+  const purchaseLive =
+    resolved.purchase.grantedCredits > 0 && takenBackEurCents(intent) < resolved.pack.eurCents;
   await deps.boards.updateBoardSettings(intent.boardId, (board) =>
-    decidePlusRestore(board, disputeId),
+    decidePlusRestore(board, { purchaseLive }),
   );
 }
 
@@ -901,11 +927,12 @@ async function handleRefund(deps: StripeWebhookDeps, ctx: HandlerContext): Promi
     }
   }
   // PIN-242: once the money taken back on this purchase (refunds
-  // plus lost disputes) reaches the pack price, the claw above was
-  // the remainder and the Plus it granted goes too (partials never
-  // do). Runs on the duplicate path too, so a crash between the
-  // claw and the revoke is repaired by the retry; the revoke
-  // itself is a no-op once the grant is gone.
+  // plus standing lost disputes; a won one gave its money back)
+  // reaches the pack price, the claw above was the remainder and
+  // the Plus it granted goes too (partials never do). Runs on the
+  // duplicate path too, so a crash between the claw and the revoke
+  // is repaired by the retry; the revoke itself is a no-op once
+  // the grant is gone.
   if (takenBackEurCents(counted.intent) >= pack.eurCents) {
     await revokePurchasePlus(deps, ctx, intent, "full_refund", undefined, refundId);
   }
@@ -1004,10 +1031,17 @@ async function restoreDispute(
   ids: DeadLetterExtra,
 ): Promise<string> {
   const { intent } = resolved;
-  // PIN-242: bring Plus back if this dispute's loss revoked it,
-  // even when the makes below can no longer be un-clawed.
-  await restorePurchasePlus(deps, intent, disputeId);
-  if (intent.finalDisputeClawbacks && disputeId in intent.finalDisputeClawbacks) {
+  const finallyClawed = !!intent.finalDisputeClawbacks && disputeId in intent.finalDisputeClawbacks;
+  // PIN-242: a lost dispute's money is back, so its cents and
+  // makes leave the take-back (atomic, once; later refunds and
+  // redelivered claw events price without it). Then bring Plus
+  // back if that makes the purchase live again, even when the
+  // makes below can no longer be un-clawed.
+  const current = finallyClawed
+    ? ((await deps.intents.reinstateFinalDispute(intent.id, disputeId)).intent ?? intent)
+    : intent;
+  await restorePurchasePlus(deps, resolved, current);
+  if (finallyClawed) {
     // Funds came back after the makes were finally clawed:
     // the ledger cannot un-claw, so flag it for a human.
     return deadLetter(deps, ctx, "reinstated_after_final_clawback", {

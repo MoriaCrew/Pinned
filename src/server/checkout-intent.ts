@@ -94,6 +94,13 @@ export interface CheckoutIntent {
    * figure refund and final-dispute claws are both priced from.
    */
   finalDisputeEurCents?: Record<string, number>;
+  /**
+   * Lost disputes later won or reinstated (PIN-242): the money is
+   * back, so their cents and makes leave the take-back figures
+   * above. Their claim stays (a redelivered `lost` is still a
+   * no-op) and their makes stay clawed for an operator to settle.
+   */
+  reinstatedDisputeIds?: string[];
 }
 
 /** Everything a checkout/browser surface may see. No board identifier beyond the opaque `id`. */
@@ -222,6 +229,16 @@ export interface CheckoutIntentStore {
     packEurCents: number,
     packCredits: number,
   ): Promise<{ intent: CheckoutIntent | null; applied: boolean; makes: number }>;
+  /**
+   * Record that a finally clawed dispute was won or reinstated
+   * (PIN-242), atomically and once: its cents leave
+   * `takenBackEurCents` and its makes leave the claw base. No
+   * final claim, or already recorded: `applied: false`, unchanged.
+   */
+  reinstateFinalDispute(
+    intentId: string,
+    disputeId: string,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }>;
 }
 
 export interface CheckoutIntentStoreOptions {
@@ -356,29 +373,38 @@ export function applyRefundAccountingToIntent(
   };
 }
 
-function sumValues(record: Record<string, number> | undefined): number {
+/** Sum a per-dispute record over the disputes still lost (not reinstated, PIN-242). */
+function sumStanding(record: Record<string, number> | undefined, intent: CheckoutIntent): number {
+  const reinstated = intent.reinstatedDisputeIds ?? [];
   let total = 0;
-  for (const value of Object.values(record ?? {})) total += value;
+  for (const [disputeId, value] of Object.entries(record ?? {})) {
+    if (!reinstated.includes(disputeId)) total += value;
+  }
   return total;
 }
 
 /**
  * The money taken back on a purchase (PIN-242): cumulative
- * refunded EUR cents plus every lost dispute's settled EUR
- * cents. Reaching the pack price means the purchase is fully
- * taken back (its makes all clawed, its Plus revoked).
+ * refunded EUR cents plus the settled EUR cents of every lost
+ * dispute still standing (a won or reinstated one gave its money
+ * back). Reaching the pack price means the purchase is fully
+ * taken back (its makes all clawed, its Plus revoked); below it
+ * the purchase still grants Plus.
  */
 export function takenBackEurCents(intent: CheckoutIntent): number {
-  return (intent.refundedEurCents ?? 0) + sumValues(intent.finalDisputeEurCents);
+  return (intent.refundedEurCents ?? 0) + sumStanding(intent.finalDisputeEurCents, intent);
 }
 
 /**
  * The make delta for `addedCents` more taken back (PIN-150,
- * PIN-242): `min(packCredits, floor(total * packCredits /
- * packEurCents))` on the new cumulative total, minus every make
- * refunds and lost disputes already clawed - one figure, so any
- * mix of partial refunds and lost disputes sums to exactly the
- * pack with no per-event rounding drift.
+ * PIN-242): `max(0, min(packCredits, floor(total * packCredits /
+ * packEurCents)) - clawed)`, where `total` is the new
+ * `takenBackEurCents` and `clawed` the makes refunds and still
+ * standing lost disputes already clawed - one figure, so any mix
+ * of partial refunds and lost disputes sums to exactly the pack
+ * with no per-event rounding drift. A reinstated dispute leaves
+ * both sides: its makes stay clawed in the ledger (an operator
+ * settles them), and later claws price from the rest alone.
  */
 function cumulativeClawDelta(
   intent: CheckoutIntent,
@@ -388,7 +414,7 @@ function cumulativeClawDelta(
 ): number {
   const totalCents = takenBackEurCents(intent) + addedCents;
   const targetMakes = Math.min(packCredits, Math.floor((totalCents * packCredits) / packEurCents));
-  const clawedMakes = (intent.refundClawedMakes ?? 0) + sumValues(intent.finalDisputeClawbacks);
+  const clawedMakes = (intent.refundClawedMakes ?? 0) + sumStanding(intent.finalDisputeClawbacks, intent);
   return Math.max(0, targetMakes - clawedMakes);
 }
 
@@ -452,6 +478,17 @@ export function countFinalDisputeClawbackOnIntent(
     },
     makes,
   };
+}
+
+/** Mark a finally clawed dispute reinstated on a clone (PIN-242, see reinstateFinalDispute on the port); null when it has no final claim or is already reinstated. Shared by both stores. */
+export function reinstateFinalDisputeOnIntent(
+  intent: CheckoutIntent,
+  disputeId: string,
+): CheckoutIntent | null {
+  assertId(disputeId, "disputeId");
+  const reinstated = intent.reinstatedDisputeIds ?? [];
+  if (!(disputeId in (intent.finalDisputeClawbacks ?? {})) || reinstated.includes(disputeId)) return null;
+  return { ...intent, reinstatedDisputeIds: [...reinstated, disputeId] };
 }
 
 export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
@@ -583,6 +620,19 @@ export class InMemoryCheckoutIntentStore implements CheckoutIntentStore {
     if (!next) return { intent: structuredClone(intent), applied: false, makes };
     this.intents.set(intentId, structuredClone(next));
     return { intent: structuredClone(next), applied: true, makes };
+  }
+
+  async reinstateFinalDispute(
+    intentId: string,
+    disputeId: string,
+  ): Promise<{ intent: CheckoutIntent | null; applied: boolean }> {
+    assertId(intentId, "intentId");
+    const intent = this.intents.get(intentId);
+    if (!intent) return { intent: null, applied: false };
+    const next = reinstateFinalDisputeOnIntent(intent, disputeId);
+    if (!next) return { intent: structuredClone(intent), applied: false };
+    this.intents.set(intentId, structuredClone(next));
+    return { intent: structuredClone(next), applied: true };
   }
 
   async expire(intentId: string, at: number): Promise<CheckoutIntent | null> {

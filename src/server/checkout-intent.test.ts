@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY } from "../policy/policy";
 import {
   InMemoryCheckoutIntentStore,
+  takenBackEurCents,
   toPublicCheckoutIntent,
   type CheckoutIntentStore,
   type CreateCheckoutIntentInput,
@@ -344,6 +345,31 @@ function describeCheckoutIntentStore(
       await expect(store.countFinalDisputeClawback(reversed.id, "du_bad", -1, 299, 20)).rejects.toThrow(
         RangeError,
       );
+    });
+
+    it("a won lost dispute leaves the take-back once; its claim stays and later refunds price without it (PIN-242)", async () => {
+      const { store } = make();
+      const intent = await store.create(createInput({ credits: 20, eurCents: 299 }));
+      // No final claim yet: nothing to reinstate.
+      expect(await store.reinstateFinalDispute(intent.id, "du_test_fake_1")).toMatchObject({ applied: false });
+      expect(await store.countFinalDisputeClawback(intent.id, "du_test_fake_1", 149, 299, 20)).toMatchObject({
+        makes: 9,
+      });
+      const won = await store.reinstateFinalDispute(intent.id, "du_test_fake_1");
+      expect(won).toMatchObject({ applied: true, intent: { reinstatedDisputeIds: ["du_test_fake_1"] } });
+      expect(takenBackEurCents(won.intent!)).toBe(0);
+      expect(await store.reinstateFinalDispute(intent.id, "du_test_fake_1")).toMatchObject({
+        applied: false,
+        intent: { reinstatedDisputeIds: ["du_test_fake_1"] },
+      });
+      // A redelivered lost never claims again.
+      expect(await store.countFinalDisputeClawback(intent.id, "du_test_fake_1", 149, 299, 20)).toMatchObject({
+        applied: false,
+        makes: 9,
+      });
+      // Refund 100 claws floor(100 * 20 / 299) = 6 from its own cents (not 16 - 9 = 7).
+      expect(await store.countRefund(intent.id, "re_test_fake_a", 100, 299, 20)).toMatchObject({ deltaMakes: 6 });
+      expect(await store.reinstateFinalDispute("nope", "du_x")).toEqual({ intent: null, applied: false });
     });
 
     it("rejects invalid create inputs with RangeError and stores nothing resolvable", async () => {
