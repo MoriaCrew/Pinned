@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiCallLog } from "../domain/types";
+import { t } from "../i18n";
 import { DEFAULT_POLICY, resolvePolicy, type Policy } from "../policy/policy";
 import {
   InMemoryBudgetStore,
@@ -115,7 +116,11 @@ describe("decorator chain: budget (PIN-61)", () => {
     );
     const out = await ports.elementNamer.nameElements(namerInput());
     expect(out.status).toBe("failed");
-    if (out.status === "failed") expect(out.errorCode).toBe("hourly_budget");
+    if (out.status === "failed") {
+      expect(out.errorCode).toBe("hourly_budget");
+      // The hourly line, not the daily "try again tomorrow" copy.
+      expect(out.message).toBe(t("en", "ai.budgetHourly"));
+    }
     expect(calls).toBe(0);
     expect(logs).toMatchObject([{ outcome: "denied_hourly_budget", denialReason: "hourly_budget", attempts: 0, reservedMicroUsd: 0 }]);
   });

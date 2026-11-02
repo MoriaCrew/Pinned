@@ -108,6 +108,7 @@
   "notFound.home": "Go home",
   "ai.budgetOff": "AI is switched off right now. Try again later.",
   "ai.budgetExhausted": "Today's AI budget is used up. Try again tomorrow.",
+  "ai.budgetHourly": "This hour's AI budget is used up. Try again in a little while.",
   "ai.participantCap": "You've reached today's limit. Try again tomorrow.",
   "ai.boardCap": "This board reached today's limit. Try again tomorrow.",
   "ai.photoCap": "This photo reached its cut-out limit. Keep the pins you have.",
