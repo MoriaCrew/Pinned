@@ -1437,8 +1437,8 @@ around the prod-switch merge above; this is Checklist B of
    board and refund in full in the Dashboard (Payments → the
    payment → Refund); confirm the 20 creations claw back, the
    endpoint delivery is 200, and the live reconcile command there
-   exits 0 (`clean=true`, `needsAttention=false`). Note the known
-   v1 behaviour: the refunded board keeps Plus (Follow-ups).
+   exits 0 (`clean=true`, `needsAttention=false`). Since PIN-242 (stacked below) note the changed behaviour:
+   a full refund also revokes Plus - confirm that here too.
 4. **Rollback rehearsal.** Set `PLUS_MODE=off` in
    `apphosting.prod.yaml` and roll out `main` (Rollback paragraph
    above): buying answers "unavailable", the webhook 503s and
