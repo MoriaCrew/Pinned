@@ -35,6 +35,7 @@ Manager references by name.
 |---|---|---|---|
 | `AI_MOCK` | mock unless `"0"` | `0` | `0` |
 | `AI_DAILY_BUDGET_USD` / `AI_DAILY_CALL_LIMIT` | 5 / 500 | 5 / 500 | **50 / 10000** |
+| `AI_HOURLY_BUDGET_USD` (PIN-240, 0 = off) | 0 | 2 | **15** |
 | `AUTH_MODE` / `AUTH_SAME_ORIGIN` | link-only / off | optional / 1 | optional / 1 |
 | `UI_LOCALES` | `en` | all 7 | all 7 |
 | `PLUS_MODE` | off | stripe (sandbox) | off until PIN-210 (live) |

@@ -41,6 +41,8 @@ export interface AppConfig {
   firebaseProjectId: string | null;
   firestoreEmulatorHost: string | null;
   aiDailyBudgetUsd: number;
+  /** PIN-240: hourly AI sub-cap (AI_HOURLY_BUDGET_USD); 0/unset = off (daily cap only, as before). */
+  aiHourlyBudgetUsd: number;
   aiDailyCallLimit: number;
   /** Raw POLICY_OVERRIDES_JSON; parsed/validated by src/policy (PIN-59). */
   policyOverridesJson: string | null;
@@ -269,6 +271,7 @@ export function parseConfig(
     firebaseProjectId,
     firestoreEmulatorHost: nonEmpty(env.FIRESTORE_EMULATOR_HOST),
     aiDailyBudgetUsd: budgetNumber(env.AI_DAILY_BUDGET_USD, 5),
+    aiHourlyBudgetUsd: budgetNumber(env.AI_HOURLY_BUDGET_USD, 0),
     policyOverridesJson: nonEmpty(env.POLICY_OVERRIDES_JSON),
     aiDailyCallLimit: Math.floor(positiveNumber(env.AI_DAILY_CALL_LIMIT, 500)),
     labEnabled: env.PINNED_LAB === "1",

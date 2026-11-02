@@ -40,6 +40,12 @@ env:
     value: "50"
   - variable: AI_DAILY_CALL_LIMIT
     value: "10000"
+  # PIN-240: hourly sub-cap inside the $50/day cap, so hour 1 cannot
+  # burn the judges' whole day. Operator-tunable: raise/lower freely,
+  # or set "0" to switch the sub-cap off (daily cap only, NOT a kill
+  # switch - for a kill use AI_DAILY_BUDGET_USD=0, docs/launch-ops-runbook.md).
+  - variable: AI_HOURLY_BUDGET_USD
+    value: "15"
   - variable: APP_BASE_URL
     value: https://pinneds.com
   # PIN-26: public contact on /privacy and /terms. A plain value: the

@@ -24,6 +24,7 @@ import { t } from "../i18n";
 import type { Policy } from "../policy/policy";
 import {
   dayBucketFor,
+  hourBucketFor,
   type BudgetStore,
   type ReserveDenyReason,
   type ReserveResult,
@@ -111,6 +112,7 @@ function deniedOutcome<T>(reason: ReserveDenyReason | "budget_unavailable"): Por
     off: t("en", "ai.budgetOff"),
     call_limit: t("en", "ai.budgetExhausted"),
     budget: t("en", "ai.budgetExhausted"),
+    hourly_budget: t("en", "ai.budgetExhausted"),
     participant_cap: t("en", "ai.participantCap"),
     board_cap: t("en", "ai.boardCap"),
     photo_cap: t("en", "ai.photoCap"),
@@ -178,6 +180,7 @@ async function runDecorated<T>(
   const { policy } = deps;
   const startedAt = deps.now();
   const dayBucket = dayBucketFor(startedAt);
+  const hourBucket = hourBucketFor(startedAt);
   const boardId = safeId(meta.boardId);
   const participantId = safeId(meta.participantId);
   const photoId = safeId(meta.photoId);
@@ -248,6 +251,8 @@ async function runDecorated<T>(
         dayBucket,
         estimatedCostUsd: estimateReserveUsd(meta.operation, reserveLimits),
         budgetUsd: policy.dailyBudgetUsd,
+        hourBucket,
+        hourlyBudgetUsd: policy.hourlyBudgetUsd,
         callLimit: policy.dailyCallLimit,
         participantId,
         participantPhotoCap: participantId ? meta.participantPhotoCap : undefined,

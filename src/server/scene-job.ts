@@ -643,7 +643,7 @@ async function composeElement(
  * collage of the cut-outs appears instead"). Participant/board
  * daily caps are NOT budget fallback: they stay friendly failed.
  */
-const BUDGET_FALLBACK_CODES = new Set(["budget", "call_limit", "budget_off"]);
+const BUDGET_FALLBACK_CODES = new Set(["budget", "hourly_budget", "call_limit", "budget_off"]);
 
 function isBudgetFallback(errorCode: string | undefined): boolean {
   return errorCode !== undefined && BUDGET_FALLBACK_CODES.has(errorCode);
