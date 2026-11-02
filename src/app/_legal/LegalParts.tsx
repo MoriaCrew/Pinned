@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { DEFAULT_LOCALE, t, type Locale } from "../../i18n";
 import { Wordmark } from "../../ui";
+import { LanguageLink } from "../auth/LanguageMenu";
 
 /**
  * Shared parts of /privacy and /terms (PIN-26). The `_legal` folder is
@@ -41,6 +42,7 @@ export function SiteLinks({
         {t(locale, "footer.terms")}
       </a>
       <a href={SOURCE_URL}>{t(locale, "footer.source")}</a>
+      <LanguageLink />
     </nav>
   );
 }

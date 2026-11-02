@@ -34,8 +34,8 @@ export type YouEntry =
   | "myPins"
   | "boardPlus"
   | "changeLook"
-  | "deleteBoard"
   | "language"
+  | "deleteBoard"
   | "signIn"
   | "signOut";
 
@@ -44,8 +44,9 @@ export type YouEntry =
  * name here (or Join), your library when signed in, Board Plus for
  * everyone on a board with creations (PIN-183: it carries the count),
  * Change look for the host or a member while the board has Plus
- * (PIN-183), Delete board for the host alone (PIN-168), Language when
- * more than one is on (PIN-191), then Sign in / Sign out.
+ * (PIN-183), Language when more than one is on (PIN-191), Delete
+ * board for the host alone (PIN-168; last before the account line,
+ * PIN-247), then Sign in / Sign out.
  * Link-only (auth off) never gets an account entry; nothing
  * account-shaped shows while auth loads.
  */
@@ -59,8 +60,10 @@ export function youMenuEntries(state: YouState): YouEntry[] {
   if (signedIn) entries.push("myBoards", "myPins");
   if (state.onBoard && state.hasCredits) entries.push("boardPlus");
   if (state.onBoard && (state.isHost || state.canChangeLook)) entries.push("changeLook");
-  if (state.onBoard && state.isHost) entries.push("deleteBoard");
+  // Language sits above Delete board (PIN-247), so the one danger
+  // entry is the last before the account line.
   if (state.languageCount > 1) entries.push("language");
+  if (state.onBoard && state.isHost) entries.push("deleteBoard");
   if (state.authEnabled && state.authStatus !== "loading") {
     entries.push(signedIn ? "signOut" : "signIn");
   }

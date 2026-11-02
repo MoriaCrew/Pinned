@@ -180,6 +180,33 @@
   pointer-events: none;
 }
 
+/* ---------- Desktop (PIN-247) ----------
+   A laptop gets a wide board instead of the phone column. Scenes wrap
+   into rows (a mouse can't scroll a sideways row whose scrollbar is
+   hidden), the filter chips wrap, and the pin grid fills the width on
+   its own (auto-fill). Phones are untouched. */
+@media (min-width: 1100px) {
+  .board {
+    max-width: 75rem;
+  }
+
+  .strip :global(.pn-prints) {
+    flex-wrap: wrap;
+    row-gap: var(--space-6);
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .strip :global(.pn-prints > li) {
+    flex: 0 1 17rem;
+  }
+
+  .board :global(.pn-filter-row) {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
 /* ---------- Board Plus (PIN-111) ---------- */
 
 /* The TryOnBar sits over the last row: give the page room for it. */
