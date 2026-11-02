@@ -1466,8 +1466,10 @@ missing permission: add read on that one resource only.
 2. **The prod switch** is a separate config-only PR (PIN-210, "turn
    on live billing on prod"). It adds one block to
    `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
-   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
-   (the dev backend ignores that file). Merge it only after step 4.
+   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":20}}`
+   (judging-week value, Robin Nov 2: 20 free creations per new board,
+   back to 5 after judging; the dev backend ignores that file). Merge
+   it only after step 4.
    If that happens before the freeze, it rides promotion #2. If not,
    run a config-only promotion as soon as step 4 is done, even during
    judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
@@ -1475,7 +1477,8 @@ missing permission: add read on that one resource only.
 
 **Smoke after the rollout.** `GET https://pinneds.com/api/health`
 shows `plusMode: "stripe"`; a webhook POST with a bad
-`Stripe-Signature` answers 400; a new board shows 5 creations.
+`Stripe-Signature` answers 400; a new board shows 20 creations
+(the judging-week `starterMakes`).
 Robin buys the €2.99 pack **on the demo board** with a real card
 and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
 board, and this makes it a paying customer's board). Checkout says

@@ -91,13 +91,15 @@ env:
     secret: STRIPE_WEBHOOK_SECRET
     availability:
       - RUNTIME
-  # Creations pool on (code default is off). Robin (Oct 31): a new
-  # board starts with 5 free creations, enough to try the app; Board
-  # Plus adds 20. The demo board is a normal board; Robin buys Plus on
-  # it with a real card (docs/DEPLOY.md §6.4). Spend stays bounded by
-  # AI_DAILY_BUDGET_USD and AI_DAILY_CALL_LIMIT whatever this value is.
+  # Creations pool on (code default is off). Robin (Nov 2): during
+  # judging week a new board starts with 20 free creations (a one-time
+  # pool per board, PIN-181; was 5), so judges are never stopped short;
+  # Board Plus adds 20 more. The demo board is a normal board; Robin
+  # buys Plus on it with a real card (docs/DEPLOY.md §6.4). Spend stays
+  # bounded by AI_DAILY_BUDGET_USD, AI_HOURLY_BUDGET_USD and
+  # AI_DAILY_CALL_LIMIT whatever this value is. After judging: back to 5.
   - variable: POLICY_OVERRIDES_JSON
-    value: '{"credits":{"enabled":true,"starterMakes":5}}'
+    value: '{"credits":{"enabled":true,"starterMakes":20}}'
   # /PIN-210
   # Security review (PIN-112): same App Hosting forwarding layout
   # as dev (lab-measured fahIndexFromRight=2); key per-IP limits on
