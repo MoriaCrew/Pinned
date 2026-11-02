@@ -73,3 +73,11 @@ env:
   # a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
+  # Security review (PIN-112): lab probe on this backend measured
+  # fahIndexFromRight=2, so key per-IP limits on the platform-
+  # appended entry, not the client-spoofable first XFF entry.
+  - variable: CLIENT_IP_TRUSTED_HOPS
+    value: "2"
+  # Security review: dev must only ever run test-mode Stripe.
+  - variable: STRIPE_EXPECTED_LIVEMODE
+    value: test
