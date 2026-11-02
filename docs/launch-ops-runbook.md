@@ -34,7 +34,9 @@ Hourly sub-cap rules:
   (`reservedMicroUsd`) also holds `hourBucket` +
   `hourReservedMicroUsd` (UTC hour, e.g. `2026-11-04T14`). When
   the hour rolls, the hour accumulator resets inside the same
-  transaction; the daily total keeps climbing and stays
+  transaction; the stored hour only moves forward (a late reserve
+  stamped with an earlier hour counts against the stored hour,
+  never resets it); the daily total keeps climbing and stays
   authoritative — a call that fits the hour but busts the day is
   denied `budget`, never allowed by the hour.
 - **0 or unset = off** (the code default): behaviour is exactly
@@ -213,4 +215,3 @@ them running unattended:
   needed; keep Firestore TTL + bucket lifecycle rules.
 - [ ] Record final judging-week spend (GCP + `usage:costs`)
   on the Linear launch issue.
-
