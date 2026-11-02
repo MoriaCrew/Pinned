@@ -285,6 +285,10 @@ host-only but answers every failure with the uniform 404
 ## Data
 
 - `Board.plus?: { plan, source: "mock" | "stripe", grantedAt } | null`.
+- `Board.plusRevocation?: { purchaseId, reason, disputeId?,
+  revokedPlus, revokedAt } | null` (PIN-242): the tombstone a
+  revocation leaves (below), server-only. Absent or `null` means
+  nothing was revoked (or a win/new purchase cleared it).
   Absent or `null` means a free board; every reader is null-safe.
 - `Board.host?: { tokenHash, issuedAt } | null`: server-only.
 - Skin and Plus are written only through
@@ -723,6 +727,27 @@ and dispute lifecycle pages):
   dead-letters `plus_grant_unavailable`, re-runnable once
   fixed. A `stripe` grant counts in every `PLUS_MODE`, `off`
   included.
+- **Plus revocation (PIN-242).** Plus follows its purchase's
+  money, mirroring the makes claw: once the makes clawback has
+  landed, the webhook clears `Board.plus`
+  (`decidePlusRevocation`) when a purchase is taken all the way
+  back — a cumulative settled refund reaching the pack price
+  (`refundedEurCents >= eurCents`; partial refunds never), or a
+  dispute closed `lost` that clawed the purchase in full — and
+  leaves a `Board.plusRevocation` tombstone with the removed
+  grant. If another granted purchase on the board is still live
+  (not fully clawed back), Plus stays: it grants it too. A
+  `source: "mock"` grant is never touched by a Stripe event, a
+  purchase clawed all the way back before its grant landed
+  never grants Plus at all, and a lost dispute's win/restore
+  (`decidePlusRestore`, the freeze/restore mirror) brings the
+  tombstoned grant back — only that dispute can, a new purchase
+  meanwhile supersedes it, and the makes half of a reinstate
+  after the final claw still dead-letters for an operator as
+  before. It runs on the duplicate paths too, so a crash
+  between claw and revoke (propagated, Stripe retries) is
+  repaired by the next delivery; with no board repository an
+  actually-due revoke dead-letters `plus_revoke_unavailable`.
 - `async_payment_failed` + `expired` are the terminal
   events: they close the intent and its ledger purchase,
   never grant; a purchase the ledger refuses to close (e.g.
@@ -811,13 +836,14 @@ again keeps the one record) - reasons include
 `unknown_purchase`, `unknown_mapping` (refund/dispute for a
 charge we never mapped), `mapping_conflict`,
 `freeze_no_available`, `ledger_refused`, `fx_unverifiable`,
-`reinstated_after_final_clawback` and `plus_grant_unavailable`
+`reinstated_after_final_clawback`, `plus_grant_unavailable` and
+`plus_revoke_unavailable` (PIN-242)
 (PIN-181: makes granted, Plus not written). Records carry ids
 only - no payloads, no secrets. Plus is sold only inside the
 pack (PIN-181); a separate host plan stays unbuilt: the draft
 `pinneds_host_monthly` price is seeded only (PIN-146).
-Refunds and disputes claw back makes but do **not** revoke
-Plus in v1 (follow-up below).
+Refunds and disputes claw back makes and, when a purchase is
+taken all the way back, revoke its Plus too (PIN-242 above).
 
 ## Pool debit on makes (PIN-151)
 
@@ -1331,8 +1357,8 @@ board, and this makes it a paying customer's board). Checkout says
 creations, and the endpoint's delivery in Workbench is 200. Refund
 check, on a throwaway board: buy the pack again, then refund it in
 the Dashboard (Payments → the payment → Refund, full). The refund
-events claw back the 20 creations; the board keeps Plus (see
-Follow-ups). Then
+events claw back the 20 creations and revoke the board's Plus
+(PIN-242). Then
 `node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
 exits 0 (`clean=true`), and the setup key is deleted.
 
@@ -1350,9 +1376,6 @@ Stopping for good: disable the endpoint in Workbench.
   shared in-process `checkRateLimit`, a soft limit per instance.
 - Adopt `request-guards.ts` on the other state-changing routes.
 - UI behaviour for a Plus skin whose grant stopped counting.
-- PIN-181: revoke (or keep, by decision) Plus when a purchase is
-  fully refunded or a dispute is lost. v1 claws back the makes
-  only; the board keeps its `stripe` grant.
 - PIN-181 UI slice: the one-purchase sheet, "creations" copy and
   the removal of `plus.priceLabels` landed in PIN-182; the
   indicator's thresholds, the out-of-creations invitation, Board

@@ -34,6 +34,24 @@ export type PlusMode = (typeof PLUS_MODES)[number];
 /** Where an entitlement came from: the demo mock or a real payment. */
 export type PlusSource = "mock" | "stripe";
 
+/** Why a paid entitlement was taken back (PIN-242). */
+export type PlusRevocationReason = "full_refund" | "dispute_lost";
+
+/**
+ * Tombstone left by a revocation (PIN-242), stored on
+ * `Board.plusRevocation` (server-only, never in a view): the grant
+ * that was removed, so a dispute that is later won or reinstated
+ * can restore exactly it — and nothing else can.
+ */
+export interface BoardPlusRevocation {
+  purchaseId: string;
+  reason: PlusRevocationReason;
+  /** The dispute whose loss revoked the grant; only for `dispute_lost`. */
+  disputeId?: string;
+  revokedPlus: BoardPlus;
+  revokedAt: number;
+}
+
 /** Stored on Board.plus once granted. */
 export interface BoardPlus {
   plan: PlusPlan;
@@ -134,6 +152,60 @@ export interface PlusView {
   active: boolean;
   plan?: PlusPlan;
   mode: PlusMode;
+}
+
+export interface PlusRevocationInput {
+  purchaseId: string;
+  reason: PlusRevocationReason;
+  disputeId?: string;
+  at: number;
+  hasOtherLiveGrant: boolean;
+}
+
+/**
+ * The revocation decision (PIN-242), run inside the repository
+ * write by the Stripe webhook on a cumulative full refund or a
+ * dispute closed lost. `hasOtherLiveGrant` comes from the caller
+ * (the credit ledger: another granted purchase not fully clawed
+ * back); Plus then stays. A mock grant is never touched by a
+ * Stripe event, and a replay after the revoke writes nothing.
+ */
+export function decidePlusRevocation(
+  board: Pick<Board, "plus">,
+  input: PlusRevocationInput,
+): { plus: null; plusRevocation: BoardPlusRevocation } | null {
+  if (input.hasOtherLiveGrant) return null;
+  const current = board.plus;
+  // A credits purchase only ever grants the board plan, so only
+  // that stripe grant is its to take back (never a host plan).
+  if (current == null || current.plan !== "board" || current.source !== "stripe") return null;
+  return {
+    plus: null,
+    plusRevocation: {
+      purchaseId: input.purchaseId,
+      reason: input.reason,
+      ...(input.disputeId ? { disputeId: input.disputeId } : {}),
+      revokedPlus: { ...current },
+      revokedAt: input.at,
+    },
+  };
+}
+
+/**
+ * The dispute-win restore (PIN-242), mirroring the makes
+ * freeze/restore symmetry: only the very dispute whose loss
+ * revoked the grant brings it back. A grant written since (a new
+ * purchase) is never overwritten - the tombstone just clears.
+ */
+export function decidePlusRestore(
+  board: Pick<Board, "plus" | "plusRevocation">,
+  disputeId: string,
+): { plus: BoardPlus; plusRevocation: null } | { plusRevocation: null } | null {
+  const revocation = board.plusRevocation;
+  if (revocation == null || revocation.reason !== "dispute_lost") return null;
+  if (revocation.disputeId !== disputeId) return null;
+  if (board.plus != null) return { plusRevocation: null };
+  return { plus: { ...revocation.revokedPlus }, plusRevocation: null };
 }
 
 export function plusView(board: Pick<Board, "plus">, mode: PlusMode): PlusView {

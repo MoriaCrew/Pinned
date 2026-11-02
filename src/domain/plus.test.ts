@@ -3,6 +3,8 @@ import {
   PLUS_SKIN_IDS,
   canUseSkin,
   decideMockGrant,
+  decidePlusRestore,
+  decidePlusRevocation,
   decidePurchasePlusGrant,
   grantPlus,
   hasPlus,
@@ -95,6 +97,64 @@ describe("Board Plus domain (PIN-103)", () => {
     for (const mode of ["off", "mock", "stripe"] as const) {
       expect(hasPlus(paidBoard, mode)).toBe(true);
     }
+  });
+
+  it("revocation (PIN-242): a full-takeback of a stripe grant clears it and leaves the tombstone", () => {
+    const fullRefund = { purchaseId: "pur_1", reason: "full_refund" as const, at: 9, hasOtherLiveGrant: false };
+    expect(decidePlusRevocation({ plus: PAID }, fullRefund)).toEqual({
+      plus: null,
+      plusRevocation: { purchaseId: "pur_1", reason: "full_refund", revokedPlus: PAID, revokedAt: 9 },
+    });
+    expect(
+      decidePlusRevocation({ plus: PAID }, { ...fullRefund, reason: "dispute_lost", disputeId: "du_1" }),
+    ).toEqual({
+      plus: null,
+      plusRevocation: {
+        purchaseId: "pur_1",
+        reason: "dispute_lost",
+        disputeId: "du_1",
+        revokedPlus: PAID,
+        revokedAt: 9,
+      },
+    });
+    // A credits purchase grants only the board plan: a paid host
+    // grant is not its Plus to take back.
+    expect(decidePlusRevocation({ plus: { ...PAID, plan: "host" } }, fullRefund)).toBeNull();
+  });
+
+  it("revocation (PIN-242): another live grant keeps Plus; mock and free boards are untouched", () => {
+    const input = { purchaseId: "pur_1", reason: "full_refund" as const, at: 9, hasOtherLiveGrant: true };
+    expect(decidePlusRevocation({ plus: PAID }, input)).toBeNull();
+    const noOther = { ...input, hasOtherLiveGrant: false };
+    // Mock-sourced Plus is never revoked by a Stripe event.
+    expect(decidePlusRevocation({ plus: MOCK }, noOther)).toBeNull();
+    // Nothing to revoke (free board, or a replay after the revoke).
+    expect(decidePlusRevocation({}, noOther)).toBeNull();
+    expect(decidePlusRevocation({ plus: null }, noOther)).toBeNull();
+    expect(decidePlusRevocation({ plus: { ...PAID, plan: "gold" as never } }, noOther)).toBeNull();
+  });
+
+  it("restore (PIN-242): only the dispute whose loss revoked the grant brings it back", () => {
+    const revoked = decidePlusRevocation(
+      { plus: PAID },
+      { purchaseId: "pur_1", reason: "dispute_lost", disputeId: "du_1", at: 9, hasOtherLiveGrant: false },
+    )!;
+    const board = { plus: null, plusRevocation: revoked.plusRevocation };
+    expect(decidePlusRestore(board, "du_1")).toEqual({ plus: PAID, plusRevocation: null });
+    expect(decidePlusRestore(board, "du_other")).toBeNull();
+    // A second restore after the first (tombstone cleared) is a no-op.
+    expect(decidePlusRestore({ plus: PAID, plusRevocation: null }, "du_1")).toBeNull();
+    // A refund revocation never restores.
+    const refunded = decidePlusRevocation(
+      { plus: PAID },
+      { purchaseId: "pur_1", reason: "full_refund", at: 9, hasOtherLiveGrant: false },
+    )!;
+    expect(decidePlusRestore({ plus: null, plusRevocation: refunded.plusRevocation }, "du_1")).toBeNull();
+    // A grant written since (a new purchase) is kept; the tombstone just clears.
+    const newer = grantPlus("board", "stripe", 20);
+    expect(decidePlusRestore({ plus: newer, plusRevocation: revoked.plusRevocation }, "du_1")).toEqual({
+      plusRevocation: null,
+    });
   });
 
   it("view exposes state and mode — never source, grant time or a price", () => {

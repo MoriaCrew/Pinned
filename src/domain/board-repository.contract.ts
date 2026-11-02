@@ -141,6 +141,34 @@ export function describeBoardRepositoryContract(
       });
     });
 
+    it("updateBoardSettings: a Plus revocation clears the grant and keeps the tombstone (PIN-242)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      const plus = { plan: "board" as const, source: "stripe" as const, grantedAt: 2_000 };
+      await repo.updateBoardSettings(SLUG, () => ({ plus }));
+      const revocation = {
+        purchaseId: "pur-1",
+        reason: "dispute_lost" as const,
+        disputeId: "du-1",
+        revokedPlus: plus,
+        revokedAt: 3_000,
+      };
+      const revoked = await repo.updateBoardSettings(SLUG, () => ({ plus: null, plusRevocation: revocation }));
+      expect(revoked?.plus ?? null).toBeNull();
+      expect(revoked?.plusRevocation).toEqual(revocation);
+      expect(revoked?.version).toBe(2);
+      expect(await repo.getBoard(SLUG)).toEqual(revoked);
+      // Mutating the returned tombstone never reaches the store.
+      revoked!.plusRevocation!.revokedPlus.plan = "host";
+      expect((await repo.getBoard(SLUG))?.plusRevocation).toEqual(revocation);
+      // The win restores the same grant and clears the tombstone.
+      const restored = await repo.updateBoardSettings(SLUG, () => ({ plus, plusRevocation: null }));
+      expect(restored?.plus).toEqual(plus);
+      expect(restored?.plusRevocation ?? null).toBeNull();
+      expect(restored?.version).toBe(3);
+      expect(await repo.getBoard(SLUG)).toEqual(restored);
+    });
+
     it("updateBoardSettings mutator: sees the stored board, null is a no-op, throw writes nothing (PIN-103)", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard({ themeId: "cork" }));
