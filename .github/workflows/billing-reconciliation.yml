@@ -1,0 +1,106 @@
+# PIN-243 scheduled billing reconciliation + dead-letter alerting surface.
+#
+# WHAT THE OPERATOR MUST ADD before this does anything (never invent values):
+#   Repository secrets (Settings -> Secrets and variables -> Actions):
+#     PINNED_RECONCILE_STRIPE_READ_KEY
+#       Restricted Stripe read key for the chosen environment
+#       (rk_test_ for dev, rk_live_ for prod; Checkout Sessions: Read.
+#        Add Refunds: Read + Disputes: Read only if you want the
+#        refunds/disputes counts; without them the report says so).
+#     PINNED_RECONCILE_GCP_CREDENTIALS_JSON
+#       Service-account JSON key (or workload-identity replacement) with
+#       read-only Firestore access (roles/datastore.viewer) on the single
+#       target project below. Used as Application Default Credentials.
+#   Repository variable (optional):
+#     PINNED_RECONCILE_ENV = "dev" (default) or "prod"
+#       prod additionally passes --live --i-understand-live and
+#       --project moriacrew-pinned-prod; keep it "dev" until go-live
+#       (docs/15 PIN-243 go-live ops runbook).
+#
+# Until BOTH secrets exist every step after the guard is skipped and the
+# run succeeds with a warning (no daily red noise). Once enabled, a
+# non-clean report (exit 1: paid-no-grant, deadLetterTotal > 0,
+# grant-no-payment, pending-past-TTL) FAILS the run — that failure,
+# plus the step summary, is the alerting surface. Watch Actions
+# notifications for this workflow. The script is read-only and never
+# prints the key (scripts/billing-reconciliation.mjs).
+
+name: Billing reconciliation
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard — skip until operator secrets exist
+        id: guard
+        env:
+          HAS_STRIPE_KEY: ${{ secrets.PINNED_RECONCILE_STRIPE_READ_KEY != '' }}
+          HAS_GCP_CREDS: ${{ secrets.PINNED_RECONCILE_GCP_CREDENTIALS_JSON != '' }}
+        run: |
+          if [ "$HAS_STRIPE_KEY" = "true" ] && [ "$HAS_GCP_CREDS" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Billing reconciliation skipped::Add repository secrets PINNED_RECONCILE_STRIPE_READ_KEY and PINNED_RECONCILE_GCP_CREDENTIALS_JSON (see header of this workflow) to enable."
+            {
+              echo "## Billing reconciliation — skipped (PIN-243)"
+              echo "Operator secrets not configured yet. See the header of \`.github/workflows/billing-reconciliation.yml\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.guard.outputs.enabled == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Authenticate to Google Cloud (Firestore ADC, read-only SA)
+        if: steps.guard.outputs.enabled == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.PINNED_RECONCILE_GCP_CREDENTIALS_JSON }}
+
+      - name: Install
+        if: steps.guard.outputs.enabled == 'true'
+        run: npm ci
+
+      - name: Reconcile (fail = alert)
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          STRIPE_RECONCILE_KEY: ${{ secrets.PINNED_RECONCILE_STRIPE_READ_KEY }}
+          RECONCILE_ENV: ${{ inputs.environment || vars.PINNED_RECONCILE_ENV || 'dev' }}
+        run: |
+          set +e
+          if [ "$RECONCILE_ENV" = "prod" ]; then
+            node scripts/billing-reconciliation.mjs --json --env-var STRIPE_RECONCILE_KEY --live --i-understand-live --project moriacrew-pinned-prod > reconcile.json
+          else
+            node scripts/billing-reconciliation.mjs --json --env-var STRIPE_RECONCILE_KEY --project moriacrew-pinned-dev > reconcile.json
+          fi
+          code=$?
+          {
+            echo "## Billing reconciliation ($RECONCILE_ENV) — exit $code"
+            echo '```json'
+            cat reconcile.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            echo "::error title=Billing reconciliation needs attention::Reconcile exited $code (paid-no-grant / dead letters / other anomaly). See step summary and docs/15 PIN-243 runbook."
+          fi
+          exit "$code"

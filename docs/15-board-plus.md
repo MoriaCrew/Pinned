@@ -1233,6 +1233,44 @@ pending request in the Dashboard): agents only ever
 demonstrate the gate and report the pending request, they do
 not chase approval.
 
+**Scheduled reconciliation + dead-letter alerting (PIN-243).**
+The script is automation-ready: human mode keeps the lines above
+and ends with one parseable `RECONCILIATION_JSON:{...}` line;
+`--json` sends the human lines to stderr and prints only the JSON
+payload (`{stripe, project, summary, report}`) on stdout. The
+summary (`summarizeBillingReconciliation` in
+`src/domain/billing-reconciliation.ts`, mirrored in the script)
+carries `paidNoGrantCount`, `grantNoPaymentCount`,
+`deadLetterTotal`, `pendingPastTtlCount`, `anomalyCount`,
+`clean`, and `needsAttention` — true exactly when
+paid-no-grant > 0 or `deadLetterTotal > 0`, the alert condition.
+Exit stays 1 for any non-clean report (a superset of the alert
+condition), 0 clean, 2 usage/config.
+`.github/workflows/billing-reconciliation.yml` runs it daily
+(06:17 UTC) and on `workflow_dispatch`, but does nothing until
+the operator adds the repository secrets named in its header —
+`PINNED_RECONCILE_STRIPE_READ_KEY` (restricted read key for the
+target environment) and `PINNED_RECONCILE_GCP_CREDENTIALS_JSON`
+(read-only Firestore service account for ADC) — plus optional
+variable `PINNED_RECONCILE_ENV` (`dev` default; `prod` only at
+go-live). Without both secrets the run succeeds as a documented
+skip; with them, a non-clean report fails the run and lands in
+the step summary — that failed run is the dead-letter alert, so
+watch Actions notifications for the workflow and drain dead
+letters per the runbook above before calling a billing change
+done. Never paste secret values into the workflow, issues or PRs.
+
+**Refunds/disputes visibility (PIN-243).** Each run also lists
+Stripe refunds and disputes from the last 30 days
+(`refundsLast30Days`, `disputesLast30Days`, `openDisputes` in the
+summary; informational only — a refund is not an anomaly and
+never changes the exit code). The restricted read key in the
+PIN-210 table has only Checkout Sessions: Read, so until an
+operator adds Refunds: Read + Disputes: Read to that key the run
+prints `refunds-disputes unavailable...` and the counts are
+absent: then check Stripe Dashboard → Payments (refunds) and
+Payments → Disputes on the same daily cadence instead.
+
 **Dev webhook endpoint.** `npm run billing:webhook-endpoint`
 (`scripts/ensure-stripe-webhook-endpoint.mjs`, dry-run unless
 `--apply`; pure plan in `src/billing/webhook-endpoint.ts`)
@@ -1368,6 +1406,53 @@ and roll out `main`: buying answers "unavailable" and the webhook
 session grants once billing is back, or refund it). The pool
 stays on; `"enabled":false` in the override stops it too.
 Stopping for good: disable the endpoint in Workbench.
+
+**Go-live ops runbook (PIN-243; operator Dashboard steps —
+documented here, never executed by an agent).** Run in order
+around the prod-switch merge above; this is Checklist B of
+`docs/security-review-2026-11-01.md` made executable:
+
+1. **Prove the webhook-secret pairing (dev first).** After the
+   dev rollout, Stripe Dashboard (test mode) → Developers →
+   Webhooks → the `dev.pinneds.com` endpoint → "Send test event"
+   (`checkout.session.completed`): the delivery must be **200**,
+   not 400 (bad signature — Secret Manager
+   `STRIPE_WEBHOOK_SECRET` does not pair with the endpoint; roll
+   the secret in Workbench and re-store it, PIN-153 section) and
+   not 503 (billing off / config fail-closed; check
+   `GET /api/health` `plusMode` and the PIN-243/§F6 pairing +
+   livemode guards). Repeat against the live endpoint after the
+   prod rollout. Only this test delivery (or the live smoke
+   below) proves the pairing — Stripe never returns the secret.
+2. **Check delivery history for accumulated 503s.** Same endpoint
+   page → delivery history: during the billing-off era the prod
+   webhook answered 503, so look for a backlog of failed/pending
+   deliveries. Stripe retries for up to three days; resend only
+   events for real paid sessions once pairing is proven, and let
+   test/noise deliveries expire. A fresh run of non-2xx after
+   go-live means grants are not landing — stop and reconcile.
+3. **Live EUR 2.99 buy + refund smoke.** The "Smoke after the
+   rollout" paragraph above, unchanged: buy the pack on the demo
+   board with a real card and keep it; buy again on a throwaway
+   board and refund in full in the Dashboard (Payments → the
+   payment → Refund); confirm the 20 creations claw back, the
+   endpoint delivery is 200, and the live reconcile command there
+   exits 0 (`clean=true`, `needsAttention=false`). Since PIN-242 (stacked below) note the changed behaviour:
+   a full refund also revokes Plus - confirm that here too.
+4. **Rollback rehearsal.** Set `PLUS_MODE=off` in
+   `apphosting.prod.yaml` and roll out `main` (Rollback paragraph
+   above): buying answers "unavailable", the webhook 503s and
+   Stripe retries paid sessions for up to three days, so
+   re-enabling grants them (or refund in the Dashboard). Time the
+   rollout once before relying on it; disabling the endpoint in
+   Workbench is the stop-for-good switch.
+5. **Turn the schedule on.** Add the two
+   `PINNED_RECONCILE_*` repository secrets (PIN-243 section
+   above), set `PINNED_RECONCILE_ENV=prod` only now, run the
+   workflow once by hand (`workflow_dispatch`, environment
+   `prod`), and confirm a green run with the JSON summary in its
+   step summary before trusting the daily cron as the
+   dead-letter alert.
 
 ## Follow-ups
 
