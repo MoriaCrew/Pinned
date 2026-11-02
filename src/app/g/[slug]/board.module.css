@@ -41,6 +41,26 @@
   font: 650 15px/20px var(--font-ui);
 }
 
+/* Report this board (PIN-239): one quiet link at the page foot, 44px target. */
+.reportFoot {
+  padding: var(--space-5) var(--space-4) 0;
+  text-align: center;
+}
+
+.reportFoot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--ink-muted);
+  font: 500 14px/20px var(--font-ui);
+}
+
+.reportFoot a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
 /* One quiet line under a collage print (PIN-180). */
 .collageNote {
   margin: 0;

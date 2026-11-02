@@ -5,7 +5,7 @@ import { buildBoardPreview } from "../../../domain/board-preview";
 import { fixedSceneChips } from "../../../domain/chips";
 import { parseSceneParam } from "../../../domain/scene-viewer";
 import { isSkinId } from "../../../domain/skins";
-import { isValidSlug } from "../../../domain/tokens";
+import { boardReportRef, isValidSlug } from "../../../domain/tokens";
 import { t } from "../../../i18n";
 import { getLocale } from "../../../i18n/server";
 import { getPolicy } from "../../../policy/server";
@@ -152,6 +152,8 @@ export default async function BoardPage({
       tryOnSkin={tryOnSkin}
       initialSceneId={parseSceneParam(query.scene)}
       initialBilling={query.billing ?? null}
+      legalContactEmail={getConfig().legalContactEmail}
+      reportRef={boardReportRef(slug)}
       policy={{ pollIntervalMs: resolved.boardPollIntervalMs, jobPollIntervalMs: resolved.jobPollIntervalMs, uploadMaxPx: resolved.uploadMaxPx, uploadJpegQuality: resolved.uploadJpegQuality, pinsPerScene: resolved.pinsPerScene, sceneChips, scenePromptMaxChars: resolved.scenePromptMaxChars, elementLabelMaxChars: resolved.elementLabelMaxChars, sceneSize: resolved.sceneSize, elementsPerPhotoMax: resolved.elementsPerPhoto.max, photosPerBatch: resolved.photosPerBatch, batchUploadConcurrency: resolved.batchUploadConcurrency, uploadRetryMaxAttempts: resolved.uploadRetryMaxAttempts, uploadRetryBackoffMs: resolved.uploadRetryBackoffMs, signInNudge: resolved.signInNudge, libraryStripMax: resolved.libraryStripMax, dictationMaxSeconds: resolved.dictationMaxSeconds, dictationEnabled: resolved.dictationsPerParticipantPerDay > 0 && resolved.dailyBudgetUsd > 0 && resolved.dailyCallLimit > 0, makes: { packs: resolved.credits.packs, lowMakesWarning: resolved.credits.lowMakesWarning, lowFreePhotosWarning: resolved.credits.lowFreePhotosWarning } }}
     />
   );

@@ -28,6 +28,18 @@ export function generateAdminToken(): string {
   return b64url(randomBytes(32));
 }
 
+/**
+ * Opaque board reference for abuse reports (PIN-239): the first 16
+ * hex of the domain-separated sha256 of the slug. A report carries
+ * this instead of the capability slug, so mail and logs never gain
+ * a working board link; the operator recomputes it per board (any
+ * sha256 tool) to find the reported one (docs/20-abuse-runbook.md).
+ * Server-only in practice (node:crypto): the board page computes it.
+ */
+export function boardReportRef(slug: string): string {
+  return createHash("sha256").update(`pinned-report-v1:${slug}`, "utf8").digest("hex").slice(0, 16);
+}
+
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }

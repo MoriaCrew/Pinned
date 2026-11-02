@@ -77,6 +77,8 @@ export const PolicySchema = z
     scenePreviewQuality: z.number().int().min(1).max(100).default(80),
     scenePromptMaxChars: z.number().int().min(1).default(500),
     workingCopyTtlHours: z.number().positive().default(24),
+    /** Takedown commitment on /terms (PIN-239): hours to remove reported illegal or abusive content once confirmed. */
+    takedownHours: z.number().int().min(1).default(24),
     /** Board API caps (PIN-65): join roster, title length, cookie life. */
     participantsPerBoard: z.number().int().min(1).default(50),
     boardTitleMaxChars: z.number().int().min(1).default(80),
@@ -424,6 +426,7 @@ export const PolicyOverridesSchema = z.object({
   scenePreviewMaxPx: z.number().int().positive().optional(),
   scenePreviewQuality: z.number().int().min(1).max(100).optional(),
   workingCopyTtlHours: z.number().positive().optional(),
+  takedownHours: z.number().int().min(1).optional(),
   participantsPerBoard: z.number().int().min(1).optional(),
   activityStripMax: z.number().int().min(0).optional(),
   chipsCacheTtlHours: z.number().positive().optional(),
