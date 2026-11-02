@@ -9,7 +9,7 @@ import {
   type YouEntry,
   type YouState,
 } from "../../domain/you-menu";
-import { t, tCount, tf } from "../../i18n";
+import { LOCALE_NAMES, t, tCount, tf } from "../../i18n";
 import { useLocale, useLocaleSettings } from "../../i18n/client";
 import { Avatar, Icon, Menu, cx } from "../../ui";
 import { useAuth, type AuthContextValue } from "./AuthProvider";
@@ -156,7 +156,11 @@ export function YouView({
           ? [{ label: t(locale, "you.deleteBoard"), danger: true, onSelect: act(board.onDeleteBoard) }]
           : [];
       case "language":
-        return [{ label: t(locale, "you.language"), onSelect: act(() => setLanguageOpen(true)) }];
+        // The current language in its own name (PIN-247), so the entry
+        // reads the same whatever language the page is in.
+        return [
+          { label: t(locale, "you.language"), detail: LOCALE_NAMES[locale], onSelect: act(() => setLanguageOpen(true)) },
+        ];
       case "signIn":
         return [{ label: t(locale, "you.signIn"), onSelect: act(() => void auth.signIn()) }];
       case "signOut":

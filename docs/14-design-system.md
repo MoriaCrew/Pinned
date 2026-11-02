@@ -41,7 +41,7 @@ Principles:
 ## UI kit
 
 - `src/ui/` holds the components (`import { … } from "../ui"`):
-  Icon (23 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Icon (24 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
   CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
   FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,
@@ -190,13 +190,21 @@ Principles:
   My boards + My pins when signed in; Board Plus with the creations
   left as a quiet `detail` subline, for everyone on a board with
   creations (PIN-183); Change look for the host, or a member once the
-  board has Plus (PIN-183); a danger Delete board (asks first,
-  PIN-168) for the host; Sign in with
+  board has Plus (PIN-183); Language when more than one is on, with
+  the current language in its own name as the `detail` line
+  (PIN-191, PIN-247); a danger Delete board (asks first, PIN-168)
+  for the host, last before the account line (PIN-247); Sign in with
   Google / Sign out when sign-in is on. Off a board it is
   account-only: nothing in link-only, a quiet "Sign in" when signed
   out (left out where the page itself asks you to sign in), the
   avatar menu once signed in. On the landing it sits top right over
   the hero.
+- Desktop (PIN-247): from 1100px wide the board column grows to
+  75rem, the scene prints wrap into rows instead of a sideways strip
+  (a mouse can't scroll a row whose scrollbar is hidden), and the
+  pin filter chips wrap. The pin grid fills the width by itself
+  (auto-fill). Phones are unchanged; the rules are the Desktop block
+  of `src/app/g/[slug]/board.module.css`.
 - Board header: wordmark · Share · you. Who else is here moves to
   the start of the meta line as a small `AvatarStack` (`size="sm"`,
   `--avatar-sm`); you are not in it, you are the button.

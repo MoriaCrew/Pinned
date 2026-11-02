@@ -89,7 +89,7 @@ describe("Board Plus and Change look entries (PIN-183)", () => {
       youMenuEntries(
         state({ ...withCredits, isHost: true, canChangeLook: true, authEnabled: true, authStatus: "signedIn", languageCount: 2 }),
       ),
-    ).toEqual(["joinedAs", "editName", "myBoards", "myPins", "boardPlus", "changeLook", "deleteBoard", "language", "signOut"]);
+    ).toEqual(["joinedAs", "editName", "myBoards", "myPins", "boardPlus", "changeLook", "language", "deleteBoard", "signOut"]);
   });
 
   it("gives a member Change look once the board has Plus, but never Delete board", () => {
@@ -162,14 +162,14 @@ describe("language entry (PIN-191)", () => {
     expect(youMenuEntries(state({ languageCount: 1, authEnabled: true }))).toEqual(["join", "signIn"]);
   });
 
-  it("is shown with two languages, before the account line", () => {
+  it("is shown with two languages, before Delete board and the account line (PIN-247)", () => {
     expect(youMenuEntries(state({ languageCount: 2 }))).toEqual(["join", "language"]);
     expect(youMenuEntries(state({ joined: true, isHost: true, authEnabled: true, languageCount: 7 }))).toEqual([
       "joinedAs",
       "editName",
       "changeLook",
-      "deleteBoard",
       "language",
+      "deleteBoard",
       "signIn",
     ]);
   });
