@@ -6,8 +6,8 @@ import { JSON_HEADERS } from "./shared";
 /**
  * Request guards for state-changing JSON routes (PIN-103). Opt-in:
  * each returns a ready error response or null, so a route chains
- * the ones it needs before any I/O. Today only the host-only Plus
- * routes use them; other routes can adopt them one by one.
+ * the ones it needs before any I/O. The host-only Plus routes use
+ * the full set; PIN-241 adopted readJsonCapped on the scenes, * chips and tap-add POSTs. Other routes can adopt them one by one.
  * Bodies are `{ error, code }` like the rest of the board API.
  */
 function refuse(

@@ -405,6 +405,39 @@ describe("decorator chain: ChipSuggester (PIN-75)", () => {
     // 1200 output tokens at the Spark list rate: $0.0051 < $0.01.
     expect(seen[0].estimatedCostUsd).toBeCloseTo(0.0051, 6);
   });
+
+  it("PIN-241: per-participant chips cap denies past the cap, in its own counter", async () => {
+    let calls = 0;
+    const budget = new InMemoryBudgetStore();
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        budget,
+        policy: resolvePolicy({ chipsPerParticipantPerDay: 2 }),
+        suggester: {
+          async suggestChips(input) {
+            calls += 1;
+            return { status: "ready", value: { chips: ["x"], promptVersion: input.promptVersion } };
+          },
+        },
+      },
+    );
+    expect((await ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
+    expect((await ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
+    expect(await ports.chipSuggester!.suggestChips(chipsInput)).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(calls).toBe(2); // denied before the provider
+    // Another participant still gets chips; photo quota untouched.
+    expect(
+      (await ports.chipSuggester!.suggestChips({ ...chipsInput, participantId: "p2" })).status,
+    ).toBe("ready");
+    const snap = budget.snapshot(DAY);
+    expect(snap.participantChips).toEqual({ p1: 2, p2: 1 });
+    expect(snap.participantPhotos).toEqual({});
+    expect(snap.participantTapNames).toEqual({});
+  });
 });
 
 describe("decorator chain: Segmenter caps (PIN-92)", () => {

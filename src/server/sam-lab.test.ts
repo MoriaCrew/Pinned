@@ -121,4 +121,16 @@ describe("runSamLab", () => {
     expect(result.label?.objectLabel).toBe("brass lamp");
     expect(result.segments).toHaveLength(0);
   });
+
+  it("PIN-241: a provider failure surfaces a generic line, never the raw error", async () => {
+    const gateway: ModelGateway = {
+      ...mockGateway,
+      async segmentObject() {
+        throw new Error("provider internals: account 123 secret detail");
+      },
+    };
+    await expect(
+      runSamLab(await makePhoto(), { mode: "concept", concept: "mug" }, { gateway, mock: false }),
+    ).rejects.toMatchObject({ name: "SamLabError", status: 502, message: "SAM call failed." });
+  });
 });

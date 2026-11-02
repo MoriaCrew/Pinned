@@ -139,6 +139,7 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
       boards: { b1: 2 },
       participantSegments: {},
       participantTapNames: {},
+      participantChips: {},
       participantTranscriptions: {},
       hourBucket: "",
       hourReservedMicroUsd: 0,
@@ -204,6 +205,21 @@ describe("FirestoreBudgetStore (PIN-61, fake Firestore)", () => {
     expect(doc?.participantPhotos).toEqual({});
     expect(doc?.participantScenes).toEqual({});
     expect(doc?.participantTapNames).toEqual({ p1: 1, p2: 1 });
+  });
+
+  it("chips caps (PIN-241): counted in their own map, denied at cap", async () => {
+    const fake = new FakeFirestore();
+    const store = new FirestoreBudgetStore(fake as unknown as Firestore);
+    const chips = req({ participantId: "p1", participantChipsCap: 1 });
+    expect((await store.reserve(chips)).ok).toBe(true);
+    expect(await store.reserve(chips)).toEqual({ ok: false, reason: "participant_cap" });
+    expect(
+      (await store.reserve(req({ participantId: "p2", participantChipsCap: 1 }))).ok,
+    ).toBe(true);
+    const doc = fake.store.get(`aiBudget/${DAY}`);
+    expect(doc?.calls).toBe(2);
+    expect(doc?.participantPhotos).toEqual({});
+    expect(doc?.participantChips).toEqual({ p1: 1, p2: 1 });
   });
 
   it("transcription caps (PIN-119): counted in their own map, denied at cap", async () => {
