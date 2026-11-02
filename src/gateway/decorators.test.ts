@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiCallLog } from "../domain/types";
+import { t } from "../i18n";
 import { DEFAULT_POLICY, resolvePolicy, type Policy } from "../policy/policy";
 import {
   InMemoryBudgetStore,
@@ -102,6 +103,27 @@ describe("decorator chain: budget (PIN-61)", () => {
     expect(logs).toMatchObject([{ outcome: "denied_off", denialReason: "off", attempts: 0, reservedMicroUsd: 0 }]);
   });
 
+  it("hourly sub-cap (PIN-240): denies hourly_budget before the provider, logged denied_hourly_budget", async () => {
+    let calls = 0;
+    const { ports, logs } = setup(
+      {
+        async nameElements() {
+          calls += 1;
+          return READY;
+        },
+      },
+      { policy: resolvePolicy({ hourlyBudgetUsd: 0.000001 }) },
+    );
+    const out = await ports.elementNamer.nameElements(namerInput());
+    expect(out.status).toBe("failed");
+    if (out.status === "failed") {
+      expect(out.errorCode).toBe("hourly_budget");
+      // The hourly line, not the daily "try again tomorrow" copy.
+      expect(out.message).toBe(t("en", "ai.budgetHourly"));
+    }
+    expect(calls).toBe(0);
+    expect(logs).toMatchObject([{ outcome: "denied_hourly_budget", denialReason: "hourly_budget", attempts: 0, reservedMicroUsd: 0 }]);
+  });
   it("fail closed when the budget store errors: no provider call", async () => {
     let calls = 0;
     const broken: BudgetStore = {
@@ -387,6 +409,39 @@ describe("decorator chain: ChipSuggester (PIN-75)", () => {
     await ports.chipSuggester!.suggestChips(chipsInput);
     // 1200 output tokens at the Spark list rate: $0.0051 < $0.01.
     expect(seen[0].estimatedCostUsd).toBeCloseTo(0.0051, 6);
+  });
+
+  it("PIN-241: per-participant chips cap denies past the cap, in its own counter", async () => {
+    let calls = 0;
+    const budget = new InMemoryBudgetStore();
+    const { ports } = setup(
+      { async nameElements() { return READY; } },
+      {
+        budget,
+        policy: resolvePolicy({ chipsPerParticipantPerDay: 2 }),
+        suggester: {
+          async suggestChips(input) {
+            calls += 1;
+            return { status: "ready", value: { chips: ["x"], promptVersion: input.promptVersion } };
+          },
+        },
+      },
+    );
+    expect((await ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
+    expect((await ports.chipSuggester!.suggestChips(chipsInput)).status).toBe("ready");
+    expect(await ports.chipSuggester!.suggestChips(chipsInput)).toMatchObject({
+      status: "failed",
+      errorCode: "participant_cap",
+    });
+    expect(calls).toBe(2); // denied before the provider
+    // Another participant still gets chips; photo quota untouched.
+    expect(
+      (await ports.chipSuggester!.suggestChips({ ...chipsInput, participantId: "p2" })).status,
+    ).toBe("ready");
+    const snap = budget.snapshot(DAY);
+    expect(snap.participantChips).toEqual({ p1: 2, p2: 1 });
+    expect(snap.participantPhotos).toEqual({});
+    expect(snap.participantTapNames).toEqual({});
   });
 });
 

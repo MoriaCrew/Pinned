@@ -79,6 +79,7 @@ export function Pin({
   as: Root = "div",
   onToggle,
   pressedWhenRest,
+  speakOwner = true,
   children,
   className,
 }: {
@@ -94,6 +95,12 @@ export function Pin({
   onToggle?: () => void;
   /** Add sheet: everything starts kept, so rest = pressed. */
   pressedWhenRest?: boolean;
+  /**
+   * False when the owner is the viewer, shown as "You" (the Add sheet):
+   * the button is then named by the thing alone, since "{owner}'s"
+   * would read "You's teal mug" (PIN-247).
+   */
+  speakOwner?: boolean;
   /** Extra controls under the pin (e.g. a More menu for the owner). */
   children?: ReactNode;
   className?: string;
@@ -113,7 +120,7 @@ export function Pin({
     </span>
   ) : null;
   if (onToggle) {
-    const named = owner ? tf(locale, "ui.ownerThing", { owner: owner.name, thing: label }) : label;
+    const named = owner && speakOwner ? tf(locale, "ui.ownerThing", { owner: owner.name, thing: label }) : label;
     // `picked` and `dropped` are different states, so at most one status applies.
     const status = picked
       ? pickIndex

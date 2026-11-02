@@ -63,7 +63,7 @@ import type {
 } from "./board";
 import type { BoardThemeTokens } from "./board-themes";
 import { decideJoin, type JoinAttemptState, type JoinRateParams } from "./join-rate";
-import type { BoardPlus } from "./plus";
+import type { BoardPlus, BoardPlusRevocation } from "./plus";
 import type { ReclaimAttemptState } from "./reclaim-lockout";
 
 export interface DeleteElementResult {
@@ -84,7 +84,9 @@ export interface BoardSettingsPatch {
    */
   skin?: { themeId: string; theme?: BoardThemeTokens };
   /** Board Plus entitlement written by the billing seam. */
-  plus?: BoardPlus;
+  plus?: BoardPlus | null;
+  /** Revocation tombstone written by the billing seam (PIN-242); null clears it. */
+  plusRevocation?: BoardPlusRevocation | null;
 }
 
 /**
@@ -103,7 +105,12 @@ export function applyBoardSettings(board: Board, patch: BoardSettingsPatch): Boa
     if (patch.skin.theme) next.theme = { ...patch.skin.theme };
     else delete next.theme;
   }
-  if (patch.plus) next.plus = { ...patch.plus };
+  if ("plus" in patch) next.plus = patch.plus ? { ...patch.plus } : null;
+  if ("plusRevocation" in patch) {
+    next.plusRevocation = patch.plusRevocation
+      ? { ...patch.plusRevocation, revokedPlus: { ...patch.plusRevocation.revokedPlus } }
+      : null;
+  }
   return next;
 }
 

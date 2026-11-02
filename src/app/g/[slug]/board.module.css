@@ -41,6 +41,47 @@
   font: 650 15px/20px var(--font-ui);
 }
 
+/* Report this board (PIN-239): one quiet link at the page foot, 44px target. */
+.reportFoot {
+  padding: var(--space-5) var(--space-4) 0;
+  text-align: center;
+}
+
+.reportFoot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--ink-muted);
+  font: 500 14px/20px var(--font-ui);
+}
+
+.reportFoot a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* No mail app (in-app browsers): the address and reference as plain, selectable text. */
+.reportManual,
+.reportFacts {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 13px/18px var(--font-ui);
+}
+
+.reportFacts dt,
+.reportFacts dd {
+  display: inline;
+}
+
+.reportFacts dd {
+  margin: 0 0 0 var(--space-1);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
 /* One quiet line under a collage print (PIN-180). */
 .collageNote {
   margin: 0;
@@ -178,6 +219,33 @@
   height: calc(var(--space-8) * 2 + env(safe-area-inset-bottom));
   background: linear-gradient(transparent, var(--surface));
   pointer-events: none;
+}
+
+/* ---------- Desktop (PIN-247) ----------
+   A laptop gets a wide board instead of the phone column. Scenes wrap
+   into rows (a mouse can't scroll a sideways row whose scrollbar is
+   hidden), the filter chips wrap, and the pin grid fills the width on
+   its own (auto-fill). Phones are untouched. */
+@media (min-width: 1100px) {
+  .board {
+    max-width: 75rem;
+  }
+
+  .strip :global(.pn-prints) {
+    flex-wrap: wrap;
+    row-gap: var(--space-6);
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .strip :global(.pn-prints > li) {
+    flex: 0 1 17rem;
+  }
+
+  .board :global(.pn-filter-row) {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
 }
 
 /* ---------- Board Plus (PIN-111) ---------- */

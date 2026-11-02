@@ -657,6 +657,10 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
 .pn-foot-links a[aria-current="page"] { color: var(--ink); text-decoration: none; }
 .pn-foot-links a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* PIN-247: the footer's language switch, a link-sized button (globe + current language). */
+.pn-foot-lang { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.pn-foot-lang:hover { color: var(--ink); }
+.pn-foot-lang:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (min-width: 540px) {
   .pn-landing-actions { grid-auto-flow: column; justify-content: start; }
@@ -717,6 +721,19 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-menu-detail { color: var(--ink-muted); font: 500 13px/18px var(--font-ui); }
 .pn-menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .pn-menu-note { margin: 0 0 var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
+/* ---------- Language list (PIN-191, PIN-247) ----------
+   One row per language: its own name, the name in the page's language
+   under it, a check on the current one. */
+.pn-lang-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-raised); overflow: hidden; }
+.pn-lang-list > li + li { border-top: 1px solid var(--line); }
+.pn-lang-option { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: calc(var(--tap) + var(--space-2)); padding: var(--space-2) var(--space-4); border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pn-lang-option:hover { background: var(--surface-sunk); }
+.pn-lang-option:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pn-lang-names { display: grid; flex: 1; min-width: 0; }
+.pn-lang-name { font: 650 16px/22px var(--font-ui); }
+.pn-lang-gloss { color: var(--ink-muted); font: 500 13px/18px var(--font-ui); }
+.pn-lang-check { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border: 2px solid var(--line-strong); border-radius: 50%; }
+.pn-lang-option[aria-current="true"] .pn-lang-check { border-color: var(--ink); background: var(--ink); color: var(--surface-raised); }
 
 /* ---------- Make sheet (PIN-100; chat-style composer PIN-216) ---------- */
 /* Long on a small phone: the body scrolls, the title and the composer (the foot) stay put. */

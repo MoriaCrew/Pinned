@@ -17,6 +17,7 @@ import {
   applyReserve,
   emptyBudgetDay,
   evaluateReserve,
+  hourWindow,
   type BudgetDayState,
   type BudgetStore,
   type ReserveRequest,
@@ -47,7 +48,12 @@ function stateFrom(data: DocumentData | undefined): BudgetDayState {
     boards: numRecord(data.boards),
     participantSegments: numRecord(data.participantSegments),
     participantTapNames: numRecord(data.participantTapNames),
+    participantChips: numRecord(data.participantChips),
     participantTranscriptions: numRecord(data.participantTranscriptions),
+    // PIN-240: legacy day docs have no hour fields; "" / 0 = no hour tracked yet.
+    hourBucket: typeof data.hourBucket === "string" ? data.hourBucket : "",
+    hourReservedMicroUsd:
+      typeof data.hourReservedMicroUsd === "number" ? data.hourReservedMicroUsd : 0,
     photos: numRecord(data.photos),
   };
 }
@@ -97,6 +103,23 @@ export class FirestoreBudgetStore implements BudgetStore {
       }
       if (request.participantId && request.participantTapNameCap !== undefined) {
         updates[`participantTapNames.${request.participantId}`] =
+          FieldValue.increment(1);
+      }
+      // PIN-240: the stored hour only moves forward (`hourWindow`). A
+      // later hour resets the accumulator in the same transaction; the
+      // same or an older hour increments the stored hour, never
+      // rewriting the bucket back.
+      if (request.hourBucket) {
+        const hour = hourWindow(state, request.hourBucket);
+        if (hour.rolled) {
+          updates.hourBucket = hour.hourBucket;
+          updates.hourReservedMicroUsd = result.estimatedMicroUsd;
+        } else {
+          updates.hourReservedMicroUsd = FieldValue.increment(result.estimatedMicroUsd);
+        }
+      }
+      if (request.participantId && request.participantChipsCap !== undefined) {
+        updates[`participantChips.${request.participantId}`] =
           FieldValue.increment(1);
       }
       transaction.update(ref, updates);

@@ -30,6 +30,7 @@ export function PhotoPick({ onFiles }: { onFiles: (files: File[]) => void }) {
       </span>
       <span className="pn-add-pick-title">{t(locale, "add.pick")}</span>
       <span className="pn-add-pick-help">{t(locale, "add.pickHelp")}</span>
+      <span className="pn-add-pick-help">{t(locale, "add.uploadConsent")}</span>
       <span className="pn-add-pick-actions">
         <label className="pn-btn pn-btn-primary pn-add-pick-action">
           <Icon name="camera" size={20} />

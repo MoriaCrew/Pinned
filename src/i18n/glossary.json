@@ -10,7 +10,12 @@
     "Muse Spark",
     "SAM 3.1",
     "Muse Image",
-    "Muse Voice"
+    "Muse Voice",
+    "Muse Voice Transcribe",
+    "Muse Spark Open",
+    "Muse Code",
+    "Muse Wonder Full",
+    "store: false"
   ],
   "concepts": [
     "board",

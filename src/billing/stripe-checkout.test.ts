@@ -190,7 +190,7 @@ describe("StripeCreditCheckout (PIN-149)", () => {
     ).toBeNull();
     expect(createCreditCheckout(parseConfig({ PLUS_MODE: "stripe" }))).toBeNull();
     expect(
-      createCreditCheckout(parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "rk_test_x" })),
+      createCreditCheckout(parseConfig({ PLUS_MODE: "stripe", STRIPE_SECRET_KEY: "rk_test_x", STRIPE_WEBHOOK_SECRET: "whsec_test_x" })),
     ).toBeInstanceOf(StripeCreditCheckout);
   });
 });

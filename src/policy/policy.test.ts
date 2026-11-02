@@ -36,6 +36,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     expect(DEFAULT_POLICY.maxConcurrentDecomposeJobs).toBe(2);
     expect(DEFAULT_POLICY.samMinConfidence).toBe(0);
     expect(DEFAULT_POLICY.dailyBudgetUsd).toBe(5);
+    expect(DEFAULT_POLICY.hourlyBudgetUsd).toBe(0);
     expect(DEFAULT_POLICY.dailyCallLimit).toBe(500);
     expect(DEFAULT_POLICY.pinsPerScene).toEqual({ min: 1, max: 4 });
     expect(DEFAULT_POLICY.boardPollIntervalMs).toBe(5_000);
@@ -363,6 +364,12 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
 
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
     expect(resolvePolicy({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBe(0);
+  });
+
+  it("hourlyBudgetUsd defaults off (0) and honours overrides (PIN-240)", () => {
+    expect(resolvePolicy({}).hourlyBudgetUsd).toBe(0);
+    expect(resolvePolicy({ hourlyBudgetUsd: 15 }).hourlyBudgetUsd).toBe(15);
+    expect(resolvePolicy({ hourlyBudgetUsd: 0 }).hourlyBudgetUsd).toBe(0);
   });
 
   it("rejects inverted ranges and unknown faces mode", () => {

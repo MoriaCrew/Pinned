@@ -285,6 +285,10 @@ host-only but answers every failure with the uniform 404
 ## Data
 
 - `Board.plus?: { plan, source: "mock" | "stripe", grantedAt } | null`.
+- `Board.plusRevocation?: { purchaseId, reason, disputeId?,
+  revokedPlus, revokedAt } | null` (PIN-242): the tombstone a
+  revocation leaves (below), server-only. Absent or `null` means
+  nothing was revoked (or a win/new purchase cleared it).
   Absent or `null` means a free board; every reader is null-safe.
 - `Board.host?: { tokenHash, issuedAt } | null`: server-only.
 - Skin and Plus are written only through
@@ -723,6 +727,35 @@ and dispute lifecycle pages):
   dead-letters `plus_grant_unavailable`, re-runnable once
   fixed. A `stripe` grant counts in every `PLUS_MODE`, `off`
   included.
+- **Plus revocation (PIN-242).** Plus follows its purchase's
+  money, mirroring the makes claw: once the makes clawback has
+  landed, the webhook clears `Board.plus`
+  (`decidePlusRevocation`) when a purchase is taken all the way
+  back — the money taken back on it (cumulative settled refunds
+  plus lost disputes, `takenBackEurCents`) reaching the pack
+  price; partial refunds and partial losses never. The event
+  that gets there claws the remainder and names the reason
+  (`full_refund`, or `dispute_lost` with its dispute id) — and
+  leaves a `Board.plusRevocation` tombstone with the removed
+  grant. If another granted purchase on the board is still live
+  (its take-back below its price, even with its makes clawed
+  after a won-after-lost dispute), Plus stays: it grants it too. A
+  `source: "mock"` grant is never touched by a Stripe event, a
+  purchase clawed all the way back before its grant landed
+  never grants Plus at all, and a lost dispute won or reinstated
+  after all gives its money back: its cents and makes leave the
+  take-back (`reinstateFinalDispute`; the claim stays, so a
+  redelivered `lost` or `funds_withdrawn` claws nothing), and once
+  the take-back is below the price `decidePlusRestore` (the
+  freeze/restore mirror) brings the tombstoned grant back,
+  whichever refund or lost dispute completed it. A new purchase
+  meanwhile supersedes it, and the makes half of a reinstate
+  after the final claw still dead-letters for an operator as
+  before (those makes stay clawed; later refunds claw from their
+  own cents). It runs on the duplicate paths too, so a crash
+  between claw and revoke (propagated, Stripe retries) is
+  repaired by the next delivery; with no board repository an
+  actually-due revoke dead-letters `plus_revoke_unavailable`.
 - `async_payment_failed` + `expired` are the terminal
   events: they close the intent and its ledger purchase,
   never grant; a purchase the ledger refuses to close (e.g.
@@ -745,7 +778,7 @@ and dispute lifecycle pages):
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
-  | `closed` `lost` | the one final clawback (floor), then restore the ceil excess |
+  | `closed` `lost` | the one final clawback (cumulative floor, below), then restore the ceil excess |
 
   Funds reinstated after a final clawback cannot be
   un-clawed by the ledger, so that case dead-letters as
@@ -768,12 +801,19 @@ the board's Policy pack by lookup key, and dead-letter
 Money -> makes (one documented formula): for a pack of
 `credits` makes at `eurCents`, clawbacks use
 `min(credits, floor(cents * credits / eurCents))` on the
-CUMULATIVE settled-EUR amount - the intent stores cumulative
-refunded EUR cents + makes already clawed for refunds, and
-each refund claws the difference, so partial refunds sum to
-exactly the pack with no rounding drift. Dispute freezes use
-the same ratio with `ceil` (round up protects the pool; the
-excess over the final floor amount is restored by the
+CUMULATIVE settled-EUR amount taken back - the intent stores
+refunded EUR cents and each lost dispute's EUR cents (PIN-242)
+plus the makes already clawed for both (a lost dispute later won
+or reinstated drops out of both figures), and each succeeded
+refund or `lost` close claws the difference, so any mix of
+partial refunds and lost disputes sums to exactly the pack
+once the money reaches `eurCents`, with no per-event rounding
+drift. At 20 makes for 299: refund 150 claws 10 and a lost
+149 dispute then claws the last 10 (per-event floors would
+stop at 19); refund 100 + lost 100 is 200 cents, 13 in all.
+Dispute freezes use the same ratio with `ceil` on the
+disputed amount (round up protects the pool and always
+covers the cumulative delta; the excess is restored by the
 `lost` close that claws).
 Foreign-presentment refund/dispute amounts are never
 FX-guessed: settled EUR comes from the reported
@@ -789,8 +829,9 @@ or a missing one, dead-letters `fx_unverifiable` (PIN-181).
 Refund
 counting is atomic in the intent store (`countRefund`
 prices the delta from the stored cumulative inside the
-write), and a dispute's final clawback is claimed
-atomically by the `lost` close, so a re-delivery or a
+write), and a dispute's final clawback is claimed and priced
+the same way by the `lost` close
+(`countFinalDisputeClawback`), so a re-delivery or a
 `funds_withdrawn` after it, in any order, never claws
 twice. When none of that reads as EUR the
 event dead-letters (`fx_unverifiable`).
@@ -811,13 +852,14 @@ again keeps the one record) - reasons include
 `unknown_purchase`, `unknown_mapping` (refund/dispute for a
 charge we never mapped), `mapping_conflict`,
 `freeze_no_available`, `ledger_refused`, `fx_unverifiable`,
-`reinstated_after_final_clawback` and `plus_grant_unavailable`
+`reinstated_after_final_clawback`, `plus_grant_unavailable` and
+`plus_revoke_unavailable` (PIN-242)
 (PIN-181: makes granted, Plus not written). Records carry ids
 only - no payloads, no secrets. Plus is sold only inside the
 pack (PIN-181); a separate host plan stays unbuilt: the draft
 `pinneds_host_monthly` price is seeded only (PIN-146).
-Refunds and disputes claw back makes but do **not** revoke
-Plus in v1 (follow-up below).
+Refunds and disputes claw back makes and, when a purchase is
+taken all the way back, revoke its Plus too (PIN-242 above).
 
 ## Pool debit on makes (PIN-151)
 
@@ -1207,6 +1249,112 @@ pending request in the Dashboard): agents only ever
 demonstrate the gate and report the pending request, they do
 not chase approval.
 
+**Scheduled reconciliation + dead-letter alerting (PIN-243).**
+The script is automation-ready, in three output modes. Human mode
+(operator terminal) keeps the lines above and ends with one
+parseable `RECONCILIATION_JSON:{...}` line. `--json` sends the
+human lines to stderr and prints only the full payload
+(`{stripe, project, summary, report}`) on stdout — operator
+terminal only, since the report carries ids. `--summary-only` is
+the public-log mode: stdout is only `{stripe, project, summary}`,
+stderr only the aggregate `billing reconciliation …`, `SUMMARY …`
+and `refunds-disputes …` lines, and an error prints the Stripe
+status and code, never Stripe's message. No session,
+payment-intent or checkout-intent id, board hash or timestamp is
+printed: a checkout-intent id is a board link
+(`/billing/return?intent=<id>` redirects to the board). The
+summary (`summarizeBillingReconciliation` in
+`src/domain/billing-reconciliation.ts`, mirrored in the script;
+counts and booleans only, pinned by tests) carries
+`paidNoGrantCount`, `grantNoPaymentCount`, `deadLetterTotal`,
+`pendingPastTtlCount`, `anomalyCount`, `clean`, and
+`needsAttention` — true exactly when paid-no-grant > 0 or
+`deadLetterTotal > 0`, the alert condition. Exit stays 1 for any
+non-clean report (a superset of the alert condition) or a runtime
+error, 0 clean, 2 usage/config.
+
+`.github/workflows/billing-reconciliation.yml` runs it with
+`--summary-only` daily (06:17 UTC; GitHub runs the cron from the
+default branch, `main`) and on `workflow_dispatch`. The repo is
+public, so its log and step summary are too: the step summary is
+the heading `## Billing reconciliation (<env>) — exit <code>` and
+the summary JSON only. For the rows behind a red run, run the
+script in an operator terminal (command above). The job runs in
+GitHub Environment `reconcile-dev` or `reconcile-prod`: the
+dispatch input picks it, else repository variable
+`PINNED_RECONCILE_ENV` (`prod` selects `reconcile-prod`; unset or
+anything else is `reconcile-dev`; keep it unset until go-live). It
+authenticates to Google Cloud by Workload Identity Federation — no
+service-account key exists anywhere — and installs dependencies
+with `npm ci --ignore-scripts` before that auth step, so no
+install-time code runs next to a credential. Every action is
+pinned to a full commit SHA.
+
+Operator setup (never by an agent; values are placeholders, never
+paste them into issues, PRs or logs):
+
+1. **Environments.** Settings → Environments: create
+   `reconcile-dev` and `reconcile-prod`. Restrict `reconcile-prod`
+   deployment branches to `main` only (`reconcile-dev`: `main` and
+   `dev`). No required reviewers — they would hold the cron.
+2. **Per environment** (not at repository level): secret
+   `PINNED_RECONCILE_STRIPE_READ_KEY` (restricted read key:
+   `rk_test_` in dev, `rk_live_` in prod; Checkout Sessions: Read,
+   plus Refunds/Disputes: Read for the counts below), variable
+   `PINNED_RECONCILE_WIF_PROVIDER`
+   (`projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/providers/<PROVIDER_ID>`)
+   and variable `PINNED_RECONCILE_SERVICE_ACCOUNT`
+   (`<SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com`). Until all
+   three exist the run succeeds as a documented skip with a
+   warning.
+3. **Google Cloud, once per project** (`moriacrew-pinned-dev` for
+   `reconcile-dev`, `moriacrew-pinned-prod` for `reconcile-prod`):
+   a workload identity pool with a GitHub OIDC provider whose
+   attribute condition pins the repository (prod also pins
+   `refs/heads/main`), a dedicated service account with
+   `roles/datastore.viewer` only, and `roles/iam.workloadIdentityUser`
+   on that account for this repository's principal set only.
+
+```
+P=<PROJECT_ID> N=<PROJECT_NUMBER> POOL=<POOL_ID> PROVIDER=<PROVIDER_ID> SA=<SA_NAME>
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com --project "$P"
+gcloud iam workload-identity-pools create "$POOL" --project "$P" --location global \
+  --display-name "GitHub Actions billing reconciliation"
+gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" --project "$P" \
+  --location global --workload-identity-pool "$POOL" \
+  --issuer-uri "https://token.actions.githubusercontent.com" \
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment" \
+  --attribute-condition 'assertion.repository == "MoriaCrew/Pinned" && assertion.environment == "reconcile-dev"'
+# prod instead: --attribute-condition 'assertion.repository == "MoriaCrew/Pinned" && assertion.ref == "refs/heads/main" && assertion.environment == "reconcile-prod"'
+gcloud iam service-accounts create "$SA" --project "$P" \
+  --display-name "Billing reconciliation (read-only)"
+gcloud projects add-iam-policy-binding "$P" \
+  --member "serviceAccount:$SA@$P.iam.gserviceaccount.com" \
+  --role roles/datastore.viewer --condition=None
+gcloud iam service-accounts add-iam-policy-binding "$SA@$P.iam.gserviceaccount.com" \
+  --project "$P" --role roles/iam.workloadIdentityUser \
+  --member "principalSet://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/$POOL/attribute.repository/MoriaCrew/Pinned"
+```
+
+`<PROJECT_NUMBER>` comes from
+`gcloud projects describe "$P" --format="value(projectNumber)"`.
+Once enabled, a non-clean report or an error fails the run and
+lands in the step summary — that failed run is the dead-letter
+alert, so watch Actions notifications for the workflow and drain
+dead letters per the runbook above before calling a billing change
+done. Never paste secret values into the workflow, issues or PRs.
+
+**Refunds/disputes visibility (PIN-243).** Each run also lists
+Stripe refunds and disputes from the last 30 days
+(`refundsLast30Days`, `disputesLast30Days`, `openDisputes` in the
+summary; informational only — a refund is not an anomaly and
+never changes the exit code). The restricted read key in the
+PIN-210 table has only Checkout Sessions: Read, so until an
+operator adds Refunds: Read + Disputes: Read to that key the run
+prints `refunds-disputes unavailable...` and the counts are
+absent: then check Stripe Dashboard → Payments (refunds) and
+Payments → Disputes on the same daily cadence instead.
+
 **Dev webhook endpoint.** `npm run billing:webhook-endpoint`
 (`scripts/ensure-stripe-webhook-endpoint.mjs`, dry-run unless
 `--apply`; pure plan in `src/billing/webhook-endpoint.ts`)
@@ -1262,7 +1410,11 @@ scripts default to sandbox. A live run needs a live key **and**
 `--live --i-understand-live`, touches only `moriacrew-pinned-prod`
 and `https://pinneds.com/api/billing/stripe/webhook`, and prints
 ids, never keys or secrets (`scripts/stripe/operator-mode.mjs`).
-Operator machine only, never CI or a cloud agent.
+Operator machine only, never CI or a cloud agent, with one
+exception: the scheduled **read-only** reconciliation (PIN-243,
+"Scheduled reconciliation" above) runs in GitHub Actions with a
+restricted read key and keyless Firestore access, and prints counts
+only. Nothing that writes to Stripe or Secret Manager ever runs in CI.
 
 **Prerequisites (operator gates).** Stripe account activated for
 live payments (business details, bank account, statement
@@ -1314,8 +1466,10 @@ missing permission: add read on that one resource only.
 2. **The prod switch** is a separate config-only PR (PIN-210, "turn
    on live billing on prod"). It adds one block to
    `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
-   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":5}}`
-   (the dev backend ignores that file). Merge it only after step 4.
+   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":20}}`
+   (judging-week value, Robin Nov 2: 20 free creations per new board,
+   back to 5 after judging; the dev backend ignores that file). Merge
+   it only after step 4.
    If that happens before the freeze, it rides promotion #2. If not,
    run a config-only promotion as soon as step 4 is done, even during
    judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
@@ -1323,7 +1477,8 @@ missing permission: add read on that one resource only.
 
 **Smoke after the rollout.** `GET https://pinneds.com/api/health`
 shows `plusMode: "stripe"`; a webhook POST with a bad
-`Stripe-Signature` answers 400; a new board shows 5 creations.
+`Stripe-Signature` answers 400; a new board shows 20 creations
+(the judging-week `starterMakes`).
 Robin buys the €2.99 pack **on the demo board** with a real card
 and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
 board, and this makes it a paying customer's board). Checkout says
@@ -1331,8 +1486,8 @@ board, and this makes it a paying customer's board). Checkout says
 creations, and the endpoint's delivery in Workbench is 200. Refund
 check, on a throwaway board: buy the pack again, then refund it in
 the Dashboard (Payments → the payment → Refund, full). The refund
-events claw back the 20 creations; the board keeps Plus (see
-Follow-ups). Then
+events claw back the 20 creations and revoke the board's Plus
+(PIN-242). Then
 `node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
 exits 0 (`clean=true`), and the setup key is deleted.
 
@@ -1343,6 +1498,63 @@ session grants once billing is back, or refund it). The pool
 stays on; `"enabled":false` in the override stops it too.
 Stopping for good: disable the endpoint in Workbench.
 
+**Go-live ops runbook (PIN-243; operator Dashboard steps —
+documented here, never executed by an agent).** Run in order
+around the prod-switch merge above; this is Checklist B of
+`docs/security-review-2026-11-01.md` made executable:
+
+1. **Prove the webhook-secret pairing (dev first).** After the
+   dev rollout, Stripe Dashboard (test mode) → Developers →
+   Webhooks → the `dev.pinneds.com` endpoint → "Send test event"
+   (`checkout.session.completed`): the delivery must be **200**,
+   not 400 (bad signature — Secret Manager
+   `STRIPE_WEBHOOK_SECRET` does not pair with the endpoint; roll
+   the secret in Workbench and re-store it, PIN-153 section) and
+   not 503 (billing off / config fail-closed; check
+   `GET /api/health` `plusMode` and the PIN-243/§F6 pairing +
+   livemode guards). Repeat against the live endpoint after the
+   prod rollout. Only this test delivery (or the live smoke
+   below) proves the pairing — Stripe never returns the secret.
+2. **Check delivery history for accumulated 503s.** Same endpoint
+   page → delivery history: during the billing-off era the prod
+   webhook answered 503, so look for a backlog of failed/pending
+   deliveries. Stripe retries for up to three days; resend only
+   events for real paid sessions once pairing is proven, and let
+   test/noise deliveries expire. A fresh run of non-2xx after
+   go-live means grants are not landing — stop and reconcile.
+3. **Live EUR 2.99 buy + refund smoke.** The "Smoke after the
+   rollout" paragraph above, unchanged: buy the pack on the demo
+   board with a real card and keep it; buy again on a throwaway
+   board and refund in full in the Dashboard (Payments → the
+   payment → Refund); confirm the 20 creations claw back, the
+   endpoint delivery is 200, and the live reconcile command there
+   exits 0 (`clean=true`, `needsAttention=false`). Since PIN-242 (stacked below) note the changed behaviour:
+   a full refund also revokes Plus - confirm that here too.
+4. **Rollback rehearsal.** Set `PLUS_MODE=off` in
+   `apphosting.prod.yaml` and roll out `main` (Rollback paragraph
+   above): buying answers "unavailable", the webhook 503s and
+   Stripe retries paid sessions for up to three days, so
+   re-enabling grants them (or refund in the Dashboard). Time the
+   rollout once before relying on it; disabling the endpoint in
+   Workbench is the stop-for-good switch.
+5. **Turn the schedule on.** In the `reconcile-prod` GitHub
+   Environment (deployment branches: `main` only), add secret
+   `PINNED_RECONCILE_STRIPE_READ_KEY` (the live restricted read
+   key) and variables `PINNED_RECONCILE_WIF_PROVIDER` and
+   `PINNED_RECONCILE_SERVICE_ACCOUNT`, after running the
+   PIN-243 section's `gcloud` commands against
+   `moriacrew-pinned-prod` with the prod attribute condition
+   (`assertion.repository == "MoriaCrew/Pinned" && assertion.ref == "refs/heads/main" && assertion.environment == "reconcile-prod"`),
+   a dedicated service account with `roles/datastore.viewer`
+   only, and the `roles/iam.workloadIdentityUser` binding scoped
+   to `attribute.repository/MoriaCrew/Pinned`. No service-account
+   key. Set repository variable `PINNED_RECONCILE_ENV=prod` only
+   now, run the workflow once by hand from `main`
+   (`workflow_dispatch`, environment `prod`), and confirm a green
+   run whose step summary shows only the `{stripe, project, summary}`
+   JSON (no ids) before trusting the daily cron as the
+   dead-letter alert.
+
 ## Follow-ups
 
 - Host hand-off / re-issue (and sign-in linking, above).
@@ -1350,9 +1562,6 @@ Stopping for good: disable the endpoint in Workbench.
   shared in-process `checkRateLimit`, a soft limit per instance.
 - Adopt `request-guards.ts` on the other state-changing routes.
 - UI behaviour for a Plus skin whose grant stopped counting.
-- PIN-181: revoke (or keep, by decision) Plus when a purchase is
-  fully refunded or a dispute is lost. v1 claws back the makes
-  only; the board keeps its `stripe` grant.
 - PIN-181 UI slice: the one-purchase sheet, "creations" copy and
   the removal of `plus.priceLabels` landed in PIN-182; the
   indicator's thresholds, the out-of-creations invitation, Board
@@ -1406,6 +1615,15 @@ Stopping for good: disable the endpoint in Workbench.
   no call, live/sandbox dry-runs only read, live apply pipes the
   signing secret into prod over stdin and mirrors IAM there) and
   the live-mode cases in `src/billing/catalog.test.ts`.
+- PIN-243: `src/domain/billing-reconciliation.test.ts` (summary is
+  counts and booleans only; the workflow runs `--summary-only` in
+  `reconcile-dev`/`reconcile-prod` with keyless WIF, installs with
+  `--ignore-scripts` before auth, pins every action to a SHA) and
+  `src/billing/stripe-operator-mode.test.ts` (`--summary-only` on a
+  fixture with every anomaly kind prints only
+  `{stripe, project, summary}` plus three aggregate lines, matches
+  the domain summary, and a Stripe error prints status and code,
+  never the message).
 - PIN-178: `src/server/stripe-webhook.test.ts` (paid at 30:30,
   after the return redirect, after a cap check expired the
   intent, async success two days later all grant; paid after
