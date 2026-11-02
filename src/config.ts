@@ -192,6 +192,36 @@ function parseTrustedHops(value: string | undefined): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
+/** Stripe key mode from its prefix class; null when unrecognized. */
+function stripeKeyLivemode(key: string | null): boolean | null {
+  const match = /^(?:sk|rk|pk)_(live|test)_/.exec(key ?? "");
+  return match ? match[1] === "live" : null;
+}
+
+/**
+ * PLUS_MODE parsing (security review): "stripe" only when the
+ * backend can both take and fulfil a payment - a secret key AND
+ * the webhook signing secret - so a key-without-webhook-secret
+ * backend cannot sell packs it can never grant. When
+ * STRIPE_EXPECTED_LIVEMODE is set ("live"/"test", per backend in
+ * apphosting yaml), the key's mode must match it (an unrecognized
+ * key prefix also fails); without it the parse is unchanged.
+ */
+function parsePlusMode(
+  env: Readonly<Record<string, string | undefined>>,
+): PlusMode {
+  if (env.PLUS_MODE === "mock") return "mock";
+  if (env.PLUS_MODE !== "stripe") return "off";
+  const key = nonEmpty(env.STRIPE_SECRET_KEY);
+  if (!key || !nonEmpty(env.STRIPE_WEBHOOK_SECRET)) return "off";
+  const expected = nonEmpty(env.STRIPE_EXPECTED_LIVEMODE);
+  if (expected !== null) {
+    if (expected !== "live" && expected !== "test") return "off";
+    if (stripeKeyLivemode(key) !== (expected === "live")) return "off";
+  }
+  return "stripe";
+}
+
 /** A plain header name, lower-cased, or null (PIN-112). */
 function parseHeaderName(value: string | undefined): string | null {
   const trimmed = nonEmpty(value)?.toLowerCase() ?? null;
@@ -254,12 +284,7 @@ export function parseConfig(
     }),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
     legalContactEmail: parseContactEmail(env.LEGAL_CONTACT_EMAIL),
-    plusMode:
-      env.PLUS_MODE === "mock"
-        ? "mock"
-        : env.PLUS_MODE === "stripe" && nonEmpty(env.STRIPE_SECRET_KEY)
-          ? "stripe"
-          : "off",
+    plusMode: parsePlusMode(env),
     stripeSecretKey: nonEmpty(env.STRIPE_SECRET_KEY),
     stripeWebhookSecret: nonEmpty(env.STRIPE_WEBHOOK_SECRET),
     stripeApiVersion: STRIPE_API_VERSION,
