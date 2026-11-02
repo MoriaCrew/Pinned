@@ -19,8 +19,9 @@ All three caps are enforced atomically before every provider
 call (reserve in `src/gateway/budget.ts`, one Firestore counter
 doc per UTC day; the in-memory backend matches). A denied
 reserve means no provider call: scenes fall back to an honest
-collage, photo uploads say the AI budget is used up, and the
-denial is logged as a `denied_*` AiCallLog row.
+collage, photo uploads say today's (or, for `hourly_budget`, this
+hour's) AI budget is used up, and the denial is logged as a
+`denied_*` AiCallLog row.
 
 | Cap | Env | Dev | Prod (judging week) | Denial |
 | --- | --- | --- | --- | --- |

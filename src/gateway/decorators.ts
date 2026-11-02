@@ -112,7 +112,7 @@ function deniedOutcome<T>(reason: ReserveDenyReason | "budget_unavailable"): Por
     off: t("en", "ai.budgetOff"),
     call_limit: t("en", "ai.budgetExhausted"),
     budget: t("en", "ai.budgetExhausted"),
-    hourly_budget: t("en", "ai.budgetExhausted"),
+    hourly_budget: t("en", "ai.budgetHourly"),
     participant_cap: t("en", "ai.participantCap"),
     board_cap: t("en", "ai.boardCap"),
     photo_cap: t("en", "ai.photoCap"),
