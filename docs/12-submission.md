@@ -22,6 +22,13 @@ and the overnight prototype (the older 170 s storyboard is in git
 history); §7 adds the event's rules and judging brief with sources;
 §8 maps the submission form's fields.
 
+Nov 2 refresh (PIN-248): every "how it was built" claim now cites
+[`build-log.md`](build-log.md), which backs it with PR numbers and
+dates and marks what the record does not show. §3 counts re-run on
+`dev` at `a90cd7b`; §1 adds the build line and the in-app `/models`
+page; §5 records the F6/F7 pass; §6 adds "Who built it?"; §8 holds
+answers drafted to paste. Re-run §3 at the freeze commit.
+
 ## 1. One-page pitch
 
 **Pinneds Studio — your stuff, pinned together.**
@@ -51,7 +58,17 @@ Voice) and one at build time (Muse Spark Open, which translated
 the UI) each do the job they are best at (see §6), behind one
 typed Policy object and a fail-closed budget decorator, so the
 demo that ships is also the system that is safe to hand to
-family.
+family. The app explains its own models, with one real example,
+at [pinneds.com/models](https://pinneds.com/models).
+
+How it was built (Oct 26 – Nov 4): one developer steering coding
+agents, one issue per pull request. Meta's **Muse Code** set up
+Firebase and App Hosting, wired in the Meta models, built the
+Studio core overnight (29 PRs, running Muse Wonder Full) and built
+the Stripe billing. **Claude Code** rebuilt the UI on the design
+system, added the languages, refined the billing and carried the
+app to prod. **Cursor Bugbot** reviewed every PR. Each claim, with
+PR numbers and dates: [`build-log.md`](build-log.md).
 
 ### Links block (fill in at submit time — do not commit real values)
 
@@ -61,6 +78,8 @@ family.
 | Deployed product (prod) | https://pinneds.com (live from Nov 1; `<PROD_URL>` below means this) |
 | Demo board (from the PIN-81 tracker entry; never commit) | `<DEMO_BOARD_URL from Linear>` |
 | Pitch video (~3 min, §2) | `<VIDEO_URL>` |
+| How the app uses Meta's models (in the app, on prod since promotion #2, Nov 2) | https://pinneds.com/models |
+| Build log: who built what, with PR numbers | https://github.com/MoriaCrew/Pinned/blob/main/docs/build-log.md (on `main` only after the next promotion; use `blob/dev/…` until then) |
 | Dev backend (live models; the only live demo before Nov 1) | https://dev.pinneds.com |
 
 Notes for whoever fills this in:
@@ -110,6 +129,13 @@ Rules for every cut:
 - **Synthetic people and things only.** The cast and the photos
   of their things are generated; no real faces, no board link on
   screen, no slug in any file name or log.
+- **Build claims only as [`build-log.md`](build-log.md) backs
+  them.** Muse Code: the setup (Firebase, App Hosting), the Meta
+  model wiring, the overnight Studio core and the Stripe billing.
+  Muse Wonder Full for the overnight run rests on the operator's
+  statement. Claude Code refined parts and carried the app to
+  prod; Cursor Bugbot reviewed every PR. No line may imply that one
+  agent built everything.
 
 ### Prototype (Nov 1)
 
@@ -172,8 +198,10 @@ synthetic images.
 | Cost per photo (T5, **estimate**) | **≈ $0.020**/photo (bar ≤ $0.05). SAM bills one image per concept call (`usage.images_processed=1`); provider dashboard is authoritative | `eval/studio-findings.md` (T5); `docs/11` §8 |
 | Cost per scene (T5, **estimate**) | **≈ $0.01**/scene (bar ≤ $0.10). Meta's published Muse Image price is a flat $0.01 per generated image, whatever the tokens; the PIN-50 spike had priced tokens at Spark rates (≈ $0.022). Provider dashboard is authoritative | `src/gateway/costs.ts`; `docs/16-ai-usage.md`; `eval/studio-findings.md` (T5) |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
-| Automated tests | **1,507 passed / 2 skipped** (133 files), `AI_MOCK=1`, as of Oct 31, 2026 on `dev` (tip `f010eb7`). **Recount at freeze**; CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
-| Pull requests | **203 merged** (212 opened) as of Nov 1, 2026 — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
+| Automated tests | **1,879 passed / 3 skipped** (165 files, one of them skipped), `AI_MOCK=1`, as of Nov 2, 2026 on `dev` (tip `a90cd7b`). **Recount at freeze**; CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
+| Pull requests | **215 merged** (225 opened), including 3 promotions to `main`, as of Nov 2, 2026, 19:20 UTC — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
+| Review gate | All 215 merged PRs have a Cursor Bugbot check run on their final commit (209 clean, 6 neutral); Bugbot opened 241 review threads on 85 of them; CI and gitleaks passed on all 215 (as of Nov 2) | GitHub check runs; [`build-log.md`](build-log.md) §7 |
+| Who built what | Muse Code: 98 merged PRs from its working copy only (setup, Meta model wiring, the 29-PR overnight core, the 9 Stripe PRs, sign-in, security fixes). Claude Code: 106. Both: 6. Promotions: 3. Not shown: 2 (as of Nov 2) | [`build-log.md`](build-log.md) |
 | Repo public | `MoriaCrew/Pinned`, visibility PUBLIC, AGPL-3.0 | `gh repo view` (Oct 29); `LICENSE`, `README.md` |
 | UI languages | Six translated by Muse Spark Open plus a reviewer pass; first pass **$0.98** in total. No native-speaker review yet | `docs/18-i18n.md` ("Costs", "Who reviewed what") |
 | Usage (people / pins / scenes) | Not a fixed number — captured fresh per §4 on record and submit days | `scripts/usage-report.mjs` (`npm run usage:report`) |
@@ -255,8 +283,8 @@ approves.
 | F3 | Prod promotion: `dev` → `main`/prod per the hosting setup, then a real end-to-end play on `<PROD_URL>` (create board → pin → scene → remix → share → delete) | Robin + Agent (Robin owns promotion/approval; agent must never push `main`/prod itself) | `<PROD_URL>` plays the full loop with live models; `/api/health` answers |
 | F4 | Demo board seeded on the submit host (`npm run seed:demo`; slug recorded privately, `DEMO_BOARD_SLUG` set in host env if the landing demo link is wanted) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board |
 | F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2: code default $5 / 500 calls, dev the same; prod $50 / 10,000 during judging per Robin, Oct 31, see `docs/DEPLOY.md`; verify the live values, do not assume) | Robin | Live values checked in the hosting env and matching A2 |
-| F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners | Agent | Packet matches freeze-commit reality |
-| F7 | Known-v1-limits honesty pass on `README.md` + this file (1-day `tmp/` lifecycle backstop applied vs the app-side delete, cost-estimate labelling, optional sign-in scope, non-Meta Higgsfield assets disclosed) | Agent | No claim in the packet or README that the code doesn't back |
+| F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners. Nov 2 (PIN-248): re-run on `dev` `a90cd7b`; run again at the freeze commit | Agent | Packet matches freeze-commit reality |
+| F7 | Known-v1-limits honesty pass on `README.md` + this file (1-day `tmp/` lifecycle backstop applied vs the app-side delete, cost-estimate labelling, optional sign-in scope, non-Meta Higgsfield assets disclosed). Nov 2 (PIN-248): lifecycle, estimate labels and Higgsfield disclosure checked; §6 sign-in scope corrected (optional on prod too); build claims now cite `build-log.md`. Open: the `/models` "Built with Meta tools" line names only Muse Code (PIN-249, operator's call before freeze) | Agent | No claim in the packet or README that the code doesn't back |
 
 ### Video (Nov 3–4)
 
@@ -303,9 +331,10 @@ Only people with the link. Slugs are 128-bit base64url
 any data path is built; there is no board directory and no
 listing API — even our own usage report must be handed the
 slugs (§4). Identity on a board is a signed participant
-cookie. Optional Google sign-in (`AUTH_MODE=optional`, live
-on dev; PIN-57, `docs/13-auth.md`) links a participant to a
-user library but never replaces the link: the slug is still
+cookie. Optional Google sign-in (`AUTH_MODE=optional` on dev
+and prod, `apphosting.*.yaml`; PIN-57, `docs/13-auth.md`) links
+a participant to a user library but never replaces the link:
+the slug is still
 required to reach any board, and My boards lists only boards
 the user already joined by link. Board pages are `noindex`.
 
@@ -383,6 +412,20 @@ landing cut-outs). The newer showcase sets were made end to
 end with Muse Image and this app (`docs/17`,
 `public/landing/README.md`).
 
+**"Who built it, and what was built during the event?"**
+One developer, Oct 26 – Nov 4, steering coding agents one Linear
+issue per PR. Meta's Muse Code did the setup (Firebase, App
+Hosting), the Meta model wiring, the Studio core overnight (#43–#71,
+Oct 28 14:56 → Oct 29 06:26 ET, running Muse Wonder Full per the
+operator) and the Stripe billing (#117–#132). Claude Code rebuilt
+the UI, added the languages, refined the billing and carried the
+app to prod. Cursor Bugbot reviewed every PR and wrote no code.
+All code was written during the event: the first five commits,
+before the 12:00 ET kickoff, hold only the licence, planning docs
+and scanner setup (§7). [`build-log.md`](build-log.md) lists every
+merged PR with its merge time and agent, and marks the two PRs the
+record cannot attribute.
+
 **"What breaks / what's next?"**
 SAM returns no match for some named things (those simply
 don't become pins; tap-to-add is the workaround). The
@@ -424,7 +467,8 @@ Risks for Pinneds and how we answer them:
    10:43–11:40 ET) came before the 12:00 ET kickoff and hold only
    the licence, planning docs and secret-scanner configuration; the
    app scaffold landed at 15:09 ET. Say so in the README and in one
-   line of the video.
+   line of the video. [`build-log.md`](build-log.md) lists every
+   merged PR with its merge time and the agent that built it.
 2. **The product must hold up live.** A judge's new board gets the
    free tier; the demo board holds a fixed number of AI scenes once
    Plus is bought; judges behind one shared office address share the
@@ -432,7 +476,9 @@ Risks for Pinneds and how we answer them:
    board's headroom for judging week before Nov 4.
 3. **Claims must match the repo.** Four Meta models at runtime and
    one at build time; Muse Code is a coding agent, not a model in
-   the product; cost figures are estimates.
+   the product; cost figures are estimates. Who built what follows
+   [`build-log.md`](build-log.md); Muse Wonder Full for the
+   overnight run rests on the operator's statement.
 4. **Rights.** Music needs licence evidence; generated story media
    keeps its job ids (cost log in the video repository); no real faces; no board link in any
    frame.
@@ -457,3 +503,79 @@ Starred fields are required.
 | Partner technology feedback | Baseten (Muse Spark Open for the UI translations) |
 | Survey items (Meta Model API, Muse Code, obstacles, comparisons) | the submitter's own answers |
 | Consent checkbox (use, publish, share …) | read in full before ticking |
+
+### Drafted answers (Nov 2; fill the placeholders, then paste)
+
+Field limits were not visible when the form was read; trim from
+the end of each answer if one is enforced. Re-check every number
+against §3 on submit day.
+
+**Track:** Indie Developer Track. **Problem statement:** Build for
+Your World. **Repository:** https://github.com/MoriaCrew/Pinned.
+**Video:** `<VIDEO_URL>`.
+
+**Project Description**
+
+> Pinneds turns a group chat's photos of real things into a shared
+> toy. Start a board and send the link: no app, no sign-up. Anyone
+> adds a photo; Muse Spark names the things in it and SAM 3.1 cuts
+> each one out as a pin with its owner's name. Pick 1–4 pins from
+> anyone, then type, tap or say an idea (Muse Voice Transcribe), and
+> Muse Image composes a new scene that credits whose things are in
+> it. Anyone can remix a scene, and owners can take their things
+> back. The UI speaks seven languages, translated at build time by
+> Muse Spark Open.
+>
+> Try it: https://pinneds.com. Demo board: `<DEMO_BOARD_URL from
+> Linear>`. How each Meta model is used, with one real example:
+> https://pinneds.com/models.
+>
+> Built Oct 26 – Nov 4 by one developer steering coding agents, one
+> issue per pull request: Meta's Muse Code did the setup, the Meta
+> model wiring, the overnight Studio core (running Muse Wonder Full)
+> and the Stripe billing; Claude Code refined it and carried it to
+> prod; Cursor Bugbot reviewed every PR. Who built what, PR by PR:
+> `<BUILD_LOG_URL>` (§1 links block).
+
+**Use of Meta products to build the project**
+
+> At runtime, four Meta models through the Meta Model API, each
+> behind a typed port with a fail-closed budget: Muse Spark names
+> the things in a photo, names a piece you tap and suggests scene
+> ideas in your language; SAM 3.1 cuts out each named or tapped
+> thing; Muse Image composes 1–4 cut-outs into one credited scene
+> and remixes scenes (store: false); Muse Voice Transcribe turns a
+> spoken idea into text, and the audio is never stored. At build
+> time: Muse Spark Open on Baseten translated and reviewed the UI
+> into six languages; Muse Image made the source photos of two
+> landing showcase sets; and Muse Code, Meta's coding agent, built
+> the setup, the Meta model integration, the overnight Studio core
+> (on Muse Wonder Full) and the Stripe billing. Details:
+> docs/19-meta-models.md and docs/build-log.md in the repo.
+
+**Why Meta's models are important**
+
+> Each model does the job the product is built around. Muse Spark
+> names things as short noun phrases that SAM can cut, which is
+> naming for segmentation, not captioning, plus face flags and idea
+> chips. SAM 3.1 takes both a concept ("the brass lamp") and a point
+> (a tap) in one port: that pair is the pin interaction. Muse Image
+> composes several reference images into one new scene where
+> friends' real things stay recognisable (4.86 / 5 fidelity in our
+> eval), and store: false keeps remix stateless. Muse Voice
+> Transcribe turns a spoken idea into the prompt without storing
+> audio. Without multi-reference composition and promptable
+> segmentation, "your friends' actual things, remixed together,
+> credited" would not exist.
+
+**Partner technology feedback (Baseten)** — facts to build the
+submitter's own answer on: Muse Spark Open
+(`meta-models/muse-spark-open-1026`) on Baseten ran only at build
+time, through `scripts/i18n-translate.mjs`: a translation pass and
+a reviewer pass for six languages, $0.98 for the first pass in
+total (`docs/18-i18n.md`). The opinion part is the submitter's.
+
+**Survey items** — the submitter's own answers. Facts for the Muse
+Code question: 98 of the 215 merged PRs came from its working copy
+only, including the 29-PR overnight Studio core and the 9 Stripe
+PRs (as of Nov 2; `build-log.md`).
