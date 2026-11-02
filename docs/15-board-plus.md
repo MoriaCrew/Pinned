@@ -1410,7 +1410,11 @@ scripts default to sandbox. A live run needs a live key **and**
 `--live --i-understand-live`, touches only `moriacrew-pinned-prod`
 and `https://pinneds.com/api/billing/stripe/webhook`, and prints
 ids, never keys or secrets (`scripts/stripe/operator-mode.mjs`).
-Operator machine only, never CI or a cloud agent.
+Operator machine only, never CI or a cloud agent, with one
+exception: the scheduled **read-only** reconciliation (PIN-243,
+"Scheduled reconciliation" above) runs in GitHub Actions with a
+restricted read key and keyless Firestore access, and prints counts
+only. Nothing that writes to Stripe or Secret Manager ever runs in CI.
 
 **Prerequisites (operator gates).** Stripe account activated for
 live payments (business details, bank account, statement
