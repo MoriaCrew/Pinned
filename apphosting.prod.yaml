@@ -73,6 +73,16 @@ env:
   # (prerendered pages) and RUNTIME: a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
+  # PIN-73/PIN-246: the judges' demo board is a normal prod board (the
+  # one recorded for the submission video). The landing page shows its
+  # "demo" button only while this is set (read at RUNTIME). The secret
+  # exists in moriacrew-pinned-prod with access for pinned-web (set
+  # 2026-11-02); the backup board's slug is kept outside git. Never
+  # post the board link publicly (docs/DEPLOY.md §6.3, §8).
+  - variable: DEMO_BOARD_SLUG
+    secret: DEMO_BOARD_SLUG
+    availability:
+      - RUNTIME
   # PIN-210: live billing (merge only after the operator confirms both live secrets exist in prod Secret Manager)
   # Sells the Board Plus pack (EUR 2.99: Plus + 20 creations) through
   # LIVE Stripe Checkout; grants land by webhook only. A referenced
