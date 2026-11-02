@@ -59,6 +59,8 @@ export const PolicySchema = z
     segmentsPerParticipantPerDay: z.number().int().min(0).default(150),
     /** Tap-name (Spark crop pass) cap (PIN-117): one call per successful tap-add, counted in its own budget counter — never against photosPerParticipantPerDay. 100 covers the legit worst case (20 photos x up to 5 tap-adds) while failing/refusing names still consume the reservation, so a tap-loop cannot burn Spark spend unbounded. */
     tapNamesPerParticipantPerDay: z.number().int().min(0).default(100),
+    /** Scene-chips (Spark) cap (PIN-241): one call per cache-missed chips request, counted in its own budget counter like tapNamesPerParticipantPerDay — cache hits never reach the port, so only generated calls count. 100/day at the $0.0051 chips reserve bounds one participant's chips spend to ~$0.51/day while staying far above legit use (scenes cap at 10/day and repeats are cache-served). */
+    chipsPerParticipantPerDay: z.number().int().min(0).default(100),
     /** Dictation caps (PIN-119): one Muse Voice file-transcription call per dictation, counted in its own budget counter. 30s of mono 16-bit 16kHz WAV is ~960KB, so the 1MiB byte cap and the seconds cap agree; audio is never persisted. 50/day at <=30s is <=25 audio-minutes (~$0.08 at list) worst case. */
     dictationsPerParticipantPerDay: z.number().int().min(0).default(50),
     dictationMaxSeconds: z.number().positive().default(30),
@@ -84,6 +86,10 @@ export const PolicySchema = z
     elementLabelMaxChars: z.number().int().min(1).default(60),
     /** JSON body cap of the element rename PATCH (PIN-156); read from the env-level Policy before any board read. */
     elementRenameMaxBytes: z.number().int().min(1).default(1024),
+    /** JSON body caps for the scene/chips/tap-add POSTs (PIN-241), each read from the env-level Policy before any board read like elementRenameMaxBytes. Sized from the payloads: a scene is <=4 pin ids + a scenePromptMaxChars prompt (+ optional ids), chips is <=4 pin ids, tap-add is one {x, y} point. */
+    sceneRequestMaxBytes: z.number().int().min(1).default(4096),
+    chipsRequestMaxBytes: z.number().int().min(1).default(2048),
+    tapAddMaxBytes: z.number().int().min(1).default(1024),
     participantCookieDays: z.number().int().min(1).default(30),
     /** Reclaim-PIN brute-force lockout (PIN-90): failed attempts per
      * (board, name) and per (board, IP) counted in the board store
@@ -406,6 +412,7 @@ export const PolicyOverridesSchema = z.object({
   segmentsPerPhoto: z.number().int().min(0).optional(),
   segmentsPerParticipantPerDay: z.number().int().min(0).optional(),
   tapNamesPerParticipantPerDay: z.number().int().min(0).optional(),
+  chipsPerParticipantPerDay: z.number().int().min(0).optional(),
   dictationsPerParticipantPerDay: z.number().int().min(0).optional(),
   dictationMaxSeconds: z.number().positive().optional(),
   dictationMaxBytes: z.number().int().min(1).optional(),
@@ -425,6 +432,9 @@ export const PolicyOverridesSchema = z.object({
   displayNameMaxChars: z.number().int().min(1).optional(),
   elementLabelMaxChars: z.number().int().min(1).optional(),
   elementRenameMaxBytes: z.number().int().min(1).optional(),
+  sceneRequestMaxBytes: z.number().int().min(1).optional(),
+  chipsRequestMaxBytes: z.number().int().min(1).optional(),
+  tapAddMaxBytes: z.number().int().min(1).optional(),
   participantCookieDays: z.number().int().min(1).optional(),
   reclaimMaxFailuresPerName: z.number().int().min(1).optional(),
   reclaimMaxFailuresPerIp: z.number().int().min(1).optional(),

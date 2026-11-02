@@ -89,6 +89,8 @@ interface CallMeta {
   boardCap?: number;
   /** PIN-117: TapNamer-only per-participant cap (own counter). */
   participantTapNameCap?: number;
+  /** PIN-241: ChipSuggester-only per-participant cap (own counter). */
+  participantChipsCap?: number;
   /** PIN-119: SpeechTranscriber-only cap + clip seconds for pricing. */
   participantTranscriptionCap?: number;
   audioSeconds?: number;
@@ -261,6 +263,7 @@ async function runDecorated<T>(
         boardCap: boardId ? meta.boardCap : undefined,
         participantSegmentCap: participantId ? meta.participantSegmentCap : undefined,
         participantTapNameCap: participantId ? meta.participantTapNameCap : undefined,
+        participantChipsCap: participantId ? meta.participantChipsCap : undefined,
         participantTranscriptionCap: participantId ? meta.participantTranscriptionCap : undefined,
         photoId,
         photoCap: photoId ? meta.photoCap : undefined,
@@ -434,6 +437,7 @@ export function decoratePorts(
             boardId: input.boardId,
             participantId: input.participantId,
             userIdAtCall: input.userIdAtCall,
+            participantChipsCap: policy.chipsPerParticipantPerDay,
           },
           () => suggester.suggestChips(input),
         ),

@@ -3,9 +3,9 @@ import { getConfig } from "../../../../config";
 import { getModelGateway } from "../../../../gateway";
 import {
   createMetaLogSink,
-  getTodayAiUsage,
-  isAiBudgetExhausted,
+  reserveSamLabBudget,
 } from "../../../../server/ai-usage";
+import { getBudgetStore } from "../../../../server/budget-store";
 import { MAX_PHOTO_BYTES, PhotoIntakeError } from "../../../../server/photo-intake";
 import { getPolicy } from "../../../../policy/server";
 import { getGameRepository } from "../../../../server/repository";
@@ -84,8 +84,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     const mock = cfg.aiMock;
     if (!cfg.aiMock) {
-      const usage = await getTodayAiUsage(repository);
-      if (isAiBudgetExhausted(usage, cfg)) {
+      // PIN-241: reserve atomically against the same BudgetStore
+      // counter Studio traffic uses (fail closed on deny or store
+      // error), replacing the racy scan-based pre-check. The lab's
+      // raw ModelGateway shape cannot use the decorated ports, so
+      // reserveSamLabBudget is the smallest correct seam.
+      const reserved = await reserveSamLabBudget(
+        getBudgetStore(),
+        getPolicy(),
+        { autoLabel: input.mode === "concept" && !!input.autoLabel },
+      );
+      if (!reserved) {
         return NextResponse.json(
           { error: "Daily AI guard reached on this environment. Lab is paused." },
           { status: 429, headers: JSON_HEADERS },
@@ -104,7 +113,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     console.error("sam lab failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Lab run failed." },
+      { error: "Lab run failed." },
       { status: 500, headers: JSON_HEADERS },
     );
   }
