@@ -25,6 +25,7 @@ export default async function TermsPage() {
   const locale = await getLocale();
   const cfg = getConfig();
   const pack = getPolicy().credits.packs[0];
+  const takedown = plural(getPolicy().takedownHours, "hour");
   return (
     <LegalShell locale={locale} title={t(locale, "legal.termsTitle")} current="terms">
       <LegalSection id="about" title="About these terms">
@@ -130,6 +131,21 @@ export default async function TermsPage() {
 
       <LegalSection id="law" title="Governing law">
         <p>These terms are governed by the laws of the country where Moria Crew is established.</p>
+      </LegalSection>
+
+      <LegalSection id="report" title="Reporting abuse and takedowns">
+        <ul>
+          <li>
+            To report illegal or abusive content, use &quot;Report this board&quot; at the foot of the board page
+            or email us at the contact address below. The report carries a board reference, never the board
+            link itself.
+          </li>
+          <li>
+            When a report shows content breaking these terms or the law, we remove it within {takedown} of
+            confirming it. The same address is our abuse contact for anything urgent.
+          </li>
+          <li>Please describe what to look at in words; never attach or forward illegal images.</li>
+        </ul>
       </LegalSection>
 
       <ContactSection email={cfg.legalContactEmail} />
