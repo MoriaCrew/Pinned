@@ -285,6 +285,10 @@ host-only but answers every failure with the uniform 404
 ## Data
 
 - `Board.plus?: { plan, source: "mock" | "stripe", grantedAt } | null`.
+- `Board.plusRevocation?: { purchaseId, reason, disputeId?,
+  revokedPlus, revokedAt } | null` (PIN-242): the tombstone a
+  revocation leaves (below), server-only. Absent or `null` means
+  nothing was revoked (or a win/new purchase cleared it).
   Absent or `null` means a free board; every reader is null-safe.
 - `Board.host?: { tokenHash, issuedAt } | null`: server-only.
 - Skin and Plus are written only through
@@ -723,6 +727,35 @@ and dispute lifecycle pages):
   dead-letters `plus_grant_unavailable`, re-runnable once
   fixed. A `stripe` grant counts in every `PLUS_MODE`, `off`
   included.
+- **Plus revocation (PIN-242).** Plus follows its purchase's
+  money, mirroring the makes claw: once the makes clawback has
+  landed, the webhook clears `Board.plus`
+  (`decidePlusRevocation`) when a purchase is taken all the way
+  back — the money taken back on it (cumulative settled refunds
+  plus lost disputes, `takenBackEurCents`) reaching the pack
+  price; partial refunds and partial losses never. The event
+  that gets there claws the remainder and names the reason
+  (`full_refund`, or `dispute_lost` with its dispute id) — and
+  leaves a `Board.plusRevocation` tombstone with the removed
+  grant. If another granted purchase on the board is still live
+  (its take-back below its price, even with its makes clawed
+  after a won-after-lost dispute), Plus stays: it grants it too. A
+  `source: "mock"` grant is never touched by a Stripe event, a
+  purchase clawed all the way back before its grant landed
+  never grants Plus at all, and a lost dispute won or reinstated
+  after all gives its money back: its cents and makes leave the
+  take-back (`reinstateFinalDispute`; the claim stays, so a
+  redelivered `lost` or `funds_withdrawn` claws nothing), and once
+  the take-back is below the price `decidePlusRestore` (the
+  freeze/restore mirror) brings the tombstoned grant back,
+  whichever refund or lost dispute completed it. A new purchase
+  meanwhile supersedes it, and the makes half of a reinstate
+  after the final claw still dead-letters for an operator as
+  before (those makes stay clawed; later refunds claw from their
+  own cents). It runs on the duplicate paths too, so a crash
+  between claw and revoke (propagated, Stripe retries) is
+  repaired by the next delivery; with no board repository an
+  actually-due revoke dead-letters `plus_revoke_unavailable`.
 - `async_payment_failed` + `expired` are the terminal
   events: they close the intent and its ledger purchase,
   never grant; a purchase the ledger refuses to close (e.g.
@@ -745,7 +778,7 @@ and dispute lifecycle pages):
   | `funds_withdrawn` | keep the freeze, or establish it if `created` was missed; after a `lost` claim, only completes that one claw |
   | `funds_reinstated` | restore the freeze |
   | `closed` `won` / `warning_closed` | restore the freeze (a no-op after `funds_reinstated`) |
-  | `closed` `lost` | the one final clawback (floor), then restore the ceil excess |
+  | `closed` `lost` | the one final clawback (cumulative floor, below), then restore the ceil excess |
 
   Funds reinstated after a final clawback cannot be
   un-clawed by the ledger, so that case dead-letters as
@@ -768,12 +801,19 @@ the board's Policy pack by lookup key, and dead-letter
 Money -> makes (one documented formula): for a pack of
 `credits` makes at `eurCents`, clawbacks use
 `min(credits, floor(cents * credits / eurCents))` on the
-CUMULATIVE settled-EUR amount - the intent stores cumulative
-refunded EUR cents + makes already clawed for refunds, and
-each refund claws the difference, so partial refunds sum to
-exactly the pack with no rounding drift. Dispute freezes use
-the same ratio with `ceil` (round up protects the pool; the
-excess over the final floor amount is restored by the
+CUMULATIVE settled-EUR amount taken back - the intent stores
+refunded EUR cents and each lost dispute's EUR cents (PIN-242)
+plus the makes already clawed for both (a lost dispute later won
+or reinstated drops out of both figures), and each succeeded
+refund or `lost` close claws the difference, so any mix of
+partial refunds and lost disputes sums to exactly the pack
+once the money reaches `eurCents`, with no per-event rounding
+drift. At 20 makes for 299: refund 150 claws 10 and a lost
+149 dispute then claws the last 10 (per-event floors would
+stop at 19); refund 100 + lost 100 is 200 cents, 13 in all.
+Dispute freezes use the same ratio with `ceil` on the
+disputed amount (round up protects the pool and always
+covers the cumulative delta; the excess is restored by the
 `lost` close that claws).
 Foreign-presentment refund/dispute amounts are never
 FX-guessed: settled EUR comes from the reported
@@ -789,8 +829,9 @@ or a missing one, dead-letters `fx_unverifiable` (PIN-181).
 Refund
 counting is atomic in the intent store (`countRefund`
 prices the delta from the stored cumulative inside the
-write), and a dispute's final clawback is claimed
-atomically by the `lost` close, so a re-delivery or a
+write), and a dispute's final clawback is claimed and priced
+the same way by the `lost` close
+(`countFinalDisputeClawback`), so a re-delivery or a
 `funds_withdrawn` after it, in any order, never claws
 twice. When none of that reads as EUR the
 event dead-letters (`fx_unverifiable`).
@@ -811,13 +852,14 @@ again keeps the one record) - reasons include
 `unknown_purchase`, `unknown_mapping` (refund/dispute for a
 charge we never mapped), `mapping_conflict`,
 `freeze_no_available`, `ledger_refused`, `fx_unverifiable`,
-`reinstated_after_final_clawback` and `plus_grant_unavailable`
+`reinstated_after_final_clawback`, `plus_grant_unavailable` and
+`plus_revoke_unavailable` (PIN-242)
 (PIN-181: makes granted, Plus not written). Records carry ids
 only - no payloads, no secrets. Plus is sold only inside the
 pack (PIN-181); a separate host plan stays unbuilt: the draft
 `pinneds_host_monthly` price is seeded only (PIN-146).
-Refunds and disputes claw back makes but do **not** revoke
-Plus in v1 (follow-up below).
+Refunds and disputes claw back makes and, when a purchase is
+taken all the way back, revoke its Plus too (PIN-242 above).
 
 ## Pool debit on makes (PIN-151)
 
@@ -1331,8 +1373,8 @@ board, and this makes it a paying customer's board). Checkout says
 creations, and the endpoint's delivery in Workbench is 200. Refund
 check, on a throwaway board: buy the pack again, then refund it in
 the Dashboard (Payments → the payment → Refund, full). The refund
-events claw back the 20 creations; the board keeps Plus (see
-Follow-ups). Then
+events claw back the 20 creations and revoke the board's Plus
+(PIN-242). Then
 `node --env-file=.env.local scripts/billing-reconciliation.mjs --env-var STRIPE_PINNED_PROD_READ_KEY --live --i-understand-live --project "$P"`
 exits 0 (`clean=true`), and the setup key is deleted.
 
@@ -1350,9 +1392,6 @@ Stopping for good: disable the endpoint in Workbench.
   shared in-process `checkRateLimit`, a soft limit per instance.
 - Adopt `request-guards.ts` on the other state-changing routes.
 - UI behaviour for a Plus skin whose grant stopped counting.
-- PIN-181: revoke (or keep, by decision) Plus when a purchase is
-  fully refunded or a dispute is lost. v1 claws back the makes
-  only; the board keeps its `stripe` grant.
 - PIN-181 UI slice: the one-purchase sheet, "creations" copy and
   the removal of `plus.priceLabels` landed in PIN-182; the
   indicator's thresholds, the out-of-creations invitation, Board

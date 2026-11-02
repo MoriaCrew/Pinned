@@ -12,7 +12,7 @@
  */
 import type { PolicyOverrides } from "../policy/policy";
 import type { BoardThemeTokens } from "./board-themes";
-import type { BoardPlus } from "./plus";
+import type { BoardPlus, BoardPlusRevocation } from "./plus";
 
 /** Mask bounding box, normalized 0..1 against the source frame
  * (the gateway port convention, ports.ts SegmentPrompt). The
@@ -61,6 +61,8 @@ export interface Board {
   policyOverrides?: PolicyOverrides;
   /** Board Plus entitlement (PIN-103); absent or null = free board. */
   plus?: BoardPlus | null;
+  /** Tombstone of a revoked paid grant (PIN-242); server-only, never in a response. Absent or null = nothing revoked. */
+  plusRevocation?: BoardPlusRevocation | null;
   /** Host credential (PIN-103); server-only, never in a response. */
   host?: BoardHost | null;
   /**
