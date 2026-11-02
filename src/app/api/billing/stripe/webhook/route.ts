@@ -35,6 +35,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const config = getConfig();
   const rawBody = await request.text();
+  // The declared-length check above trusts the header; enforce
+  // the same cap on the bytes actually read (chunked/lying
+  // senders) before anything touches the signature check.
+  if (new TextEncoder().encode(rawBody).length > getPolicy().credits.webhookMaxBytes) {
+    return NextResponse.json({ error: "body_too_large" }, { status: 413 });
+  }
   const signature = request.headers.get("stripe-signature");
   try {
     await handleStripeWebhook(rawBody, signature, {
