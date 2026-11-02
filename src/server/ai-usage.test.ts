@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryGameRepository } from "../domain/repository";
+import { InMemoryBudgetStore, type BudgetStore } from "../gateway/budget";
+import { DEFAULT_POLICY } from "../policy/policy";
 import {
   createMetaLogSink,
   estimateMetaCostUsd,
   getTodayAiUsage,
   isAiBudgetExhausted,
+  reserveSamLabBudget,
 } from "./ai-usage";
 
 describe("AI usage guardrails", () => {
@@ -74,5 +77,43 @@ describe("AI usage guardrails", () => {
     expect(usage.deniedCount).toBe(1);
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 1 })).toBe(true);
     expect(isAiBudgetExhausted(usage, { aiDailyBudgetUsd: 2, aiDailyCallLimit: 2 })).toBe(false);
+  });
+});
+describe("reserveSamLabBudget (PIN-241)", () => {
+  const now = Date.UTC(2026, 9, 27, 12, 0, 0);
+  const day = "2026-10-27";
+
+  it("reserves one SAM call, or Spark + SAM when auto-labelling, in the shared counter", async () => {
+    const store = new InMemoryBudgetStore();
+    expect(await reserveSamLabBudget(store, DEFAULT_POLICY, { autoLabel: false }, now)).toBe(true);
+    expect(store.snapshot(day).calls).toBe(1);
+    expect(store.snapshot(day).reservedMicroUsd).toBe(2500); // one SAM image
+    expect(await reserveSamLabBudget(store, DEFAULT_POLICY, { autoLabel: true }, now)).toBe(true);
+    const snap = store.snapshot(day);
+    expect(snap.calls).toBe(3);
+    // + Spark elements reserve (4000 output tokens) + SAM.
+    expect(snap.reservedMicroUsd).toBe(2500 + 17_000 + 2500);
+  });
+
+  it("denies once the shared daily call limit is hit (Studio spend counts too)", async () => {
+    const store = new InMemoryBudgetStore();
+    const policy = { ...DEFAULT_POLICY, dailyCallLimit: 2 };
+    expect(await reserveSamLabBudget(store, policy, { autoLabel: true }, now)).toBe(true);
+    expect(await reserveSamLabBudget(store, policy, { autoLabel: false }, now)).toBe(false);
+    expect(store.snapshot(day).calls).toBe(2); // denied reserve wrote nothing
+  });
+
+  it("fails closed on a budget of 0 and on a throwing store", async () => {
+    const store = new InMemoryBudgetStore();
+    expect(
+      await reserveSamLabBudget(store, { ...DEFAULT_POLICY, dailyBudgetUsd: 0 }, { autoLabel: false }, now),
+    ).toBe(false);
+    expect(store.snapshot(day).calls).toBe(0);
+    const broken: BudgetStore = {
+      async reserve() {
+        throw new Error("firestore unavailable");
+      },
+    };
+    expect(await reserveSamLabBudget(broken, DEFAULT_POLICY, { autoLabel: false }, now)).toBe(false);
   });
 });

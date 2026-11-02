@@ -267,10 +267,10 @@ export async function runSamLab(
         includeConfidence: input.includeConfidence,
       });
     } catch (cause) {
-      throw new SamLabError(
-        `SAM call failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        502,
-      );
+      // PIN-241: provider error text stays server-side; the lab
+      // response carries a generic line, never the raw message.
+      console.error("sam lab SAM call failed", cause);
+      throw new SamLabError("SAM call failed.", 502);
     }
     decoded = raw.segments
       .slice(0, MAX_SEGMENTS_RENDERED)

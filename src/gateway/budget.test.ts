@@ -41,6 +41,7 @@ describe("evaluateReserve (PIN-61)", () => {
       boards: {},
       participantSegments: {},
       participantTapNames: {},
+      participantChips: {},
       participantTranscriptions: {},
       hourBucket: "",
       hourReservedMicroUsd: 0,
@@ -155,6 +156,37 @@ describe("tap-name caps (PIN-117)", () => {
     expect(snap.participantPhotos).toEqual({});
     expect(snap.participantSegments).toEqual({});
     expect(snap.participantTapNames).toEqual({ p1: 2 });
+  });
+});
+
+describe("chips caps (PIN-241)", () => {
+  it("evaluateReserve denies on the chips cap, independently of other quotas", () => {
+    const state = { ...emptyBudgetDay(), participantChips: { p1: 100 } };
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantChipsCap: 100 })),
+    ).toMatchObject({ ok: false, reason: "participant_cap" });
+    expect(
+      evaluateReserve(state, req({ participantId: "p2", participantChipsCap: 100 })).ok,
+    ).toBe(true);
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantPhotoCap: 20 })).ok,
+    ).toBe(true);
+    expect(
+      evaluateReserve(state, req({ participantId: "p1", participantTapNameCap: 100 })).ok,
+    ).toBe(true);
+  });
+
+  it("store counts chips in their own counter", async () => {
+    const store = new InMemoryBudgetStore();
+    const chips = req({ participantId: "p1", participantChipsCap: 2 });
+    expect((await store.reserve(chips)).ok).toBe(true);
+    expect((await store.reserve(chips)).ok).toBe(true);
+    expect(await store.reserve(chips)).toEqual({ ok: false, reason: "participant_cap" });
+    const snap = store.snapshot(DAY);
+    expect(snap.calls).toBe(2);
+    expect(snap.participantPhotos).toEqual({});
+    expect(snap.participantTapNames).toEqual({});
+    expect(snap.participantChips).toEqual({ p1: 2 });
   });
 });
 
@@ -290,6 +322,7 @@ describe("InMemoryBudgetStore (PIN-61)", () => {
       boards: { b1: 1 },
       participantSegments: {},
       participantTapNames: {},
+      participantChips: {},
       participantTranscriptions: {},
       hourBucket: "",
       hourReservedMicroUsd: 0,

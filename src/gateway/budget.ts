@@ -34,6 +34,8 @@ export interface BudgetDayState {
   participantSegments: Record<string, number>;
   /** TapNamer-only per-participant counts (PIN-117): kept apart from `participantPhotos` exactly like participantSegments, so tap naming neither consumes nor is masked by the photos-per-day budget. */
   participantTapNames: Record<string, number>;
+  /** ChipSuggester-only per-participant counts (PIN-241): kept apart exactly like participantTapNames. */
+  participantChips: Record<string, number>;
   /** SpeechTranscriber-only per-participant counts (PIN-119): kept apart exactly like participantTapNames. */
   participantTranscriptions: Record<string, number>;
   /** PIN-240: current UTC hour bucket tracked in this day doc; "" = none yet / legacy doc. */
@@ -45,7 +47,7 @@ export interface BudgetDayState {
 }
 
 export function emptyBudgetDay(): BudgetDayState {
-  return { calls: 0, reservedMicroUsd: 0, participantPhotos: {}, participantScenes: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantTranscriptions: {}, hourBucket: "", hourReservedMicroUsd: 0, photos: {} };
+  return { calls: 0, reservedMicroUsd: 0, participantPhotos: {}, participantScenes: {}, boards: {}, participantSegments: {}, participantTapNames: {}, participantChips: {}, participantTranscriptions: {}, hourBucket: "", hourReservedMicroUsd: 0, photos: {} };
 }
 
 export interface ReserveRequest {
@@ -70,6 +72,8 @@ export interface ReserveRequest {
   participantSegmentCap?: number;
   /** TapNamer-only daily cap for participantId (PIN-117), counted in `participantTapNames`, not `participantPhotos`. */
   participantTapNameCap?: number;
+  /** ChipSuggester-only daily cap for participantId (PIN-241), counted in `participantChips`. */
+  participantChipsCap?: number;
   /** SpeechTranscriber-only daily cap for participantId (PIN-119), counted in `participantTranscriptions`. */
   participantTranscriptionCap?: number;
   /** Photo (job) id + Policy segmentsPerPhoto cap (PIN-92). */
@@ -155,6 +159,11 @@ export function evaluateReserve(
       return { ok: false, reason: "participant_cap" };
     }
   }
+  if (request.participantId && request.participantChipsCap !== undefined) {
+    if ((state.participantChips[request.participantId] ?? 0) >= request.participantChipsCap) {
+      return { ok: false, reason: "participant_cap" };
+    }
+  }
   return { ok: true, estimatedMicroUsd };
 }
 
@@ -172,6 +181,7 @@ export function applyReserve(
     boards: { ...state.boards },
     participantSegments: { ...state.participantSegments },
     participantTapNames: { ...state.participantTapNames },
+    participantChips: { ...state.participantChips },
     participantTranscriptions: { ...state.participantTranscriptions },
     hourBucket: request.hourBucket ?? state.hourBucket,
     hourReservedMicroUsd: !request.hourBucket
@@ -206,6 +216,10 @@ export function applyReserve(
   if (request.participantId && request.participantTranscriptionCap !== undefined) {
     next.participantTranscriptions[request.participantId] =
       (next.participantTranscriptions[request.participantId] ?? 0) + 1;
+  }
+  if (request.participantId && request.participantChipsCap !== undefined) {
+    next.participantChips[request.participantId] =
+      (next.participantChips[request.participantId] ?? 0) + 1;
   }
   return next;
 }

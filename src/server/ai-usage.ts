@@ -6,16 +6,19 @@ import "server-only";
  *
  * PIN-61: pricing moved to src/gateway/costs.ts and the day bucket
  * to src/gateway/budget.ts (re-exported here for existing callers).
- * The scan-based guard below now serves only the operator SAM lab
- * (PIN-93 deleted the legacy ModelGateway routes); Studio traffic
- * uses the decorated ports' atomic counter (src/gateway/budget.ts).
+ * Studio traffic uses the decorated ports' atomic counter
+ * (src/gateway/budget.ts). PIN-241: the operator SAM lab reserves
+ * against that same atomic counter via reserveSamLabBudget below
+ * (its raw ModelGateway shape cannot go through the decorated
+ * ports); the scan-based summary remains for usage reporting only
+ * and no longer gates any spend.
  */
 import { randomUUID } from "node:crypto";
 import type { GameRepository } from "../domain/repository";
 import { aiCallCostUsdEst, isDeniedOutcome, type AiCallLog } from "../domain/types";
-import { DEFAULT_POLICY } from "../policy/policy";
-import { dayBucketFor } from "../gateway/budget";
-import { estimateMetaCostUsd } from "../gateway/costs";
+import { DEFAULT_POLICY, type Policy } from "../policy/policy";
+import { dayBucketFor, hourBucketFor, type BudgetStore } from "../gateway/budget";
+import { estimateMetaCostUsd, estimateReserveUsd } from "../gateway/costs";
 import type { MetaCallLog } from "../gateway/meta-gateway";
 
 export { dayBucketFor, estimateMetaCostUsd };
@@ -85,4 +88,50 @@ export function createMetaLogSink(
       expireAt: createdAt + retentionDays * 86_400_000,
     });
   };
+}
+/**
+ * Atomic budget reserve for one SAM lab run (PIN-241). The lab
+ * calls the raw ModelGateway (segmentObject, plus nameObject when
+ * auto-labelling), whose shape the decorated capability ports do
+ * not expose, so the route reserves here instead: one reserve per
+ * provider call the run will make, priced with the same estimates
+ * the decorator uses, against the same BudgetStore counter Studio
+ * traffic uses. Both reserves land before any provider call, so a
+ * denied or erroring reserve means no spend (fail closed) and
+ * concurrent lab runs cannot race past the daily cap the way the
+ * old scan-based pre-check could.
+ */
+export async function reserveSamLabBudget(
+  budget: BudgetStore,
+  policy: Pick<Policy, "dailyBudgetUsd" | "dailyCallLimit" | "hourlyBudgetUsd" | "maxTokens">,
+  opts: { autoLabel: boolean },
+  now: number = Date.now(),
+): Promise<boolean> {
+  const dayBucket = dayBucketFor(now);
+  const reserveLimits = {
+    sparkElementsMaxTokens: policy.maxTokens.sparkElements,
+    sparkChipsMaxTokens: policy.maxTokens.sparkChips,
+    sparkTapNameMaxTokens: policy.maxTokens.sparkTapName,
+  };
+  const operations = opts.autoLabel
+    ? (["nameElements", "segment"] as const)
+    : (["segment"] as const);
+  try {
+    for (const operation of operations) {
+      const result = await budget.reserve({
+        dayBucket,
+        estimatedCostUsd: estimateReserveUsd(operation, reserveLimits),
+        budgetUsd: policy.dailyBudgetUsd,
+        // Stacked on PIN-240: lab spend counts toward the hourly
+        // sub-cap too, exactly like decorated Studio reserves.
+        hourBucket: hourBucketFor(now),
+        hourlyBudgetUsd: policy.hourlyBudgetUsd,
+        callLimit: policy.dailyCallLimit,
+      });
+      if (!result.ok) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }

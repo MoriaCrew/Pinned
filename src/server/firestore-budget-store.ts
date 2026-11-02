@@ -47,6 +47,7 @@ function stateFrom(data: DocumentData | undefined): BudgetDayState {
     boards: numRecord(data.boards),
     participantSegments: numRecord(data.participantSegments),
     participantTapNames: numRecord(data.participantTapNames),
+    participantChips: numRecord(data.participantChips),
     participantTranscriptions: numRecord(data.participantTranscriptions),
     // PIN-240: legacy day docs have no hour fields; "" / 0 = no hour tracked yet.
     hourBucket: typeof data.hourBucket === "string" ? data.hourBucket : "",
@@ -112,6 +113,10 @@ export class FirestoreBudgetStore implements BudgetStore {
           updates.hourBucket = request.hourBucket;
           updates.hourReservedMicroUsd = result.estimatedMicroUsd;
         }
+      }
+      if (request.participantId && request.participantChipsCap !== undefined) {
+        updates[`participantChips.${request.participantId}`] =
+          FieldValue.increment(1);
       }
       transaction.update(ref, updates);
       return result;
