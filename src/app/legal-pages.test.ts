@@ -60,6 +60,14 @@ describe("privacy page (PIN-26)", () => {
     expect(await privacy()).toContain(`href="${SOURCE_URL}"`);
   });
 
+  it("says reported content may be kept and shared with authorities (PIN-239)", async () => {
+    const page = text(await privacy());
+    expect(page).toContain(
+      "When content is reported to us, we may keep it while we handle the report, even after it is deleted from the board, and share it with the competent authorities where the law requires.",
+    );
+    expect(page).not.toMatch(/zero (data )?retention/i);
+  });
+
   it("takes every duration from Policy, none from a literal", async () => {
     state.policy = resolvePolicy({
       workingCopyTtlHours: 7,
