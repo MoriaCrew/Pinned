@@ -24,6 +24,8 @@ type InputProps = { type?: string; accept?: string; capture?: string; multiple?:
 describe("add-photo pick actions (PIN-118)", () => {
   it("renders Take photo with the camera capture and Choose photo without it", () => {
     const out = renderToStaticMarkup(h(PhotoPick, { onFiles: noop }));
+    // Upload consent (PIN-239) sits at the pick step, before any file is chosen.
+    expect(out).toContain("Only upload photos you have permission to share. Anyone with this board&#x27;s link can see them.");
     expect(out).toContain("Take photo");
     expect(out).toContain("Choose photo");
     expect(out.match(/type="file"/g)).toHaveLength(2);

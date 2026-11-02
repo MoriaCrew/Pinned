@@ -81,6 +81,7 @@ import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { DeleteBoardSheet } from "./DeleteBoardSheet";
 import { isPoolEmptyCode, parseBillingFlag, poolEmptyCopy, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesIndicator, useMakesFlow } from "./MakesFlow";
+import { ReportBoardLink } from "./ReportBoard";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
@@ -210,6 +211,8 @@ export function BoardClient({
   tryOnSkin = null,
   initialSceneId = null,
   initialBilling = null,
+  legalContactEmail = null,
+  reportRef = null,
 }: {
   slug: string;
   initialView: BoardClientView;
@@ -220,6 +223,10 @@ export function BoardClient({
   initialSceneId?: string | null;
   /** `?billing=` from the billing return (PIN-152); validated in the makes flow. */
   initialBilling?: string | string[] | null;
+  /** PIN-239: the legal contact for "Report this board"; null points at /terms#contact. */
+  legalContactEmail?: string | null;
+  /** PIN-239: opaque board reference for reports (never the slug); absent hides the link. */
+  reportRef?: string | null;
 }) {
   const [queryClient] = useState(
     () =>
@@ -229,7 +236,7 @@ export function BoardClient({
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} initialSceneId={initialSceneId} initialBilling={initialBilling} />
+      <BoardBody slug={slug} initialView={initialView} policy={policy} tryOnSkin={tryOnSkin} initialSceneId={initialSceneId} initialBilling={initialBilling} legalContactEmail={legalContactEmail} reportRef={reportRef} />
     </QueryClientProvider>
   );
 }
@@ -241,6 +248,8 @@ function BoardBody({
   tryOnSkin,
   initialSceneId,
   initialBilling,
+  legalContactEmail,
+  reportRef,
 }: {
   slug: string;
   initialView: BoardClientView;
@@ -248,6 +257,8 @@ function BoardBody({
   tryOnSkin: SkinId | null;
   initialSceneId: string | null;
   initialBilling: string | string[] | null;
+  legalContactEmail: string | null;
+  reportRef: string | null;
 }) {
   const locale = useLocale();
   const queryClient = useQueryClient();
@@ -1561,6 +1572,7 @@ function BoardBody({
           aboveDock={showDock}
           picking={pickingNow}
         />
+        <ReportBoardLink email={legalContactEmail} reportRef={reportRef} />
       </main>
       {viewerSlot ? (
         <SceneViewer

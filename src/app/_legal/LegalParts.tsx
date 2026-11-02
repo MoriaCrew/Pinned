@@ -14,7 +14,7 @@ import { Wordmark } from "../../ui";
 export const SOURCE_URL = "https://github.com/MoriaCrew/Pinned";
 export const ISSUES_URL = `${SOURCE_URL}/issues`;
 /** Date shown under the title; change it whenever the text changes (history lives in git). */
-export const LEGAL_UPDATED = "31 October 2026";
+export const LEGAL_UPDATED = "1 November 2026";
 
 /** "1 day" / "30 days": the English body's own plural. */
 export function plural(n: number, unit: string): string {

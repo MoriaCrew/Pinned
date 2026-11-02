@@ -189,6 +189,7 @@ describe("terms page (PIN-26)", () => {
       "Open source",
       "Changes",
       "Governing law",
+      "Reporting abuse and takedowns",
       "Contact",
     ]) {
       expect(page).toContain(heading);
@@ -215,6 +216,19 @@ describe("terms page (PIN-26)", () => {
     expect(await terms()).toContain('<a href="#contact">contact us</a>');
     expect(page).toContain("the creations it added are taken off the board in proportion to the refund");
     expect(page).toContain("those creations are on hold until the dispute ends");
+  });
+
+  it("promises the Policy takedown time and names the abuse contact (PIN-239)", async () => {
+    state.cfg = { ...state.cfg, legalContactEmail: "contact@example.com" };
+    const page = text(await terms());
+    expect(page).toContain("we remove it within 24 hours of confirming it");
+    expect(page).toContain("The same address is our abuse contact");
+    expect(page).toContain("never attach or forward illegal images");
+    expect(await terms()).toContain('href="mailto:contact@example.com"');
+    // The number is Policy's, never a literal.
+    state.policy = resolvePolicy({ takedownHours: 5 });
+    expect(text(await terms())).toContain("within 5 hours");
+    expect(text(await terms())).not.toContain("within 24 hours");
   });
 
   it("follows PLUS_MODE: not on sale when off, a demo note when mock", async () => {
