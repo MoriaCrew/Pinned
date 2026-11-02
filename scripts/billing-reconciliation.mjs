@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * PIN-153 billing reconciliation (operator-run, read-only; never
+ * PIN-153 billing reconciliation (read-only; PIN-243: also the
+ * scheduled workflow .github/workflows/billing-reconciliation.yml).
  * CI). Joins paid Stripe Checkout Sessions (read-only listing
  * with the runtime key) against Firestore ledger purchases,
  * checkout intents and PIN-150 dead letters, and reports:
@@ -113,6 +114,30 @@ function buildBillingReconciliationReport(input, hash) {
   };
 }
 
+// Mirror of summarizeBillingReconciliation + billingReconciliationExitCode
+// in src/domain/billing-reconciliation.ts — keep in sync (PIN-243).
+function summarizeBillingReconciliation(report, visibility) {
+  return {
+    paidNoGrantCount: report.paidNoGrant.length,
+    grantNoPaymentCount: report.grantNoPayment.length,
+    deadLetterTotal: report.deadLetterTotal,
+    pendingPastTtlCount: report.pendingPastTtl.length,
+    anomalyCount: report.anomalyCount,
+    needsAttention: report.paidNoGrant.length > 0 || report.deadLetterTotal > 0,
+    clean: report.clean,
+    ...(visibility
+      ? {
+          refundsLast30Days: visibility.refundsLast30Days,
+          disputesLast30Days: visibility.disputesLast30Days,
+          openDisputes: visibility.openDisputes,
+        }
+      : {}),
+  };
+}
+function billingReconciliationExitCode(report) {
+  return report.clean ? 0 : 1;
+}
+
 // --- Stripe read-only listing over plain fetch (seed-script pattern). ---
 const API_BASE = "https://api.stripe.com/v1";
 let apiKey = "";
@@ -158,6 +183,27 @@ async function listPaidSessions() {
     startingAfter = result.data[result.data.length - 1].id;
   }
   throw new Error("Checkout session listing exceeded the 50-page safety cap.");
+}
+
+// PIN-243 refunds/disputes visibility (informational, never an anomaly).
+// The restricted read key may lack Refunds/Disputes read (docs/15 read-key
+// table); a 403 degrades to `undefined` + the Dashboard check, never a failure.
+async function listRefundDisputeVisibility(nowMs) {
+  const sinceSec = Math.floor((nowMs - 30 * 24 * 60 * 60 * 1000) / 1000);
+  try {
+    const [refunds, disputes] = await Promise.all([
+      stripeGet("/refunds", { limit: "100", "created[gte]": String(sinceSec) }),
+      stripeGet("/disputes", { limit: "100", "created[gte]": String(sinceSec) }),
+    ]);
+    const disputeRows = disputes.data ?? [];
+    return {
+      refundsLast30Days: (refunds.data ?? []).length,
+      disputesLast30Days: disputeRows.length,
+      openDisputes: disputeRows.filter((d) => d.status !== "won" && d.status !== "lost").length,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function main() {
@@ -226,6 +272,8 @@ async function main() {
         });
       }
     }
+    if (args.includes("--json")) console.log = console.error.bind(console);
+    const visibility = await listRefundDisputeVisibility(Date.now());
     const report = buildBillingReconciliationReport(
       { paidSessions, purchases, intents, deadLetters, now: Date.now() },
       boardHash,
@@ -253,7 +301,22 @@ async function main() {
         `deadLetters=${report.deadLetterTotal} pendingPastTtl=${report.pendingPastTtl.length} ` +
         `anomalies=${report.anomalyCount} clean=${report.clean}`,
     );
-    process.exitCode = report.clean ? 0 : 1;
+    const summary = summarizeBillingReconciliation(report, visibility);
+    console.log(
+      visibility
+        ? `refunds-disputes last30d refunds=${summary.refundsLast30Days} disputes=${summary.disputesLast30Days} openDisputes=${summary.openDisputes}`
+        : `refunds-disputes unavailable (read key lacks Refunds/Disputes read; check Stripe Dashboard Payments, docs/15 PIN-243)`,
+    );
+    // PIN-243 machine-readable summary for automation. `--json` prints the
+    // full payload as the only stdout JSON document; human mode keeps the
+    // lines above and adds this one parseable line.
+    const payload = { stripe: gate.mode, project: projectId, summary, report };
+    if (args.includes("--json")) {
+      process.stdout.write(`${JSON.stringify(payload)}\n`);
+    } else {
+      process.stdout.write(`RECONCILIATION_JSON:${JSON.stringify(payload)}\n`);
+    }
+    process.exitCode = billingReconciliationExitCode(report);
   } finally {
     await db.terminate();
   }

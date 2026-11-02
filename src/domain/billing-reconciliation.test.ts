@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  billingReconciliationExitCode,
   buildBillingReconciliationReport,
+  summarizeBillingReconciliation,
   type BillingReconciliationInput,
 } from "./billing-reconciliation";
 
@@ -185,6 +187,58 @@ describe("buildBillingReconciliationReport (PIN-153)", () => {
     expect(report.anomalyCount).toBe(1);
   });
 
+  it("PIN-243 summary: paid-no-grant or any dead letter needs attention and exits 1", () => {
+    const clean = buildBillingReconciliationReport(input(), boardHash);
+    expect(summarizeBillingReconciliation(clean)).toMatchObject({
+      paidNoGrantCount: 0,
+      deadLetterTotal: 0,
+      needsAttention: false,
+      clean: true,
+    });
+    expect(billingReconciliationExitCode(clean)).toBe(0);
+
+    const paidNoGrant = buildBillingReconciliationReport(
+      input({ paidSessions: [{ sessionId: "cs_x" }] }),
+      boardHash,
+    );
+    expect(summarizeBillingReconciliation(paidNoGrant).needsAttention).toBe(true);
+    expect(billingReconciliationExitCode(paidNoGrant)).toBe(1);
+
+    const deadLetters = buildBillingReconciliationReport(
+      input({ deadLetters: [{ reason: "unknown_intent" }] }),
+      boardHash,
+    );
+    expect(summarizeBillingReconciliation(deadLetters).needsAttention).toBe(true);
+    expect(billingReconciliationExitCode(deadLetters)).toBe(1);
+
+    // Refunds/disputes visibility rides along but never flips clean/needsAttention.
+    const withVisibility = summarizeBillingReconciliation(clean, {
+      refundsLast30Days: 2,
+      disputesLast30Days: 1,
+      openDisputes: 1,
+    });
+    expect(withVisibility).toMatchObject({
+      refundsLast30Days: 2,
+      disputesLast30Days: 1,
+      openDisputes: 1,
+      needsAttention: false,
+      clean: true,
+    });
+  });
+
+  it("PIN-243 scheduled workflow exists, is guarded, and names its secrets", () => {
+    const workflow = readFileSync(
+      path.resolve(__dirname, "../../.github/workflows/billing-reconciliation.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain("cron:");
+    expect(workflow).toContain("workflow_dispatch");
+    expect(workflow).toContain("PINNED_RECONCILE_STRIPE_READ_KEY");
+    expect(workflow).toContain("PINNED_RECONCILE_GCP_CREDENTIALS_JSON");
+    expect(workflow).toContain("enabled=false");
+    expect(workflow).toContain("billing-reconciliation.mjs");
+  });
+
   it("the operator script carries the same report builder (mirror)", () => {
     const script = readFileSync(
       path.resolve(__dirname, "../../scripts/billing-reconciliation.mjs"),
@@ -195,5 +249,13 @@ describe("buildBillingReconciliationReport (PIN-153)", () => {
     expect(script).toContain("checkoutIntents");
     expect(script).toContain("billingDeadLetters");
     expect(script).toContain("creditAccounts");
+    // PIN-243 mirror: machine-readable summary + automation exit + visibility.
+    expect(script).toContain("summarizeBillingReconciliation");
+    expect(script).toContain("billingReconciliationExitCode");
+    expect(script).toContain("RECONCILIATION_JSON:");
+    expect(script).toContain("--json");
+    expect(script).toContain("listRefundDisputeVisibility");
+    expect(script).toContain("/refunds");
+    expect(script).toContain("/disputes");
   });
 });

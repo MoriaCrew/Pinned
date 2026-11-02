@@ -84,6 +84,65 @@ export interface BillingReconciliationReport {
   clean: boolean;
 }
 
+/** Recent refunds/disputes visibility (PIN-243). Informational only: a refund is not an anomaly. */
+export interface RefundDisputeVisibility {
+  refundsLast30Days: number;
+  disputesLast30Days: number;
+  openDisputes: number;
+}
+
+/**
+ * Machine-readable reconciliation summary (PIN-243), the shape the
+ * operator script prints as its `RECONCILIATION_JSON:` line / `--json`
+ * payload and the scheduled workflow keys its alert on.
+ * `needsAttention` is the alert condition: paid money with no grant
+ * (`paidNoGrantCount > 0`) or any dead letter (`deadLetterTotal > 0`).
+ */
+export interface ReconciliationSummary {
+  paidNoGrantCount: number;
+  grantNoPaymentCount: number;
+  deadLetterTotal: number;
+  pendingPastTtlCount: number;
+  anomalyCount: number;
+  needsAttention: boolean;
+  clean: boolean;
+  refundsLast30Days?: number;
+  disputesLast30Days?: number;
+  openDisputes?: number;
+}
+
+export function summarizeBillingReconciliation(
+  report: BillingReconciliationReport,
+  visibility?: RefundDisputeVisibility,
+): ReconciliationSummary {
+  return {
+    paidNoGrantCount: report.paidNoGrant.length,
+    grantNoPaymentCount: report.grantNoPayment.length,
+    deadLetterTotal: report.deadLetterTotal,
+    pendingPastTtlCount: report.pendingPastTtl.length,
+    anomalyCount: report.anomalyCount,
+    needsAttention: report.paidNoGrant.length > 0 || report.deadLetterTotal > 0,
+    clean: report.clean,
+    ...(visibility
+      ? {
+          refundsLast30Days: visibility.refundsLast30Days,
+          disputesLast30Days: visibility.disputesLast30Days,
+          openDisputes: visibility.openDisputes,
+        }
+      : {}),
+  };
+}
+
+/**
+ * Automation exit code (PIN-243): 1 whenever the report is not clean.
+ * That is a superset of the alert condition — paid-no-grant and
+ * `deadLetterTotal > 0` always exit non-zero, as do grant-no-payment
+ * and pending-past-TTL (the pre-PIN-243 operator contract).
+ */
+export function billingReconciliationExitCode(report: BillingReconciliationReport): 0 | 1 {
+  return report.clean ? 0 : 1;
+}
+
 export interface BillingReconciliationInput {
   paidSessions: readonly PaidStripeSessionFact[];
   purchases: readonly LedgerPurchaseFact[];
