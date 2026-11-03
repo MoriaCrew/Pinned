@@ -135,7 +135,13 @@ Principles:
   images from `public/landing/sets/<id>/` (provenance in
   `public/landing/README.md`), not `public/lab/`. The secondary "See a
   board" button exists only when `DEMO_BOARD_SLUG` is set; unset shows
-  nothing.
+  nothing. Since PIN-251 it is a submit `Button` in a plain same-origin
+  `<form method="post" action="/api/demo">` (no client JS: a fresh demo
+  board is created and the visitor is redirected to it), with a muted
+  one-line note under the actions saying the copy is theirs and
+  disappears after `Policy.demo.ttlHours`; the page never links a
+  board. A refusal comes back as `?demo=busy|unavailable`, shown as the
+  same one-line `pn-lib-notice` the board-deleted flag uses.
 - **Showcase sets (PIN-175).** The pile, the step-1 photo with its two
   name tags, the three step-2 stickers and the step-3 scene all come
   from one set, picked per request (the page is dynamic, so a

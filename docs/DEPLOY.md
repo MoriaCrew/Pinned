@@ -204,13 +204,23 @@ element; delete the throwaway board.
      the landing, the repo, Linear comments or the video (a board
      link is a capability URL; anyone holding it can join and pin,
      and there is no lock or read-only mode).
-   - The **landing demo board** is what "See a board" opens
-     (`DEMO_BOARD_SLUG`, step 5). It is a sacrificial public board:
-     `SEED_BASE_URL=https://pinneds.com npm run seed:demo` makes one
-     (synthetic fixtures, 2 participants, 1 scene; default caps).
-     Trashed → seed again and repoint. The script prints the slug
-     once: record it only in the private notes (PIN-76), never in
-     git. Time the first scene with
+   - The **demo template board** is what "See a board" copies
+     (`DEMO_BOARD_SLUG`, step 5). Since PIN-251 the landing never
+     links it: the button posts to `/api/demo`, which clones the
+     template into a **fresh demo board for that visitor** (their
+     own host cookie, `Policy.demo.starterMakes` free creations,
+     `demo.freePhotos` free photos) and deletes it after
+     `demo.ttlHours` (the sweep runs inside later demo creations, at
+     most `demo.sweepBatch` boards each). Caps: `demo.maxPerIp` per
+     client address and `demo.maxTotal` overall per `demo.windowMs`;
+     a reached cap sends the visitor back to the landing with a
+     one-line notice. The template is read only (cut-outs are shared
+     by reference, scene pictures copied), so never pin on it or
+     delete its scenes; to change the demo, seed a new one and
+     repoint. `SEED_BASE_URL=https://pinneds.com npm run seed:demo`
+     makes one (synthetic fixtures, 2 participants, 1 scene; default
+     caps). The script prints the slug once: record it only in the
+     private notes (PIN-76), never in git. Time the first scene with
      `npm run seed:demo -- --time-first-scene <slug>`.
 4. **Judges'-board overrides** (no deploy; Firestore console →
    `boards/<slug>` → field `policyOverrides`, a map). Try it on a
@@ -235,7 +245,7 @@ element; delete the throwaway board.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
    `apphosting.prod.yaml` (it ships with promotion #2). The value is
-   the landing demo board's slug (step 3), never the judges' board's.
+   the demo template board's slug (step 3), never the judges' board's.
    Repointing later = a new secret version (`gcloud secrets versions
    add DEMO_BOARD_SLUG --data-file=<file> --project "$P"`) **plus a
    rollout**: the Cloud Run revision pins the secret version, so
@@ -277,8 +287,13 @@ the judges' board and kept (§6.4). Steps, smoke and rollback:
   is. Run the §5 smoke and the billing smoke in `docs/15` right after.
 - **Twice a day:** health, the judges' board (counts only: joins,
   pins, scenes since the last check; nobody but the recorded
-  participants and the judges should appear), the landing demo
-  board, `usage:costs`.
+  participants and the judges should appear), the demo template
+  board (unchanged counts: 2 participants, its pins and 1 scene) and
+  a "See a board" click (lands on a fresh board), `usage:costs`.
+- **Demo boards piling up or abused:** lower `demo.maxTotal` /
+  `demo.maxPerIp` in `POLICY_OVERRIDES_JSON` (0 closes the demo; the
+  landing then still shows the button, which answers "busy"), or
+  unset `DEMO_BOARD_SLUG` to hide it (both need a rollout, §6.5).
 - **Meta slow or down:** set the judges' board's `dailyBudgetUsd` to 0.
   Scenes become honest collages, uploads say AI is switched off,
   existing pins and scenes keep working. Undo by restoring the value.
@@ -291,5 +306,8 @@ the judges' board and kept (§6.4). Steps, smoke and rollback:
 ## 9. After judging
 
 Lower `AI_DAILY_BUDGET_USD`/`AI_DAILY_CALL_LIMIT`, set
-`minInstances: 0`, remove the demo-board overrides you no longer
-need, and keep the TTL and lifecycle rules.
+`minInstances: 0`, remove the judges'-board overrides you no longer
+need, consider lower `demo.maxTotal` / `demo.starterMakes`, and keep
+the TTL and lifecycle rules. Expired demo boards keep being swept by
+later demo creations; a quiet landing leaves the last few until the
+next click (their `tmp/` copies still fall to the bucket lifecycle).
