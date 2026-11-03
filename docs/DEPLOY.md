@@ -171,8 +171,9 @@ curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"opti
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
-curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked
-curl -s https://pinneds.com/ | grep -c 'href="/g/'   # 1: the landing demo link (DEMO_BOARD_SLUG); 0 on dev
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" -H "Content-Type: application/json" -d '{}' https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked (411 without a body: the byte cap needs Content-Length)
+curl -s https://pinneds.com/ | grep -c 'action="/api/demo"'   # 1: the landing "See a board" form (DEMO_BOARD_SLUG set, PIN-251); 0 when the demo is off. The landing never links a board.
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" -X POST -H "sec-fetch-site: same-origin" -H "Content-Length: 0" https://pinneds.com/api/demo | sed -E 's#/g/[A-Za-z0-9_-]{22}#/g/<slug>#'   # 303 to a fresh demo board (a copy of the template, swept after its TTL); a second POST from the same address → 303 /?demo=busy (the per-address cap). Never record the slug; each POST uses one of this address's demo slots.
 # Languages (PIN-227): French browser → French, saved English wins, unknown → English
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
