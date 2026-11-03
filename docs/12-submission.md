@@ -77,7 +77,7 @@ PR numbers and dates: [`build-log.md`](build-log.md).
 | Repository (public, AGPL-3.0) | https://github.com/MoriaCrew/Pinned |
 | Deployed product (prod) | https://pinneds.com (live from Nov 1; `<PROD_URL>` below means this) |
 | Judges' board (private link from the PIN-81 tracker entry; never commit; not the landing demo board, `docs/DEPLOY.md` §6.3) | `<DEMO_BOARD_URL from Linear>` |
-| Pitch video (~3 min, §2) | `<VIDEO_URL>` |
+| Pitch video (~3 min, §2; public since Nov 3) | https://www.youtube.com/watch?v=q6lkrA6fsCI |
 | How the app uses Meta's models (in the app, on prod since promotion #2, Nov 2) | https://pinneds.com/models |
 | Build log: who built what, with PR numbers | https://github.com/MoriaCrew/Pinned/blob/main/docs/build-log.md (on `main` only after the next promotion; use `blob/dev/…` until then) |
 | Dev backend (live models; the only live demo before Nov 1) | https://dev.pinneds.com |
@@ -501,7 +501,7 @@ Starred fields are required.
 | Most Viral: X post link | the X post of the short cut, if posted before submitting |
 | Project Description * | §1 pitch + `<PROD_URL>` + `<DEMO_BOARD_URL from Linear>` (no other field takes a URL to the product) |
 | Public GitHub Repository | https://github.com/MoriaCrew/Pinned |
-| 3-Minute Demo Video | `<VIDEO_URL>` (the placeholder suggests YouTube) |
+| 3-Minute Demo Video | https://www.youtube.com/watch?v=q6lkrA6fsCI (public since Nov 3) |
 | Use of Meta products to build the project | `docs/19-meta-models.md` summary |
 | Why Meta's models are important | §6 "Why Meta's models" |
 | Partner technology feedback | Baseten (Muse Spark Open for the UI translations) |
@@ -516,7 +516,7 @@ against §3 on submit day.
 
 **Track:** Indie Developer Track. **Problem statement:** Build for
 Your World. **Repository:** https://github.com/MoriaCrew/Pinned.
-**Video:** `<VIDEO_URL>`.
+**Video:** https://www.youtube.com/watch?v=q6lkrA6fsCI.
 
 **Project Description**
 

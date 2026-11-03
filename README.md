@@ -1,13 +1,19 @@
 # Pinneds — your stuff, pinned together
 
-Friends drop photos onto one shared board. Meta's models cut out the things in them, and
-anyone can mix everyone's pins into new scenes that credit whose things are in them.
+Friends drop photos onto one shared board. Meta's models, called through the Meta Model
+API, cut out the things in them, and anyone can mix everyone's pins into new scenes that
+credit whose things are in them.
 
 - **Live app:** https://pinneds.com (live from Nov 1)
 - **Dev, live models:** https://dev.pinneds.com
-- **Video:** 3-minute video: link added at submission <!-- VIDEO_URL -->
+- **Video:** [3-minute demo on YouTube](https://www.youtube.com/watch?v=q6lkrA6fsCI)
 - **Hackathon:** [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details),
   Indie track, theme *Build for Your World*. Solo developer, Oct 26 – Nov 4, 2026.
+- **Built during the event.** All application code was written between the Oct 26, 2026
+  kickoff and the Nov 4 deadline. The five commits before the 12:00 ET kickoff hold only
+  the licence, planning docs and the secret-scanner setup; the app scaffold landed at
+  15:09 ET on Oct 26. Every merged PR with its merge time and the coding agent that built
+  it: [`docs/build-log.md`](docs/build-log.md).
 
 <p align="center">
   <img src="public/landing/sets/cat/scene-street-skate.webp" width="360"
@@ -88,9 +94,11 @@ Spec: [`docs/11-studio.md`](docs/11-studio.md) §5. Decisions:
   per-board overrides. Prompts, validators and the UI read the same object.
   `src/config.ts` is the only file that reads `process.env`.
 - **Six ports and decorators.** `ElementNamer`, `TapNamer`, `ChipSuggester`, `Segmenter`,
-  `SceneComposer` and `SpeechTranscriber` each have a Meta adapter (plain `fetch`, no
-  provider SDK), a mock adapter (the default, `AI_MOCK=1`) and a recorded-fixture
-  adapter. Product code only gets the decorated ports (`src/server/ai-ports.ts`). Spend
+  `SceneComposer` and `SpeechTranscriber` each have a Meta adapter
+  (`src/gateway/meta-ports.ts` over `src/gateway/meta-gateway.ts`, the one file that calls
+  the Meta Model API: plain `fetch`, no provider SDK), a mock adapter (the default,
+  `AI_MOCK=1`) and a recorded-fixture adapter. Product code only gets the decorated ports
+  (`src/server/ai-ports.ts`). Spend
   is reserved before a call on a per-day counter, with per-person and per-board caps.
 - **Jobs, request and poll.** A `DecomposeJob` (photo → pins) and a `SceneJob` (pins →
   scene) move `pending → running → ready / failed / refused`, idempotent by id with
