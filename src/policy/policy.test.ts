@@ -362,6 +362,58 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     });
   });
 
+  it("demo: per-visitor demo board defaults, deep-overridable, invalid values fail closed (PIN-251)", () => {
+    expect(DEFAULT_POLICY.demo).toEqual({
+      ttlHours: 24,
+      starterMakes: 2,
+      freePhotos: 3,
+      maxPerIp: 3,
+      maxTotal: 200,
+      windowMs: 86_400_000,
+      sweepBatch: 20,
+      createPerIp: { limit: 5, windowMs: 600_000 },
+    });
+    // Env layer, then the per-board layer on top; untouched keys keep their defaults.
+    const p = resolvePolicy(
+      { demo: { ttlHours: 2, maxTotal: 50 } },
+      { demo: { starterMakes: 0, createPerIp: { limit: 1 } } },
+    );
+    expect(p.demo).toEqual({
+      ttlHours: 2,
+      starterMakes: 0,
+      freePhotos: 3,
+      maxPerIp: 3,
+      maxTotal: 50,
+      windowMs: 86_400_000,
+      sweepBatch: 20,
+      createPerIp: { limit: 1, windowMs: 600_000 },
+    });
+    // 0 closes a cap (no demo boards at all) or turns the sweep off; both are valid operator choices.
+    expect(resolvePolicy({ demo: { maxPerIp: 0, maxTotal: 0, sweepBatch: 0 } }).demo).toMatchObject({
+      maxPerIp: 0,
+      maxTotal: 0,
+      sweepBatch: 0,
+    });
+    expect(parsePolicyOverridesJson('{"demo":{"ttlHours":48,"maxPerIp":5}}')).toEqual({
+      demo: { ttlHours: 48, maxPerIp: 5 },
+    });
+    for (const bad of [
+      { demo: { ttlHours: 0 } },
+      { demo: { starterMakes: -1 } },
+      { demo: { starterMakes: 1.5 } },
+      { demo: { freePhotos: -1 } },
+      { demo: { maxPerIp: -1 } },
+      { demo: { maxTotal: 2.5 } },
+      { demo: { windowMs: 0 } },
+      { demo: { sweepBatch: -1 } },
+      { demo: { createPerIp: { limit: 0 } } },
+      { demo: { ttlHours: "24" } },
+    ]) {
+      expect(() => resolvePolicy(bad as never)).toThrow();
+      expect(() => resolvePolicy(null, bad as never)).toThrow();
+    }
+  });
+
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
     expect(resolvePolicy({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBe(0);
   });
