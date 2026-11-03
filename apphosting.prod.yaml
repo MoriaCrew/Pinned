@@ -73,12 +73,14 @@ env:
   # (prerendered pages) and RUNTIME: a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
-  # PIN-73/PIN-246: the judges' demo board is a normal prod board (the
-  # one recorded for the submission video). The landing page shows its
-  # "demo" button only while this is set (read at RUNTIME). The secret
-  # exists in moriacrew-pinned-prod with access for pinned-web (set
-  # 2026-11-02); the backup board's slug is kept outside git. Never
-  # post the board link publicly (docs/DEPLOY.md §6.3, §8).
+  # PIN-73/PIN-246/PIN-251: the demo TEMPLATE board, the seeded
+  # synthetic board that "See a board" copies into a fresh board per
+  # visitor (never the judges' board, whose link stays private). The
+  # landing shows the button only while this is set (read at RUNTIME).
+  # The secret exists in moriacrew-pinned-prod with access for
+  # pinned-web (set 2026-11-02, repointed 2026-11-03); the slug is
+  # kept outside git. Never post a board link publicly
+  # (docs/DEPLOY.md §6.3, §8).
   - variable: DEMO_BOARD_SLUG
     secret: DEMO_BOARD_SLUG
     availability:
