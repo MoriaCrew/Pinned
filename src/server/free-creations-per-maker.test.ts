@@ -101,6 +101,7 @@ describe("free creations per maker (PIN-205)", () => {
   it("fails closed to 0 when the counter throws or no store is wired; creation still succeeds", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const broken: StarterAllowanceStore = {
+      hasSlot: async () => true,
       tryClaim: async () => {
         throw new Error("contention");
       },

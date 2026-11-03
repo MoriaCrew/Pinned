@@ -27,6 +27,7 @@ for how each Meta model is used. Numbers 01, 02 and 05 are archived with the dro
 | [`20-abuse-runbook.md`](20-abuse-runbook.md) | Abuse reports and illegal content: storage hold, quarantine, library copies, single-element hold, NCMEC CyberTipline, takedown clock |
 | [`DEPLOY.md`](DEPLOY.md) | Prod runbook and env matrix (lands with PIN-209) |
 | [`launch-ops-runbook.md`](launch-ops-runbook.md) | Launch ops: hourly AI sub-cap, GCP budget alerts, soft-kill drill, demo-board protection (PIN-240) |
+| [`build-log.md`](build-log.md) | Who built what: each coding agent's PRs with dates, the evidence for each claim, and what the record does not show (PIN-248) |
 
 ## Decisions (`docs/adr/`)
 

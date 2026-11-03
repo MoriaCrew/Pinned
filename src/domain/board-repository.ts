@@ -128,9 +128,18 @@ export interface BoardRepository {
    * Tombstone the board (PIN-167): `deletedAt = at`, written
    * atomically against the counter writers so none can clear it.
    * True only for the call that tombstoned it; false when missing
-   * or already deleted. The slug is never reusable.
+   * or already deleted. The slug is never reusable. The tombstone
+   * also drops `demoSweepAt` (PIN-251), so a deleted demo board is
+   * never listed for the sweep again.
    */
   deleteBoard(slug: string, at: number): Promise<boolean>;
+  /**
+   * Live demo boards whose `demoSweepAt` is before `before`, oldest
+   * expiry first, at most `limit` (PIN-251). Ordinary boards carry
+   * no `demoSweepAt` and are never returned; `limit <= 0` returns
+   * nothing.
+   */
+  listDemoBoardsToSweep(before: number, limit: number): Promise<Board[]>;
 
   /**
    * Upsert join identity; participantCount grows only on first
@@ -310,8 +319,18 @@ export class InMemoryBoardRepository implements BoardRepository {
   async deleteBoard(slug: string, at: number): Promise<boolean> {
     const board = this.liveBoard(slug);
     if (!board) return false;
-    this.boards.set(slug, { ...board, deletedAt: at });
+    const { demoSweepAt: _swept, ...rest } = board;
+    this.boards.set(slug, { ...rest, deletedAt: at });
     return true;
+  }
+
+  async listDemoBoardsToSweep(before: number, limit: number): Promise<Board[]> {
+    if (limit <= 0) return [];
+    return [...this.boards.values()]
+      .filter((b) => b.deletedAt === undefined && b.demoSweepAt !== undefined && b.demoSweepAt < before)
+      .sort((a, b) => (a.demoSweepAt as number) - (b.demoSweepAt as number))
+      .slice(0, limit)
+      .map(clone);
   }
 
   // Cap check and insert share one synchronous body: no awaits

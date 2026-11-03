@@ -628,6 +628,8 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-promise { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(clamp(38px, 9.6vw, 58px) * var(--display-scale)); line-height: 1.02; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); text-wrap: balance; color: var(--ink); }
 .pn-landing-body { margin: 0; max-width: 36ch; font: 400 17px/26px var(--font-ui); color: var(--ink); }
 .pn-landing-actions { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+/* PIN-251: "See a board" is a form post; the form is a grid cell so its button lays out like the link beside it. */
+.pn-landing-demo { display: grid; margin: 0; }
 .pn-landing-note { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--ink-muted); }
 .pn-landing-how { grid-area: how; display: grid; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-5); border-top: 2px dashed var(--line-strong); }
 .pn-landing-steps { display: grid; gap: var(--space-5); margin: 0; padding: 0; list-style: none; }

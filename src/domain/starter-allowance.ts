@@ -80,6 +80,13 @@ export function decideStarterSlot(
  */
 export interface StarterAllowanceStore {
   tryClaim(key: string, now: number, params: StarterAllowanceParams): Promise<boolean>;
+  /**
+   * Would a claim for `key` be allowed at `now`? Records nothing
+   * (PIN-251: the demo route peeks the shared total before it spends
+   * a visitor's per-address slot). A later claim can still lose a
+   * race; callers treat the answer as advice, not a reservation.
+   */
+  hasSlot(key: string, now: number, params: StarterAllowanceParams): Promise<boolean>;
 }
 
 export function assertMakerKey(key: string): void {
@@ -99,5 +106,11 @@ export class InMemoryStarterAllowanceStore implements StarterAllowanceStore {
     if (!decision.allowed || decision.next === null) return false;
     this.counters.set(key, decision.next);
     return true;
+  }
+
+  async hasSlot(key: string, now: number, params: StarterAllowanceParams): Promise<boolean> {
+    assertMakerKey(key);
+    const current = this.counters.get(key);
+    return decideStarterSlot(key, current ? structuredClone(current) : null, now, params).allowed;
   }
 }

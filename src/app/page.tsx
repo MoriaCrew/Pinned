@@ -1,12 +1,15 @@
 import type { CSSProperties } from "react";
 import { getConfig } from "../config";
 import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../domain/board-delete-ui";
+import { DEMO_NOTICE_PARAM, parseDemoNotice } from "../domain/demo-ui";
 import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
-import { t, tf, type Locale } from "../i18n";
+import { t, tCount, tf, type Locale } from "../i18n";
 import { getLocale } from "../i18n/server";
-import { ButtonLink, Icon, Sticker, Tag, Wordmark, type IconName } from "../ui";
+import { getPolicy } from "../policy/server";
+import { Button, ButtonLink, Icon, Sticker, Tag, Wordmark, type IconName } from "../ui";
 import { SiteLinks } from "./_legal/LegalParts";
 import { You } from "./auth/You";
+import { DemoNotice } from "./DemoNotice";
 import { LANDING_SETS, landingSetById } from "./landing-sets.data";
 import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
 
@@ -16,9 +19,14 @@ import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
 export const dynamic = "force-dynamic";
 
 // Landing. Board creation is live (PIN-66): Start goes to /new.
-// The demo action points at the seeded judge board only when
-// DEMO_BOARD_SLUG is set (PIN-73, scripts/seed-demo-board.mjs);
-// unset or invalid shows nothing: no fake functionality.
+// "See a board" is a same-origin form post to /api/demo (PIN-251):
+// each visitor gets a fresh copy of the template board named by
+// DEMO_BOARD_SLUG (the seeded board, scripts/seed-demo-board.mjs;
+// never the judges' board, whose link stays private, docs/DEPLOY.md
+// §6.3), deleted after Policy.demo.ttlHours. The page itself never
+// links a board. Unset or invalid shows nothing: no fake
+// functionality. `?demo=busy|unavailable` is the route's answer when
+// it could not make one (src/domain/demo-ui.ts).
 //
 // The sticker pile and the three "How it works" pictures come from one
 // showcase set (src/app/landing-sets.data.ts), a random one per visit;
@@ -30,10 +38,13 @@ export default async function HomePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const locale = await getLocale();
-  const demoSlug = getConfig().demoBoardSlug;
+  const demoEnabled = getConfig().demoBoardSlug !== null;
+  const demoTtlHours = getPolicy().demo.ttlHours;
   const query = await searchParams;
   // PIN-168: the host lands here after deleting a board while signed out.
   const boardDeleted = isBoardDeletedFlag(query[BOARD_DELETED_PARAM]);
+  // PIN-251: the demo route sent the visitor back without a board.
+  const demoNotice = parseDemoNotice(query[DEMO_NOTICE_PARAM]);
   const requested = query.set;
   const ids = LANDING_SETS.map((entry) => entry.id);
   const set = landingSetById(pickLandingSet(ids, { requested, random: Math.random }));
@@ -47,6 +58,7 @@ export default async function HomePage({
         <div className="pn-landing-brand">
           <Wordmark size="clamp(72px, 9vw, 104px)" />
           <BoardDeletedNotice show={boardDeleted} />
+          <DemoNotice notice={demoNotice} />
         </div>
 
         {/* The pile drops in one sticker after another; its link sits right under it, outside the hidden art. */}
@@ -92,13 +104,18 @@ export default async function HomePage({
             <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
               {t(locale, "landing.start")}
             </ButtonLink>
-            {demoSlug ? (
-              <ButtonLink variant="secondary" size="lg" icon="scene" href={`/g/${demoSlug}`}>
-                {t(locale, "landing.demo")}
-              </ButtonLink>
+            {demoEnabled ? (
+              <form method="post" action="/api/demo" className="pn-landing-demo">
+                <Button type="submit" variant="secondary" size="lg" icon="scene">
+                  {t(locale, "landing.demo")}
+                </Button>
+              </form>
             ) : null}
           </div>
           <p className="pn-landing-note">{t(locale, "landing.noSignup")}</p>
+          {demoEnabled ? (
+            <p className="pn-landing-note">{tCount(locale, "landing.demoNote", demoTtlHours)}</p>
+          ) : null}
         </div>
 
         <section className="pn-landing-how" aria-labelledby="how-it-works">
