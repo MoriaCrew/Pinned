@@ -1,13 +1,19 @@
 # Pinneds — your stuff, pinned together
 
-Friends drop photos onto one shared board. Meta's models cut out the things in them, and
-anyone can mix everyone's pins into new scenes that credit whose things are in them.
+Friends drop photos onto one shared board. Meta's models, called through the Meta Model
+API, cut out the things in them, and anyone can mix everyone's pins into new scenes that
+credit whose things are in them.
 
 - **Live app:** https://pinneds.com (live from Nov 1)
 - **Dev, live models:** https://dev.pinneds.com
-- **Video:** 3-minute video: link added at submission <!-- VIDEO_URL -->
+- **Video:** [3-minute demo on YouTube](https://www.youtube.com/watch?v=q6lkrA6fsCI)
 - **Hackathon:** [Meta Global AI Developer Hackathon](https://cerebralvalley.ai/e/meta-ai-developer-hackathon/details),
   Indie track, theme *Build for Your World*. Solo developer, Oct 26 – Nov 4, 2026.
+- **Built during the event.** All application code was written between the Oct 26, 2026
+  kickoff and the Nov 4 deadline. The five commits before the 12:00 ET kickoff hold only
+  the licence, planning docs and the secret-scanner setup; the app scaffold landed at
+  15:09 ET on Oct 26. Every merged PR with its merge time and the coding agent that built
+  it: [`docs/build-log.md`](docs/build-log.md).
 
 <p align="center">
   <img src="public/landing/sets/cat/scene-street-skate.webp" width="360"
@@ -40,8 +46,9 @@ German, Italian, Indonesian), chosen per visitor from one shared link.
 ## How Meta's models power it
 
 Five Meta models. Four run inside the app behind six capability ports in `src/gateway/`;
-the fifth ran at build time. Prompts, Policy keys, fallbacks, costs and evidence for each:
-[`docs/19-meta-models.md`](docs/19-meta-models.md).
+the fifth ran at build time. The app walks through one real example at
+[pinneds.com/models](https://pinneds.com/models). Prompts, Policy keys, fallbacks, costs
+and evidence for each: [`docs/19-meta-models.md`](docs/19-meta-models.md).
 
 | Model (ID) | What it does in Pinneds | Port |
 | --- | --- | --- |
@@ -87,9 +94,11 @@ Spec: [`docs/11-studio.md`](docs/11-studio.md) §5. Decisions:
   per-board overrides. Prompts, validators and the UI read the same object.
   `src/config.ts` is the only file that reads `process.env`.
 - **Six ports and decorators.** `ElementNamer`, `TapNamer`, `ChipSuggester`, `Segmenter`,
-  `SceneComposer` and `SpeechTranscriber` each have a Meta adapter (plain `fetch`, no
-  provider SDK), a mock adapter (the default, `AI_MOCK=1`) and a recorded-fixture
-  adapter. Product code only gets the decorated ports (`src/server/ai-ports.ts`). Spend
+  `SceneComposer` and `SpeechTranscriber` each have a Meta adapter
+  (`src/gateway/meta-ports.ts` over `src/gateway/meta-gateway.ts`, the one file that calls
+  the Meta Model API: plain `fetch`, no provider SDK), a mock adapter (the default,
+  `AI_MOCK=1`) and a recorded-fixture adapter. Product code only gets the decorated ports
+  (`src/server/ai-ports.ts`). Spend
   is reserved before a call on a per-day counter, with per-person and per-board caps.
 - **Jobs, request and poll.** A `DecomposeJob` (photo → pins) and a `SceneJob` (pins →
   scene) move `pending → running → ready / failed / refused`, idempotent by id with
@@ -151,13 +160,15 @@ npm test
 npm run build
 ```
 
-On `dev` at `f010eb7` (Oct 31, 2026), `npm test` reports **1,507 tests passed, 2
-skipped**, in 133 test files. CI (`.github/workflows/ci.yml`) runs all three with
+On `dev` at `a90cd7b` (Nov 2, 2026), `npm test` reports **1,879 tests passed, 3
+skipped**, in 165 test files. CI (`.github/workflows/ci.yml`) runs all three with
 `AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full history on every
 PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook, and Cursor Bugbot
-reviews every PR. Domain and Policy logic have unit tests; the gateway has contract tests
-that replay recorded spike fixtures (`eval/fixtures/studio/`). Live-model runs happen by
-hand, with cost logged; results are in [`eval/studio-findings.md`](eval/studio-findings.md).
+reviews every PR: as of Nov 2, each of the 215 merged PRs passed CI and gitleaks and got a
+Bugbot review ([`docs/build-log.md`](docs/build-log.md)). Domain and Policy logic have
+unit tests; the gateway has contract tests that replay recorded spike fixtures
+(`eval/fixtures/studio/`). Live-model runs happen by hand, with cost logged; results are in
+[`eval/studio-findings.md`](eval/studio-findings.md).
 
 ## Billing: Board Plus
 
@@ -175,6 +186,7 @@ keys come from Secret Manager, never git. Design and runbook:
 
 - [`docs/README.md`](docs/README.md): index of every doc
 - [`docs/19-meta-models.md`](docs/19-meta-models.md): each Meta model, prompt, cost and fallback
+- [`docs/build-log.md`](docs/build-log.md): who built what, PR by PR
 - [`docs/11-studio.md`](docs/11-studio.md): product and architecture spec
 - [`docs/adr/003-studio-architecture.md`](docs/adr/003-studio-architecture.md): Policy, ports, jobs, remix
 - [`docs/DEPLOY.md`](docs/DEPLOY.md): deploy runbook and env matrix
@@ -207,6 +219,7 @@ keys come from Secret Manager, never git. Design and runbook:
 Next.js 15 (App Router) and TypeScript, Firebase App Hosting, Firestore and Cloud Storage,
 the Meta Model API, Stripe Checkout, sharp, Zod, TanStack Query and Vitest; built by one
 developer with AI coding agents, one issue per PR ([`docs/03-ai-sdlc.md`](docs/03-ai-sdlc.md)).
+Which agent built what, with PR numbers and dates: [`docs/build-log.md`](docs/build-log.md).
 `PIN-n` in code and commits is the Linear issue ID; history is in `git log`.
 
 ## License
