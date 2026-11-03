@@ -119,3 +119,44 @@ describe("landing Made with Meta AI credit (PIN-222)", () => {
     expect(html).toContain(`>${en["footer.source"]}</a>`);
   });
 });
+
+describe("landing 'See a board' demo form (PIN-251)", () => {
+  // The config is read per request, so the two cases run with the real
+  // module and a spy on getConfig: demo on (a template slug) and off.
+  const demoOn = async () => {
+    const config = await import("../config");
+    const real = config.getConfig();
+    vi.spyOn(config, "getConfig").mockReturnValue({ ...real, demoBoardSlug: "tmplAAAAAAAAAAAAAAAAA1" });
+  };
+
+  it("posts to /api/demo instead of linking any board, and says what the visitor gets", async () => {
+    await demoOn();
+    const html = await landing({ set: "classic" });
+    const form = /<form [^>]*>[\s\S]*?<\/form>/.exec(html)?.[0] ?? "";
+    expect(form).toContain('method="post"');
+    expect(form).toContain('action="/api/demo"');
+    expect(form).toMatch(/<button [^>]*type="submit"[^>]*>/);
+    expect(form).toContain(en["landing.demo"]);
+    // No board link anywhere on the page: not the template, not the judges' board.
+    expect(html).not.toMatch(/href="\/g\//);
+    expect(html).not.toContain("tmplAAAAAAAAAAAAAAAAA1");
+    expect(html).toContain(en["landing.demoNote.other"].replace("{n}", "24"));
+  });
+
+  it("shows no demo button and no note without a template", async () => {
+    const html = await landing({ set: "classic" });
+    expect(html).not.toContain('action="/api/demo"');
+    expect(html).not.toContain(en["landing.demo"]);
+    expect(html).not.toContain("disappears after");
+    expect(html).not.toMatch(/href="\/g\//);
+  });
+
+  it("shows the route's notice from ?demo= and ignores unknown values", async () => {
+    await demoOn();
+    expect(await landing({ demo: "busy" })).toContain(en["landing.demoBusy"]);
+    expect(await landing({ demo: "unavailable" })).toContain(en["landing.demoUnavailable"]);
+    const plain = await landing({ demo: "nope" });
+    expect(plain).not.toContain(en["landing.demoBusy"]);
+    expect(plain).not.toContain(en["landing.demoUnavailable"]);
+  });
+});
