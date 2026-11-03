@@ -1349,11 +1349,12 @@ Stripe refunds and disputes from the last 30 days
 (`refundsLast30Days`, `disputesLast30Days`, `openDisputes` in the
 summary; informational only — a refund is not an anomaly and
 never changes the exit code). The restricted read key in the
-PIN-210 table has only Checkout Sessions: Read, so until an
-operator adds Refunds: Read + Disputes: Read to that key the run
-prints `refunds-disputes unavailable...` and the counts are
-absent: then check Stripe Dashboard → Payments (refunds) and
-Payments → Disputes on the same daily cadence instead.
+PIN-210 table carries Charges and Refunds: Read and Payment
+Disputes: Read for this (the Dashboard's permission names; on the
+live key since Nov 2). Without them the run prints
+`refunds-disputes unavailable...` and the counts are absent: then
+check Stripe Dashboard → Payments (refunds) and Payments →
+Disputes on the same daily cadence instead.
 
 **Dev webhook endpoint.** `npm run billing:webhook-endpoint`
 (`scripts/ensure-stripe-webhook-endpoint.mjs`, dry-run unless
@@ -1431,11 +1432,17 @@ listed stays None):
 | --- | --- | --- |
 | runtime | prod Secret Manager `STRIPE_SECRET_KEY` | Checkout Sessions: Write (create; the webhook's retrieve and list-by-PaymentIntent) · Prices: Read (lookup-key price) · PaymentIntents: Read · Charges: Read · Balance: Read (settled-EUR balance transactions) |
 | setup | `.env.local` `STRIPE_PINNED_PROD_SETUP_KEY`; delete after go-live | Products: Write · Prices: Write · Webhook Endpoints: Write |
-| read | `.env.local` `STRIPE_PINNED_PROD_READ_KEY` | Checkout Sessions: Read |
+| read | `.env.local` `STRIPE_PINNED_PROD_READ_KEY`, and GitHub Environment secret `PINNED_RECONCILE_STRIPE_READ_KEY` (PIN-243) | Checkout Sessions: Read · Charges and Refunds: Read · Payment Disputes: Read (the last two only feed the reconciliation counts) |
 
 Signatures are checked locally and refunds are made in the
-Dashboard, so no key needs Refunds or Disputes. A 403 names the
-missing permission: add read on that one resource only.
+Dashboard, so no key needs Refunds or Disputes **write**. A 403
+names the missing permission: add read on that one resource only.
+To check a key, send an empty-body `POST` to the resource: without
+write permission it answers 403 `more_permissions_required`. The
+one exception is `/v1/refunds`, which validates the body (400) and
+resolves the charge (404) before the permission check, so a bogus
+id proves nothing there; the Dashboard's "Review your key" screen
+is the reference.
 
 **Commands, in order** (`P=moriacrew-pinned-prod`):
 

@@ -76,7 +76,7 @@ PR numbers and dates: [`build-log.md`](build-log.md).
 | --- | --- |
 | Repository (public, AGPL-3.0) | https://github.com/MoriaCrew/Pinned |
 | Deployed product (prod) | https://pinneds.com (live from Nov 1; `<PROD_URL>` below means this) |
-| Demo board (from the PIN-81 tracker entry; never commit) | `<DEMO_BOARD_URL from Linear>` |
+| Judges' board (private link from the PIN-81 tracker entry; never commit; not the landing demo board, `docs/DEPLOY.md` §6.3) | `<DEMO_BOARD_URL from Linear>` |
 | Pitch video (~3 min, §2) | `<VIDEO_URL>` |
 | How the app uses Meta's models (in the app, on prod since promotion #2, Nov 2) | https://pinneds.com/models |
 | Build log: who built what, with PR numbers | https://github.com/MoriaCrew/Pinned/blob/main/docs/build-log.md (on `main` only after the next promotion; use `blob/dev/…` until then) |
@@ -88,15 +88,16 @@ Notes for whoever fills this in:
   (`docs/DEPLOY.md`). Do not submit it until it has been opened
   and played end-to-end; if prod is not ready, submit the dev URL
   and say so.
-- `<DEMO_BOARD_URL from Linear>`: paste it only into the
-  submission form and the video description. It must never be
-  committed to this repo or shown in the video (§2, capture
-  notes).
+- `<DEMO_BOARD_URL from Linear>` is the judges' board: paste it
+  only into the submission form and the video description. It must
+  never be committed to this repo, shown in the video (§2, capture
+  notes), or set as `DEMO_BOARD_SLUG` (the landing links a separate,
+  sacrificial demo board; `docs/DEPLOY.md` §6.3).
 - `<VIDEO_URL>`: the unlisted/public host URL of the §2 cut.
 - The submission form has no field for the product URL or a
   demo board (§8). `<PROD_URL>` and `<DEMO_BOARD_URL from Linear>`
   go into the Project Description text, and the description is
-  the only place the demo board link appears.
+  the only place the judges' board link appears.
 
 ## 2. Video: direction, prototype and capture rules
 
@@ -281,7 +282,7 @@ approves.
 | F1 | Feature freeze declared: no new feature slices after Nov 3 EOD; only freeze-blocking fixes | Robin | Date reached; any later change is a stated exception |
 | F2 | `dev` green end-to-end: `npm run typecheck`, `npm test` (`AI_MOCK=1`), `npm run build` (exact gates from `package.json`) | Agent | All three pass at the freeze commit; test count updated in §3 if it moved |
 | F3 | Prod promotion: `dev` → `main`/prod per the hosting setup, then a real end-to-end play on `<PROD_URL>` (create board → pin → scene → remix → share → delete) | Robin + Agent (Robin owns promotion/approval; agent must never push `main`/prod itself) | `<PROD_URL>` plays the full loop with live models; `/api/health` answers |
-| F4 | Demo board seeded on the submit host (`npm run seed:demo`; slug recorded privately, `DEMO_BOARD_SLUG` set in host env if the landing demo link is wanted) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board |
+| F4 | Two boards on prod (`docs/DEPLOY.md` §6.3): the judges' board (the video board; link private, judging overrides) and the landing demo board (`npm run seed:demo`, sacrificial; its slug, never the judges', is what `DEMO_BOARD_SLUG` holds) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board; the landing's "See a board" opens a different board |
 | F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2: code default $5 / 500 calls, dev the same; prod $50 / 10,000 during judging per Robin, Oct 31, see `docs/DEPLOY.md`; verify the live values, do not assume) | Robin | Live values checked in the hosting env and matching A2 |
 | F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners. Nov 2 (PIN-248): re-run on `dev` `a90cd7b`; run again at the freeze commit | Agent | Packet matches freeze-commit reality |
 | F7 | Known-v1-limits honesty pass on `README.md` + this file (1-day `tmp/` lifecycle backstop applied vs the app-side delete, cost-estimate labelling, optional sign-in scope, non-Meta Higgsfield assets disclosed). Nov 2 (PIN-248): lifecycle, estimate labels and Higgsfield disclosure checked; §6 sign-in scope corrected (optional on prod too); build claims now cite `build-log.md`. Open: the `/models` "Built with Meta tools" line names only Muse Code (PIN-249, operator's call before freeze) | Agent | No claim in the packet or README that the code doesn't back |
@@ -293,7 +294,7 @@ approves.
 | V1 | Record the app clips with the §2 capture rules on `<PROD_URL>`; generate the story shots per the storyboard in the video repository | Robin + Agent | Every app clip and story shot in the cut list exists; no slug in any frame or file name |
 | V2 | Fresh usage numbers captured per §4 on record day → end card | Robin (agent can run the command if given the host) | End-card numbers are dated, real, and reproducible |
 | V3 | Edit to ≤ 3:00 (~170 s target) with the video repository's build script; every shortened wait marked on screen; end card discloses AI-generated shots | Robin + Agent | Final cut plays start-to-finish; every shown feature exists on the submitted build |
-| V4 | Upload video; put repo + `<PROD_URL>` in the description; the demo board link **only** if the submission rules ask for it there — never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
+| V4 | Upload video; put repo + `<PROD_URL>` in the description; the judges' board link **only** if the submission rules ask for it there — never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
 
 ### Submit (Nov 4, before 21:00 ET)
 
@@ -301,7 +302,7 @@ approves.
 | --- | --- | --- | --- |
 | S-1 | Repository public (already PUBLIC Oct 29, §3) — re-confirm, and confirm no board slug/secret ever landed in tracked files (gitleaks history is the backstop) | Agent verifies, Robin owns repo settings | `gh repo view` = PUBLIC; secret scan clean |
 | S-2 | Deployed product URL in the submission form = the played-and-verified `<PROD_URL>` (F3), not dev, unless prod genuinely isn't ready — in which case submit the dev URL and say so honestly | Robin | Form URL opened in a fresh browser plays the loop |
-| S-3 | Demo board link pasted into the submission form from the tracker entry (`<DEMO_BOARD_URL from Linear>`) | Robin | Judge can open a populated board with no sign-up |
+| S-3 | Judges' board link pasted into the submission form from the tracker entry (`<DEMO_BOARD_URL from Linear>`); it appears nowhere else | Robin | Judge can open a populated board with no sign-up |
 | S-4 | `<VIDEO_URL>` pasted; pitch text from §1; numbers from §3/§4 with estimate labels intact | Robin (text from this packet) | Form reviewed against §3 — no unlabelled cost claim |
 | S-5 | Submit before 21:00 ET, then screenshot/save the confirmation privately | Robin | Confirmation saved; packet placeholders can now be filled in private notes |
 

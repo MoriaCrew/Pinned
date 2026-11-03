@@ -50,6 +50,19 @@ export interface BoardHost {
   issuedAt: number;
 }
 
+/**
+ * A per-visitor demo board's provenance (PIN-251): which template it
+ * was cloned from and when it stops being served. Server-only, never
+ * in a response. It stays on the tombstone, so a swept board still
+ * says what it was.
+ */
+export interface BoardDemo {
+  /** The template board's slug (DEMO_BOARD_SLUG at creation). */
+  templateSlug: string;
+  /** Epoch ms after which the sweep deletes the board. */
+  expiresAt: number;
+}
+
 export interface Board {
   /** Capability-link slug; also the board id everywhere (`boardId`). */
   slug: string;
@@ -79,6 +92,16 @@ export interface Board {
    * Policy value. Ignored while the board has Plus. Server-only.
    */
   freePhotos?: number;
+  /** Set only on a per-visitor demo board (PIN-251). Server-only. */
+  demo?: BoardDemo;
+  /**
+   * The demo sweep's query key (PIN-251): `demo.expiresAt`, present
+   * only while the board is live. `deleteBoard` drops it with the
+   * tombstone, so `listDemoBoardsToSweep` never returns a board that
+   * is already gone, however it went (sweep or its host). Absent on
+   * every ordinary board, which the sweep therefore never sees.
+   */
+  demoSweepAt?: number;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter

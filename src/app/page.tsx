@@ -16,9 +16,11 @@ import { BoardDeletedNotice } from "./me/BoardDeletedNotice";
 export const dynamic = "force-dynamic";
 
 // Landing. Board creation is live (PIN-66): Start goes to /new.
-// The demo action points at the seeded judge board only when
-// DEMO_BOARD_SLUG is set (PIN-73, scripts/seed-demo-board.mjs);
-// unset or invalid shows nothing: no fake functionality.
+// The demo action points at the seeded, sacrificial landing demo
+// board only when DEMO_BOARD_SLUG is set (PIN-73,
+// scripts/seed-demo-board.mjs); never at the judges' board, whose
+// link stays private (docs/DEPLOY.md §6.3). Unset or invalid shows
+// nothing: no fake functionality.
 //
 // The sticker pile and the three "How it works" pictures come from one
 // showcase set (src/app/landing-sets.data.ts), a random one per visit;
