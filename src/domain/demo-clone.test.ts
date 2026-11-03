@@ -207,6 +207,27 @@ describe("planDemoClone (PIN-251)", () => {
     }
   });
 
+  it("keeps a remix's parent link whatever the listing order, and drops it when the parent is not written", () => {
+    const plan = planDemoClone(
+      source({
+        scenes: [
+          // The remix comes BEFORE its parent in the listing.
+          scene("sc-remix", "p-sam", ["el-1"], { parentSceneId: "sc-ok" }),
+          scene("sc-ok", "p-mia", ["el-1", "el-2"]),
+          // Its parent is kept by status but cannot be written (a pin the template no longer has).
+          scene("sc-orphan", "p-sam", ["el-2"], { parentSceneId: "sc-dangling" }),
+          scene("sc-dangling", "p-mia", ["el-1", "el-gone"]),
+        ],
+      }),
+      options(),
+    );
+    expect(plan.scenes.map((s) => s.prompt)).toEqual(["prompt sc-remix", "prompt sc-ok", "prompt sc-orphan"]);
+    const [remix, ok, orphan] = plan.scenes;
+    expect(remix.parentSceneId).toBe(ok.id);
+    expect(orphan).not.toHaveProperty("parentSceneId");
+    expect(plan.copies.map((c) => c.to)).toEqual(plan.scenes.map((s) => s.imageRef));
+  });
+
   it("keeps an unpinned element a scene still shows, and gives every record a unique fresh id", () => {
     const plan = planDemoClone(
       source({ pins: [pin("pin-2", "el-2", "p-sam")], scenes: [scene("sc-1", "p-mia", ["el-1", "el-2"])] }),

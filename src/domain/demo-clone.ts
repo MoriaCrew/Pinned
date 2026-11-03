@@ -109,7 +109,6 @@ export function planDemoClone(source: DemoCloneSource, options: DemoCloneOptions
   const keptScenes = readyScenes.filter((scene) =>
     scene.elementIds.length > 0 && scene.elementIds.every((id) => knownElementIds.has(id)),
   );
-  const keptSceneIds = new Set(keptScenes.map((scene) => scene.id));
 
   const participantIds = new Map<string, string>();
   const participants: Participant[] = source.participants.map((participant) => {
@@ -156,25 +155,29 @@ export function planDemoClone(source: DemoCloneSource, options: DemoCloneOptions
     pins.push({ id: options.newId(), boardId: slug, elementId, pinnedBy, status: "pinned", createdAt: now });
   }
 
-  const sceneIds = new Map<string, string>();
-  const scenes: Scene[] = [];
-  const copies: StorageCopy[] = [];
-  for (const scene of keptScenes) {
+  // Decide every scene that can be written before building any, so a
+  // remix keeps its parent link whatever order the scenes came in.
+  const writable = keptScenes.flatMap((scene) => {
     const createdBy = actor(scene.createdBy);
     const mapped = scene.elementIds.map((id) => elementIds.get(id));
     const file = sceneFileName(scene.imageRef as string, template.slug, scene.id);
-    if (createdBy === null || mapped.some((id) => id === undefined) || file === null) continue;
-    const id = options.newId();
-    sceneIds.set(scene.id, id);
+    if (createdBy === null || mapped.some((id) => id === undefined) || file === null) return [];
+    return [{ scene, createdBy, elementIds: mapped as string[], file }];
+  });
+  const sceneIds = new Map(writable.map(({ scene }) => [scene.id, options.newId()] as const));
+  const scenes: Scene[] = [];
+  const copies: StorageCopy[] = [];
+  for (const { scene, createdBy, elementIds: mapped, file } of writable) {
+    const id = sceneIds.get(scene.id) as string;
     const imageRef = `scenes/boards/${slug}/${id}/${file}`;
     copies.push({ from: scene.imageRef as string, to: imageRef });
-    const parentSceneId =
-      scene.parentSceneId && keptSceneIds.has(scene.parentSceneId) ? sceneIds.get(scene.parentSceneId) : undefined;
+    // Only a parent that is itself written keeps the link; otherwise the remix stands alone.
+    const parentSceneId = scene.parentSceneId ? sceneIds.get(scene.parentSceneId) : undefined;
     scenes.push({
       id,
       boardId: slug,
       createdBy,
-      elementIds: mapped as string[],
+      elementIds: mapped,
       prompt: scene.prompt,
       status: "ready",
       imageRef,
