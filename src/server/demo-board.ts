@@ -23,7 +23,9 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { planDemoClone, type DemoClonePlan } from "../domain/demo-clone";
 import { generateAdminToken, generateSlug, hashToken } from "../domain/tokens";
+import type { UserRepository } from "../domain/user-repository";
 import { MAX_SLUG_ATTEMPTS, type BoardApiDeps, type CreatedBoard } from "./board-api";
+import { unlinkMyBoards } from "./board-delete";
 import { BoardApiError } from "./board-session";
 import { sweepDeletedBoardStorage } from "./board-storage";
 import { ensureStarterMakes } from "./credit-pool";
@@ -47,7 +49,10 @@ const HOUR_MS = 60 * 60 * 1000;
 export type DemoBoardDeps = Pick<
   BoardApiDeps,
   "boards" | "store" | "credits" | "starterAllowance" | "policy" | "now" | "createSlug" | "newId" | "newHostToken"
->;
+> & {
+  /** My boards rows of swept demo boards are unlinked here (PIN-255). */
+  users: UserRepository;
+};
 
 export interface CreateDemoBoardContext {
   /** The template board (DEMO_BOARD_SLUG). */
@@ -112,9 +117,51 @@ export async function createDemoBoard(
     // and the lazy grant on the first credit touch reads the same
     // amount back from the board doc.
     await ensureStarterMakes(plan.board.slug, deps, demo.starterMakes).catch(() => undefined);
+    // The visitor's board exists; now the sweep-on-request half
+    // (PIN-255): this creation pays for at most `sweepBatch` expired
+    // ones, after the claim so refused requests do no work for free.
+    await sweepExpiredDemoBoards(deps, now);
     return { board: plan.board, hostToken: credential.token };
   }
   throw new BoardApiError("Demo unavailable.", 503, DEMO_UNAVAILABLE);
+}
+
+export interface DemoSweepResult {
+  /** Expired demo boards the query returned. */
+  listed: number;
+  /** Boards this call tombstoned (and then unlinked and swept). */
+  deleted: number;
+}
+
+/**
+ * Delete expired demo boards (PIN-255, docs/11 A4 sweep-on-request):
+ * the repository lists live boards whose `demoSweepAt` is past, and
+ * only those: an ordinary board has no `demoSweepAt`, so it can never
+ * be listed, and the extra `demo` check here is belt and braces. For
+ * each: the tombstone (the same `deleteBoard` the host uses, which
+ * drops the sweep key), then the My boards unlink and the storage
+ * sweep, exactly the host-delete order (board-delete.ts). Best-effort
+ * and idempotent: never throws into the creation path, logs by error
+ * name only, and whatever one run misses the next one finds.
+ */
+export async function sweepExpiredDemoBoards(deps: DemoBoardDeps, now: number): Promise<DemoSweepResult> {
+  const result: DemoSweepResult = { listed: 0, deleted: 0 };
+  const batch = deps.policy.demo.sweepBatch;
+  if (batch <= 0) return result;
+  try {
+    const expired = await deps.boards.listDemoBoardsToSweep(now, batch);
+    result.listed = expired.length;
+    for (const board of expired) {
+      if (board.demo === undefined || board.demoSweepAt === undefined || board.demoSweepAt >= now) continue;
+      if (!(await deps.boards.deleteBoard(board.slug, now))) continue;
+      result.deleted += 1;
+      await unlinkMyBoards(board.slug, deps);
+      await sweepDeletedBoardStorage(board.slug, deps);
+    }
+  } catch (error) {
+    logServerError("demo board sweep stopped early", error);
+  }
+  return result;
 }
 
 /**

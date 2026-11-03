@@ -263,8 +263,11 @@ export const PolicySchema = z
      * creations and `freePhotos` free photos instead of the Policy
      * `credits` pool. Worst-case AI spend per window is about
      * `maxTotal` x `starterMakes` x one scene. `sweepBatch` is how
-     * many expired demo boards one creation sweeps; `createPerIp` is
-     * the in-process brake in front of the durable claims.
+     * many expired demo boards one creation sweeps, inside that
+     * visitor's request (each is a tombstone, an unlink and a storage
+     * sweep, so the batch stays small: 5 creations per expiry keep up
+     * with any pace the caps allow); `createPerIp` is the in-process
+     * brake in front of the durable claims.
      */
     demo: z
       .object({
@@ -274,7 +277,7 @@ export const PolicySchema = z
         maxPerIp: z.number().int().min(0).default(3),
         maxTotal: z.number().int().min(0).default(200),
         windowMs: z.number().int().min(1).default(86_400_000),
-        sweepBatch: z.number().int().min(0).default(20),
+        sweepBatch: z.number().int().min(0).default(5),
         createPerIp: z
           .object({
             limit: z.number().int().min(1).default(5),
@@ -289,7 +292,7 @@ export const PolicySchema = z
         maxPerIp: 3,
         maxTotal: 200,
         windowMs: 86_400_000,
-        sweepBatch: 20,
+        sweepBatch: 5,
         createPerIp: { limit: 5, windowMs: 600_000 },
       }),
     /** One-time "sign in to keep your pins" nudge after the first

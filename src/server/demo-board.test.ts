@@ -4,10 +4,17 @@ import { InMemoryBoardRepository } from "../domain/board-repository";
 import { InMemoryCreditLedgerStore } from "../domain/credit-ledger";
 import { InMemoryStarterAllowanceStore } from "../domain/starter-allowance";
 import { generateSlug, isValidSlug } from "../domain/tokens";
+import { InMemoryUserRepository } from "../domain/user-repository";
 import { resolvePolicy } from "../policy/policy";
 import { BoardApiError } from "./board-session";
 import { readAvailableMakes } from "./credit-pool";
-import { DEMO_CAPPED, DEMO_UNAVAILABLE, createDemoBoard, type DemoBoardDeps } from "./demo-board";
+import {
+  DEMO_CAPPED,
+  DEMO_UNAVAILABLE,
+  createDemoBoard,
+  sweepExpiredDemoBoards,
+  type DemoBoardDeps,
+} from "./demo-board";
 import { InMemoryDerivativeStore } from "./derivative-store";
 import { verifyHostToken } from "./host-session";
 
@@ -22,7 +29,7 @@ const SCENE_BYTES = Buffer.from("scene-png");
 
 const policy = resolvePolicy({
   credits: { enabled: true, starterMakes: 20, freePhotosPerBoard: 15 },
-  demo: { ttlHours: 1, starterMakes: 2, freePhotos: 3, maxPerIp: 2, maxTotal: 3, windowMs: 24 * HOUR },
+  demo: { ttlHours: 1, starterMakes: 2, freePhotos: 3, maxPerIp: 2, maxTotal: 3, windowMs: 24 * HOUR, sweepBatch: 2 },
 });
 
 async function harness(overrides: Partial<DemoBoardDeps> = {}) {
@@ -30,7 +37,11 @@ async function harness(overrides: Partial<DemoBoardDeps> = {}) {
   const store = new InMemoryDerivativeStore();
   const credits = new InMemoryCreditLedgerStore();
   const starterAllowance = new InMemoryStarterAllowanceStore();
-  const deps: DemoBoardDeps = { boards, store, credits, starterAllowance, policy, now: () => NOW, ...overrides };
+  const users = new InMemoryUserRepository();
+  const clock = { now: NOW };
+  const deps: DemoBoardDeps = {
+    boards, store, credits, starterAllowance, users, policy, now: () => clock.now, ...overrides,
+  };
 
   const template: Board = {
     slug: TEMPLATE,
@@ -76,7 +87,13 @@ async function harness(overrides: Partial<DemoBoardDeps> = {}) {
     files: (await Promise.all(["tmp", "elements", "scenes"].map((root) => store.listPrefix(`${root}/boards/${slug}/`)))).flat(),
   });
   const create = (clientKey = "visitor-a") => createDemoBoard({ templateSlug: TEMPLATE, title: "Demo board", clientKey }, deps);
-  return { boards, store, credits, starterAllowance, deps, snapshot, create };
+  return { boards, store, credits, starterAllowance, users, clock, deps, snapshot, create };
+}
+
+/** A visitor joined the demo board signed in: their My boards row points at it (PIN-57). */
+async function linkVisitor(h: Awaited<ReturnType<typeof harness>>, slug: string, uid: string) {
+  await h.boards.putParticipant({ id: `${uid}-p`, boardId: slug, displayName: "Visitor", cookieSecretHash: "v", userId: uid, createdAt: h.clock.now });
+  await h.users.putUserBoard(uid, { boardId: slug, participantId: `${uid}-p`, claimedAt: h.clock.now, updatedAt: h.clock.now });
 }
 
 describe("createDemoBoard (PIN-251)", () => {
@@ -224,5 +241,78 @@ describe("createDemoBoard (PIN-251)", () => {
     expect(board.starterMakes).toBe(2);
     expect(await readAvailableMakes(board.slug, h.deps)).toBeNull();
     expect(await h.credits.getAccount(board.slug)).toBeNull();
+  });
+});
+
+describe("sweepExpiredDemoBoards (PIN-255)", () => {
+  it("deletes only boards past their TTL: tombstone, My boards row, storage; the template's shared files stay", async () => {
+    const h = await harness();
+    const old = (await h.create("visitor-a")).board;
+    await linkVisitor(h, old.slug, "uid-visitor");
+    h.clock.now = NOW + 30 * 60_000;
+    const young = (await h.create("visitor-b")).board;
+    const templateBefore = await h.snapshot(TEMPLATE);
+
+    h.clock.now = NOW + HOUR + 60_000; // the old one expired a minute ago, the young one has half an hour left
+    expect(await sweepExpiredDemoBoards(h.deps, h.clock.now)).toEqual({ listed: 1, deleted: 1 });
+
+    const gone = await h.snapshot(old.slug);
+    expect(gone.board).toBeNull();
+    expect(gone.files).toEqual([]);
+    expect(await h.users.getUserBoard("uid-visitor", old.slug)).toBeNull();
+    const kept = await h.snapshot(young.slug);
+    expect(kept.board).not.toBeNull();
+    expect(kept.files).toHaveLength(1);
+    expect(await h.snapshot(TEMPLATE)).toEqual(templateBefore);
+    // Idempotent: nothing left to do, and the swept board never comes back.
+    expect(await sweepExpiredDemoBoards(h.deps, h.clock.now)).toEqual({ listed: 0, deleted: 0 });
+    expect(await h.boards.listDemoBoardsToSweep(Number.MAX_SAFE_INTEGER, 10)).toHaveLength(1);
+  });
+
+  it("respects sweepBatch, oldest first, and does nothing when it is 0", async () => {
+    const h = await harness({ policy: resolvePolicy({ demo: { ttlHours: 1, maxPerIp: 10, maxTotal: 10, sweepBatch: 2 } }) });
+    const slugs: string[] = [];
+    for (const minutes of [0, 1, 2]) {
+      h.clock.now = NOW + minutes * 60_000;
+      slugs.push((await h.create()).board.slug);
+    }
+    h.clock.now = NOW + 2 * HOUR;
+    expect(await sweepExpiredDemoBoards(h.deps, h.clock.now)).toEqual({ listed: 2, deleted: 2 });
+    expect(await h.boards.getBoard(slugs[0])).toBeNull();
+    expect(await h.boards.getBoard(slugs[1])).toBeNull();
+    expect(await h.boards.getBoard(slugs[2])).not.toBeNull();
+
+    const off = await harness({ policy: resolvePolicy({ demo: { ttlHours: 1, sweepBatch: 0 } }) });
+    const { board } = await off.create();
+    off.clock.now = NOW + 2 * HOUR;
+    expect(await sweepExpiredDemoBoards(off.deps, off.clock.now)).toEqual({ listed: 0, deleted: 0 });
+    expect(await off.boards.getBoard(board.slug)).not.toBeNull();
+  });
+
+  it("runs inside each creation, so the visitor who comes after an expiry cleans it up", async () => {
+    const h = await harness();
+    const first = (await h.create("visitor-a")).board;
+    h.clock.now = NOW + 2 * HOUR;
+    const second = (await h.create("visitor-b")).board;
+    expect(await h.boards.getBoard(first.slug)).toBeNull();
+    expect(await h.boards.getBoard(second.slug)).not.toBeNull();
+    expect((await h.snapshot(first.slug)).files).toEqual([]);
+  });
+
+  it("never touches a board without the demo marker, and a failing sweep never fails the creation", async () => {
+    const h = await harness();
+    // An ordinary board, even one whose doc somehow carries a stale demoSweepAt, is skipped without demo.
+    const stray = generateSlug();
+    await h.boards.createBoard({ slug: stray, title: "Not a demo", counters: emptyBoardCounters(), createdAt: 1, version: 1, demoSweepAt: 1 });
+    expect(await sweepExpiredDemoBoards(h.deps, NOW)).toEqual({ listed: 1, deleted: 0 });
+    expect(await h.boards.getBoard(stray)).not.toBeNull();
+    expect(await h.boards.getBoard(TEMPLATE)).not.toBeNull();
+
+    vi.spyOn(h.boards, "listDemoBoardsToSweep").mockRejectedValue(new Error("firestore down"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { board } = await h.create();
+    expect(await h.boards.getBoard(board.slug)).not.toBeNull();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
   });
 });

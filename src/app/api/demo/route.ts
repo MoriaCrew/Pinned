@@ -10,6 +10,7 @@ import { DEMO_CAPPED, createDemoBoard } from "../../../server/demo-board";
 import { buildHostCookieHeader, hostCookieMaxAgeSeconds } from "../../../server/host-session";
 import { checkRateLimit, clientIp, clientKey } from "../../../server/rate-limit";
 import { logServerError } from "../../../server/safe-log";
+import { getUserRepository } from "../../../server/user-repository";
 import { rejectCrossSite } from "../boards/request-guards";
 import { JSON_HEADERS, boardApiDeps, isSecureRequest } from "../boards/shared";
 
@@ -48,7 +49,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // The same hashing as the maker rule, under the demo's own key prefix.
         clientKey: makerKey({ clientIp: clientIp(request) }),
       },
-      boardApiDeps(policy),
+      { ...boardApiDeps(policy), users: getUserRepository() },
     );
     const hostCookie = buildHostCookieHeader(
       board.slug,
