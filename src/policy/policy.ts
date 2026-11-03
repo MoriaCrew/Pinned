@@ -250,6 +250,51 @@ export const PolicySchema = z
         checkoutPerIp: { limit: 20, windowMs: 600_000 },
         webhookMaxBytes: 1_048_576,
       }),
+    /**
+     * Per-visitor demo boards (PIN-251, docs/DEPLOY.md §6.3): "See a
+     * board" on the landing clones the DEMO_BOARD_SLUG template into
+     * a fresh board for that visitor, which the sweep deletes once
+     * `ttlHours` have passed. The caps bound a creation path that
+     * bypasses the per-maker free creations rule: `maxPerIp` demo
+     * boards per client address and `maxTotal` overall per fixed
+     * `windowMs` window (starter-allowance semantics: the window is
+     * anchored at the first claim and a denied claim records
+     * nothing), each demo board starting with `starterMakes` free
+     * creations and `freePhotos` free photos instead of the Policy
+     * `credits` pool. Worst-case AI spend per window is about
+     * `maxTotal` x `starterMakes` x one scene. `sweepBatch` is how
+     * many expired demo boards one creation sweeps, inside that
+     * visitor's request (each is a tombstone, an unlink and a storage
+     * sweep, so the batch stays small: 5 creations per expiry keep up
+     * with any pace the caps allow); `createPerIp` is the in-process
+     * brake in front of the durable claims.
+     */
+    demo: z
+      .object({
+        ttlHours: z.number().positive().default(24),
+        starterMakes: z.number().int().min(0).default(2),
+        freePhotos: z.number().int().min(0).default(3),
+        maxPerIp: z.number().int().min(0).default(3),
+        maxTotal: z.number().int().min(0).default(200),
+        windowMs: z.number().int().min(1).default(86_400_000),
+        sweepBatch: z.number().int().min(0).default(5),
+        createPerIp: z
+          .object({
+            limit: z.number().int().min(1).default(5),
+            windowMs: z.number().int().min(1).default(600_000),
+          })
+          .default({ limit: 5, windowMs: 600_000 }),
+      })
+      .default({
+        ttlHours: 24,
+        starterMakes: 2,
+        freePhotos: 3,
+        maxPerIp: 3,
+        maxTotal: 200,
+        windowMs: 86_400_000,
+        sweepBatch: 5,
+        createPerIp: { limit: 5, windowMs: 600_000 },
+      }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
     signInNudge: z.boolean().default(true),
@@ -503,6 +548,23 @@ export const PolicyOverridesSchema = z.object({
         })
         .optional(),
       webhookMaxBytes: z.number().int().min(1).optional(),
+    })
+    .optional(),
+  demo: z
+    .object({
+      ttlHours: z.number().positive().optional(),
+      starterMakes: z.number().int().min(0).optional(),
+      freePhotos: z.number().int().min(0).optional(),
+      maxPerIp: z.number().int().min(0).optional(),
+      maxTotal: z.number().int().min(0).optional(),
+      windowMs: z.number().int().min(1).optional(),
+      sweepBatch: z.number().int().min(0).optional(),
+      createPerIp: z
+        .object({
+          limit: z.number().int().min(1).optional(),
+          windowMs: z.number().int().min(1).optional(),
+        })
+        .optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),

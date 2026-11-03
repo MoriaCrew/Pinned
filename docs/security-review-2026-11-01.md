@@ -1,5 +1,17 @@
 # Pinned — Pre-launch security review (dev / main), 2026-11-01
 
+> **Status, Nov 2, 2026.** The findings below were fixed on `dev` in PIN-238–243
+> (#216, #218–#222) and reached prod with promotion #2 (#226): F1 report link, upload
+> consent line, takedown terms and the abuse runbook
+> ([`20-abuse-runbook.md`](20-abuse-runbook.md), PIN-239); F2 and F6 trusted-hop client
+> IP, Stripe key and webhook-secret pairing with a livemode guard, and the webhook byte cap
+> (PIN-238); F3 Plus revoked on a full refund or lost dispute (PIN-242); F4 hourly AI
+> sub-cap and the launch ops runbook with GCP budget alerts
+> ([`launch-ops-runbook.md`](launch-ops-runbook.md), PIN-240); F5 and the F9 caps for the
+> lab, chips, tap-add and JSON bodies (PIN-241); F7 scheduled reconciliation with alerting
+> (PIN-243). F8, the rest of F9 and the Low items are post-hackathon hardening
+> (Checklist C). The text below is the review as written on Nov 1, kept for the record.
+
 ## Verdict
 
 **GO-WITH-FIXES for publicly promoting the current prod (`pinneds.com`,

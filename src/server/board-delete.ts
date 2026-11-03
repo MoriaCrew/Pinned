@@ -52,8 +52,15 @@ export async function deleteBoardForEveryone(
   await sweepDeletedBoardStorage(slug, deps);
 }
 
-/** Drop the board from its signed-in participants' My boards. Never throws. */
-async function unlinkMyBoards(slug: string, deps: DeleteBoardDeps): Promise<void> {
+/**
+ * Drop a deleted board from its signed-in participants' My boards.
+ * Never throws. Shared with the demo sweep (PIN-251), which deletes
+ * boards without a host.
+ */
+export async function unlinkMyBoards(
+  slug: string,
+  deps: Pick<DeleteBoardDeps, "boards" | "users">,
+): Promise<void> {
   let uids: Set<string>;
   try {
     uids = new Set(

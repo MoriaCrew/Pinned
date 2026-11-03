@@ -622,6 +622,45 @@ export function describeBoardRepositoryContract(
       expect((await repo.listEvents(SLUG)).map((e) => e.type)).toEqual(["participant_joined", "element_added"]);
     });
 
+    it("listDemoBoardsToSweep: expired live demo boards only, oldest first, capped; the tombstone drops the key (PIN-251)", async () => {
+      const repo = makeRepo();
+      const demo = (slug: string, expiresAt: number): Board =>
+        makeBoard({ slug, demo: { templateSlug: SLUG, expiresAt }, demoSweepAt: expiresAt });
+      await repo.createBoard(makeBoard()); // an ordinary board: no demoSweepAt, never listed
+      await repo.createBoard(demo("demo-slug-000000000001", 3_000));
+      await repo.createBoard(demo("demo-slug-000000000002", 1_000));
+      await repo.createBoard(demo("demo-slug-000000000003", 2_000));
+      await repo.createBoard(demo("demo-slug-000000000004", 9_000)); // not yet expired
+
+      expect((await repo.listDemoBoardsToSweep(5_000, 10)).map((b) => b.slug)).toEqual([
+        "demo-slug-000000000002",
+        "demo-slug-000000000003",
+        "demo-slug-000000000001",
+      ]);
+      expect((await repo.listDemoBoardsToSweep(5_000, 2)).map((b) => b.slug)).toEqual([
+        "demo-slug-000000000002",
+        "demo-slug-000000000003",
+      ]);
+      expect(await repo.listDemoBoardsToSweep(5_000, 0)).toEqual([]);
+      expect(await repo.listDemoBoardsToSweep(500, 10)).toEqual([]);
+      // Listed boards are isolated copies with their demo provenance.
+      const [first] = await repo.listDemoBoardsToSweep(5_000, 1);
+      expect(first.demo).toEqual({ templateSlug: SLUG, expiresAt: 1_000 });
+      first.title = "mutated";
+      expect((await repo.getBoard("demo-slug-000000000002"))?.title).toBe("Kitchen finds");
+
+      // The tombstone (sweep or host delete alike) drops demoSweepAt and keeps demo for forensics.
+      expect(await repo.deleteBoard("demo-slug-000000000002", 4_000)).toBe(true);
+      expect((await repo.listDemoBoardsToSweep(5_000, 10)).map((b) => b.slug)).toEqual([
+        "demo-slug-000000000003",
+        "demo-slug-000000000001",
+      ]);
+      expect(await repo.getBoard("demo-slug-000000000002")).toBeNull();
+      // The ordinary board's tombstone is unchanged by the rule.
+      expect(await repo.deleteBoard(SLUG, 4_000)).toBe(true);
+      expect(await repo.listDemoBoardsToSweep(10_000, 10)).toHaveLength(3);
+    });
+
     it("deleteBoard: a racing counter write never clears the tombstone (PIN-167)", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());

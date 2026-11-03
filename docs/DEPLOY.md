@@ -148,6 +148,7 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
      git fetch origin main dev
      git checkout -b promote/$(date +%Y-%m-%d) origin/main
      git restore --source=origin/dev --staged --worktree -- .   # also applies deletions
+     pre-commit run --all-files   # the commit runs the hooks: a file that reached dev without them (promotion #2: a missing trailing newline) is rewritten here, so land that fix on dev first and re-cut
      git commit -m "Promote dev to prod ($(git rev-parse --short origin/dev))"
      git diff --stat origin/dev   # must print nothing: tree == dev
      git push -u origin HEAD
@@ -166,10 +167,12 @@ Set a shell variable once: `P=moriacrew-pinned-prod`.
 ## 5. Smoke (prod or dev)
 
 ```sh
-curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"optional", plusMode:"off"
+curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"optional", plusMode:"stripe" (since promotion #2, Nov 2; "off" = billing rolled back)
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked
+curl -s https://pinneds.com/ | grep -c 'href="/g/'   # 1: the landing demo link (DEMO_BOARD_SLUG); 0 on dev
 # Languages (PIN-227): French browser → French, saved English wins, unknown → English
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
@@ -195,34 +198,61 @@ element; delete the throwaway board.
    gcloud storage buckets update gs://moriacrew-pinned-prod.firebasestorage.app --lifecycle-file=storage.lifecycle.json
    gcloud storage buckets update gs://moriacrew-pinned-dev.firebasestorage.app --lifecycle-file=storage.lifecycle.json
    ```
-3. **Demo board + an identical backup:**
-   `SEED_BASE_URL=https://pinneds.com npm run seed:demo` twice. The
-   script prints each slug once: record them only in Linear (PIN-76),
-   never in git. Time the first scene with
-   `npm run seed:demo -- --time-first-scene <slug>`.
-4. **Demo-board overrides** (no deploy; Firestore console →
+3. **Two boards, two roles (Robin, Nov 3):**
+   - The **judges' board** is the board the video was recorded on.
+     Its link goes into the submission form and nowhere else: never
+     the landing, the repo, Linear comments or the video (a board
+     link is a capability URL; anyone holding it can join and pin,
+     and there is no lock or read-only mode).
+   - The **demo template board** is what "See a board" copies
+     (`DEMO_BOARD_SLUG`, step 5). Since PIN-251 the landing never
+     links it: the button posts to `/api/demo`, which clones the
+     template into a **fresh demo board for that visitor** (their
+     own host cookie, `Policy.demo.starterMakes` free creations,
+     `demo.freePhotos` free photos) and deletes it after
+     `demo.ttlHours` (the sweep runs inside later demo creations, at
+     most `demo.sweepBatch` boards each). Caps: `demo.maxPerIp` per
+     client address and `demo.maxTotal` overall per `demo.windowMs`;
+     a reached cap sends the visitor back to the landing with a
+     one-line notice. The template is read only (cut-outs are shared
+     by reference, scene pictures copied), so never pin on it or
+     delete its scenes; to change the demo, seed a new one and
+     repoint. `SEED_BASE_URL=https://pinneds.com npm run seed:demo`
+     makes one (synthetic fixtures, 2 participants, 1 scene; default
+     caps). The script prints the slug once: record it only in the
+     private notes (PIN-76), never in git. Time the first scene with
+     `npm run seed:demo -- --time-first-scene <slug>`.
+4. **Judges'-board overrides** (no deploy; Firestore console →
    `boards/<slug>` → field `policyOverrides`, a map). Try it on a
    throwaway board first: an invalid value makes that board answer
-   500. Robin (Oct 31): the demo board is a **normal board**. It
+   500. Robin (Oct 31): the judges' board is a **normal board**. It
    gets the free tier like any other board; only the caps that would
    lock judges out of joining are raised:
    ```json
    { "participantsPerBoard": 500, "joinMaxNewPerIp": 200 }
    ```
-   Once live billing is on (§7), Robin buys Board Plus on the demo
+   Once live billing is on (§7), Robin buys Board Plus on the judges'
    board with a real card and keeps it. That purchase is the live
    go-live check (`docs/15-board-plus.md`, "Going live on prod"), and
-   it makes the demo board a paying customer's board: every skin,
+   it makes the judges' board a paying customer's board: every skin,
    foil stickers, no photo limit and 20 + 20 AI scenes. Each judge's
    own new board shows the free tier (20 AI scenes during judging
    week, `starterMakes` in `apphosting.prod.yaml`; 5 after) and the
    Plus offer. Spend stays bounded by the global daily budget. If the
-   demo board needs headroom during judging, raise its daily caps
+   judges' board needs headroom during judging, raise its daily caps
    here (`scenesPerBoardPerDay`, `photosPerParticipantPerDay`); do
    not give it a free pool.
 5. **Landing demo link:** `firebase apphosting:secrets:set DEMO_BOARD_SLUG --project "$P"`
    + `grantaccess`, then a PR adding the reference to
-   `apphosting.prod.yaml` (it ships with promotion #2).
+   `apphosting.prod.yaml` (it ships with promotion #2). The value is
+   the demo template board's slug (step 3), never the judges' board's.
+   Repointing later = a new secret version (`gcloud secrets versions
+   add DEMO_BOARD_SLUG --data-file=<file> --project "$P"`) **plus a
+   rollout**: the Cloud Run revision pins the secret version, so
+   `firebase apphosting:rollouts:create pinned-web --git-commit <main sha> --project "$P" --force`
+   (same build, ~5 min), then the §5 demo lines. Nov 2 lesson: the
+   first version held the judges' slug and the landing linked the
+   judges' board for 13 h (no one joined); fixed Nov 3.
 6. **Monitoring:**
    - Uptime check on `https://pinneds.com/api/health` every minute,
      content contains `"aiMock":false`, with an email alert
@@ -246,7 +276,7 @@ and both live secrets exist. The legal pages (PIN-26) are already on
 `dev`. If the switch is ready by the Nov 3 freeze it rides promotion
 #2; otherwise a config-only promotion turns it on as soon as it is
 ready, even during judging week (§8). The live purchase is made on
-the demo board and kept (§6.4). Steps, smoke and rollback:
+the judges' board and kept (§6.4). Steps, smoke and rollback:
 `docs/15-board-plus.md`, "Going live on prod".
 
 ## 8. Judging week (Nov 4–8)
@@ -255,8 +285,16 @@ the demo board and kept (§6.4). Steps, smoke and rollback:
   One planned exception: if the live-billing switch (§7) wasn't
   ready by the freeze, it goes out as a config-only promotion once it
   is. Run the §5 smoke and the billing smoke in `docs/15` right after.
-- **Twice a day:** health, the demo board, `usage:costs`.
-- **Meta slow or down:** set the demo board's `dailyBudgetUsd` to 0.
+- **Twice a day:** health, the judges' board (counts only: joins,
+  pins, scenes since the last check; nobody but the recorded
+  participants and the judges should appear), the demo template
+  board (unchanged counts: 2 participants, its pins and 1 scene) and
+  a "See a board" click (lands on a fresh board), `usage:costs`.
+- **Demo boards piling up or abused:** lower `demo.maxTotal` /
+  `demo.maxPerIp` in `POLICY_OVERRIDES_JSON` (0 closes the demo; the
+  landing then still shows the button, which answers "busy"), or
+  unset `DEMO_BOARD_SLUG` to hide it (both need a rollout, §6.5).
+- **Meta slow or down:** set the judges' board's `dailyBudgetUsd` to 0.
   Scenes become honest collages, uploads say AI is switched off,
   existing pins and scenes keep working. Undo by restoring the value.
 - **Bad release:** App Hosting → Rollouts → previous rollout → Roll
@@ -268,5 +306,8 @@ the demo board and kept (§6.4). Steps, smoke and rollback:
 ## 9. After judging
 
 Lower `AI_DAILY_BUDGET_USD`/`AI_DAILY_CALL_LIMIT`, set
-`minInstances: 0`, remove the demo-board overrides you no longer
-need, and keep the TTL and lifecycle rules.
+`minInstances: 0`, remove the judges'-board overrides you no longer
+need, consider lower `demo.maxTotal` / `demo.starterMakes`, and keep
+the TTL and lifecycle rules. Expired demo boards keep being swept by
+later demo creations; a quiet landing leaves the last few until the
+next click (their `tmp/` copies still fall to the bucket lifecycle).

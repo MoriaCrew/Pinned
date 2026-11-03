@@ -49,6 +49,19 @@ export function describeStarterAllowanceStoreContract(
       const store = makeStore();
       await expect(store.tryClaim("", 10_000, PARAMS)).rejects.toThrow(RangeError);
       await expect(store.tryClaim("a/b", 10_000, PARAMS)).rejects.toThrow(RangeError);
+      await expect(store.hasSlot("a/b", 10_000, PARAMS)).rejects.toThrow(RangeError);
+    });
+
+    it("hasSlot answers what tryClaim would, and records nothing (PIN-251)", async () => {
+      const store = makeStore();
+      expect(await store.hasSlot("maker-a", 10_000, PARAMS)).toBe(true);
+      expect(await store.hasSlot("maker-a", 10_000, PARAMS)).toBe(true); // still 2 slots: nothing was spent
+      expect(await store.tryClaim("maker-a", 10_000, PARAMS)).toBe(true);
+      expect(await store.tryClaim("maker-a", 10_100, PARAMS)).toBe(true);
+      expect(await store.hasSlot("maker-a", 10_200, PARAMS)).toBe(false);
+      expect(await store.hasSlot("maker-a", 11_000, PARAMS)).toBe(true); // the window has passed
+      expect(await store.hasSlot("maker-b", 10_000, { maxBoards: 0, windowMs: 1_000 })).toBe(false);
+      expect(await store.tryClaim("maker-b", 10_000, PARAMS)).toBe(true); // the peek above did not count
     });
   });
 }

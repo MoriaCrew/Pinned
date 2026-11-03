@@ -21,6 +21,13 @@ export interface DerivativeStore {
    * board-storage.ts, which builds each prefix from a valid slug.
    */
   listPrefix(prefix: string): Promise<string[]>;
+  /**
+   * Copy one stored object to a new ref (PIN-251: a demo board gets
+   * its own copy of the template's scene pictures). Server-side in
+   * GCS, so the bytes never pass through the app. Rejects when the
+   * source is missing (an Error, not a silent no-op).
+   */
+  copy(from: string, to: string): Promise<void>;
 }
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
@@ -66,6 +73,12 @@ export class InMemoryDerivativeStore implements DerivativeStore {
   async listPrefix(prefix: string): Promise<string[]> {
     const checked = assertDerivativePrefix(prefix);
     return [...this.objects.keys()].filter((ref) => ref.startsWith(checked)).sort();
+  }
+
+  async copy(from: string, to: string): Promise<void> {
+    const hit = this.objects.get(assertDerivativeRef(from));
+    if (!hit) throw new Error("Source object not found.");
+    this.objects.set(assertDerivativeRef(to), { bytes: Buffer.from(hit.bytes), contentType: hit.contentType });
   }
 }
 
@@ -116,6 +129,11 @@ export class GcsDerivativeStore implements DerivativeStore {
       .bucket(this.bucketName)
       .getFiles({ prefix: checked, autoPaginate: true });
     return files.map((file) => file.name).filter((name) => name.startsWith(checked));
+  }
+
+  /** GCS server-side copy; the destination keeps the source's content type and cache metadata. */
+  async copy(from: string, to: string): Promise<void> {
+    await this.file(from).copy(this.file(to));
   }
 }
 

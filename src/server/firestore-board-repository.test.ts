@@ -79,7 +79,12 @@ function matches(data: Data, filter: Filter): boolean {
     const v = data[filter.field];
     return Array.isArray(v) && v.includes(filter.value);
   }
-  throw new Error(`fake only supports == and array-contains, got ${filter.op}`);
+  if (filter.op === "<") {
+    // Like Firestore, a range filter matches only docs that HAVE the field.
+    const v = data[filter.field];
+    return typeof v === "number" && typeof filter.value === "number" && v < filter.value;
+  }
+  throw new Error(`fake only supports ==, array-contains and <, got ${filter.op}`);
 }
 
 class FakeQuery {
@@ -87,10 +92,18 @@ class FakeQuery {
     protected readonly db: FakeFirestore,
     private readonly scope: { kind: "collection"; path: string } | { kind: "group"; name: string },
     private readonly filter: Filter | null,
+    private readonly order: string | null = null,
+    private readonly max: number | null = null,
   ) {}
   where(field: string, op: string, value: unknown): FakeQuery {
     if (this.filter) throw new Error("fake supports one where clause");
-    return new FakeQuery(this.db, this.scope, { field, op, value });
+    return new FakeQuery(this.db, this.scope, { field, op, value }, this.order, this.max);
+  }
+  orderBy(field: string): FakeQuery {
+    return new FakeQuery(this.db, this.scope, this.filter, field, this.max);
+  }
+  limit(n: number): FakeQuery {
+    return new FakeQuery(this.db, this.scope, this.filter, this.order, n);
   }
   docs(): FakeSnapshot[] {
     const entries = [...this.db.store.entries()].filter(([path]) => {
@@ -101,11 +114,14 @@ class FakeQuery {
       const parts = path.split("/");
       return parts.length >= 2 && parts[parts.length - 2] === this.scope.name;
     });
-    return entries
-      .filter(([, data]) => !this.filter || matches(data, this.filter))
-      .map(
-        ([path, data]) => new FakeSnapshot(new FakeDocRef(this.db, path), data),
-      );
+    const order = this.order;
+    const matched = entries.filter(([, data]) => !this.filter || matches(data, this.filter));
+    if (order) {
+      matched.sort(([, a], [, b]) => (a[order] as number) - (b[order] as number));
+    }
+    return (this.max === null ? matched : matched.slice(0, this.max)).map(
+      ([path, data]) => new FakeSnapshot(new FakeDocRef(this.db, path), data),
+    );
   }
   async get(): Promise<{ docs: FakeSnapshot[] }> {
     return { docs: this.docs() };

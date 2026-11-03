@@ -78,6 +78,18 @@ env:
   # a plain value is both.
   - variable: UI_LOCALES
     value: en,fr,es,pt-BR,de,it,id
+  # PIN-251: the demo template board "See a board" copies into a
+  # fresh board per visitor (docs/DEPLOY.md §6.3). The landing shows
+  # the button only while this is set (read at RUNTIME). The dev
+  # template is a seeded synthetic board on the dev backend; its slug
+  # lives only in Secret Manager (moriacrew-pinned-dev, access granted
+  # to pinned-web). A referenced secret that is missing fails the App
+  # Hosting build, so this block must not reach `dev` before the
+  # secret exists.
+  - variable: DEMO_BOARD_SLUG
+    secret: DEMO_BOARD_SLUG
+    availability:
+      - RUNTIME
   # Security review (PIN-112): lab probe on this backend measured
   # fahIndexFromRight=2, so key per-IP limits on the platform-
   # appended entry, not the client-spoofable first XFF entry.
