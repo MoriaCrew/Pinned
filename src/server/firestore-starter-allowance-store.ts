@@ -48,6 +48,13 @@ export class FirestoreStarterAllowanceStore implements StarterAllowanceStore {
       return true;
     });
   }
+
+  /** One plain read, no transaction: the answer is advice (see the port). */
+  async hasSlot(key: string, now: number, params: StarterAllowanceParams): Promise<boolean> {
+    assertMakerKey(key);
+    const snap = await this.db.collection(STARTER_ALLOWANCES).doc(key).get();
+    return decideStarterSlot(key, fromData(snap.data()), now, params).allowed;
+  }
 }
 
 export interface FirestoreStarterAllowanceStoreOptions {

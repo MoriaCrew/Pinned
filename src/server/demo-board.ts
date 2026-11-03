@@ -118,20 +118,28 @@ export async function createDemoBoard(
 }
 
 /**
- * Both durable claims, per address first (the cheap refusal for one
- * abuser), then the total. A denied claim records nothing, so retries
- * cannot stretch the window (starter-allowance semantics); `maxPerIp`
- * or `maxTotal` at 0 closes the demo entirely. Any doubt is a refusal.
+ * Both durable claims. Order matters because a claim is spent even
+ * when the other one refuses: the shared total is peeked first (a
+ * read, nothing recorded), so a full or closed demo never burns a
+ * visitor's per-address slots; then the per-address claim (the cheap
+ * refusal for one abuser, who therefore cannot drain the total); then
+ * the total claim itself, which only a race since the peek can
+ * refuse. A denied claim records nothing, so retries cannot stretch a
+ * window (starter-allowance semantics); `maxPerIp` or `maxTotal` at 0
+ * closes the demo entirely. Any doubt is a refusal.
  */
 async function claimDemoSlot(clientKey: string, now: number, deps: DemoBoardDeps): Promise<void> {
   const capped = () => new BoardApiError("Demo boards are busy.", 429, DEMO_CAPPED);
-  if (!deps.starterAllowance) throw capped();
+  const store = deps.starterAllowance;
+  if (!store) throw capped();
   const { maxPerIp, maxTotal, windowMs } = deps.policy.demo;
+  const total = { maxBoards: maxTotal, windowMs };
   let allowed = false;
   try {
     allowed =
-      (await deps.starterAllowance.tryClaim(demoClientCapKey(clientKey), now, { maxBoards: maxPerIp, windowMs })) &&
-      (await deps.starterAllowance.tryClaim(DEMO_TOTAL_KEY, now, { maxBoards: maxTotal, windowMs }));
+      (await store.hasSlot(DEMO_TOTAL_KEY, now, total)) &&
+      (await store.tryClaim(demoClientCapKey(clientKey), now, { maxBoards: maxPerIp, windowMs })) &&
+      (await store.tryClaim(DEMO_TOTAL_KEY, now, total));
   } catch (error) {
     logServerError("demo cap claim failed", error);
     throw capped();

@@ -146,6 +146,23 @@ describe("createDemoBoard (PIN-251)", () => {
     expect(await h.boards.listDemoBoardsToSweep(NOW + 2 * HOUR, 10)).toHaveLength(3);
   });
 
+  it("a full or closed total never burns a visitor's per-address slots", async () => {
+    const caps = (maxTotal: number) =>
+      resolvePolicy({ demo: { ttlHours: 1, maxPerIp: 1, maxTotal, windowMs: 24 * HOUR } });
+    const h = await harness({ policy: caps(0) });
+    await expect(h.create("visitor-a")).rejects.toMatchObject({ status: 429, code: DEMO_CAPPED });
+    await expect(h.create("visitor-a")).rejects.toMatchObject({ status: 429, code: DEMO_CAPPED });
+    // The operator reopens the demo inside the same window: the visitor's one slot is still there.
+    h.deps.policy = caps(2);
+    await h.create("visitor-a");
+    // The total is now 1 of 2; a second address fills it; a third is refused with its own slot intact.
+    await h.create("visitor-b");
+    await expect(h.create("visitor-c")).rejects.toMatchObject({ status: 429, code: DEMO_CAPPED });
+    h.deps.policy = caps(3);
+    await h.create("visitor-c");
+    expect(await h.boards.listDemoBoardsToSweep(NOW + 2 * HOUR, 10)).toHaveLength(3);
+  });
+
   it("fails closed without a durable counter, when the counter errors, and when a cap is 0", async () => {
     const noStore = await harness({ starterAllowance: undefined });
     await expect(noStore.create()).rejects.toMatchObject({ status: 429, code: DEMO_CAPPED });
