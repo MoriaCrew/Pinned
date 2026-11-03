@@ -89,15 +89,17 @@ Notes for whoever fills this in:
   and played end-to-end; if prod is not ready, submit the dev URL
   and say so.
 - `<DEMO_BOARD_URL from Linear>` is the judges' board: paste it
-  only into the submission form and the video description. It must
-  never be committed to this repo, shown in the video (§2, capture
-  notes), or set as `DEMO_BOARD_SLUG` (the landing links a separate,
-  sacrificial demo board; `docs/DEPLOY.md` §6.3).
+  only into the submission form's Project Description, never the
+  video description (the video is public, and a board link lets
+  anyone join that board). It must never be committed to this
+  repo, shown in the video (§2, capture notes), or set as
+  `DEMO_BOARD_SLUG` (the landing links a separate, sacrificial demo
+  board; `docs/DEPLOY.md` §6.3).
 - `<VIDEO_URL>`: the unlisted/public host URL of the §2 cut.
 - The submission form has no field for the product URL or a
   demo board (§8). `<PROD_URL>` and `<DEMO_BOARD_URL from Linear>`
-  go into the Project Description text, and the description is
-  the only place the judges' board link appears.
+  go into the Project Description text, and the form's Project
+  Description is the only place the judges' board link appears.
 
 ## 2. Video: direction, prototype and capture rules
 
@@ -294,7 +296,7 @@ approves.
 | V1 | Record the app clips with the §2 capture rules on `<PROD_URL>`; generate the story shots per the storyboard in the video repository | Robin + Agent | Every app clip and story shot in the cut list exists; no slug in any frame or file name |
 | V2 | Fresh usage numbers captured per §4 on record day → end card | Robin (agent can run the command if given the host) | End-card numbers are dated, real, and reproducible |
 | V3 | Edit to ≤ 3:00 (~170 s target) with the video repository's build script; every shortened wait marked on screen; end card discloses AI-generated shots | Robin + Agent | Final cut plays start-to-finish; every shown feature exists on the submitted build |
-| V4 | Upload video; put repo + `<PROD_URL>` in the description; the judges' board link **only** if the submission rules ask for it there — never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
+| V4 | Upload video; put repo + `<PROD_URL>` in the description; never the judges' board link (the video is public; §1) — and never in the repo | Robin | `<VIDEO_URL>` resolves and is viewable without login |
 
 ### Submit (Nov 4, before 21:00 ET)
 
@@ -471,10 +473,10 @@ Risks for Pinneds and how we answer them:
    line of the video. [`build-log.md`](build-log.md) lists every
    merged PR with its merge time and the agent that built it.
 2. **The product must hold up live.** A judge's new board gets the
-   free tier; the demo board holds a fixed number of AI scenes once
-   Plus is bought; judges behind one shared office address share the
-   free-board allowance while signed out (`docs/15`). Size the demo
-   board's headroom for judging week before Nov 4.
+   free tier; the judges' board holds a fixed number of AI scenes
+   once Plus is bought; judges behind one shared office address share
+   the free-board allowance while signed out (`docs/15`). Size the
+   judges' board's headroom for judging week before Nov 4.
 3. **Claims must match the repo.** Four Meta models at runtime and
    one at build time; Muse Code is a coding agent, not a model in
    the product; cost figures are estimates. Who built what follows
@@ -527,7 +529,7 @@ Your World. **Repository:** https://github.com/MoriaCrew/Pinned.
 > back. The UI speaks seven languages, translated at build time by
 > Muse Spark Open.
 >
-> Try it: https://pinneds.com. Demo board: `<DEMO_BOARD_URL from
+> Try it: https://pinneds.com. Judges' board: `<DEMO_BOARD_URL from
 > Linear>`. How each Meta model is used, with one real example:
 > https://pinneds.com/models.
 >
