@@ -103,6 +103,7 @@ describe("sweepDeletedBoardStorage (PIN-169)", () => {
       put: (ref, bytes, type) => h.store.put(ref, bytes, type),
       get: (ref) => h.store.get(ref),
       listPrefix: (prefix) => h.store.listPrefix(prefix),
+      copy: (from, to) => h.store.copy(from, to),
       delete: async (ref) => {
         if (ref === refs[0]) throw new TypeError(`gcs down for ${ref}`);
         return h.store.delete(ref);

@@ -229,9 +229,31 @@ export class FirestoreBoardRepository implements BoardRepository {
     return this.db.runTransaction(async (tx) => {
       const board = liveBoardFrom(await tx.get(ref));
       if (!board) return false;
-      tx.set(ref, toFirestoreData({ ...board, deletedAt: at }));
+      // The whole-doc set drops demoSweepAt (PIN-251): the sweep
+      // query below is then blind to this board for good.
+      const { demoSweepAt: _swept, ...rest } = board;
+      tx.set(ref, toFirestoreData({ ...rest, deletedAt: at }));
       return true;
     });
+  }
+
+  /**
+   * One single-field range query (PIN-251): Firestore indexes every
+   * field by default, so no entry in firestore.indexes.json. Only
+   * live demo boards ever carry the field (deleteBoard drops it),
+   * and the live check below is belt and braces.
+   */
+  async listDemoBoardsToSweep(before: number, limit: number): Promise<Board[]> {
+    if (limit <= 0) return [];
+    const snap = await this.db
+      .collection(BOARDS)
+      .where("demoSweepAt", "<", before)
+      .orderBy("demoSweepAt")
+      .limit(limit)
+      .get();
+    return snap.docs
+      .map((doc) => fromSnapshot<Board>(doc))
+      .filter((board): board is Board => board !== null && board.deletedAt === undefined);
   }
 
   async putParticipant(participant: Participant): Promise<void> {
