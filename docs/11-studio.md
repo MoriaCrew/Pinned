@@ -162,7 +162,7 @@ object. The defaults below are proposals; tune them from evidence.
 | Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`, `muse-voice-transcribe-1.0` |
 | Prompt versions | `elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v2` |
 | `credits.enabled` / `credits.starterMakes` | `false` / 5 (PIN-151: the makes pool, docs/15; 25 before PIN-181; off = pre-credit behaviour exactly, on = 1 make per successful photo or AI scene, collage stays free) |
-| `demo.ttlHours` / `demo.starterMakes` / `demo.freePhotos` / `demo.maxPerIp` / `demo.maxTotal` / `demo.windowMs` / `demo.sweepBatch` | 24 / 2 / 3 / 3 / 200 / 86,400,000 / 20 (PIN-251: per-visitor demo boards cloned from the landing template, `docs/DEPLOY.md` §6.3; the caps bound a creation path outside the per-maker rule, worst case about `maxTotal` x `starterMakes` scenes per window) |
+| `demo.ttlHours` / `demo.starterMakes` / `demo.freePhotos` / `demo.maxPerIp` / `demo.maxTotal` / `demo.windowMs` / `demo.sweepBatch` | 24 / 2 / 3 / 3 / 200 / 86,400,000 / 5 (PIN-251: per-visitor demo boards cloned from the landing template, `docs/DEPLOY.md` §6.3; the caps bound a creation path outside the per-maker rule, worst case about `maxTotal` x `starterMakes` scenes per window) |
 
 > **A2 (budget), as of Oct 31:** the original hosted $2 / 200 calls
 > was too small for family play, so it was raised. Today the code

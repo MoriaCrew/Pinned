@@ -370,7 +370,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       maxPerIp: 3,
       maxTotal: 200,
       windowMs: 86_400_000,
-      sweepBatch: 20,
+      sweepBatch: 5,
       createPerIp: { limit: 5, windowMs: 600_000 },
     });
     // Env layer, then the per-board layer on top; untouched keys keep their defaults.
@@ -385,7 +385,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       maxPerIp: 3,
       maxTotal: 50,
       windowMs: 86_400_000,
-      sweepBatch: 20,
+      sweepBatch: 5,
       createPerIp: { limit: 1, windowMs: 600_000 },
     });
     // 0 closes a cap (no demo boards at all) or turns the sweep off; both are valid operator choices.
