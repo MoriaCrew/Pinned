@@ -265,7 +265,8 @@ export function parseCreateBoardInput(value: unknown, policy: Policy): CreateBoa
   return { title, ...(themeId ? { themeId } : {}) };
 }
 
-const MAX_SLUG_ATTEMPTS = 5;
+/** Slug-collision retries on a 128-bit random slug: an impossibility guard, not a Policy limit. Shared with the demo clone (PIN-251). */
+export const MAX_SLUG_ATTEMPTS = 5;
 
 export interface CreatedBoard {
   board: Board;
