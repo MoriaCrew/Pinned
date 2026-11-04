@@ -18,6 +18,7 @@ import type { ReportStore } from "../domain/report-store";
 import type { UserRepository } from "../domain/user-repository";
 import { deleteSceneObjects } from "./board-api";
 import { unlinkMyBoards } from "./board-delete";
+import { listBoardObjectRefs } from "./board-report";
 import { elementBytesStillNeeded, sweepDeletedBoardStorage } from "./board-storage";
 import type { DerivativeStore } from "./derivative-store";
 import { logServerError } from "./safe-log";
@@ -47,30 +48,22 @@ function isGoneBoard(error: unknown): boolean {
   return error instanceof RangeError;
 }
 
-/** Every stored object a board's records point at (held refs unprefixed), tombstoned boards included. */
-async function boardObjectRefs(boardId: string, boards: BoardRepository): Promise<string[]> {
-  const refs = new Set<string>();
-  for (const element of await boards.listElements(boardId)) {
-    refs.add(releaseRef(element.cutoutRef));
-    refs.add(releaseRef(element.flattenedRef));
-  }
-  for (const scene of await boards.listScenes(boardId, { includeHidden: true })) {
-    if (scene.imageRef) refs.add(scene.imageRef);
-  }
-  return [...refs];
-}
-
 /**
- * Release the Storage temporary holds on everything a board's records
- * point at (docs/20 §8 close-out, or a false alarm). Best-effort per
- * object; returns how many were released and how many failed.
+ * Release the Storage temporary holds on everything the report's hold
+ * could have covered (the same folders `listBoardObjectRefs` holds;
+ * docs/20 §7 close-out, or a false alarm), tombstoned boards included.
+ * Best-effort per object; returns how many were released and failed.
  */
 export async function releaseStorageHolds(
   boardId: string,
   deps: Pick<ReportDecideDeps, "boards" | "store">,
 ): Promise<{ released: number; failed: number }> {
   const result = { released: 0, failed: 0 };
-  for (const ref of await boardObjectRefs(boardId, deps.boards)) {
+  const [elements, scenes] = await Promise.all([
+    deps.boards.listElements(boardId),
+    deps.boards.listScenes(boardId, { includeHidden: true }),
+  ]);
+  for (const ref of await listBoardObjectRefs(boardId, elements, scenes, deps.store)) {
     try {
       await deps.store.setHold(ref, false);
       result.released += 1;
@@ -84,17 +77,21 @@ export async function releaseStorageHolds(
 
 /**
  * False alarm, or not actionable: put back what this report hid. Holds
- * another open report on the same board still lists stay. Null when the
- * report is missing or already decided.
+ * another open report on the same board still lists stay, and a scene
+ * such a report holds on its own is never brought back by a pin's
+ * release. The decision is recorded first (claim-before-act, like the
+ * jobs): the daily sweep and an operator can both see the same open
+ * report, and only the one that claims it acts. Null when the report is
+ * missing or already decided.
  */
 export async function dismissReport(
   id: string,
   deps: ReportDecideDeps,
   note?: string,
 ): Promise<DismissOutcome | null> {
-  const record = await deps.reports.get(id);
-  if (!record || record.status !== "open") return null;
   const now = deps.now?.() ?? Date.now();
+  const record = await deps.reports.decide(id, { status: "dismissed", decidedAt: now, ...(note ? { note } : {}) });
+  if (!record) return null;
   const others = (await deps.reports.listOpenForBoard(record.boardId)).filter((r) => r.id !== id);
   const stillElements = new Set(others.flatMap((r) => r.held.elementIds));
   const stillScenes = new Set(others.flatMap((r) => r.held.sceneIds));
@@ -105,7 +102,7 @@ export async function dismissReport(
   for (const elementId of record.held.elementIds) {
     if (stillElements.has(elementId)) continue;
     try {
-      if (await deps.boards.releaseElement(elementId)) released.elements += 1;
+      if (await deps.boards.releaseElement(elementId, [...stillScenes])) released.elements += 1;
     } catch (error) {
       if (!isGoneBoard(error)) throw error;
     }
@@ -125,8 +122,7 @@ export async function dismissReport(
     const holds = await releaseStorageHolds(record.boardId, deps);
     released.storage = holds.failed === 0;
   }
-  const decided = await deps.reports.decide(id, { status: "dismissed", decidedAt: now, ...(note ? { note } : {}) });
-  return decided ? { record: decided, released } : null;
+  return { record, released };
 }
 
 export type TakedownOutcome = "element_deleted" | "scene_deleted" | "board_deleted" | "already_gone";
@@ -140,16 +136,18 @@ export interface TakedownResult {
  * Confirmed: remove the reported thing for everyone. Storage holds are
  * left in place (a held object refuses deletion; the sweep counts it as
  * failed and the bytes stay as evidence until `releaseStorageHolds`).
- * Null when the report is missing or already decided.
+ * The decision is recorded first (claim-before-act), so two actors never
+ * both delete or one restores what the other removed. Null when the
+ * report is missing or already decided.
  */
 export async function takedownReport(
   id: string,
   deps: ReportDecideDeps,
   note?: string,
 ): Promise<TakedownResult | null> {
-  const record = await deps.reports.get(id);
-  if (!record || record.status !== "open") return null;
   const now = deps.now?.() ?? Date.now();
+  const record = await deps.reports.decide(id, { status: "takedown", decidedAt: now, ...(note ? { note } : {}) });
+  if (!record) return null;
   let outcome: TakedownOutcome = "already_gone";
   try {
     if (record.scope === "element" && record.targetId) {
@@ -162,8 +160,7 @@ export async function takedownReport(
   } catch (error) {
     if (!isGoneBoard(error)) throw error;
   }
-  const decided = await deps.reports.decide(id, { status: "takedown", decidedAt: now, ...(note ? { note } : {}) });
-  return decided ? { record: decided, outcome } : null;
+  return { record, outcome };
 }
 
 async function takedownElement(

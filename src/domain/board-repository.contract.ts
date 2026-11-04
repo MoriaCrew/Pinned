@@ -860,6 +860,21 @@ export function describeBoardRepositoryContract(
       expect(await repo.unhideScene("ghost")).toBe(false);
     });
 
+    it("releaseElement keeps the scenes it is told to keep hidden (a scene held by its own report, PIN-272)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createElement(makeElement());
+      await repo.putScene(makeScene());
+      await repo.putScene(makeScene({ id: "scene-2", createdAt: 1_410 }));
+      expect((await repo.holdElement("el-1")).hiddenSceneIds).toEqual(["scene-1", "scene-2"]);
+      expect(await repo.releaseElement("el-1", ["scene-2"])).toBe(true);
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["scene-1"]);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(1);
+      // The kept scene comes back only through its own release.
+      expect(await repo.unhideScene("scene-2")).toBe(true);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(2);
+    });
+
     it("setBoardReview sets and clears reviewAt on a live board only; counters and version untouched (PIN-269)", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard({ version: 3 }));

@@ -183,6 +183,34 @@ describe("report decisions (PIN-272)", () => {
     expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 10)).toEqual({ due: 1, takenDown: 0, skipped: 1 });
   });
 
+  it("dismiss never brings back a scene another open report holds on its own", async () => {
+    const h = await harness();
+    const sceneReport = await h.file(SLUG, { scope: "scene", targetId: "s-both", reason: "illegal" });
+    // The pin report finds s-both already hidden and hides s-mug.
+    const pinReport = await h.file(SLUG, { scope: "element", targetId: "mug", reason: "inappropriate" });
+    expect(pinReport.held).toEqual({ elementIds: ["mug"], sceneIds: ["s-mug"], boardReview: false, storageHold: false });
+    const outcome = await dismissReport(pinReport.id, h.deps);
+    expect(outcome?.released).toEqual({ elements: 1, scenes: 0, boardReview: false, storage: false });
+    expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug"]);
+    expect((await h.boards.getScene("s-both"))?.hidden).toBe(true);
+    // The scene report's own dismiss brings it back.
+    const second = await dismissReport(sceneReport.id, h.deps);
+    expect(second?.released.scenes).toBe(1);
+    expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug", "s-both"]);
+  });
+
+  it("a report someone else decided first is left alone: the decision is claimed before anything is touched", async () => {
+    const h = await harness();
+    const report = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "likeness" });
+    // The sweep (or another operator terminal) got there first.
+    expect(await h.reports.decide(report.id, { status: "takedown", decidedAt: NOW })).not.toBeNull();
+    expect(await dismissReport(report.id, h.deps)).toBeNull();
+    expect((await h.boards.getElement("friend"))?.cutoutRef).toBe(`held:${refsOf("friend")[0]}`);
+    expect(await takedownReport(report.id, h.deps)).toBeNull();
+    expect(await h.boards.getElement("friend")).not.toBeNull();
+    expect((await h.reports.get(report.id))?.status).toBe("takedown");
+  });
+
   it("references stay the only board id in a decision's record", async () => {
     const h = await harness();
     const report = await h.file(SLUG, { scope: "board", reason: "inappropriate" });
