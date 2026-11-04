@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 import { DEFAULT_LOCALE, t, type Locale } from "../../i18n";
 import { Wordmark } from "../../ui";
 import { LanguageLink } from "../auth/LanguageMenu";
@@ -22,7 +22,13 @@ export function plural(n: number, unit: string): string {
   return `${n} ${n === 1 ? unit : `${unit}s`}`;
 }
 
-/** Privacy, Terms and the source link (after any page-specific `children`): the landing footer and both legal pages. */
+/**
+ * Privacy, Terms and the source link (after any page-specific
+ * `children`), then the language: the landing footer, both legal
+ * pages and /models. PIN-265: one quiet row; each link is a list
+ * item and CSS draws the dots between them, so they are not read
+ * aloud and never become part of a link.
+ */
 export function SiteLinks({
   locale,
   current,
@@ -34,14 +40,24 @@ export function SiteLinks({
 }) {
   return (
     <nav className="pn-foot-links" aria-label={t(locale, "footer.label")}>
-      {children}
-      <a href="/privacy" aria-current={current === "privacy" ? "page" : undefined}>
-        {t(locale, "footer.privacy")}
-      </a>
-      <a href="/terms" aria-current={current === "terms" ? "page" : undefined}>
-        {t(locale, "footer.terms")}
-      </a>
-      <a href={SOURCE_URL}>{t(locale, "footer.source")}</a>
+      <ul className="pn-foot-list">
+        {Children.toArray(children).map((child, index) => (
+          <li key={index}>{child}</li>
+        ))}
+        <li>
+          <a href="/privacy" aria-current={current === "privacy" ? "page" : undefined}>
+            {t(locale, "footer.privacy")}
+          </a>
+        </li>
+        <li>
+          <a href="/terms" aria-current={current === "terms" ? "page" : undefined}>
+            {t(locale, "footer.terms")}
+          </a>
+        </li>
+        <li>
+          <a href={SOURCE_URL}>{t(locale, "footer.source")}</a>
+        </li>
+      </ul>
       <LanguageLink />
     </nav>
   );

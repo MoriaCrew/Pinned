@@ -5,7 +5,7 @@ import { InMemoryBoardRepository } from "../domain/board-repository";
 import type { UserProfile } from "../domain/user";
 import { InMemoryUserRepository } from "../domain/user-repository";
 import { resolvePolicy } from "../policy/policy";
-import { listMyBoards, removeMyBoard } from "./my-boards";
+import { listMyBoards, liveBoardSlugs, removeMyBoard } from "./my-boards";
 import { findClaimedParticipant, linkParticipantToUser } from "./user-session";
 
 const USER: UserProfile = { uid: "synthetic-alice", createdAt: 1, updatedAt: 1 };
@@ -263,5 +263,46 @@ describe("removeMyBoard (PIN-166)", () => {
     expect((await boards.getParticipant(SLUG, "p-bob"))?.userId).toBe(BOB);
     expect((await boards.getParticipant(OTHER_SLUG, "p-alice-other"))?.userId).toBe(USER.uid);
     expect(await users.getUserBoard(USER.uid, OTHER_SLUG)).not.toBeNull();
+  });
+});
+
+describe("liveBoardSlugs (PIN-264)", () => {
+  async function setup() {
+    const boards = new InMemoryBoardRepository();
+    const users = new InMemoryUserRepository();
+    await users.putUser(USER);
+    for (const [slug, pid, owner] of [["b1", "p1", USER.uid], ["stale", "ps", "synthetic-bob"], ["b2", "p2", USER.uid], ["b3", "p3", USER.uid]] as const) {
+      await boards.createBoard(board(slug, 1));
+      await boards.putParticipant(participant(pid, slug, owner));
+    }
+    for (const [boardId, participantId, at] of [["b1", "p1", 10], ["gone", "pg", 15], ["stale", "ps", 20], ["b2", "p2", 30], ["b3", "p3", 40]] as const) {
+      await users.putUserBoard(USER.uid, { boardId, participantId, claimedAt: at, updatedAt: at });
+    }
+    return { boards, users };
+  }
+
+  it("keeps the same claim checks as My boards and stops at the limit", async () => {
+    const deps = await setup();
+    const all = await liveBoardSlugs(USER, deps, 10);
+    expect([...all].sort()).toEqual(["b1", "b2", "b3"]);
+    expect(await liveBoardSlugs(USER, deps, 2)).toHaveLength(2);
+    expect(await liveBoardSlugs(USER, deps, 0)).toEqual([]);
+    // Same set as the full library, never a gone or re-claimed board.
+    const cards = await listMyBoards(USER, deps);
+    expect([...all].sort()).toEqual(cards.map((c) => c.slug).sort());
+  });
+
+  it("never reads a board's elements, pins, scenes or events", async () => {
+    const deps = await setup();
+    const touched: string[] = [];
+    for (const name of ["listElementsByOwner", "listPins", "listScenes", "listEvents"] as const) {
+      const original = deps.boards[name].bind(deps.boards) as (...args: unknown[]) => unknown;
+      (deps.boards as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
+        touched.push(name);
+        return original(...args);
+      };
+    }
+    await liveBoardSlugs(USER, deps, 2);
+    expect(touched).toEqual([]);
   });
 });

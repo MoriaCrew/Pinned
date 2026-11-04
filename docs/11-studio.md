@@ -1,4 +1,4 @@
-# 11 — Pinneds Studio (PIN-49)
+# 11. Pinneds Studio
 
 _Status: source of truth for the Studio pivot from Oct 28, 2026.
 Built from spec sections 1–8 of the Oct 28 hand-off (PIN-48),
@@ -162,7 +162,8 @@ object. The defaults below are proposals; tune them from evidence.
 | Models | `muse-spark-1.3`, `sam-3.1`, `muse-image-1.0`, `muse-voice-transcribe-1.0` |
 | Prompt versions | `elements.v1`, `scene.v1`, `tap-name.v1`, `chips.v2` |
 | `credits.enabled` / `credits.starterMakes` | `false` / 5 (PIN-151: the makes pool, docs/15; 25 before PIN-181; off = pre-credit behaviour exactly, on = 1 make per successful photo or AI scene, collage stays free) |
-| `demo.ttlHours` / `demo.starterMakes` / `demo.freePhotos` / `demo.maxPerIp` / `demo.maxTotal` / `demo.windowMs` / `demo.sweepBatch` | 24 / 2 / 3 / 3 / 200 / 86,400,000 / 5 (PIN-251: per-visitor demo boards cloned from the landing template, `docs/DEPLOY.md` §6.3; the caps bound a creation path outside the per-maker rule, worst case about `maxTotal` x `starterMakes` scenes per window) |
+| `demo.ttlHours` / `demo.starterMakes` / `demo.freePhotos` / `demo.maxPerIp` / `demo.maxTotal` / `demo.windowMs` / `demo.sweepBatch` | 24 / 2 / 3 / 3 / 200 / 86,400,000 / 5 (PIN-251: per-visitor demo boards cloned from the landing template, `docs/DEPLOY.md` §6 step 3; the caps bound a creation path outside the per-maker rule, worst case about `maxTotal` x `starterMakes` scenes per window) |
+| `report.perIp` / `report.maxBytes` / `report.messageMaxChars` / `report.sweepBatch` | 5 per 600,000 ms / 4,096 / 1,000 / 20 (PIN-266: the in-app report route and its backstop, `docs/20-abuse-runbook.md`, ADR-004; the takedown deadline is `takedownHours`) |
 
 > **A2 (budget), as of Oct 31:** the original hosted $2 / 200 calls
 > was too small for family play, so it was raised. Today the code
@@ -204,8 +205,24 @@ object. The defaults below are proposals; tune them from evidence.
 
 ### 5.3 Jobs
 
-- `DecomposeJob` and `SceneJob` documents move
-  `pending → running → ready / failed / refused`.
+- `DecomposeJob` and `SceneJob` documents move through five states;
+  `ready`, `failed` and `refused` are terminal.
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending
+  pending --> running: claim before call
+  pending --> failed: stale sweep
+  running --> ready
+  running --> failed: error or stale sweep
+  running --> refused
+  ready --> [*]
+  failed --> [*]
+  refused --> [*]
+```
+
+_Job states for `DecomposeJob` and `SceneJob`; only one caller wins the claim. The stale sweep applies to `DecomposeJob` only._
+
 - They are idempotent by job id, with claim-before-call, as in
   `src/server/decompose-job.ts`.
 - The request does the work and writes the status; the client polls.
@@ -250,9 +267,11 @@ object. The defaults below are proposals; tune them from evidence.
 > are chosen or at TTL, and (b) a 1-day lifecycle rule as backstop.
 > (a) shipped: the app deletes the working copy at "Pin selected" and
 > an opportunistic per-board sweep deletes copies past the TTL
-> (`src/server/board-api.ts`, `decompose-job.ts`). (b) lands with
-> PIN-209. Until the 1-day rule is applied on a bucket, do not claim
-> a hard 24 h deletion in user-facing copy.
+> (`src/server/board-api.ts`, `decompose-job.ts`). (b) shipped:
+> `storage.lifecycle.json` now holds the 1-day rule on `tmp/` (PIN-209,
+> Oct 31). `firebase deploy` does not apply it; the operator applies
+> it to each bucket (`docs/DEPLOY.md` §6 step 2). Claim a 24 h
+> deletion in user-facing copy only for a bucket that has the rule.
 
 ### 5.6 Scene inputs
 
@@ -433,7 +452,8 @@ owning issue in brackets decides or verifies.
    **Default:** app deletes the working copy when pins are chosen
    (or at 24 h via a sweeper); operator tightens the lifecycle rule
    to 1 day as backstop. No 24 h claim in copy until both exist.
-   **Status:** the app side shipped; the 1-day rule is PIN-209 (A6).
+   **Status:** both shipped (A6); the operator applies the 1-day rule
+   per bucket (`docs/DEPLOY.md` §6 step 2).
    [PIN-53 + operator]
 6. **Slug validation:** a `%2F` slug reaches Firestore as a path.
    Validate at every route entry, or centrally in the repository?
@@ -442,17 +462,17 @@ owning issue in brackets decides or verifies.
    not 500), plus a unit test. Exactly 22 chars matches the current
    128-bit base64url generator. [PIN-51]
 7. **Preset fate:** `docs/archive/09` presets bundle a host persona with a
-   look. The game is gone — keep, halve, or delete?
+   look. The game is gone: keep, halve, or delete?
    **Default (A5):** looks become board themes (tokens + PIN-41
    art); personas are deleted in PIN-52. [PIN-52 / PIN-53]
-8. **Demo-board seeding:** how is the judge demo board populated —
+8. **Demo-board seeding:** how is the judge demo board populated:
    synthetic pins committed as fixtures, generated live on first
    visit, or seeded by a script against prod?
    **Default:** synthetic elements + scenes committed as small
    fixtures under `eval/` rules, seeded by an idempotent script per
    environment; no live paid calls on judge traffic. [PIN-55]
 9. **Faces copy:** `faces: note` shows "everyone in this photo OK
-   with being remixed?" — dismissible per photo, per board, or
+   with being remixed?", dismissible per photo, per board, or
    once per participant?
    **Default:** once per photo containing a face; never blocking
    (§2). Refusals from the provider render as a friendly `refused`
@@ -498,9 +518,9 @@ owning issue in brackets decides or verifies.
 
 | Issue | What | Blocked by | Executor |
 | --- | --- | --- | --- |
-| PIN-48 | Parent: Studio pivot hand-off | — | Muse Code |
-| PIN-49 | Spec into the repo (`docs/11`, ADR-003), agent rules rewritten | — | Muse Code |
-| PIN-50 | Slice 0: live spikes on synthetic images (§8) | — | Muse Code |
+| PIN-48 | Parent: Studio pivot hand-off | none | Muse Code |
+| PIN-49 | Spec into the repo (`docs/11`, ADR-003), agent rules rewritten | none | Muse Code |
+| PIN-50 | Slice 0: live spikes on synthetic images (§8) | none | Muse Code |
 | PIN-51 | Policy and gateway foundations (§5.1–5.2) | PIN-49 | Muse Code |
 | PIN-52 | Delete the game code, rename routes to boards | PIN-49 | Muse Code |
 | PIN-53 | Slice 1: photo → elements → pins | PIN-51, PIN-52 | Muse Code |

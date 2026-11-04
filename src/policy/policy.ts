@@ -295,6 +295,38 @@ export const PolicySchema = z
         sweepBatch: 5,
         createPerIp: { limit: 5, windowMs: 600_000 },
       }),
+    /**
+     * Report & hold (PIN-266, docs/20-abuse-runbook.md): the caps of
+     * the in-app report route, `POST /api/boards/<slug>/report`. A
+     * report is one Firestore write plus reversible holds, never a
+     * model call, so a flood is the risk, not spend: `perIp` is the
+     * in-process brake per client address; `maxBytes` caps the JSON
+     * body and is read from the env-level Policy before any board
+     * read (like sceneRequestMaxBytes); `messageMaxChars` caps the
+     * reporter's free text (stored with the report, never logged).
+     * `sweepBatch` is how many due reports one backstop run (every
+     * 6 h) takes down (0 turns the timed takedown off); the deadline
+     * itself is the existing `takedownHours`, on every holding report
+     * (PIN-278).
+     */
+    report: z
+      .object({
+        perIp: z
+          .object({
+            limit: z.number().int().min(1).default(5),
+            windowMs: z.number().int().min(1).default(600_000),
+          })
+          .default({ limit: 5, windowMs: 600_000 }),
+        maxBytes: z.number().int().min(1).default(4096),
+        messageMaxChars: z.number().int().min(1).default(1000),
+        sweepBatch: z.number().int().min(0).default(20),
+      })
+      .default({
+        perIp: { limit: 5, windowMs: 600_000 },
+        maxBytes: 4096,
+        messageMaxChars: 1000,
+        sweepBatch: 20,
+      }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */
     signInNudge: z.boolean().default(true),
@@ -565,6 +597,19 @@ export const PolicyOverridesSchema = z.object({
           windowMs: z.number().int().min(1).optional(),
         })
         .optional(),
+    })
+    .optional(),
+  report: z
+    .object({
+      perIp: z
+        .object({
+          limit: z.number().int().min(1).optional(),
+          windowMs: z.number().int().min(1).optional(),
+        })
+        .optional(),
+      maxBytes: z.number().int().min(1).optional(),
+      messageMaxChars: z.number().int().min(1).optional(),
+      sweepBatch: z.number().int().min(0).optional(),
     })
     .optional(),
   libraryPageSize: z.number().int().min(1).optional(),

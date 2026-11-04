@@ -28,6 +28,9 @@ export const ICON_PATHS = {
   mic: ["M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z", "M5.5 11a6.5 6.5 0 0 0 13 0", "M12 17.5V21"],
   stop: ["M8.5 6.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"],
   globe: ["M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0z", "M3 12h18", "M12 3c2.5 2.6 3.75 5.6 3.75 9S14.5 18.4 12 21", "M12 3c-2.5 2.6-3.75 5.6-3.75 9S9.5 18.4 12 21"],
+  /* PIN-263: launch (start something new, or open it in a new tab) and play (a video). */
+  launch: ["M14 4h6v6", "M20 4l-9 9", "M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"],
+  play: ["M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0z", "M10 8.75v6.5l5.25-3.25z"],
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

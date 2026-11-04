@@ -21,7 +21,7 @@ dropped (Oct 28); its docs are in `docs/archive/` — do not apply them.
    written dismissal. Medium+ security findings block merge.
    **Never merge to `main`** without Robin; promotion is a separate
    promotion PR into `main` (squash only, per the `Protect main`
-   ruleset) after a hosted dev smoke (`docs/DEPLOY.md` §4).
+   ruleset) after a hosted dev smoke (`docs/DEPLOY.md` §5).
 3. **AI behind the gateway.** All model calls go through the six
    capability ports in `src/gateway/index.ts` (`ElementNamer`,
    `Segmenter`, `SceneComposer`, `ChipSuggester`, `TapNamer`,

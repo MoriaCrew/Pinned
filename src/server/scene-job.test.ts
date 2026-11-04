@@ -548,6 +548,18 @@ describe("deleted-element exclusion and hidden scenes", () => {
     expect(await h.jobs.listForBoard("board-1")).toHaveLength(0);
   });
 
+  it("a pin under a report hold is refused up front, typed, with no composer call (PIN-279)", async () => {
+    const h = await makeHarness();
+    await h.boards.holdElement("el2");
+    const error = await startSceneJob(
+      { boardId: "board-1", participantId: "p1", elementIds: ["el1", "el2"], prompt: "x" },
+      h.deps,
+    ).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "element_under_review" });
+    expect(h.calls).toHaveLength(0);
+    expect(await h.jobs.listForBoard("board-1")).toHaveLength(0);
+  });
+
   it("deleting an element between create and run fails typed with no composer call", async () => {
     const h = await makeHarness();
     const pending: SceneJob = {

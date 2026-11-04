@@ -47,7 +47,8 @@
   text-align: center;
 }
 
-.reportFoot a {
+.reportFoot a,
+.reportLink {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
@@ -55,13 +56,62 @@
   font: 500 14px/20px var(--font-ui);
 }
 
-.reportFoot a:focus-visible {
+.reportLink {
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.reportFoot a:focus-visible,
+.reportLink:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
 
-/* No mail app (in-app browsers): the address and reference as plain, selectable text. */
+/* The report sheet (PIN-271): two chip groups, a message, an email. */
+.reportForm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.reportGroupLabel {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 500 13px/18px var(--font-ui);
+}
+
+.reportChips {
+  flex-wrap: wrap;
+}
+
+.reportError {
+  margin: 0;
+  color: var(--danger, var(--ink));
+  font: 400 14px/20px var(--font-ui);
+}
+
+.reportReceipt {
+  display: grid;
+  gap: var(--space-3);
+  font: 400 15px/22px var(--font-ui);
+}
+
+.reportReceipt p {
+  margin: 0;
+}
+
+.reportMono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+/* The address and reference as plain, selectable text for follow-up. */
 .reportManual,
 .reportFacts {
   margin: 0;
@@ -271,6 +321,8 @@
   flex-direction: column;
   max-height: 92vh;
   max-height: 92dvh;
+  /* The body below scrolls; the sheet itself must not (PIN-261). */
+  overflow: visible;
 }
 
 .lookSheet:focus {

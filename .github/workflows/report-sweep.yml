@@ -1,0 +1,119 @@
+# PIN-272 report backstop: the timed takedown of ADR-004.
+#
+# Whatever a report hid is tombstoned by itself once Policy.takedownHours
+# have passed with no operator decision (PIN-278; docs/20,
+# docs/adr/004-report-and-hold.md). The app has no scheduler, so this
+# job runs `report:ops sweep` every six hours; a report waits at most
+# one run past its deadline. Content reported as illegal is taken down
+# too, with its Storage holds kept as evidence.
+#
+# PUBLIC REPO: anyone can read this job's log. The sweep prints counts
+# only (due / takenDown / skipped), never a report id, reference, slug
+# or link.
+#
+# Environments: the job reuses reconcile-dev / reconcile-prod (same
+# selection rule as billing-reconciliation.yml: dispatch input, else the
+# repository variable PINNED_RECONCILE_ENV). It needs its OWN identity
+# because the reconciliation service account is read-only; until the
+# variables below exist the run skips with a warning.
+#
+# WHAT THE OPERATOR MUST ADD (never invent values; never paste them
+# into issues, PRs or logs). In EACH environment:
+#   Variable PINNED_REPORT_SWEEP_WIF_PROVIDER
+#     the same provider resource name as PINNED_RECONCILE_WIF_PROVIDER
+#   Variable PINNED_REPORT_SWEEP_SERVICE_ACCOUNT
+#     <SA_NAME>@<PROJECT_ID>.iam.gserviceaccount.com
+# Google Cloud, once per project, from an operator machine (placeholders in <>):
+#   P=<PROJECT_ID> N=<PROJECT_NUMBER> POOL=<POOL_ID> SA=pinned-report-sweep BUCKET=<P>.firebasestorage.app
+#   gcloud iam service-accounts create "$SA" --project "$P" --display-name "Report sweep (timed takedown)"
+#   gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$SA@$P.iam.gserviceaccount.com" --role roles/datastore.user --condition=None
+#   gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member "serviceAccount:$SA@$P.iam.gserviceaccount.com" --role roles/storage.objectAdmin
+#   gcloud iam service-accounts add-iam-policy-binding "$SA@$P.iam.gserviceaccount.com" --project "$P" --role roles/iam.workloadIdentityUser \
+#     --member "principalSet://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/$POOL/attribute.repository/MoriaCrew/Pinned"
+# The existing pool and provider (billing-reconciliation.yml step 3) are
+# reused: their attribute condition already binds the environment name.
+
+name: Report sweep
+
+on:
+  schedule:
+    - cron: "17 */6 * * *" # every 6 h at :17 UTC, from the default branch (main)
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (runs in reconcile-dev or reconcile-prod)"
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    environment: ${{ (inputs.environment || vars.PINNED_RECONCILE_ENV) == 'prod' && 'reconcile-prod' || 'reconcile-dev' }}
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation token; no key in a secret
+    env:
+      SWEEP_ENV: ${{ (inputs.environment || vars.PINNED_RECONCILE_ENV) == 'prod' && 'prod' || 'dev' }}
+    steps:
+      - name: Guard — skip until the environment is configured
+        id: guard
+        env:
+          HAS_WIF_PROVIDER: ${{ vars.PINNED_REPORT_SWEEP_WIF_PROVIDER != '' }}
+          HAS_SERVICE_ACCOUNT: ${{ vars.PINNED_REPORT_SWEEP_SERVICE_ACCOUNT != '' }}
+        run: |
+          if [ "$HAS_WIF_PROVIDER" = "true" ] && [ "$HAS_SERVICE_ACCOUNT" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Report sweep skipped::Environment reconcile-$SWEEP_ENV needs variables PINNED_REPORT_SWEEP_WIF_PROVIDER and PINNED_REPORT_SWEEP_SERVICE_ACCOUNT (see the header of this workflow) to enable."
+            {
+              echo "## Report sweep ($SWEEP_ENV) — skipped (PIN-272)"
+              echo "Environment \`reconcile-$SWEEP_ENV\` has no sweep identity yet. See the header of \`.github/workflows/report-sweep.yml\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      # Before the auth step and without lifecycle scripts, so no
+      # dependency install code runs while a Google credential exists.
+      - name: Install (no lifecycle scripts)
+        if: steps.guard.outputs.enabled == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        if: steps.guard.outputs.enabled == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PINNED_REPORT_SWEEP_WIF_PROVIDER }}
+          service_account: ${{ vars.PINNED_REPORT_SWEEP_SERVICE_ACCOUNT }}
+
+      - name: Sweep due reports
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          set +e
+          if [ "$SWEEP_ENV" = "prod" ]; then
+            npm run -s report:ops -- --project moriacrew-pinned-prod sweep > sweep.out
+          else
+            npm run -s report:ops -- --project moriacrew-pinned-dev sweep > sweep.out
+          fi
+          code=$?
+          {
+            echo "## Report sweep ($SWEEP_ENV) — exit $code"
+            echo '```'
+            grep '^REPORT_SWEEP ' sweep.out || echo "No summary line: see the job log."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"

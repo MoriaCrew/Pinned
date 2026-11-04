@@ -12,9 +12,9 @@ import type {
   PinCard,
 } from "./board-view";
 
-/** Only real pins can be picked — candidates are not pinned yet. */
+/** Only real pins can be picked — candidates are not pinned yet, and a pin under a report hold (PIN-279) has no picture to compose. */
 export function selectableCards(cards: readonly PinCard[]): PinCard[] {
-  return cards.filter((card) => card.status === "pinned");
+  return cards.filter((card) => card.status === "pinned" && !card.element.held);
 }
 
 /**

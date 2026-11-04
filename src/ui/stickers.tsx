@@ -27,6 +27,7 @@ export function Sticker({
   loading = "lazy",
   style,
   className,
+  held,
 }: {
   src: string;
   alt?: string;
@@ -40,19 +41,29 @@ export function Sticker({
   loading?: "lazy" | "eager";
   style?: CSSProperties;
   className?: string;
+  /** PIN-279: under a report hold; a quiet placeholder stands where the picture was. */
+  held?: boolean;
 }) {
+  const locale = useLocale();
   const vars: Record<string, string | number> = { "--t": tilt ?? stickerTilt(seed) };
   if (size !== undefined) vars["--pn-size"] = typeof size === "number" ? `${size}px` : size;
-  if (state === "cutting" || foil) vars["--src"] = `url("${src}")`;
+  // PIN-279: a held pin has no picture anywhere, foil mask included.
+  const foiled = Boolean(foil) && !held;
+  if (!held && (state === "cutting" || foiled)) vars["--src"] = `url("${src}")`;
   return (
     <span
       className={cx("pn-sticker", className)}
       data-state={state}
-      data-foil={foil ? "" : undefined}
+      data-foil={foiled ? "" : undefined}
+      data-held={held ? "" : undefined}
       style={{ ...(vars as CSSProperties), ...style }}
     >
-      <img src={src} alt={alt} draggable={false} loading={loading} decoding="async" />
-      {foil ? <span className="pn-foil" aria-hidden="true" /> : null}
+      {held ? (
+        <span className="pn-sticker-held">{t(locale, "ui.underReview")}</span>
+      ) : (
+        <img src={src} alt={alt} draggable={false} loading={loading} decoding="async" />
+      )}
+      {foiled ? <span className="pn-foil" aria-hidden="true" /> : null}
       {state === "picked" && pickIndex ? (
         <span className="pn-sticker-badge" aria-hidden="true">
           {pickIndex}
@@ -82,6 +93,7 @@ export function Pin({
   speakOwner = true,
   children,
   className,
+  held,
 }: {
   src: string;
   label: string;
@@ -104,10 +116,14 @@ export function Pin({
   /** Extra controls under the pin (e.g. a More menu for the owner). */
   children?: ReactNode;
   className?: string;
+  /** PIN-279: under a report hold; placeholder instead of the picture, never a pick button. */
+  held?: boolean;
 }) {
   const locale = useLocale();
   const picked = state === "picked";
-  const sticker = <Sticker src={src} seed={seed ?? label} state={state} pickIndex={pickIndex} size={size} foil={foil} />;
+  const sticker = (
+    <Sticker src={src} seed={seed ?? label} state={state} pickIndex={pickIndex} size={size} foil={foil} held={held} />
+  );
   const tag = (
     <span className="pn-pin-tag">
       <span className="pn-pin-tag-text">{label}</span>
@@ -119,7 +135,7 @@ export function Pin({
       <span className="pn-pin-owner-name">{owner.name}</span>
     </span>
   ) : null;
-  if (onToggle) {
+  if (onToggle && !held) {
     const named = owner && speakOwner ? tf(locale, "ui.ownerThing", { owner: owner.name, thing: label }) : label;
     // `picked` and `dropped` are different states, so at most one status applies.
     const status = picked

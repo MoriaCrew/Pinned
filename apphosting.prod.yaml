@@ -52,6 +52,11 @@ env:
   # address is printed on both pages, so it is not a secret.
   - variable: LEGAL_CONTACT_EMAIL
     value: contact@moriacrew.com
+  # PIN-263: judging-week links on the landing, public plain values.
+  # Unset a value to take its link down (no code change).
+  - variable: DEMO_VIDEO_URL
+    value: https://youtu.be/q6lkrA6fsCI
+  # PROMO_POST_URL: add the launch post's link here once it is published.
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID

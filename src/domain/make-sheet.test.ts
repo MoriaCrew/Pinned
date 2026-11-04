@@ -106,10 +106,14 @@ describe("idea chips (PIN-216)", () => {
 });
 
 describe("make sheet logic (PIN-70)", () => {
-  it("only pinned pins are selectable, never candidates", () => {
-    const cards = [card("p1", "e1"), card("c1", "e2", "candidate")];
+  it("only pinned pins are selectable, never candidates nor a pin under a report hold (PIN-279)", () => {
+    const held = card("h1", "e3");
+    held.element = { ...held.element, held: true };
+    const cards = [card("p1", "e1"), card("c1", "e2", "candidate"), held];
     expect(selectableCards(cards).map((c) => c.pinId)).toEqual(["p1"]);
-    expect(selectedCards(cards, new Set(["p1", "c1"])).map((c) => c.pinId)).toEqual(["p1"]);
+    expect(selectedCards(cards, new Set(["p1", "c1", "h1"])).map((c) => c.pinId)).toEqual(["p1"]);
+    // A pick made before the hold landed is pruned like a deleted pin.
+    expect([...pruneSelection(new Set(["p1", "h1"]), selectableCards(cards).map((c) => c.pinId))]).toEqual(["p1"]);
   });
 
   it("toggles picks and rejects (never evicts) at the Policy cap", () => {

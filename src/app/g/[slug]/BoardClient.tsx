@@ -81,12 +81,13 @@ import { PlusFlow, useLookFlow } from "./PlusFlow";
 import { DeleteBoardSheet } from "./DeleteBoardSheet";
 import { isPoolEmptyCode, parseBillingFlag, poolEmptyCopy, type MakesPack } from "../../../domain/makes-ui";
 import { BillingBanner, MakesIndicator, useMakesFlow } from "./MakesFlow";
-import { ReportBoardLink } from "./ReportBoard";
+import { ReportBoard } from "./ReportBoard";
 import { SceneViewer } from "./SceneViewer";
 import styles from "./board.module.css";
 
 export interface BoardClientView extends BoardViewLike {
-  board: { slug: string; title: string; themeId?: string | null };
+  /** PIN-266 `underReview`: a board-wide report hold; the page shows a banner. */
+  board: { slug: string; title: string; themeId?: string | null; underReview?: boolean };
   me: { id: string; displayName: string } | null;
   scenes: BoardViewScene[];
   activity: ActivityLine[];
@@ -105,6 +106,10 @@ export interface BoardClientView extends BoardViewLike {
 export interface BoardClientPolicy {
   pollIntervalMs: number;
   jobPollIntervalMs: number;
+  /** Policy report.messageMaxChars: the report sheet's message cap (PIN-271). */
+  reportMessageMaxChars: number;
+  /** Policy takedownHours: the deadline a hold's receipt quotes (PIN-278). */
+  takedownHours: number;
   uploadMaxPx: number;
   uploadJpegQuality: number;
   pinsPerScene: { min: number; max: number };
@@ -1243,6 +1248,11 @@ function BoardBody({
   return (
     <div className="pn-skin-root" data-theme={look.shownSkin} style={{ minHeight: "100dvh" }}>
       <main className={cx(styles.board, !showDock && styles.boardRest, look.tryOn && styles.boardTryOn)} inert={viewerOpen}>
+        {view.board.underReview ? (
+          <p className="pn-lib-notice" role="status">
+            {t(locale, "board.underReviewNotice")}
+          </p>
+        ) : null}
         <BoardHeader
           title={view.board.title}
           people={people}
@@ -1572,7 +1582,22 @@ function BoardBody({
           aboveDock={showDock}
           picking={pickingNow}
         />
-        <ReportBoardLink email={legalContactEmail} reportRef={reportRef} />
+        <ReportBoard
+          slug={slug}
+          email={legalContactEmail}
+          reportRef={reportRef}
+          messageMaxChars={policy.reportMessageMaxChars}
+          takedownHours={policy.takedownHours}
+          targets={{
+            // The pins on the grid only: leftover candidates are never on the board for others.
+            pins: cards
+              .filter((card) => card.status === "pinned" && !card.element.held)
+              .map((card) => ({ id: card.element.id, label: card.element.label })),
+            // The same catalogue numbers the prints show ("Nº 03": ready scenes, oldest first).
+            scenes: [...numbers.entries()].map(([id, index]) => ({ id, index })),
+          }}
+          onReported={() => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) })}
+        />
       </main>
       {viewerSlot ? (
         <SceneViewer

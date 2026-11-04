@@ -102,6 +102,13 @@ export interface Board {
    * every ordinary board, which the sweep therefore never sees.
    */
   demoSweepAt?: number;
+  /**
+   * Under review (PIN-266, ADR-004): set by a board-wide report hold.
+   * While present, uploads, scenes and tap-adds answer 423 and the
+   * board view says `underReview`; the operator's dismiss clears it.
+   * Counters and version are untouched by the flag.
+   */
+  reviewAt?: number;
   counters: BoardCounters;
   createdAt: number;
   version: number; // optimistic-concurrency counter
@@ -155,6 +162,28 @@ export interface Element {
    */
   sourceElementId?: string;
   createdAt: number;
+}
+
+/**
+ * Held storage refs (docs/20 §6, automated by PIN-269): a `held:`
+ * prefix on an element's `cutoutRef` / `flattenedRef` blanks the pin
+ * without deleting anything. Every reader serves, deletes or composes
+ * a ref only when it starts with `elements/`, and the derivative store
+ * refuses a ref containing `:`, so no held bytes reach a response, a
+ * model or a collage. The prefix is reversible by design.
+ */
+export const HELD_REF_PREFIX = "held:";
+
+export function isHeldRef(ref: string): boolean {
+  return ref.startsWith(HELD_REF_PREFIX);
+}
+
+export function holdRef(ref: string): string {
+  return isHeldRef(ref) ? ref : `${HELD_REF_PREFIX}${ref}`;
+}
+
+export function releaseRef(ref: string): string {
+  return isHeldRef(ref) ? ref.slice(HELD_REF_PREFIX.length) : ref;
 }
 
 export type PinStatus = "candidate" | "pinned";

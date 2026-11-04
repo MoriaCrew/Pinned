@@ -1,9 +1,10 @@
-# 14 — Pinneds design system (PIN-95)
+# 14. Pinneds design system
 
-Status: **Accepted** by Robin on Oct 29, 2026. Replaces the
-first-generation Studio look (`docs/archive/09`), which read as
-AI-generated. The product flow (`docs/11` §6) is unchanged; the
-look and the interaction design are rebuilt from scratch.
+The look and interaction design of Pinneds, decided on Oct 29, 2026
+(PIN-95). It replaces the first-generation Studio look
+(`docs/archive/09-design-system.md`), which read as AI-generated. The
+product flow (`docs/11` §6) is unchanged; the look and the
+interaction design were rebuilt from scratch.
 
 ## The idea
 
@@ -41,7 +42,7 @@ Principles:
 ## UI kit
 
 - `src/ui/` holds the components (`import { … } from "../ui"`):
-  Icon (24 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Icon (26 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
   CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
   FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,
@@ -124,7 +125,9 @@ Principles:
   skin with synthetic samples from `public/lab/`; use it for QA and
   PR screenshots.
 
-## Landing and library screens (PIN-104)
+## Landing and library screens
+
+PIN-104 put the landing, My boards and My pins on the kit.
 
 - Landing (`/`), My boards, My pins and the not-found page sit on the
   Paper skin (`data-theme="paper"` + `pn-skin-root`, class
@@ -246,9 +249,9 @@ fill on its cream ground (2.1:1).
   `public/fonts/LICENSES.md`); the reading face and Bricolage
   Grotesque are preloaded.
 
-## Link card (PIN-102)
+## Link card
 
-A board link pasted into a chat shows a 1200 x 630 card in the
+PIN-102. A board link pasted into a chat shows a 1200 x 630 card in the
 board's skin (`src/app/g/[slug]/opengraph-image.tsx`, reused by
 `twitter-image.tsx`): wordmark, "{name} invited you to pin your
 things to" (earliest participant; dropped when nobody joined), the
@@ -290,10 +293,11 @@ No pins yet: three dashed ghost outlines.
 | Oct 30 | A thing's name tag wraps to up to 3 lines, "…" only past that (PIN-164) | One line cut most names after ~9 letters in the wide uppercase looks |
 | Oct 31 | One purchase replaces the Plus plans and makes packs: €2.99 once per board for Plus + 20 creations, bought by any joined member for the board; free pool 5; members change the look once the board has Plus; no host plan sold (PIN-181; supersedes the Oct 29 Plus row) | One clear thing to buy; guests never have to pay, and anyone who wants more can give it to the board |
 | Oct 31 | One Board Plus sheet is the only screen that asks for money: the perks plus one €2.99 purchase (Plus + 20 creations) for the board, through the credits checkout; no plan cards, no Host plan, no separate "Add makes" sheet; makes are called "creations" in the UI (PIN-182) | One clear thing to buy and one word for what it buys; any member can give it to the board, and nobody sees a price list |
-| Oct 31 | The Make sheet is a chat-style composer: mic and Stop are icon buttons inside the field (the chat convention, an exception to "icon-only for close, share, more"), "Make it" stays labelled; ideas are one scrolling row; tapping a pressed chip takes it back out (PIN-216) | Robin: the mic below the field felt awkward; the old sheet overflowed a 390x844 phone and wiped typed text |
+| Oct 31 | The Make sheet is a chat-style composer: mic and Stop are icon buttons inside the field (the chat convention, an exception to "icon-only for close, share, more"), "Make it" stays labelled; ideas are one scrolling row; tapping a pressed chip takes it back out (PIN-216) | The operator found the mic below the field awkward; the old sheet overflowed a 390x844 phone and wiped typed text |
 | Oct 31 | The creations indicator speaks only at `lowMakesWarning` or fewer left, as one quiet board-meta line with a text button (no card, nothing above the threshold); running out is an invitation into the Plus sheet, never an error; the count lives in the you menu as Board Plus; any joined member can change the look once Plus is on (PIN-183) | A board with plenty looks like a credits-off board; money is offered when it helps, not shown all the time |
 | Oct 31 | Busy boards get a sticky filter row above the pins (New / All / Mine / people) instead of reordering or paging the grid; the grid stays oldest first (PIN-218) | 100+ pins from 18 people is 40 rows; finding your own or a friend's pins, or what is new, should take one tap, and polling must never reshuffle the grid |
 | Oct 31 | When a page throws, visitors get the Paper dead end "Something came unpinned." with Try again and Go home, never the error, its message or digest; `global-error` carries the same screen when the root layout itself fails (PIN-212) | Judges and first-time visitors never see Next's bare "Application error"; same quiet look as not-found, one primary action |
 | Oct 31 | The Make sheet rides above the phone keyboard; measured, not configured: a `visualViewport` hook sets `--pn-keyboard-inset` on the sheet (0 with the keyboard closed or while pinch-zoomed), which lifts it and takes the same height off its scrolling middle; no glide under reduced motion; the root viewport keeps the default `interactive-widget` (PIN-226) | iOS Safari and Chrome on Android lay the keyboard over the page, so it covered the field and Make it while typing; changing the viewport would move every page on Android |
 | Oct 31 | Name tags never auto-hyphenate (`hyphens: manual`); a pin's owner name ends with "…" when it does not fit, full name in `title`; the picking dock's tray slots shrink (44px down to about 34px) so a long Next label never leaves the dock (PIN-225) | Spark names things in English and owners can rename in any language, but the browser hyphenates by the page language ("Pot-ted Succulent" in fr and de); es "Siguiente" and de "Weiter" pushed the Next button past the dock edge at 390px |
 | Oct 31 | A board's free photos (PIN-230) show only in the Add sheet and only when close: nothing above `lowFreePhotosWarning` (3), one quiet line under the picker at or under it, and at 0 the Get Plus invitation in the picker's place (library pins stay); the Plus sheet lists "Unlimited photos" after the creations perk (PIN-231) | The limit should be a cap people rarely feel, not a meter; hitting it is an offer, never an error |
+| Nov 4 | "Report this board" opens a sheet instead of a mail (PIN-271, ADR-004): what (this board, a pin by label, a scene by number) and why as pressed chips, a message, an optional email, Cancel and Send; the receipt shows the opaque reference and the legal address stays as plain text; a board under a report hold shows the one-line `pn-lib-notice` and its write actions answer with a friendly line | One tap on a mailto sent an empty report by mistake on Nov 4; a reason and a confirm step are what stop that, and an in-app record is what lets the app hide the reported thing at once |

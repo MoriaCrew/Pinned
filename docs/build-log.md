@@ -1,6 +1,7 @@
 # Build log: who built Pinneds, and how we know
 
-_As of Nov 2, 2026, 19:20 UTC (`dev` at `a90cd7b`; PIN-248). Times are
+_As of Nov 4, 2026, 16:00 UTC (`dev` at `d958f29`; PIN-248, counts
+refreshed by PIN-274). Times are
 US Eastern (ET) from GitHub's merge times. This log backs every "how it
 was built" line in the [`README`](../README.md), the submission packet
 ([`12-submission.md`](12-submission.md)), the in-app
@@ -32,7 +33,7 @@ request ([`03-ai-sdlc.md`](03-ai-sdlc.md)):
 | Muse Code built the Stripe billing (PIN-146–153) | Backed | W |
 | Claude Code refined parts of it | Backed | F, W, L |
 | Claude Code carried it to prod | Backed | F, W, L |
-| Cursor Bugbot reviewed every PR | Backed: 215 of 215 merged PRs | GitHub check runs |
+| Cursor Bugbot reviewed every PR | Backed: 240 of 240 merged PRs | GitHub check runs |
 
 ## Sources
 
@@ -44,7 +45,7 @@ Strongest first:
   names Muse Code as the executor of PIN-48–57.
 - **W** (operator-held): the two agents worked in separate local
   working copies of the repo, and each copy's git reflog records the
-  branches that got commits there (read Nov 2). The Muse Code copy was
+  branches that got commits there (read Nov 2 and Nov 4). The Muse Code copy was
   cloned Oct 26 at 10:43 ET and made the first commit after GitHub's
   initial one. The Claude Code copy was cloned Oct 30 at 06:44 ET;
   Claude Code sessions outside that copy are covered by F.
@@ -234,22 +235,23 @@ All F or W, and L where the issue is labelled:
 - Live Stripe path for the operator scripts and runbook: #182 (PIN-210).
   The prod billing switch: #203 (PIN-210, Oct 31 23:04 ET).
 - The prod landing's demo link: #224 (PIN-246).
-- Promotion #2 (#226, merged Nov 2 14:16 ET) was cut in the Claude Code
-  copy (W). Promotions #16 (Oct 26) and #31 (Oct 31) carry `dev` and
+- Promotions #2 (#226, merged Nov 2 14:16 ET) and #3 (#236, Nov 3
+  14:22 ET) were cut in the Claude Code copy (W). Promotions #16 (Oct
+  26) and #31 (Oct 31) carry `dev` and
   are not attributed to one agent; agents never merge to `main` without
   the operator ([`AGENTS.md`](../AGENTS.md)).
 
 ### 7. Cursor Bugbot reviewed every PR
 
 From GitHub's check runs on the final commit of each merged PR (read
-Nov 2, 19:30 UTC):
+Nov 2, 19:30 UTC, and again Nov 4, 16:20 UTC):
 
-- All 215 merged PRs have a "Cursor Bugbot" check run: 209 finished
+- All 240 merged PRs have a "Cursor Bugbot" check run: 234 finished
   clean and 6 finished neutral (findings posted on the final commit).
-- Bugbot opened 241 review threads across 85 of those PRs. It opened
+- Bugbot opened 264 review threads across 94 of those PRs. It opened
   every review thread on them.
 - CI (`check`) and `gitleaks (full history)` passed on the final commit
-  of all 215.
+  of all 240.
 - Cursor wrote no code: no PR came from a `cursor/` branch, and no
   Pinned issue carries the `executor/cursor` label.
 
@@ -257,31 +259,33 @@ Nov 2, 19:30 UTC):
 
 | Day (ET) | Muse Code | Claude Code |
 | --- | --- | --- |
-| Oct 26 | Repo guardrails before kickoff; scaffold, Firebase, App Hosting, live models on dev (#1–#18; #11 not shown, #16 is a promotion) | — |
-| Oct 27 – Oct 28 morning | The photo-game prototype (#19–#39, not #31) and domains (#40–#42) | — |
+| Oct 26 | Repo guardrails before kickoff; scaffold, Firebase, App Hosting, live models on dev (#1–#18; #11 not shown, #16 is a promotion) | None |
+| Oct 27 – Oct 28 morning | The photo-game prototype (#19–#39, not #31) and domains (#40–#42) | None |
 | Oct 28 14:56 – Oct 29 06:26 | The Studio core (#43–#71) | Drafted the hand-off before the run |
 | Oct 29 | Sign-in (#72–#79); hardening (#80, #84, #88, #92, #93) | Design system and UI rebuild (#81–#107 without Muse Code's, to Oct 30 06:14) |
 | Oct 30 | Tap naming, photo choice, dictation (#100, #103, #106); AI call log (#108, #110); Stripe billing (#117–#132) | Scene viewer, delete, rename, board delete (§5) |
 | Oct 31 | Upload pipeline: idempotent uploads, stale-job sweep, multi-photo queue, SAM confidence (#145–#149) | Billing refinements, languages, showcase sets, prod prep (#136–#208 without #145–#149) |
 | Nov 1 | Pre-launch security review and first fixes (PIN-238–243) | Submission brief (#214), `/models` page (#215) |
-| Nov 2 | Security fixes merged (#216, #218–#222) | Follow-up fixes on that stack; #223–#225; promotion #2 (#226) |
+| Nov 2 | Security fixes merged (#216, #218–#222) | Follow-up fixes on that stack; #223–#225; promotion #2 (#226); runbook updates (#228) |
+| Nov 3 | Phone-layout fixes (#240–#241, 23:07–23:15 ET): named in Linear only, see "What the record does not show" | Submission packet and build log (#227); demo-board docs (#229); per-visitor demo boards (#230–#235, #238); showcase script (#138); smoke runbook (#239); promotion #3 (#236) |
+| Nov 4 | Judging-week landing (#243–#246, 01:02–03:32 ET): named in Linear only, see "What the record does not show" | Report & hold (#247–#252) |
 
 The photo game Pinneds started as was dropped on Oct 28; #47 deleted its
 code ([`archive/`](archive/)).
 
 ## Counts
 
-Merged PRs as of Nov 2, 2026, 19:20 UTC. A PR count is a rough measure:
+Merged PRs as of Nov 4, 2026, 16:00 UTC. A PR count is a rough measure:
 PR sizes vary from a one-line fix to a full slice.
 
 | Source | Merged PRs |
 | --- | --- |
 | Muse Code copy only (W, with D or L where they exist) | 98 |
-| Claude Code (F, or W in the Claude Code copy) | 106 |
+| Claude Code (F, or W in the Claude Code copy) | 124 |
 | Both copies (the security fixes) | 6 |
-| Promotions to `main` (#16, #31, #226) | 3 |
-| No agent evidence (#11, #134) | 2 |
-| **Total** | **215** |
+| Promotions to `main` (#16, #31, #226, #236) | 4 |
+| No agent evidence (#11, #134, #240–#241, #243–#246) | 8 |
+| **Total** | **240** |
 
 ## What the record does not show
 
@@ -295,6 +299,11 @@ PR sizes vary from a one-line fix to a full slice.
 - **#134** (PIN-169, Oct 30 17:40 ET): storage clean-up when a board is
   deleted. Its commits are in neither copy. Its sibling issues PIN-167
   and PIN-168 (#133, #135) were done in the Claude Code copy.
+- **#240–#241, #243–#246** (PIN-261–265, Nov 3 23:07 – Nov 4 03:32 ET):
+  phone-layout fixes and the judging-week landing. Their branches are in
+  neither copy's reflog on the operator's machine. The Linear close
+  comments name Muse Code, which this log does not count as evidence
+  (see Sources).
 - **Gaps in W.** Reflogs live on the operator's machine, expire after a
   while and disappear with a removed worktree. "Not shown" means not
   shown, not "done by someone else".
@@ -303,7 +312,7 @@ PR sizes vary from a one-line fix to a full slice.
 ## Appendix: every merged PR by source
 
 Ranges list merged PRs only. Numbers closed without merging (#3, #4,
-#75, #217) or still open (#138, #209–#213) are skipped.
+#75, #209–#213, #217, #237) or still open (#242, #253) are skipped.
 
 - **Muse Code copy only (98):** #1–#10, #12–#15, #17–#30, #32–#80, #84,
   #88, #92–#93, #95, #100, #103, #106, #108, #110, #117, #119, #121,
@@ -311,13 +320,13 @@ Ranges list merged PRs only. Numbers closed without merging (#3, #4,
 - **Claude Code footer (78):** #81–#83, #85–#87, #89–#91, #94, #96–#99,
   #101–#102, #104–#105, #107, #143–#144, #150–#155, #157–#167,
   #169–#208, #223.
-- **Claude Code copy, no footer (28):** #109, #111–#116, #118, #120,
+- **Claude Code copy, no footer (46):** #109, #111–#116, #118, #120,
   #122, #124, #129–#131, #133, #135–#142, #156, #168, #214–#215,
-  #224–#225. Promotion #2 (#226) was also cut in this copy and is
-  counted under promotions.
+  #224–#225, #227–#235, #238–#239, #247–#252. Promotions #2 (#226) and
+  #3 (#236) were also cut in this copy and are counted under promotions.
 - **Both copies (6):** #216, #218–#222.
-- **Promotions (3):** #16, #31, #226.
-- **No agent evidence (2):** #11, #134.
+- **Promotions (4):** #16, #31, #226, #236.
+- **No agent evidence (8):** #11, #134, #240–#241, #243–#246.
 
 ## Re-running this log
 

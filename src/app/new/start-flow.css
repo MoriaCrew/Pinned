@@ -15,7 +15,7 @@
 
 /* Seven skins make three rows: the title, the suggestion and the action stay in view while the picker
    scrolls, and the board's name stays visible above the sheet. */
-.pn-start-sheet { max-height: 86dvh; grid-template-rows: auto auto minmax(0, 1fr) auto; animation: pn-start-rise .24s ease-out both; }
+.pn-start-sheet { max-height: 86dvh; overflow: visible; grid-template-rows: auto auto minmax(0, 1fr) auto; animation: pn-start-rise .24s ease-out both; }
 .pn-start-sheet .pn-sheet-body { grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 /* Padding and negative margin give the focus ring and the check room inside the scroller. */
 .pn-start-picker { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; margin: -8px; }

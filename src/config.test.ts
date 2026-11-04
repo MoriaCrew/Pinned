@@ -15,6 +15,18 @@ describe("parseConfig (FR8 fail-closed defaults)", () => {
     expect(parseConfig({ UI_LOCALES: "en,fr,es,pt-BR,de,it,id" }).uiLocales).toHaveLength(7);
   });
 
+  it("judging-week links: only an https URL is kept, anything else is null (PIN-263)", () => {
+    for (const key of ["DEMO_VIDEO_URL", "PROMO_POST_URL"] as const) {
+      const field = key === "DEMO_VIDEO_URL" ? "demoVideoUrl" : "promoPostUrl";
+      expect(parseConfig({})[field]).toBeNull();
+      expect(parseConfig({ [key]: " " })[field]).toBeNull();
+      expect(parseConfig({ [key]: " https://youtu.be/q6lkrA6fsCI " })[field]).toBe("https://youtu.be/q6lkrA6fsCI");
+      for (const junk of ["http://youtu.be/x", "javascript:alert(1)", "youtu.be/x", "https://user:pw@x.com/a", "https://x.com/a b", "not a url"]) {
+        expect(parseConfig({ [key]: junk })[field], junk).toBeNull();
+      }
+    }
+  });
+
   it("demo board slug: valid slug kept, anything else fails closed to null (PIN-73)", () => {
     expect(parseConfig({}).demoBoardSlug).toBeNull();
     expect(parseConfig({ DEMO_BOARD_SLUG: "" }).demoBoardSlug).toBeNull();

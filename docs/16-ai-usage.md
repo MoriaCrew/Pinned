@@ -1,7 +1,10 @@
-# AI usage attribution (PIN-137)
+# 16. AI usage and cost log
 
-Every decorated AI call appends one `AiCallLog` (v2) record,
-including budget/cap denials (`denied_*` outcomes). Fields:
+This page covers what each AI call records (PIN-137 added the
+attribution fields), how a call is priced, and the operator report
+that rolls the log up. Every decorated AI call appends one
+`AiCallLog` (v2) record, including budget and cap denials
+(`denied_*` outcomes). Fields:
 `boardId` (slug, internal only), `participantId`,
 `userIdAtCall` (snapshot at call time, `null` for link-only,
 never backfilled), `sceneId`/`photoId`/`jobId` where the caller
@@ -20,16 +23,16 @@ Oct 30):
 
 | Operation | Billing unit | Estimate |
 | --- | --- | --- |
-| Spark (`nameElements`, `nameOne`, `suggestChips`) | tokens | $1.25 in / $4.25 out per 1M tokens |
+| Muse Spark (`nameElements`, `nameOne`, `suggestChips`) | tokens | $1.25 in / $4.25 out per 1M tokens |
 | SAM 3.1 (`segment`) | image | $2.50 per 1000 images |
 | Muse Image (`composeScene`) | generated image | flat $0.01 |
-| Muse Voice (`transcribe`) | audio second | $0.18 per hour |
+| Muse Voice Transcribe (`transcribe`) | audio second | $0.18 per hour |
 
 A scene costs the flat Muse Image price, whatever its token
 counts (PIN-180). Before the call the gateway reserves $0.01
 against the daily budget (so the $5 code default admits 500
-scenes, and prod's $50 during judging admits 5,000). After
-it, the `AiCallLog` row is priced at $0.01 per generated image:
+scenes, and prod's $50 a day, set in `apphosting.prod.yaml` for
+judging week, admits 5,000). After the call, the `AiCallLog` row is priced at $0.01 per generated image:
 `images` on the row is how many images the reply held, so a
 reply with no image (a refusal) and a failed call are priced
 at $0. Input and output tokens stay on the row for
@@ -37,16 +40,15 @@ attribution but never move the price. The scene job's own
 `costUsd` is the same $0.01 for an AI scene and $0 for a
 collage.
 
-## SAM `store` flag (PIN-213)
+## SAM `store` flag
 
-SAM store flag: PIN-213, default off until probed. `Policy.samStore`
-unset (the default) sends no `store` field on SAM `/v1/responses`
-calls, exactly as before; `false` sends `store: false` on every
-concept and tap (point) cut. Set it per board
-(`policyOverrides.samStore`) for the one live probe, then globally
-via `POLICY_OVERRIDES_JSON`. Muse Image compose already sends
-`store: false` (`Policy.sceneStore`). The SAM lab route does not use
-the flag.
+PIN-213. `Policy.samStore` unset (the default) sends no `store` field
+on SAM 3.1 `/v1/responses` calls; `false` sends `store: false` on
+every concept and tap (point) cut, and `true` sends `store: true`.
+The flag is meant to be set per board (`policyOverrides.samStore`)
+for one live probe, then globally via `POLICY_OVERRIDES_JSON`.
+Muse Image compose already sends `store: false` (`Policy.sceneStore`,
+default false). The SAM lab route does not use the flag.
 
 ## Collage reason
 
@@ -54,23 +56,25 @@ A scene that comes out as a collage records why, in
 `collageReason` on the scene and its job (also in the public
 scene and job payloads):
 
-- `budget`: the daily AI budget, call limit or AI switch
-  closed the composer (job errors `budget`, `call_limit`,
-  `budget_off`). The board shows one line on the print: AI was
-  busy, so this one is a collage, and no creation was used. No
-  make is debited for a collage.
-- `pool_empty`: the board has no makes left (PIN-151). Its
-  copy is the makes copy (PIN-152).
+- `budget`: the daily or hourly AI budget, the call limit or the AI
+  switch closed the composer (job errors `budget`, `hourly_budget`,
+  `call_limit`, `budget_off`). The board shows one line on the
+  print: AI was busy, so this one is a collage, and no creation was
+  used. No creation is debited for a collage.
+- `pool_empty`: the board has no creations left (PIN-151). Its
+  copy is the creations copy (PIN-152).
 - `mock`: offline demo mode (`AI_MOCK=1`). No extra line.
 
 Collages from before this field have no reason and show no line.
 
 A photo job the budget denied (the namer, or the cutter when
 no pin landed) ends `failed` with the same `errorCode`
-(`budget`, `call_limit` or `budget_off`), and the add sheet
-shows the budget line instead of the generic failure.
+(`budget`, `hourly_budget`, `call_limit` or `budget_off`), and the
+add sheet shows the budget line instead of the generic failure.
 
 ## Operator report
+
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
 
 ```sh
 npm run usage:costs -- --from 2026-10-01 --to 2026-10-31
@@ -87,8 +91,9 @@ Firestore TTL policies can only be created console-side. Rows
 carry `expireAtTs` (a Timestamp mirror of `expireAt`, written by
 `FirestoreGameRepository`) so the operator can enable a TTL
 policy on `aiCallLogs.expireAtTs` in the Firebase console or via
-`gcloud firestore fields ttls update`. Until that policy exists,
-rows are retained — code does not fake deletion. The same
+`gcloud firestore fields ttls update` (`docs/DEPLOY.md` §6, item 1).
+Until that policy exists, rows are retained; the code does not
+fake deletion. The same
 console step applies to `starterAllowances.expireAtTs` (PIN-204,
 the free-creations-per-maker counters keyed by a hashed client
 address or user id, docs/15): with the policy on, a counter goes

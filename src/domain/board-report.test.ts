@@ -7,10 +7,193 @@ import {
   matchReportRef,
   parseFindArgs,
 } from "../../scripts/find-report-ref.mjs";
-import { reportBoardHref } from "./board-report";
+import {
+  NOTHING_HELD,
+  parseReportInput,
+  planHoldsSomething,
+  planReportHold,
+  reportBoardHref,
+  type ReportPlanInput,
+} from "./board-report";
 import { boardReportRef, generateSlug } from "./tokens";
 
 const SLUG = "AbCdEfGhIjKlMnOpQrStUv";
+const LIMITS = { messageMaxChars: 20 };
+const HOUR = 3_600_000;
+
+describe("parseReportInput (PIN-268)", () => {
+  it("accepts a narrow scope with a target and a board scope without one", () => {
+    expect(parseReportInput({ scope: "element", targetId: "el-1", reason: "likeness" }, LIMITS)).toEqual({
+      ok: true,
+      input: { scope: "element", targetId: "el-1", reason: "likeness" },
+    });
+    expect(parseReportInput({ scope: "board", reason: "inappropriate", message: "  ", reporterEmail: "" }, LIMITS)).toEqual({
+      ok: true,
+      input: { scope: "board", reason: "inappropriate" },
+    });
+  });
+
+  it("keeps a trimmed message and a valid email", () => {
+    expect(
+      parseReportInput(
+        { scope: "scene", targetId: "sc-1", reason: "other", message: "  not ours  ", reporterEmail: " a@b.co " },
+        LIMITS,
+      ),
+    ).toEqual({
+      ok: true,
+      input: { scope: "scene", targetId: "sc-1", reason: "other", message: "not ours", reporterEmail: "a@b.co" },
+    });
+  });
+
+  it("rejects bad shapes, unknown values and a target on a board scope", () => {
+    for (const bad of [
+      null,
+      "x",
+      [],
+      { scope: "board" },
+      { reason: "likeness" },
+      { scope: "pin", reason: "likeness" },
+      { scope: "board", reason: "mistake" },
+      { scope: "element", reason: "likeness" },
+      { scope: "element", targetId: "../x", reason: "likeness" },
+      { scope: "element", targetId: 7, reason: "likeness" },
+      { scope: "board", targetId: "el-1", reason: "likeness" },
+      { scope: "board", reason: "likeness", message: 3 },
+      { scope: "board", reason: "likeness", reporterEmail: ["a@b.co"] },
+    ]) {
+      expect(parseReportInput(bad, LIMITS)).toEqual({ ok: false, error: "invalid" });
+    }
+  });
+
+  it("requires a message for 'other', caps it in code points, and checks the email", () => {
+    expect(parseReportInput({ scope: "board", reason: "other" }, LIMITS)).toEqual({ ok: false, error: "message_required" });
+    expect(parseReportInput({ scope: "board", reason: "other", message: "   " }, LIMITS)).toEqual({ ok: false, error: "message_required" });
+    const twentyOne = "é".repeat(21);
+    expect(parseReportInput({ scope: "board", reason: "likeness", message: twentyOne }, LIMITS)).toEqual({ ok: false, error: "message_too_long" });
+    expect(parseReportInput({ scope: "board", reason: "likeness", message: "é".repeat(20) }, LIMITS).ok).toBe(true);
+    expect(parseReportInput({ scope: "board", reason: "likeness", reporterEmail: "nope" }, LIMITS)).toEqual({ ok: false, error: "email_invalid" });
+    expect(parseReportInput({ scope: "board", reason: "likeness", reporterEmail: `${"a".repeat(250)}@b.co` }, LIMITS)).toEqual({ ok: false, error: "email_invalid" });
+  });
+});
+
+describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
+  const scenes = [
+    { id: "sc-a", hidden: false, elementIds: ["el-1", "el-2"] },
+    { id: "sc-b", hidden: false, elementIds: ["el-2"] },
+    { id: "sc-hidden", hidden: true, elementIds: ["el-1"] },
+  ];
+  const elements = [{ id: "el-1" }, { id: "el-2" }];
+  const base: ReportPlanInput = {
+    scope: "board",
+    reason: "inappropriate",
+    reporterKind: "visitor",
+    now: 1_000,
+    takedownHours: 24,
+    boardElements: elements,
+    boardScenes: scenes,
+  };
+
+  it("element: holds the element and the visible scenes using it, for anyone", () => {
+    const result = planReportHold({ ...base, scope: "element", element: { id: "el-1", faceFlag: false } });
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        held: { elementIds: ["el-1"], sceneIds: ["sc-a"], boardReview: false, storageHold: false },
+        severity: "normal",
+        queuedOnly: false,
+        deleteAt: 1_000 + 24 * HOUR,
+      },
+    });
+  });
+
+  it("every holding plan carries the deadline, takedownHours from now (PIN-278)", () => {
+    const likeness = planReportHold({ ...base, scope: "element", reason: "likeness", element: { id: "el-2", faceFlag: true } });
+    expect(likeness.ok && likeness.plan.deleteAt).toBe(1_000 + 24 * HOUR);
+    expect(likeness.ok && likeness.plan.held.sceneIds).toEqual(["sc-a", "sc-b"]);
+    for (const input of [
+      { ...base, scope: "element" as const, reason: "likeness" as const, element: { id: "el-2", faceFlag: false } },
+      { ...base, scope: "element" as const, reason: "inappropriate" as const, element: { id: "el-2", faceFlag: true } },
+      { ...base, scope: "element" as const, reason: "illegal" as const, element: { id: "el-2", faceFlag: true } },
+      { ...base, scope: "scene" as const, reason: "other" as const, scene: { id: "sc-a", hidden: false } },
+      { ...base, scope: "board" as const, reason: "illegal" as const },
+      { ...base, reporterKind: "participant" as const, reason: "ownership" as const },
+    ]) {
+      const result = planReportHold(input);
+      expect(result.ok && result.plan.queuedOnly).toBe(false);
+      expect(result.ok && result.plan.deleteAt).toBe(1_000 + 24 * HOUR);
+    }
+  });
+
+  it("a queued-only report (nothing hidden) has no deadline", () => {
+    for (const input of [
+      { ...base, reporterKind: "visitor" as const, reason: "other" as const },
+      { ...base, scope: "scene" as const, reason: "other" as const, scene: { id: "sc-hidden", hidden: true } },
+    ]) {
+      const result = planReportHold(input);
+      expect(result.ok && result.plan.queuedOnly).toBe(true);
+      expect(result.ok && "deleteAt" in result.plan).toBe(false);
+    }
+  });
+
+  it("scene: hides that scene; an already hidden scene is queued only", () => {
+    expect(planReportHold({ ...base, scope: "scene", scene: { id: "sc-b", hidden: false } })).toEqual({
+      ok: true,
+      plan: { held: { elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: false }, severity: "normal", queuedOnly: false, deleteAt: 1_000 + 24 * HOUR },
+    });
+    const hidden = planReportHold({ ...base, scope: "scene", scene: { id: "sc-hidden", hidden: true } });
+    expect(hidden.ok && hidden.plan.queuedOnly).toBe(true);
+    expect(hidden.ok && planHoldsSomething(hidden.plan.held)).toBe(false);
+  });
+
+  it("a missing target is an error, never a board-wide hold", () => {
+    expect(planReportHold({ ...base, scope: "element", element: null })).toEqual({ ok: false, error: "target_missing" });
+    expect(planReportHold({ ...base, scope: "element" })).toEqual({ ok: false, error: "target_missing" });
+    expect(planReportHold({ ...base, scope: "scene", scene: null })).toEqual({ ok: false, error: "target_missing" });
+  });
+
+  it("board + participant: every element and visible scene, board under review, no storage hold", () => {
+    const result = planReportHold({ ...base, reporterKind: "participant" });
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        held: { elementIds: ["el-1", "el-2"], sceneIds: ["sc-a", "sc-b"], boardReview: true, storageHold: false },
+        severity: "normal",
+        queuedOnly: false,
+        deleteAt: 1_000 + 24 * HOUR,
+      },
+    });
+  });
+
+  it("board + illegal from anyone: the same plus a storage hold, severity high", () => {
+    const result = planReportHold({ ...base, reason: "illegal" });
+    expect(result.ok && result.plan).toEqual({
+      held: { elementIds: ["el-1", "el-2"], sceneIds: ["sc-a", "sc-b"], boardReview: true, storageHold: true },
+      severity: "high",
+      queuedOnly: false,
+      deleteAt: 1_000 + 24 * HOUR,
+    });
+  });
+
+  it("board + visitor + another reason: nothing hidden, queued only", () => {
+    const result = planReportHold(base);
+    expect(result).toEqual({ ok: true, plan: { held: { ...NOTHING_HELD }, severity: "normal", queuedOnly: true } });
+    expect(result.ok && planHoldsSomething(result.plan.held)).toBe(false);
+  });
+
+  it("severity follows the reason alone, and illegal on a pin or a scene adds the Storage hold", () => {
+    const high = planReportHold({ ...base, scope: "element", reason: "illegal", element: { id: "el-1", faceFlag: false } });
+    expect(high.ok && high.plan.severity).toBe("high");
+    expect(high.ok && high.plan.held).toEqual({ elementIds: ["el-1"], sceneIds: ["sc-a"], boardReview: false, storageHold: true });
+    const normal = planReportHold({ ...base, scope: "element", reason: "ownership", element: { id: "el-1", faceFlag: false } });
+    expect(normal.ok && normal.plan.severity).toBe("normal");
+    expect(normal.ok && normal.plan.held.storageHold).toBe(false);
+    const scene = planReportHold({ ...base, scope: "scene", reason: "illegal", scene: { id: "sc-b", hidden: false } });
+    expect(scene.ok && scene.plan.held).toEqual({ elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: true });
+    // An already hidden scene reported as illegal is still listed, so its folder gets the hold (never queued only).
+    const hiddenIllegal = planReportHold({ ...base, scope: "scene", reason: "illegal", scene: { id: "sc-hidden", hidden: true } });
+    expect(hiddenIllegal.ok && hiddenIllegal.plan).toEqual({ held: { elementIds: [], sceneIds: ["sc-hidden"], boardReview: false, storageHold: true }, severity: "high", queuedOnly: false, deleteAt: 1_000 + 24 * HOUR });
+  });
+});
 
 describe("boardReportRef (PIN-239)", () => {
   it("is the first 16 hex of the domain-separated sha256, so standard tools recompute it", () => {

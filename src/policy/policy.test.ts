@@ -414,6 +414,42 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
     }
   });
 
+  it("report: in-app report route caps, deep-overridable, invalid values fail closed (PIN-267)", () => {
+    expect(DEFAULT_POLICY.report).toEqual({
+      perIp: { limit: 5, windowMs: 600_000 },
+      maxBytes: 4096,
+      messageMaxChars: 1000,
+      sweepBatch: 20,
+    });
+    const p = resolvePolicy(
+      { report: { messageMaxChars: 500 } },
+      { report: { perIp: { limit: 2 }, sweepBatch: 0 } },
+    );
+    expect(p.report).toEqual({
+      perIp: { limit: 2, windowMs: 600_000 },
+      maxBytes: 4096,
+      messageMaxChars: 500,
+      sweepBatch: 0,
+    });
+    // The deadline stays the one takedown promise on /terms.
+    expect(p.takedownHours).toBe(DEFAULT_POLICY.takedownHours);
+    expect(parsePolicyOverridesJson('{"report":{"maxBytes":8192}}')).toEqual({
+      report: { maxBytes: 8192 },
+    });
+    for (const bad of [
+      { report: { perIp: { limit: 0 } } },
+      { report: { perIp: { windowMs: 0 } } },
+      { report: { maxBytes: 0 } },
+      { report: { messageMaxChars: 0 } },
+      { report: { messageMaxChars: 10.5 } },
+      { report: { sweepBatch: -1 } },
+      { report: { maxBytes: "4096" } },
+    ]) {
+      expect(() => resolvePolicy(bad as never)).toThrow();
+      expect(() => resolvePolicy(null, bad as never)).toThrow();
+    }
+  });
+
   it("dailyBudgetUsd 0 means off and survives resolution", () => {
     expect(resolvePolicy({ dailyBudgetUsd: 0 }).dailyBudgetUsd).toBe(0);
   });

@@ -40,8 +40,10 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 24 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(24);
+  it("ships 26 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(26);
+    expect(ICON_NAMES).toContain("launch");
+    expect(ICON_NAMES).toContain("play");
     expect(ICON_NAMES).toContain("globe");
     expect(ICON_NAMES).toContain("mic");
     expect(ICON_NAMES).toContain("stop");
@@ -56,6 +58,24 @@ describe("UI kit components (PIN-97)", () => {
     const picked = html(h(Sticker, { src: "/a.webp", seed: "x", state: "picked", pickIndex: 2 }));
     expect(picked).toContain("pn-sticker-badge");
     expect(picked).toContain(">2<");
+  });
+
+  it("a held sticker shows the under-review placeholder instead of a picture, and a held pin is no pick button (PIN-279)", () => {
+    const held = html(h(Sticker, { src: "/a.webp", seed: "x", held: true }));
+    expect(held).toContain("pn-sticker-held");
+    expect(held).toContain("Under review");
+    expect(held).not.toContain("<img");
+    // The foil perk never paints a held pin's shape either.
+    const foiled = html(h(Sticker, { src: "/a.webp", seed: "x", held: true, foil: true }));
+    expect(foiled).not.toContain("pn-foil");
+    expect(foiled).not.toContain("data-foil");
+    expect(foiled).not.toContain("--src");
+    expect(foiled).not.toContain("/a.webp");
+    const pin = html(h(Pin, { src: "/a.webp", label: "Duck", owner: { id: "p1", name: "Robin" }, held: true, onToggle: () => {} }));
+    expect(pin).not.toContain("<button");
+    expect(pin).toContain("Under review");
+    expect(pin).toContain("Duck");
+    expect(pin).toContain("Robin");
   });
 
   it("makes a pickable pin a pressed button with a full spoken label", () => {

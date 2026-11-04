@@ -1,5 +1,7 @@
 # Deploying Pinneds (dev → prod)
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 _Owner: Robin. Every operator step below is written so a local Claude
 Code session with `gcloud`, `firebase` and `gh` logged in can run it,
 with Robin approving each command. Console-only steps are marked
@@ -43,6 +45,8 @@ Manager references by name.
 | `PINNED_LAB` | off | 1 | — (lab routes 404) |
 | `DEMO_BOARD_SLUG` | — | — | secret ref after seeding (§6) |
 | `LEGAL_CONTACT_EMAIL` | — (legal pages link to public GitHub issues) | `contact@moriacrew.com` | `contact@moriacrew.com` (a plain value: it is shown on `/privacy` and `/terms`) |
+| `DEMO_VIDEO_URL` | — (no video link) | `https://youtu.be/q6lkrA6fsCI` | `https://youtu.be/q6lkrA6fsCI` (PIN-263: "Watch the 3-minute demo" under How it works; https only, unset to hide) |
+| `PROMO_POST_URL` | — (no post link) | a test post | — until the launch post is published (PIN-263: "See the post on X" in the landing footer; https only) |
 | `runConfig` | — | base: min 0, max 2, 512 MiB | min **1**, max **4**, **1024 MiB**, concurrency 10 |
 | Secrets | — | `META_API_KEY`, `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `META_API_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` (+ Stripe and `DEMO_BOARD_SLUG` later) |
 
@@ -171,12 +175,17 @@ curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"opti
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
-curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked
-curl -s https://pinneds.com/ | grep -c 'href="/g/'   # 1: the landing demo link (DEMO_BOARD_SLUG); 0 on dev
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" -H "Content-Type: application/json" -d '{}' https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked (411 without a body: the byte cap needs Content-Length)
+curl -s https://pinneds.com/ | grep -c 'action="/api/demo"'   # 1: the landing "See a board" form (DEMO_BOARD_SLUG set, PIN-251); 0 when the demo is off. The landing never links a board.
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" -X POST -H "sec-fetch-site: same-origin" -H "Content-Length: 0" https://pinneds.com/api/demo | sed -E 's#/g/[A-Za-z0-9_-]{22}#/g/<slug>#'   # 303 to a fresh demo board (a copy of the template, swept after its TTL); a second POST from the same address → 303 /?demo=busy (the per-address cap). Never record the slug; each POST uses one of this address's demo slots.
 # Languages (PIN-227): French browser → French, saved English wins, unknown → English
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
 curl -s -H "Accept-Language: ja" https://pinneds.com/ | grep -o '<html lang="en"'
+# Report & hold (PIN-266, docs/20): the route exists and refuses a cross-site post; GET records nothing.
+# Never file a real report from here: on prod it hides content and alerts the operator.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" -H "sec-fetch-site: cross-site" https://pinneds.com/api/boards/AAAAAAAAAAAAAAAAAAAAAA/report  # 403
+curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/boards/AAAAAAAAAAAAAAAAAAAAAA/report  # 405
 ```
 
 On a phone: create and join a board; upload a fixture photo from
@@ -259,6 +268,25 @@ element; delete the throwaway board.
      **(console: Monitoring → Uptime checks)**; the check also keeps
      the instance warm.
    - Alert on Cloud Run 5xx > 5 in 5 min for `pinned-web`.
+   - **Report alert (PIN-272, docs/20):** every report the app receives
+     is one structured line `report.received` on stdout (reference,
+     reason, scope, hold counts; never the board link). Turn it into
+     an email on the same channel: a log-based metric, then an alert
+     policy on it (console: Monitoring → Alerting → Create policy →
+     metric `logging/user/pinned_report_received`, condition "any
+     time series violates: count > 0 over 5 min", notification = the
+     email channel, documentation = "run
+     `npm run report:ops -- --project <p> pending`, then docs/20").
+     ```sh
+     gcloud logging metrics create pinned_report_received --project "$P" \
+       --description "Report & hold: a report was filed (docs/20)" \
+       --log-filter 'resource.type="cloud_run_revision" AND resource.labels.service_name="pinned-web" AND jsonPayload.event="report.received"'
+     ```
+     Test-fire once per project with a report on a throwaway board
+     (`docs/launch-ops-runbook.md` §3 rule: an alert nobody saw
+     arrive is not an alert). The backstop (every 6 h)
+     (`.github/workflows/report-sweep.yml`) needs its own identity:
+     its header lists the operator steps.
    - GCP billing budget (e.g. $25) with 50/90/100 % emails. Meta
      spend is not on GCP billing: run
      `GCLOUD_PROJECT=moriacrew-pinned-prod npm run usage:costs -- --days 1`
@@ -289,7 +317,12 @@ the judges' board and kept (§6.4). Steps, smoke and rollback:
   pins, scenes since the last check; nobody but the recorded
   participants and the judges should appear), the demo template
   board (unchanged counts: 2 participants, its pins and 1 scene) and
-  a "See a board" click (lands on a fresh board), `usage:costs`.
+  a "See a board" click (lands on a fresh board), `usage:costs`, and
+  the reports queue: `npm run report:ops -- --project moriacrew-pinned-prod pending`
+  (an alert email means one just landed; decide each with `show`,
+  then `dismiss` or `takedown`, docs/20). The app already hid what
+  the report named, so the queue is never an emergency for the
+  content, only for the reporter waiting on an answer.
 - **Demo boards piling up or abused:** lower `demo.maxTotal` /
   `demo.maxPerIp` in `POLICY_OVERRIDES_JSON` (0 closes the demo; the
   landing then still shows the button, which answers "busy"), or

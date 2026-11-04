@@ -22,6 +22,8 @@ export interface MyPinCard {
   label: string;
   description: string;
   faceFlag: boolean;
+  /** PIN-279: under a report hold; no picture is served and it cannot be pinned anywhere. */
+  held?: boolean;
   /** Title (never slug) of the board the element lives on. */
   sourceBoardTitle: string;
   /** Owner-checked thumbnail route (no board slug in the URL). */

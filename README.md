@@ -1,4 +1,4 @@
-# Pinneds — your stuff, pinned together
+# Pinneds: your stuff, pinned together
 
 Friends drop photos onto one shared board. Meta's models, called through the Meta Model
 API, cut out the things in them, and anyone can mix everyone's pins into new scenes that
@@ -52,7 +52,7 @@ and evidence for each: [`docs/19-meta-models.md`](docs/19-meta-models.md).
 
 | Model (ID) | What it does in Pinneds | Port |
 | --- | --- | --- |
-| **Muse Spark** (`muse-spark-1.3`) | Names 1–6 things per photo as short noun phrases SAM can cut, and flags faces (`elements.v1`). Names a cut-out you tapped, from its crop (`tap-name.v1`). Suggests scene ideas for the picked pins in the viewer's UI language, cached 24 h per language (`chips.v2`). | `ElementNamer`, `TapNamer`, `ChipSuggester` |
+| **Muse Spark** (`muse-spark-1.3`) | Names 1–6 things per photo as short noun phrases SAM 3.1 can cut, and flags faces (`elements.v1`). Names a cut-out you tapped, from its crop (`tap-name.v1`). Suggests scene ideas for the picked pins in the viewer's UI language, cached 24 h per language (`chips.v2`). | `ElementNamer`, `TapNamer`, `ChipSuggester` |
 | **SAM 3.1** (`sam-3.1`) | Cuts out each named thing (one concept per call, four calls at a time) and whatever you tap (point prompt), keeping the most confident usable mask. | `Segmenter` |
 | **Muse Image** (`muse-image-1.0`) | Composes 1–4 pins into one new scene through `/v1/responses` (`scene.v1`, `store: false`); a remix sends the parent scene first. It also made the source photos of the Meta-made landing sets. | `SceneComposer` |
 | **Muse Voice Transcribe** (`muse-voice-transcribe-1.0`) | Turns a spoken scene idea (up to 30 s) into text. The audio is never stored. | `SpeechTranscriber` |
@@ -73,7 +73,7 @@ flowchart LR
   point --> tapname["Muse Spark<br/>names the tapped pin"]
   tapname --> pins
   pins --> chips["Muse Spark<br/>idea chips"]
-  voice["Spoken idea"] --> asr["Muse Voice<br/>transcribes"]
+  voice["Spoken idea"] --> asr["Muse Voice Transcribe<br/>transcribes"]
   chips --> idea["Scene idea"]
   asr --> idea
   pins --> compose["Muse Image<br/>composes"]
@@ -110,16 +110,31 @@ Spec: [`docs/11-studio.md`](docs/11-studio.md) §5. Decisions:
   capability slugs, validated before any data path is built.
 - **Privacy.**
   - Original photos are never stored. An upload is checked, stripped of EXIF and
-    re-encoded into a working copy under `tmp/`. Only cut-outs (`elements/`) and scenes
-    (`scenes/`) persist, served through routes that check the board link; client
-    Firestore and Storage rules deny everything.
-  - The working copy is deleted when the uploader confirms their pins ("Pin N"). Any copy
-    older than Policy `workingCopyTtlHours` (24 h) is swept the next time someone adds a
-    photo to that board, and a bucket lifecycle rule in `storage.lifecycle.json` deletes
-    leftover working copies as the backstop.
+    re-encoded into a working copy; only cut-outs and scenes persist, served through
+    routes that check the board link. Client Firestore and Storage rules deny everything.
+  - The working copy is deleted when the uploader confirms their pins. If they never do,
+    the next photo added to that board sweeps any copy older than Policy
+    `workingCopyTtlHours` (24 h), and the bucket lifecycle rule in `storage.lifecycle.json`
+    is the backstop.
   - Calls to Meta run in Standard mode: not used for training, which is not the same as
     not stored. The Muse Image compose call sends `store: false`. We make no "zero data
     retention" claim.
+
+```mermaid
+flowchart LR
+  up["Upload<br/>(original never written)"] --> chk["Checked, EXIF stripped,<br/>re-encoded"]
+  chk --> wc["Working copy<br/>tmp/"]
+  wc --> spark["Muse Spark<br/>names"]
+  wc --> sam["SAM 3.1<br/>cuts out"]
+  sam --> el["Cut-outs<br/>elements/"]
+  el --> sc["Scenes<br/>scenes/"]
+  wc -->|"pins confirmed"| del["Working copy deleted"]
+  wc -.->|"older than 24 h: swept"| del
+  wc -.->|"1-day lifecycle rule"| del
+```
+
+*What persists: cut-outs and scenes. The original is never written; the working copy is
+temporary.*
 
 ## Run it locally
 
@@ -160,13 +175,14 @@ npm test
 npm run build
 ```
 
-On `dev` at `a90cd7b` (Nov 2, 2026), `npm test` reports **1,879 tests passed, 3
-skipped**, in 165 test files. CI (`.github/workflows/ci.yml`) runs all three with
-`AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full history on every
-PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook, and Cursor Bugbot
-reviews every PR: as of Nov 2, each of the 215 merged PRs passed CI and gitleaks and got a
-Bugbot review ([`docs/build-log.md`](docs/build-log.md)). Domain and Policy logic have
-unit tests; the gateway has contract tests that replay recorded spike fixtures
+On `dev` at `d958f29` (Nov 4, 2026), `npm test` reports **2,091 tests passed, 3
+skipped**, in 181 test files (one of them skipped). CI (`.github/workflows/ci.yml`) runs
+all three with `AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full
+history on every PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook,
+and Cursor Bugbot reviews every PR: as of Nov 4, each of the 240 merged PRs passed CI and
+gitleaks and got a Bugbot review ([`docs/build-log.md`](docs/build-log.md)). Domain and
+Policy logic have unit tests; the gateway has contract tests that replay recorded spike
+fixtures
 (`eval/fixtures/studio/`). Live-model runs happen by hand, with cost logged; results are in
 [`eval/studio-findings.md`](eval/studio-findings.md).
 
@@ -174,34 +190,30 @@ unit tests; the gateway has contract tests that replay recorded spike fixtures
 
 `PLUS_MODE` is `off` (the default: nothing is sold), `mock` (a no-money demo) or `stripe`.
 With `stripe` the app sells one pack, **Board Plus (€2.99, Stripe)**: once per board, it
-unlocks every board look and foil stickers and adds 20 creations (AI makes). Any member
+unlocks every board look and foil stickers and adds 20 creations. Any member
 can buy it for the board; guests never have to pay. Creations are a Policy switch
-(`credits.enabled`, off in code): when on, a maker's first 3 boards a week start with 5
-free (later ones start at 0), each AI scene uses one (photos and cut-outs never do), and a
-collage is free. A board without Plus cuts up to 15 free photos; Plus removes that limit. Purchases are granted by Stripe webhook only, and
+(`credits.enabled`: off in the code defaults, on in both hosted backends through
+`POLICY_OVERRIDES_JSON`). When on, a maker's first 3 boards a week start with 5 free
+creations (prod gives 20 during judging week; later boards start at 0), each AI scene uses
+one (photos and cut-outs never do), and a collage is free. A board without Plus cuts up to
+15 free photos; Plus removes that limit. Purchases are granted by Stripe webhook only, and
 keys come from Secret Manager, never git. Design and runbook:
 [`docs/15-board-plus.md`](docs/15-board-plus.md).
 
 ## Docs
 
-- [`docs/README.md`](docs/README.md): index of every doc
+- [`docs/README.md`](docs/README.md): index of every doc, in reading order
 - [`docs/19-meta-models.md`](docs/19-meta-models.md): each Meta model, prompt, cost and fallback
-- [`docs/build-log.md`](docs/build-log.md): who built what, PR by PR
 - [`docs/11-studio.md`](docs/11-studio.md): product and architecture spec
 - [`docs/adr/003-studio-architecture.md`](docs/adr/003-studio-architecture.md): Policy, ports, jobs, remix
-- [`docs/DEPLOY.md`](docs/DEPLOY.md): deploy runbook and env matrix
-- [`docs/13-auth.md`](docs/13-auth.md): optional Google sign-in
-- [`docs/15-board-plus.md`](docs/15-board-plus.md): Board Plus and creations
-- [`docs/16-ai-usage.md`](docs/16-ai-usage.md): AI call log and cost estimates
-- [`docs/17-showcase-sets.md`](docs/17-showcase-sets.md): how the landing sets are made
-- [`docs/18-i18n.md`](docs/18-i18n.md): languages and translation
-- [`SECURITY.md`](SECURITY.md) and [`AGENTS.md`](AGENTS.md): public-repo guardrails and agent rules
+- [`docs/build-log.md`](docs/build-log.md): who built what, PR by PR
+- [`SECURITY.md`](SECURITY.md): public-repo guardrails
 
 ## Known limits
 
-- **Cuts can miss.** Sometimes SAM finds no usable mask for a named thing, and it doesn't
-  become a pin; tapping it in the photo is the workaround. Spark names the same photo a
-  little differently from run to run.
+- **Cuts can miss.** Sometimes SAM 3.1 finds no usable mask for a named thing, and it does not
+  become a pin; tapping it in the photo is the workaround. Muse Spark names the same photo
+  a little differently from run to run.
 - **Costs are estimates** from Meta list prices (`src/gateway/costs.ts`). The provider
   dashboard is authoritative.
 - **Not every picture is from Meta.** The classic landing set, the `/new` look-picker
@@ -209,8 +221,7 @@ keys come from Secret Manager, never git. Design and runbook:
   photos are Higgsfield images (SAM 3.1 cut out the stickers). The try-on and cat landing
   sets are Meta end to end.
 - **AI-written text is English in places.** Pin names and some scene text stay English
-  whatever the UI language (PIN-200). Generated idea chips follow the UI language
-  (PIN-214); the fixed starter chips stay English until their translations land.
+  whatever the UI language. Idea chips, generated and fixed, follow the UI language.
 - **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
   checked them yet. Latin-script languages only.
 
@@ -224,7 +235,7 @@ Which agent built what, with PR numbers and dates: [`docs/build-log.md`](docs/bu
 
 ## License
 
-Copyright (C) 2026 Moria Crew. AGPL-3.0 — see `LICENSE`. In short: you may use, study and modify this
+Copyright (C) 2026 Moria Crew. AGPL-3.0, see `LICENSE`. In short: you may use, study and modify this
 code, but if you offer a modified version to others over a network you
 must release your source under the same licence. Hackathon note: the
 organisers separately receive a broad licence to submitted materials

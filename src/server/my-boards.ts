@@ -24,6 +24,32 @@ export interface MyBoardsDeps {
   plusMode?: PlusMode;
 }
 
+/**
+ * The user's live board slugs, at most `limit` (PIN-264, Bugbot on
+ * #242): the same claim checks as listMyBoards (the board exists and
+ * the participant still carries this user's claim) without the
+ * per-board elements, pins, scenes and events reads. It stops as soon
+ * as it has `limit`. The landing only needs to tell none, one (and
+ * its slug) and several apart.
+ */
+export async function liveBoardSlugs(
+  user: UserProfile,
+  deps: Pick<MyBoardsDeps, "boards" | "users">,
+  limit: number,
+): Promise<string[]> {
+  const slugs: string[] = [];
+  if (limit <= 0) return slugs;
+  for (const entry of await deps.users.listUserBoards(user.uid)) {
+    const board = await deps.boards.getBoard(entry.boardId);
+    if (!board) continue;
+    const participant = await deps.boards.getParticipant(entry.boardId, entry.participantId);
+    if (!participant || participant.userId !== user.uid) continue;
+    slugs.push(board.slug);
+    if (slugs.length >= limit) break;
+  }
+  return slugs;
+}
+
 export async function listMyBoards(
   user: UserProfile,
   deps: MyBoardsDeps,
