@@ -33,7 +33,7 @@ describe("report foot (PIN-271)", () => {
   it("opens a sheet instead of a mail: a button, the address and the reference as text, never the slug", () => {
     const ref = boardReportRef(SLUG);
     const out = renderToStaticMarkup(
-      h(ReportBoard, { slug: SLUG, email: "contact@example.com", reportRef: ref, targets, messageMaxChars: 1000 }),
+      h(ReportBoard, { slug: SLUG, email: "contact@example.com", reportRef: ref, targets, messageMaxChars: 1000, takedownHours: 24 }),
     );
     expect(out).toContain("Report this board");
     expect(out).toContain('aria-haspopup="dialog"');
@@ -46,8 +46,8 @@ describe("report foot (PIN-271)", () => {
   });
 
   it("renders nothing without a reference, and no address line without an address", () => {
-    expect(renderToStaticMarkup(h(ReportBoard, { slug: SLUG, email: "c@e.co", reportRef: null, targets, messageMaxChars: 1000 }))).toBe("");
-    const out = renderToStaticMarkup(h(ReportBoard, { slug: SLUG, email: null, reportRef: boardReportRef(SLUG), targets, messageMaxChars: 1000 }));
+    expect(renderToStaticMarkup(h(ReportBoard, { slug: SLUG, email: "c@e.co", reportRef: null, targets, messageMaxChars: 1000, takedownHours: 24 }))).toBe("");
+    const out = renderToStaticMarkup(h(ReportBoard, { slug: SLUG, email: null, reportRef: boardReportRef(SLUG), targets, messageMaxChars: 1000, takedownHours: 24 }));
     expect(out).not.toContain("<dt>Email</dt>");
     expect(out).toContain("<dt>Board reference</dt>");
   });
@@ -100,11 +100,11 @@ describe("report form (PIN-271)", () => {
 describe("report receipt (PIN-271)", () => {
   it("says what happened and shows the reference and the follow-up address", () => {
     const ref = boardReportRef(SLUG);
-    const held = renderToStaticMarkup(h(ReportReceipt, { result: { reference: ref, held: true }, email: "contact@example.com" }));
-    expect(held).toContain(`Hidden while we check. Your reference: ${ref}`);
+    const held = renderToStaticMarkup(h(ReportReceipt, { result: { reference: ref, held: true }, email: "contact@example.com", takedownHours: 24 }));
+    expect(held).toContain(`Hidden now and removed in 24 hours unless we clear it. Your reference: ${ref}`);
     expect(held).toContain("contact@example.com");
     expect(held).not.toContain(SLUG);
-    const received = renderToStaticMarkup(h(ReportReceipt, { result: { reference: ref, held: false }, email: null }));
+    const received = renderToStaticMarkup(h(ReportReceipt, { result: { reference: ref, held: false }, email: null, takedownHours: 24 }));
     expect(received).toContain(`Received. We&#x27;ll take a look. Your reference: ${ref}`);
     expect(received).not.toContain("Questions about a report?");
   });

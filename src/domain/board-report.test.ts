@@ -101,29 +101,36 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
         held: { elementIds: ["el-1"], sceneIds: ["sc-a"], boardReview: false, storageHold: false },
         severity: "normal",
         queuedOnly: false,
+        deleteAt: 1_000 + 24 * HOUR,
       },
     });
   });
 
-  it("element + likeness + faceFlag: the one timed takedown, takedownHours from now", () => {
-    const result = planReportHold({
-      ...base,
-      scope: "element",
-      reason: "likeness",
-      element: { id: "el-2", faceFlag: true },
-    });
-    expect(result.ok && result.plan.deleteAt).toBe(1_000 + 24 * HOUR);
-    expect(result.ok && result.plan.held.sceneIds).toEqual(["sc-a", "sc-b"]);
-  });
-
-  it("no deadline without a face flag, with another reason, or ever for illegal", () => {
+  it("every holding plan carries the deadline, takedownHours from now (PIN-278)", () => {
+    const likeness = planReportHold({ ...base, scope: "element", reason: "likeness", element: { id: "el-2", faceFlag: true } });
+    expect(likeness.ok && likeness.plan.deleteAt).toBe(1_000 + 24 * HOUR);
+    expect(likeness.ok && likeness.plan.held.sceneIds).toEqual(["sc-a", "sc-b"]);
     for (const input of [
       { ...base, scope: "element" as const, reason: "likeness" as const, element: { id: "el-2", faceFlag: false } },
       { ...base, scope: "element" as const, reason: "inappropriate" as const, element: { id: "el-2", faceFlag: true } },
       { ...base, scope: "element" as const, reason: "illegal" as const, element: { id: "el-2", faceFlag: true } },
+      { ...base, scope: "scene" as const, reason: "other" as const, scene: { id: "sc-a", hidden: false } },
       { ...base, scope: "board" as const, reason: "illegal" as const },
+      { ...base, reporterKind: "participant" as const, reason: "ownership" as const },
     ]) {
       const result = planReportHold(input);
+      expect(result.ok && result.plan.queuedOnly).toBe(false);
+      expect(result.ok && result.plan.deleteAt).toBe(1_000 + 24 * HOUR);
+    }
+  });
+
+  it("a queued-only report (nothing hidden) has no deadline", () => {
+    for (const input of [
+      { ...base, reporterKind: "visitor" as const, reason: "other" as const },
+      { ...base, scope: "scene" as const, reason: "other" as const, scene: { id: "sc-hidden", hidden: true } },
+    ]) {
+      const result = planReportHold(input);
+      expect(result.ok && result.plan.queuedOnly).toBe(true);
       expect(result.ok && "deleteAt" in result.plan).toBe(false);
     }
   });
@@ -131,7 +138,7 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
   it("scene: hides that scene; an already hidden scene is queued only", () => {
     expect(planReportHold({ ...base, scope: "scene", scene: { id: "sc-b", hidden: false } })).toEqual({
       ok: true,
-      plan: { held: { elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: false }, severity: "normal", queuedOnly: false },
+      plan: { held: { elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: false }, severity: "normal", queuedOnly: false, deleteAt: 1_000 + 24 * HOUR },
     });
     const hidden = planReportHold({ ...base, scope: "scene", scene: { id: "sc-hidden", hidden: true } });
     expect(hidden.ok && hidden.plan.queuedOnly).toBe(true);
@@ -152,6 +159,7 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
         held: { elementIds: ["el-1", "el-2"], sceneIds: ["sc-a", "sc-b"], boardReview: true, storageHold: false },
         severity: "normal",
         queuedOnly: false,
+        deleteAt: 1_000 + 24 * HOUR,
       },
     });
   });
@@ -162,6 +170,7 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
       held: { elementIds: ["el-1", "el-2"], sceneIds: ["sc-a", "sc-b"], boardReview: true, storageHold: true },
       severity: "high",
       queuedOnly: false,
+      deleteAt: 1_000 + 24 * HOUR,
     });
   });
 
@@ -182,7 +191,7 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
     expect(scene.ok && scene.plan.held).toEqual({ elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: true });
     // An already hidden scene reported as illegal is still listed, so its folder gets the hold (never queued only).
     const hiddenIllegal = planReportHold({ ...base, scope: "scene", reason: "illegal", scene: { id: "sc-hidden", hidden: true } });
-    expect(hiddenIllegal.ok && hiddenIllegal.plan).toEqual({ held: { elementIds: [], sceneIds: ["sc-hidden"], boardReview: false, storageHold: true }, severity: "high", queuedOnly: false });
+    expect(hiddenIllegal.ok && hiddenIllegal.plan).toEqual({ held: { elementIds: [], sceneIds: ["sc-hidden"], boardReview: false, storageHold: true }, severity: "high", queuedOnly: false, deleteAt: 1_000 + 24 * HOUR });
   });
 });
 

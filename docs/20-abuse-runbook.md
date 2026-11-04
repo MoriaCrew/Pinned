@@ -42,14 +42,14 @@ and acts at once, reversibly, per this table:
 
 | Scope | Reporter | Reason | Automatic action |
 | --- | --- | --- | --- |
-| pin / scene | anyone | any | the pin's refs get `held:` (image 404, never composed), the scenes using it are hidden; a scene is hidden |
-| pin with a face | anyone | `likeness` | as above, plus a deadline: tombstoned by the daily sweep if nobody decided within `takedownHours` |
-| whole board | participant | any | every pin held and scene hidden; board under review (uploads, scenes, tap-adds answer 423; banner on the page) |
-| whole board | anyone | `illegal` | as above, plus Storage temporary holds on every object (evidence), severity high |
-| whole board | visitor | not `illegal` | nothing hidden (anyone with a link can join and report); the report is queued |
+| pin / scene | anyone | any | the pin's refs get `held:` (image 404, never composed), the scenes using it are hidden; a scene is hidden. Deadline: tombstoned by the sweep if nobody decided within `takedownHours` |
+| whole board | participant | any | every pin held and scene hidden; board under review (uploads, scenes, tap-adds answer 423; banner on the page). Same deadline: the board is tombstoned |
+| whole board | anyone | `illegal` | as above, plus Storage temporary holds on every object (evidence), severity high. Same deadline; the takedown keeps the holds |
+| whole board | visitor | not `illegal` | nothing hidden (anyone with a link can join and report); the report is queued, no deadline |
 
-Nothing is deleted automatically except the one deadline case, and an
-`illegal` report is never deleted by the app. The reporter sees a
+Every hold carries the deadline (`takedownHours`, 24 h): the sweep
+tombstones what nobody decided (PIN-278). An `illegal` report's
+Storage holds survive that takedown, so the bytes stay as evidence. The reporter sees a
 receipt with the board's **reference** (first 16 hex of
 `sha256("pinned-report-v1:" + slug)`, `boardReportRef`), never the
 slug. The same reference is the only board identifier in the alert
@@ -111,11 +111,13 @@ failed, the bytes stay. That is the point for section 6; for an
 ordinary takedown that reports `storage hold true`, run
 `release-holds` afterwards (section 7, step 3).
 
-**Timed takedown.** A `likeness` report on a face-flagged pin carries
-`deleteAt`; `.github/workflows/report-sweep.yml` runs
-`report:ops sweep` daily and tombstones what passed its deadline
-with no decision (never an `illegal` report). Deciding before the
-deadline, either way, cancels it. The step summary shows counts only.
+**Timed takedown.** Every report that held something carries
+`deleteAt` (`takedownHours` after it was filed; the receipt says so).
+`.github/workflows/report-sweep.yml` runs `report:ops sweep` every
+six hours and tombstones what passed its deadline with no decision,
+`illegal` reports included (their Storage holds stay, section 6).
+Deciding before the deadline, either way, cancels it. The step summary
+shows counts only.
 
 **Reply to the reporter** when they left an email (the record's
 `email` line): the decision and the date, nothing else; never the

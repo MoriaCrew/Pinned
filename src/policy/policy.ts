@@ -304,9 +304,10 @@ export const PolicySchema = z
      * body and is read from the env-level Policy before any board
      * read (like sceneRequestMaxBytes); `messageMaxChars` caps the
      * reporter's free text (stored with the report, never logged).
-     * `sweepBatch` is how many due reports one backstop run takes
-     * down (0 turns the timed takedown off); the deadline itself is
-     * the existing `takedownHours`.
+     * `sweepBatch` is how many due reports one backstop run (every
+     * 6 h) takes down (0 turns the timed takedown off); the deadline
+     * itself is the existing `takedownHours`, on every holding report
+     * (PIN-278).
      */
     report: z
       .object({
@@ -318,13 +319,13 @@ export const PolicySchema = z
           .default({ limit: 5, windowMs: 600_000 }),
         maxBytes: z.number().int().min(1).default(4096),
         messageMaxChars: z.number().int().min(1).default(1000),
-        sweepBatch: z.number().int().min(0).default(5),
+        sweepBatch: z.number().int().min(0).default(20),
       })
       .default({
         perIp: { limit: 5, windowMs: 600_000 },
         maxBytes: 4096,
         messageMaxChars: 1000,
-        sweepBatch: 5,
+        sweepBatch: 20,
       }),
     /** One-time "sign in to keep your pins" nudge after the first
      * pinned pin (PIN-84). Only ever renders when sign-in is on. */

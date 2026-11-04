@@ -294,7 +294,7 @@
   "board.reportCancel": "Cancelar",
   "board.reportClose": "Fechar",
   "board.reportDone": "Pronto",
-  "board.reportHeld": "Oculto enquanto verificamos. Seu protocolo: {ref}",
+  "board.reportHeld": "Ocultado agora e removido em {hours} horas, a menos que liberemos. Sua referência: {ref}",
   "board.reportReceived": "Recebido. Vamos dar uma olhada. Seu protocolo: {ref}",
   "board.reportFollowUp": "Dúvidas sobre a denúncia? Escreva para este endereço e informe o protocolo:",
   "board.underReviewNotice": "Este quadro está pausado enquanto verificamos uma denúncia.",

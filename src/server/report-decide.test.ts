@@ -162,25 +162,33 @@ describe("report decisions (PIN-272)", () => {
     expect(late?.outcome).toBe("already_gone");
   });
 
-  it("the sweep takes down due likeness reports in deadline order, batch-capped, and never an illegal one", async () => {
+  it("the sweep takes down every due report in deadline order, batch-capped, illegal included with its Storage holds kept (PIN-278)", async () => {
     const h = await harness();
     const timed = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "likeness" });
     expect(timed.deleteAt).toBe(NOW + 24 * HOUR);
-    // An illegal record with a deadline must not exist by construction; the sweep refuses it anyway.
-    await h.reports.create({ ...timed, id: "forged", reason: "illegal", deleteAt: NOW + 1, targetId: "mug" });
+    const illegal = await h.file(SLUG, { scope: "element", targetId: "mug", reason: "illegal" });
+    expect(illegal.deleteAt).toBe(NOW + 24 * HOUR);
     // A due report on a thing that no longer exists closes as already_gone.
     await h.reports.create({ ...timed, id: "ghost", targetId: "ghost", deleteAt: NOW + 2 });
 
-    expect(await sweepDueReports(h.deps, NOW + 23 * HOUR, 10)).toEqual({ due: 2, takenDown: 1, skipped: 1 });
-    expect((await h.reports.get("forged"))?.status).toBe("open");
+    expect(await sweepDueReports(h.deps, NOW + 23 * HOUR, 10)).toEqual({ due: 1, takenDown: 1, skipped: 0 });
     expect((await h.reports.get("ghost"))?.status).toBe("takedown");
     expect(await h.boards.getElement("friend")).not.toBeNull();
+    expect(await h.boards.getElement("mug")).not.toBeNull();
 
     expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 0)).toEqual({ due: 0, takenDown: 0, skipped: 0 });
-    expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 10)).toEqual({ due: 2, takenDown: 1, skipped: 1 });
+    expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 1)).toEqual({ due: 1, takenDown: 1, skipped: 0 });
+    expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 10)).toEqual({ due: 1, takenDown: 1, skipped: 0 });
     expect(await h.boards.getElement("friend")).toBeNull();
+    expect(await h.boards.getElement("mug")).toBeNull();
     expect((await h.reports.get(timed.id))).toMatchObject({ status: "takedown", note: "timed takedown (takedownHours)" });
-    expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 10)).toEqual({ due: 1, takenDown: 0, skipped: 1 });
+    expect((await h.reports.get(illegal.id))).toMatchObject({ status: "takedown", held: { storageHold: true } });
+    // The evidence is still there, under its hold.
+    for (const ref of refsOf("mug")) {
+      expect(h.store.isHeld(ref)).toBe(true);
+      expect(await h.store.get(ref)).not.toBeNull();
+    }
+    expect(await sweepDueReports(h.deps, NOW + 25 * HOUR, 10)).toEqual({ due: 0, takenDown: 0, skipped: 0 });
   });
 
   it("dismiss never brings back a scene another open report holds on its own", async () => {

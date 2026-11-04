@@ -294,7 +294,7 @@
   "board.reportCancel": "Annuler",
   "board.reportClose": "Fermer",
   "board.reportDone": "Terminé",
-  "board.reportHeld": "Masqué le temps qu'on vérifie. Ta référence : {ref}",
+  "board.reportHeld": "Masqué pour l'instant et supprimé dans {hours} heures sauf si on le rétablit. Ta référence : {ref}",
   "board.reportReceived": "Reçu. On va regarder. Ta référence : {ref}",
   "board.reportFollowUp": "Des questions sur un signalement ? Écris à cette adresse en indiquant la référence :",
   "board.underReviewNotice": "Ce tableau est en pause le temps qu'on vérifie un signalement.",

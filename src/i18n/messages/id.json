@@ -294,7 +294,7 @@
   "board.reportCancel": "Batal",
   "board.reportClose": "Tutup",
   "board.reportDone": "Selesai",
-  "board.reportHeld": "Disembunyikan sementara kami cek. Referensimu: {ref}",
+  "board.reportHeld": "Disembunyikan sekarang dan akan dihapus dalam {hours} jam kecuali kami pulihkan. Referensi kamu: {ref}",
   "board.reportReceived": "Diterima. Akan kami cek. Referensimu: {ref}",
   "board.reportFollowUp": "Ada pertanyaan soal laporan? Tulis ke alamat ini dan cantumkan referensi:",
   "board.underReviewNotice": "Papan ini dijeda sementara kami cek laporan.",

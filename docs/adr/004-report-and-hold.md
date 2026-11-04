@@ -47,12 +47,15 @@ with counsel.
    with a link can join and report, so one click must not blank a
    friend group's board). `illegal` adds Storage temporary holds on
    the board's folders.
-4. **Delete on a timer only for faces.** A `likeness` report on an
-   element Spark flagged as a face sets `deleteAt = now +
-   takedownHours`; the backstop tombstones it if nobody decided by
-   then. Nothing else is deleted automatically, and content reported
-   as `illegal` is never deleted by the app: it is preserved for the
-   runbook's §7.
+4. **Delete on a timer.** _Amended 2026-11-04 (PIN-278): the
+   operator does not watch the queue by default._ Every report that
+   holds something sets `deleteAt = now + takedownHours`; the backstop
+   tombstones it if nobody decided by then. Content reported as
+   `illegal` is tombstoned too, but its Storage temporary holds
+   survive the takedown, so the bytes are preserved for the runbook's
+   §7 until `release-holds`. A queued-only report (nothing hidden) has
+   no deadline. _Before:_ only a `likeness` report on a face-flagged
+   element had a deadline, and `illegal` was never deleted by the app.
 5. **No model as judge.** Suspected illegal content never leaves the
    project (the runbook's "nothing reads image bytes" holds for the
    automation too), a model verdict is not a defensible takedown

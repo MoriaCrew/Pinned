@@ -294,7 +294,7 @@
   "board.reportCancel": "Cancel",
   "board.reportClose": "Close",
   "board.reportDone": "Done",
-  "board.reportHeld": "Hidden while we check. Your reference: {ref}",
+  "board.reportHeld": "Hidden now and removed in {hours} hours unless we clear it. Your reference: {ref}",
   "board.reportReceived": "Received. We'll take a look. Your reference: {ref}",
   "board.reportFollowUp": "Questions about a report? Write to this address and quote the reference:",
   "board.underReviewNotice": "This board is paused while we check a report.",
