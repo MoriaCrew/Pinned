@@ -58,6 +58,19 @@ if (!command) usage("A command is required.");
 if (!project || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(project)) usage("--project must name the Firebase project (never a default).");
 const bucket = option("--bucket") ?? `${project}.firebasestorage.app`;
 
+/**
+ * What the Storage hold line adds after true/false: `(released <time>)`
+ * once `markHoldsReleased` ran (it clears the flag but keeps the list),
+ * `(partial: N object(s) held)` while a hold that lost some `setHold`
+ * calls still stands, nothing otherwise.
+ */
+function storageNote(record: ReportRecord): string {
+  const refs = record.held.storageRefs?.length ?? 0;
+  if (record.holdsReleasedAt !== undefined) return ` (released ${new Date(record.holdsReleasedAt).toISOString()}${refs > 0 ? `, ${refs} object(s)` : ""})`;
+  if (!record.held.storageHold && refs > 0) return ` (partial: ${refs} object(s) held)`;
+  return "";
+}
+
 /** Terminal line for one report: ids, reference, enums, times and counts; never the board. */
 function describe(record: ReportRecord, withMessage = false): string {
   const at = (ms?: number) => (ms === undefined ? "-" : new Date(ms).toISOString());
@@ -65,9 +78,7 @@ function describe(record: ReportRecord, withMessage = false): string {
     `report ${record.id}  ref ${record.reference}  ${record.status}`,
     `  ${record.scope}${record.targetId ? ` ${record.targetId}` : ""}  reason ${record.reason}  severity ${record.severity}  by ${record.reporterKind}`,
     `  created ${at(record.createdAt)}  deleteAt ${at(record.deleteAt)}  decided ${at(record.decidedAt)}${record.note ? `  note: ${record.note}` : ""}`,
-    `  held: ${record.held.elementIds.length} element(s), ${record.held.sceneIds.length} scene(s), review ${record.held.boardReview}, storage hold ${record.held.storageHold}${
-      !record.held.storageHold && (record.held.storageRefs?.length ?? 0) > 0 ? ` (partial: ${record.held.storageRefs?.length} object(s) held)` : ""
-    }${record.holdsReleasedAt ? `, released ${new Date(record.holdsReleasedAt).toISOString()}` : ""}`,
+    `  held: ${record.held.elementIds.length} element(s), ${record.held.sceneIds.length} scene(s), review ${record.held.boardReview}, storage hold ${record.held.storageHold}${storageNote(record)}`,
   ];
   if (withMessage) {
     lines.push(`  email: ${record.reporterEmail ?? "-"}`);

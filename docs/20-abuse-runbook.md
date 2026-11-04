@@ -131,7 +131,10 @@ evidence. Then section 6 (report and preserve). Never run
 
 If `storage hold false` on an `illegal` report, a Storage call
 failed when the report was filed: set the holds by hand (section 5,
-step 1) before anything else.
+step 1) before anything else. With `(partial: N object(s) held)` after
+it, those N are held already (a dismiss or `release-holds` releases
+them), so set only the missing ones. `(released <time>)` means the
+holds were released on purpose.
 
 ## 4. The judges' demo board
 

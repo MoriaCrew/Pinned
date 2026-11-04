@@ -341,7 +341,9 @@ describe("report decisions (PIN-272)", () => {
     const outcome = await dismissReport(partial.id, h.deps);
     expect(outcome?.released.storage).toBe(true);
     for (const ref of [...refsOf("mug"), ...refsOf("friend"), sceneRef("s-mug")]) expect(h.store.isHeld(ref)).toBe(false);
-    expect((await h.reports.get(partial.id))?.holdsReleasedAt).toBeDefined();
+    // The released record keeps the list of what it held, flag off: the operator line reads "released", not "partial".
+    expect(await h.reports.get(partial.id)).toMatchObject({ holdsReleasedAt: expect.any(Number), held: { storageHold: false } });
+    expect((await h.reports.get(partial.id))?.held.storageRefs?.length).toBe(5);
   });
 
   it("references stay the only board id in a decision's record", async () => {
