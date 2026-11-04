@@ -1587,7 +1587,8 @@ function BoardBody({
           messageMaxChars={policy.reportMessageMaxChars}
           targets={{
             pins: view.elements.map((element) => ({ id: element.id, label: element.label })),
-            scenes: scenes.filter((scene) => scene.status === "ready").map((scene, index) => ({ id: scene.id, index: index + 1 })),
+            // The same catalogue numbers the prints show ("Nº 03": ready scenes, oldest first).
+            scenes: [...numbers.entries()].map(([id, index]) => ({ id, index })),
           }}
           onReported={() => void queryClient.invalidateQueries({ queryKey: boardQueryKey(slug) })}
         />
