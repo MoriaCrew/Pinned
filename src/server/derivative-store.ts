@@ -28,6 +28,13 @@ export interface DerivativeStore {
    * source is missing (an Error, not a silent no-op).
    */
   copy(from: string, to: string): Promise<void>;
+  /**
+   * Temporary hold on one stored object (PIN-269, docs/20 §3): while
+   * held, Storage refuses to delete it, so a tombstone's sweep fails
+   * harmlessly and the bytes stay as evidence. `false` releases.
+   * A missing object is a no-op (nothing to preserve).
+   */
+  setHold(ref: string, held: boolean): Promise<void>;
 }
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
@@ -53,6 +60,7 @@ function assertDerivativePrefix(prefix: string): string {
 
 export class InMemoryDerivativeStore implements DerivativeStore {
   private readonly objects = new Map<string, { bytes: Buffer; contentType: string }>();
+  private readonly holds = new Set<string>();
 
   async put(ref: string, bytes: Uint8Array, contentType: string): Promise<void> {
     this.objects.set(assertDerivativeRef(ref), {
@@ -66,8 +74,25 @@ export class InMemoryDerivativeStore implements DerivativeStore {
     return hit ? Buffer.from(hit.bytes) : null;
   }
 
+  /** Like GCS, a held object refuses deletion (the sweep counts it as failed). */
   async delete(ref: string): Promise<void> {
-    this.objects.delete(assertDerivativeRef(ref));
+    const checked = assertDerivativeRef(ref);
+    if (this.holds.has(checked)) {
+      throw Object.assign(new Error("Object is under a temporary hold."), { code: 403 });
+    }
+    this.objects.delete(checked);
+  }
+
+  async setHold(ref: string, held: boolean): Promise<void> {
+    const checked = assertDerivativeRef(ref);
+    if (!this.objects.has(checked)) return;
+    if (held) this.holds.add(checked);
+    else this.holds.delete(checked);
+  }
+
+  /** Test helper: whether `ref` is under a hold. */
+  isHeld(ref: string): boolean {
+    return this.holds.has(assertDerivativeRef(ref));
   }
 
   async listPrefix(prefix: string): Promise<string[]> {
@@ -134,6 +159,16 @@ export class GcsDerivativeStore implements DerivativeStore {
   /** GCS server-side copy; the destination keeps the source's content type and cache metadata. */
   async copy(from: string, to: string): Promise<void> {
     await this.file(from).copy(this.file(to));
+  }
+
+  /** The object's `temporaryHold` flag (the runbook's `gcloud storage objects update --temporary-hold`). */
+  async setHold(ref: string, held: boolean): Promise<void> {
+    try {
+      await this.file(ref).setMetadata({ temporaryHold: held });
+    } catch (error) {
+      if ((error as { code?: number }).code === 404) return;
+      throw error;
+    }
   }
 }
 

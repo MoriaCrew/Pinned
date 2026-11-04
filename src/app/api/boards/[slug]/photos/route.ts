@@ -9,6 +9,7 @@ import {
   boardApiDeps,
   errorResponse,
   policyForBoard,
+  rejectUnderReview,
   slugGate,
   viewerFor,
 } from "../../shared";
@@ -51,6 +52,10 @@ export async function POST(
       { status: 429, headers: JSON_HEADERS },
     );
   }
+  // PIN-270: a board under a report hold takes no new photo until the
+  // operator decides; checked before the body is read.
+  const paused = await rejectUnderReview(slug, locale);
+  if (paused) return paused;
 
   const lengthHeader = request.headers.get("content-length");
   const contentLength = Number(lengthHeader ?? NaN);

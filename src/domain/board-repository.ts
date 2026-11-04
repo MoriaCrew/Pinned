@@ -51,15 +51,18 @@
  *   RangeError like a missing board. Its records stay readable by
  *   id and by board list (storage cleanup enumerates them).
  */
-import type {
-  Board,
-  BoardCounters,
-  BoardEvent,
-  Element,
-  Participant,
-  Pin,
-  PinStatus,
-  Scene,
+import {
+  holdRef,
+  isHeldRef,
+  releaseRef,
+  type Board,
+  type BoardCounters,
+  type BoardEvent,
+  type Element,
+  type Participant,
+  type Pin,
+  type PinStatus,
+  type Scene,
 } from "./board";
 import type { BoardThemeTokens } from "./board-themes";
 import { decideJoin, type JoinAttemptState, type JoinRateParams } from "./join-rate";
@@ -69,6 +72,13 @@ import type { ReclaimAttemptState } from "./reclaim-lockout";
 export interface DeleteElementResult {
   deleted: boolean;
   removedPinIds: string[];
+  hiddenSceneIds: string[];
+}
+
+/** holdElement (PIN-269): `held` is false only for a missing element. */
+export interface HoldElementResult {
+  held: boolean;
+  /** Scenes this call hid (already hidden ones are not listed). */
   hiddenSceneIds: string[];
 }
 
@@ -208,6 +218,34 @@ export interface BoardRepository {
   renameElement(elementId: string, label: string): Promise<Element | null>;
   /** Cascade delete; see the contract notes above. */
   deleteElement(elementId: string): Promise<DeleteElementResult>;
+  /**
+   * Report & hold (PIN-269, ADR-004). Keeps the element and its pins
+   * but blanks it: `held:` goes in front of both storage refs (readers
+   * serve, delete and compose only refs starting `elements/`) and every
+   * visible scene using it is hidden, counters following, in one
+   * atomic step. Idempotent: an already held element answers
+   * `held: true` with no new scenes. Missing element → `held: false`.
+   */
+  holdElement(elementId: string): Promise<HoldElementResult>;
+  /**
+   * Undo of holdElement: the refs lose the prefix, and every hidden,
+   * non-tombstoned scene using the element comes back when all of its
+   * elements exist unheld (a scene never resurrects over a deleted or
+   * still-held pin; a scene another report hid returns once that hold
+   * is released too). Scenes listed in `keepHiddenSceneIds` stay hidden
+   * whatever their pins (a scene another open report holds on its own,
+   * PIN-272). False when the element is missing.
+   */
+  releaseElement(elementId: string, keepHiddenSceneIds?: readonly string[]): Promise<boolean>;
+  /** Hide one visible scene (sceneCount follows). True only when it was visible. */
+  hideScene(sceneId: string): Promise<boolean>;
+  /** Bring back a hidden, non-tombstoned scene whose elements all exist unheld. True only when it changed. */
+  unhideScene(sceneId: string): Promise<boolean>;
+  /**
+   * Board under review (PIN-266): set or clear `Board.reviewAt`.
+   * Counters and version untouched. False for a missing or deleted board.
+   */
+  setBoardReview(slug: string, at: number | null): Promise<boolean>;
 
   /** Stores the pin; appends `pin_added` when created already pinned. */
   createPin(pin: Pin): Promise<void>;
@@ -506,6 +544,84 @@ export class InMemoryBoardRepository implements BoardRepository {
       this.adjustCounters(scene.boardId, { sceneCount: -1 });
     }
     return { deleted: true, removedPinIds, hiddenSceneIds };
+  }
+
+  async holdElement(elementId: string): Promise<HoldElementResult> {
+    const element = this.elements.get(elementId);
+    if (!element) return { held: false, hiddenSceneIds: [] };
+    this.requireBoard(element.boardId);
+    this.elements.set(elementId, {
+      ...clone(element),
+      cutoutRef: holdRef(element.cutoutRef),
+      flattenedRef: holdRef(element.flattenedRef),
+    });
+    const hiddenSceneIds: string[] = [];
+    for (const scene of [...this.scenes.values()]) {
+      if (scene.hidden || !scene.elementIds.includes(elementId)) continue;
+      this.scenes.set(scene.id, { ...clone(scene), hidden: true });
+      hiddenSceneIds.push(scene.id);
+      this.adjustCounters(scene.boardId, { sceneCount: -1 });
+    }
+    return { held: true, hiddenSceneIds };
+  }
+
+  async releaseElement(elementId: string, keepHiddenSceneIds: readonly string[] = []): Promise<boolean> {
+    const element = this.elements.get(elementId);
+    if (!element) return false;
+    this.requireBoard(element.boardId);
+    this.elements.set(elementId, {
+      ...clone(element),
+      cutoutRef: releaseRef(element.cutoutRef),
+      flattenedRef: releaseRef(element.flattenedRef),
+    });
+    const keep = new Set(keepHiddenSceneIds);
+    for (const scene of [...this.scenes.values()]) {
+      if (!scene.hidden || scene.deletedAt !== undefined || !scene.elementIds.includes(elementId)) continue;
+      if (keep.has(scene.id)) continue;
+      if (this.sceneElementsAllPresent(scene)) this.unhideStored(scene);
+    }
+    return true;
+  }
+
+  async hideScene(sceneId: string): Promise<boolean> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) return false;
+    this.requireBoard(scene.boardId);
+    if (scene.hidden) return false;
+    this.scenes.set(sceneId, { ...clone(scene), hidden: true });
+    this.adjustCounters(scene.boardId, { sceneCount: -1 });
+    return true;
+  }
+
+  async unhideScene(sceneId: string): Promise<boolean> {
+    const scene = this.scenes.get(sceneId);
+    if (!scene) return false;
+    this.requireBoard(scene.boardId);
+    if (!scene.hidden || scene.deletedAt !== undefined || !this.sceneElementsAllPresent(scene)) return false;
+    this.unhideStored(scene);
+    return true;
+  }
+
+  async setBoardReview(slug: string, at: number | null): Promise<boolean> {
+    const board = this.boards.get(slug);
+    if (!board || board.deletedAt !== undefined) return false;
+    const { reviewAt: _review, ...rest } = board;
+    this.boards.set(slug, at === null ? rest : { ...rest, reviewAt: at });
+    return true;
+  }
+
+  /** Every element a scene uses exists and none is held (the unhide rule). */
+  private sceneElementsAllPresent(scene: Scene): boolean {
+    return scene.elementIds.every((id) => {
+      const element = this.elements.get(id);
+      return element !== undefined && !isHeldRef(element.cutoutRef) && !isHeldRef(element.flattenedRef);
+    });
+  }
+
+  private unhideStored(scene: Scene): void {
+    const { hidden: _hidden, ...rest } = clone(scene);
+    this.scenes.set(scene.id, rest);
+    this.adjustCounters(scene.boardId, { sceneCount: 1 });
   }
 
   async createPin(pin: Pin): Promise<void> {

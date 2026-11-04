@@ -79,6 +79,40 @@ describe("sweepDeletedBoardStorage (PIN-169)", () => {
     expect(await sweep()).toEqual({ deleted: 0, kept: kept.length, failed: 0 }); // idempotent
   });
 
+  it("a held library copy on a live board still keeps the shared bytes (PIN-269)", async () => {
+    const h = await harness();
+    await h.boards.createElement(element("shared", DEAD));
+    await h.boards.createElement(element("own", DEAD));
+    await h.boards.createElement(element("copy-shared", COPIES, DEAD, "shared"));
+    // The copy is under a report hold: its refs carry the `held:` prefix.
+    expect((await h.boards.holdElement("copy-shared")).held).toBe(true);
+    await h.put(...files(DEAD, "shared"), ...files(DEAD, "own"));
+    await h.boards.deleteBoard(DEAD, 2);
+    expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 2, kept: 2, failed: 0 });
+    expect(await h.store.listPrefix(folderOf(DEAD, "shared"))).toHaveLength(2);
+    expect(await h.store.listPrefix(folderOf(DEAD, "own"))).toEqual([]);
+    // The hold released, the copy still counts; the copy deleted, the bytes go with the next sweep.
+    await h.boards.releaseElement("copy-shared");
+    expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 0, kept: 2, failed: 0 });
+    await h.boards.deleteElement("copy-shared");
+    expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 2, kept: 0, failed: 0 });
+  });
+
+  it("deleting a board whose held copy was the last live pointer frees the source bytes (PIN-269)", async () => {
+    const h = await harness();
+    await h.boards.createElement(element("shared", DEAD));
+    await h.boards.createElement(element("copy-shared", COPIES, DEAD, "shared"));
+    expect((await h.boards.holdElement("copy-shared")).held).toBe(true);
+    await h.put(...files(DEAD, "shared"));
+    await h.boards.deleteBoard(DEAD, 2);
+    // The held live copy keeps the source's bytes.
+    expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 0, kept: 2, failed: 0 });
+    // The copy's board goes while the copy is still held: nothing live points at the bytes any more.
+    await h.boards.deleteBoard(COPIES, 3);
+    expect(await sweepDeletedBoardStorage(COPIES, h.deps)).toEqual({ deleted: 2, kept: 0, failed: 0 });
+    expect(await h.store.listPrefix(folderOf(DEAD, "shared"))).toEqual([]);
+  });
+
   it("deleting the board that held the last live copy frees the kept bytes; a live source keeps its own", async () => {
     const h = await harness();
     await h.boards.createElement(element("shared", DEAD));
@@ -104,6 +138,7 @@ describe("sweepDeletedBoardStorage (PIN-169)", () => {
       get: (ref) => h.store.get(ref),
       listPrefix: (prefix) => h.store.listPrefix(prefix),
       copy: (from, to) => h.store.copy(from, to),
+      setHold: (ref, held) => h.store.setHold(ref, held),
       delete: async (ref) => {
         if (ref === refs[0]) throw new TypeError(`gcs down for ${ref}`);
         return h.store.delete(ref);

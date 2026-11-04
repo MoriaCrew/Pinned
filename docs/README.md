@@ -24,7 +24,7 @@ for how each Meta model is used. Numbers 01, 02 and 05 are archived with the dro
 | [`17-showcase-sets.md`](17-showcase-sets.md) | Recipe for making a landing showcase set with the app's own pipeline |
 | [`18-i18n.md`](18-i18n.md) | UI languages: how a request picks one, `UI_LOCALES`, adding strings, translation runs |
 | [`19-meta-models.md`](19-meta-models.md) | Each Meta model: prompt and version, Policy keys, inputs, fallbacks, cost, evidence |
-| [`20-abuse-runbook.md`](20-abuse-runbook.md) | Abuse reports and illegal content: storage hold, quarantine, library copies, single-element hold, NCMEC CyberTipline, takedown clock |
+| [`20-abuse-runbook.md`](20-abuse-runbook.md) | Abuse reports and illegal content: the in-app report and its automatic hold, the operator's decide script, the manual hold path, NCMEC CyberTipline, takedown clock |
 | [`DEPLOY.md`](DEPLOY.md) | Prod runbook and env matrix (lands with PIN-209) |
 | [`launch-ops-runbook.md`](launch-ops-runbook.md) | Launch ops: hourly AI sub-cap, GCP budget alerts, soft-kill drill, demo-board protection (PIN-240) |
 | [`build-log.md`](build-log.md) | Who built what: each coding agent's PRs with dates, the evidence for each claim, and what the record does not show (PIN-248) |
@@ -34,6 +34,7 @@ for how each Meta model is used. Numbers 01, 02 and 05 are archived with the dro
 | Doc | What it covers |
 | --- | --- |
 | [`adr/003-studio-architecture.md`](adr/003-studio-architecture.md) | ADR-003: Policy as data, capability ports and decorators, jobs, Element/Pin split, stateless remix |
+| [`adr/004-report-and-hold.md`](adr/004-report-and-hold.md) | ADR-004: reports hold first (reversibly), the operator decides, timed takedown only for face-flagged likeness reports, no model as judge, alert through Monitoring |
 
 ADR-001 (hosting) and ADR-002 (no friction) still stand; they live in the archived
 `archive/02-architecture.md`.
