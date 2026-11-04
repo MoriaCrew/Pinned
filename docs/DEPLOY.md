@@ -46,7 +46,7 @@ Manager references by name.
 | `DEMO_BOARD_SLUG` | — | — | secret ref after seeding (§6) |
 | `LEGAL_CONTACT_EMAIL` | — (legal pages link to public GitHub issues) | `contact@moriacrew.com` | `contact@moriacrew.com` (a plain value: it is shown on `/privacy` and `/terms`) |
 | `DEMO_VIDEO_URL` | — (no video link) | `https://youtu.be/q6lkrA6fsCI` | `https://youtu.be/q6lkrA6fsCI` (PIN-263: "Watch the 3-minute demo" under How it works; https only, unset to hide) |
-| `PROMO_POST_URL` | — (no post link) | a test post | — until the launch post is published (PIN-263: "See the post on X" in the landing footer; https only) |
+| `PROMO_POST_URL` | — (no post link) | the launch post | the launch post (PIN-263, PIN-280: "See the post on X" in the landing footer; https only, unset to hide) |
 | `runConfig` | — | base: min 0, max 2, 512 MiB | min **1**, max **4**, **1024 MiB**, concurrency 10 |
 | Secrets | — | `META_API_KEY`, `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `META_API_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` (+ Stripe and `DEMO_BOARD_SLUG` later) |
 

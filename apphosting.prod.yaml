@@ -56,7 +56,9 @@ env:
   # Unset a value to take its link down (no code change).
   - variable: DEMO_VIDEO_URL
     value: https://youtu.be/q6lkrA6fsCI
-  # PROMO_POST_URL: add the launch post's link here once it is published.
+  # PIN-280: the launch post ("See the post on X" in the landing footer).
+  - variable: PROMO_POST_URL
+    value: https://x.com/MoriaCrew/status/2118015726829125926
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID
