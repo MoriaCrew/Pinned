@@ -131,7 +131,7 @@ describe("report decisions (PIN-272)", () => {
     }
     expect(await h.users.getUserBoard(UID, SLUG)).toBeNull();
     // Close-out: release the holds, then the objects can go.
-    expect(await releaseStorageHolds(SLUG, h.deps)).toEqual({ released: 6, failed: 0 });
+    expect(await releaseStorageHolds(SLUG, h.deps)).toEqual({ released: 6, kept: 0, failed: 0 });
     expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
   });
 
@@ -209,6 +209,32 @@ describe("report decisions (PIN-272)", () => {
     expect(await takedownReport(report.id, h.deps)).toBeNull();
     expect(await h.boards.getElement("friend")).not.toBeNull();
     expect((await h.reports.get(report.id))?.status).toBe("takedown");
+  });
+
+  it("releasing holds keeps the objects another board's open illegal report still holds as evidence", async () => {
+    const h = await harness();
+    const OTHER = "ZyXwVuTsRqPoNmLkJiHgFe";
+    await h.boards.createBoard({ slug: OTHER, title: "Other", counters: emptyBoardCounters(), createdAt: 1_000, version: 0 });
+    await h.boards.putParticipant({ ...participant, id: "p2", boardId: OTHER, userId: undefined });
+    const srcRefs = [`elements/boards/${OTHER}/src/cutout.png`, `elements/boards/${OTHER}/src/flattened.jpg`];
+    for (const ref of srcRefs) await h.store.put(ref, Buffer.from("s"), "image/png");
+    const base = { description: "", maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 }, sourcePhotoId: "job", faceFlag: false };
+    await h.boards.createElement({ ...base, id: "src", boardId: OTHER, ownerId: "p2", label: "src", cutoutRef: srcRefs[0], flattenedRef: srcRefs[1], createdAt: 1_200 });
+    // A library copy on this board shares the other board's bytes (PIN-85).
+    await h.boards.createElement({ ...base, id: "copy", boardId: SLUG, ownerId: "p1", label: "copy", cutoutRef: srcRefs[0], flattenedRef: srcRefs[1], sourceElementId: "src", createdAt: 1_250 });
+    const theirs = await h.file(OTHER, { scope: "board", reason: "illegal" });
+    const mine = await h.file(SLUG, { scope: "board", reason: "illegal" });
+    expect(srcRefs.every((ref) => h.store.isHeld(ref))).toBe(true);
+
+    const outcome = await dismissReport(mine.id, h.deps);
+    expect(outcome?.released.storage).toBe(true);
+    expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
+    // The other board's evidence is not this report's to release.
+    expect(srcRefs.every((ref) => h.store.isHeld(ref))).toBe(true);
+    expect(await releaseStorageHolds(SLUG, h.deps)).toMatchObject({ kept: 2, failed: 0 });
+
+    await dismissReport(theirs.id, h.deps);
+    expect(srcRefs.some((ref) => h.store.isHeld(ref))).toBe(false);
   });
 
   it("references stay the only board id in a decision's record", async () => {

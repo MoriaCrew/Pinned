@@ -148,7 +148,9 @@ async function main(): Promise<number> {
           return 1;
         }
         const released = await releaseStorageHolds(record.boardId, deps);
-        console.log(`released ${released.released} object hold(s), ${released.failed} failed (ref ${record.reference}).`);
+        console.log(
+          `released ${released.released} object hold(s), kept ${released.kept} (evidence of another board's open report), ${released.failed} failed (ref ${record.reference}).`,
+        );
         return released.failed === 0 ? 0 : 1;
       }
       case "sweep": {

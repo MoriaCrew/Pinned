@@ -48,22 +48,49 @@ function isGoneBoard(error: unknown): boolean {
   return error instanceof RangeError;
 }
 
+export interface HoldReleaseResult {
+  released: number;
+  /** Objects left held: they sit under another board whose own open report holds them as evidence. */
+  kept: number;
+  failed: number;
+}
+
+/** The board a stored object belongs to, from its folder; null for any other path. */
+const OBJECT_OWNER = /^(?:elements|scenes)\/boards\/([A-Za-z0-9_-]{22})\//;
+
 /**
  * Release the Storage temporary holds on everything the report's hold
  * could have covered (the same folders `listBoardObjectRefs` holds;
  * docs/20 §7 close-out, or a false alarm), tombstoned boards included.
- * Best-effort per object; returns how many were released and failed.
+ * A library copy's bytes live under another board's folder: those stay
+ * held while that board has an open report with a Storage hold of its
+ * own (its evidence is not this report's to release). Best-effort per
+ * object; returns how many were released, kept and failed.
  */
 export async function releaseStorageHolds(
   boardId: string,
-  deps: Pick<ReportDecideDeps, "boards" | "store">,
-): Promise<{ released: number; failed: number }> {
-  const result = { released: 0, failed: 0 };
+  deps: Pick<ReportDecideDeps, "boards" | "store" | "reports">,
+): Promise<HoldReleaseResult> {
+  const result: HoldReleaseResult = { released: 0, kept: 0, failed: 0 };
   const [elements, scenes] = await Promise.all([
     deps.boards.listElements(boardId),
     deps.boards.listScenes(boardId, { includeHidden: true }),
   ]);
+  const evidenceElsewhere = new Map<string, boolean>();
+  const heldAsEvidence = async (owner: string): Promise<boolean> => {
+    if (owner === boardId) return false;
+    if (!evidenceElsewhere.has(owner)) {
+      const open = await deps.reports.listOpenForBoard(owner);
+      evidenceElsewhere.set(owner, open.some((r) => r.held.storageHold));
+    }
+    return evidenceElsewhere.get(owner) === true;
+  };
   for (const ref of await listBoardObjectRefs(boardId, elements, scenes, deps.store)) {
+    const owner = OBJECT_OWNER.exec(ref)?.[1] ?? boardId;
+    if (await heldAsEvidence(owner)) {
+      result.kept += 1;
+      continue;
+    }
     try {
       await deps.store.setHold(ref, false);
       result.released += 1;
