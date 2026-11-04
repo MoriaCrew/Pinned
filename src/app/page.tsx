@@ -2,10 +2,12 @@ import type { CSSProperties } from "react";
 import { getConfig } from "../config";
 import { BOARD_DELETED_PARAM, isBoardDeletedFlag } from "../domain/board-delete-ui";
 import { DEMO_NOTICE_PARAM, parseDemoNotice } from "../domain/demo-ui";
+import { landingSecondary } from "../domain/landing-actions";
 import { anotherLandingSet, pickLandingSet } from "../domain/landing-sets";
 import { t, tCount, tf, type Locale } from "../i18n";
 import { getLocale } from "../i18n/server";
 import { getPolicy } from "../policy/server";
+import { viewerBoardSlugs } from "../server/landing-viewer";
 import { Button, ButtonLink, Icon, Sticker, Tag, Wordmark, type IconName } from "../ui";
 import { SiteLinks } from "./_legal/LegalParts";
 import { You } from "./auth/You";
@@ -42,6 +44,8 @@ export default async function HomePage({
   const demoEnabled = config.demoBoardSlug !== null;
   // PIN-263: judging-week links, each shown only while its env URL is set.
   const { demoVideoUrl, promoPostUrl } = config;
+  // PIN-264: someone signed in with boards gets theirs instead of the demo.
+  const second = landingSecondary({ demoEnabled, myBoardSlugs: await viewerBoardSlugs() });
   const demoTtlHours = getPolicy().demo.ttlHours;
   const query = await searchParams;
   // PIN-168: the host lands here after deleting a board while signed out.
@@ -107,16 +111,24 @@ export default async function HomePage({
             <ButtonLink variant="primary" size="lg" icon="plus" href="/new">
               {t(locale, "landing.start")}
             </ButtonLink>
-            {demoEnabled ? (
+            {second.kind === "demo" ? (
               <form method="post" action="/api/demo" className="pn-landing-demo">
                 <Button type="submit" variant="secondary" size="lg" icon="launch">
                   {t(locale, "landing.demo")}
                 </Button>
               </form>
+            ) : second.kind === "myBoard" ? (
+              <ButtonLink variant="secondary" size="lg" icon="arrow" href={`/g/${encodeURIComponent(second.slug)}`}>
+                {t(locale, "landing.myBoard")}
+              </ButtonLink>
+            ) : second.kind === "myBoards" ? (
+              <ButtonLink variant="secondary" size="lg" icon="arrow" href="/me/boards">
+                {t(locale, "landing.myBoards")}
+              </ButtonLink>
             ) : null}
           </div>
           <p className="pn-landing-note">{t(locale, "landing.noSignup")}</p>
-          {demoEnabled ? (
+          {second.kind === "demo" ? (
             <p className="pn-landing-note">{tCount(locale, "landing.demoNote", demoTtlHours)}</p>
           ) : null}
         </div>

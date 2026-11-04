@@ -205,3 +205,40 @@ describe("judging-week links (PIN-263)", () => {
     expect(form).toContain(en["landing.demo"]);
   });
 });
+
+describe("signed-in visitors with boards (PIN-264)", () => {
+  const setup = async (slugs: string[] | null) => {
+    const config = await import("../config");
+    const real = config.getConfig();
+    vi.spyOn(config, "getConfig").mockReturnValue({ ...real, demoBoardSlug: "tmplAAAAAAAAAAAAAAAAA1" });
+    const viewer = await import("../server/landing-viewer");
+    vi.spyOn(viewer, "viewerBoardSlugs").mockResolvedValue(slugs);
+  };
+
+  it("opens the one board instead of the demo, and drops the demo note", async () => {
+    await setup(["boardAAAAAAAAAAAAAAAA1"]);
+    const html = await landing({ set: "classic" });
+    expect(html).toMatch(/<a [^>]*href="\/g\/boardAAAAAAAAAAAAAAAA1"[^>]*>[\s\S]*?See my board<\/a>/);
+    expect(html).not.toContain('action="/api/demo"');
+    expect(html).not.toContain("disappears after");
+  });
+
+  it("lists several boards on My boards", async () => {
+    await setup(["boardAAAAAAAAAAAAAAAA1", "boardBBBBBBBBBBBBBBBB2"]);
+    const html = await landing({ set: "classic" });
+    expect(html).toMatch(/<a [^>]*href="\/me\/boards"[^>]*>[\s\S]*?See my boards<\/a>/);
+    expect(html).not.toMatch(/href="\/g\//);
+    expect(html).not.toContain('action="/api/demo"');
+  });
+
+  it("keeps the demo for everyone else: signed out, or signed in with no boards", async () => {
+    for (const slugs of [null, []]) {
+      await setup(slugs);
+      const html = await landing({ set: "classic" });
+      expect(html).toContain('action="/api/demo"');
+      expect(html).not.toContain(en["landing.myBoard"]);
+      expect(html).not.toMatch(/href="\/g\//);
+      vi.restoreAllMocks();
+    }
+  });
+});

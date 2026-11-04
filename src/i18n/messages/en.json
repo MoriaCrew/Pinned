@@ -4,6 +4,8 @@
   "landing.body": "Snap a photo, we cut out what's in it, and friends pin theirs to the same board.",
   "landing.start": "Start a board",
   "landing.demo": "Demo board",
+  "landing.myBoard": "See my board",
+  "landing.myBoards": "See my boards",
   "landing.demoTitle": "Demo board",
   "landing.demoNote.one": "A fresh demo board just for you. It disappears after {n} hour.",
   "landing.demoNote.other": "A fresh demo board just for you. It disappears after {n} hours.",

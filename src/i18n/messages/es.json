@@ -4,6 +4,8 @@
   "landing.body": "Toma una foto, recortamos lo que hay dentro y tus amigos pinean las suyas en el mismo tablero.",
   "landing.start": "Crear tablero",
   "landing.demo": "Tablero demo",
+  "landing.myBoard": "Ver mi tablero",
+  "landing.myBoards": "Ver mis tableros",
   "landing.demoTitle": "Tablero demo",
   "landing.demoNote.one": "Un tablero demo nuevo solo para ti. Desaparece en {n} hora.",
   "landing.demoNote.other": "Un tablero demo nuevo solo para ti. Desaparece en {n} horas.",
