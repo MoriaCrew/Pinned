@@ -419,7 +419,7 @@ describe("Policy (PIN-59, docs/11 §5.1)", () => {
       perIp: { limit: 5, windowMs: 600_000 },
       maxBytes: 4096,
       messageMaxChars: 1000,
-      sweepBatch: 5,
+      sweepBatch: 20,
     });
     const p = resolvePolicy(
       { report: { messageMaxChars: 500 } },

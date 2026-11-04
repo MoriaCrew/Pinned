@@ -282,7 +282,7 @@ element; delete the throwaway board.
      ```
      Test-fire once per project with a report on a throwaway board
      (`docs/launch-ops-runbook.md` §3 rule: an alert nobody saw
-     arrive is not an alert). The daily backstop
+     arrive is not an alert). The backstop (every 6 h)
      (`.github/workflows/report-sweep.yml`) needs its own identity:
      its header lists the operator steps.
    - GCP billing budget (e.g. $25) with 50/90/100 % emails. Meta

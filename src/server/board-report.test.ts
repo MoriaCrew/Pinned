@@ -75,6 +75,7 @@ describe("createReport (PIN-270)", () => {
       severity: "normal",
       createdAt: NOW,
       status: "open",
+      deleteAt: NOW + h.policy.takedownHours * HOUR,
       held: { elementIds: ["mug"], sceneIds: ["s-mug", "s-both"], boardReview: false, storageHold: false },
     });
     expect(await h.reports.get("rep-1")).toEqual(result.record);
@@ -86,6 +87,7 @@ describe("createReport (PIN-270)", () => {
     expect(event).toEqual({
       severity: "WARNING",
       event: REPORT_RECEIVED_EVENT,
+      deleteAt: NOW + h.policy.takedownHours * HOUR,
       reference: boardReportRef(SLUG),
       reason: "inappropriate",
       scope: "element",
@@ -101,8 +103,10 @@ describe("createReport (PIN-270)", () => {
     const timed = await createReport(SLUG, { scope: "element", targetId: "friend", reason: "likeness" }, null, h.deps);
     expect(timed.record.deleteAt).toBe(NOW + h.policy.takedownHours * HOUR);
     expect((await h.reports.listOpenDue(NOW + 25 * HOUR, 10)).map((r) => r.id)).toEqual(["rep-1"]);
+    // PIN-278: every holding report carries the deadline, face flag or not.
     const plain = await createReport(SLUG, { scope: "element", targetId: "mug", reason: "likeness" }, null, h.deps);
-    expect(plain.record).not.toHaveProperty("deleteAt");
+    expect(plain.record.deleteAt).toBe(NOW + h.policy.takedownHours * HOUR);
+    expect((await h.reports.listOpenDue(NOW + 25 * HOUR, 10)).map((r) => r.id)).toEqual(["rep-1", plain.record.id]);
   });
 
   it("scene: hides that scene only", async () => {
@@ -158,7 +162,7 @@ describe("createReport (PIN-270)", () => {
     const result = await createReport(SLUG, { scope: "board", reason: "illegal" }, null, h.deps);
     expect(result.record.severity).toBe("high");
     expect(result.record.held).toMatchObject({ elementIds: ["mug", "friend", "copy"], sceneIds: ["s-mug", "s-both"], boardReview: true, storageHold: true });
-    expect(result.record).not.toHaveProperty("deleteAt");
+    expect(result.record.deleteAt).toBe(NOW + h.policy.takedownHours * HOUR);
     const expectedHeld = [
       ...refsOf("mug"),
       ...refsOf("friend"),

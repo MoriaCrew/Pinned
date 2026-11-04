@@ -6,10 +6,10 @@
  * board), one reason and an optional message. `planReportHold`
  * turns it into a HoldPlan, the decision table of ADR-004: what to
  * hide right away (reversibly, never a delete), whether the board
- * goes under review, whether Storage gets a temporary hold, and
- * the one case that gets a deletion deadline (a face-flagged pin
- * reported as someone's likeness). The server applies the plan and
- * records what it actually held, so a dismiss can put it back.
+ * goes under review, whether Storage gets a temporary hold, and the
+ * deletion deadline every holding plan carries (`takedownHours`,
+ * PIN-278). The server applies the plan and records what it
+ * actually held, so a dismiss can put it back.
  *
  * Client-safe: no I/O, no Policy import (the caller passes the two
  * numbers it needs). The report reference (`boardReportRef` in
@@ -68,7 +68,7 @@ export interface ReportRecord {
   severity: ReportSeverity;
   createdAt: number;
   status: ReportStatus;
-  /** Timed takedown deadline (face-flagged likeness only); absent otherwise. */
+  /** Timed takedown deadline: every report that held something carries one (PIN-278); absent on a queued-only report. */
   deleteAt?: number;
   held: ReportHeld;
   decidedAt?: number;
@@ -154,7 +154,7 @@ export interface ReportPlanInput {
   reason: ReportReason;
   reporterKind: ReporterKind;
   now: number;
-  /** Policy `takedownHours`: the deadline of the one timed takedown. */
+  /** Policy `takedownHours`: the deadline of every holding plan. */
   takedownHours: number;
   /** The element an element-scope report names; null when the id matched nothing. */
   element?: Pick<Element, "id" | "faceFlag"> | null;
@@ -168,9 +168,9 @@ export interface ReportPlanInput {
 export interface HoldPlan {
   held: ReportHeld;
   severity: ReportSeverity;
-  /** Set only for a face-flagged pin reported as a likeness. */
+  /** Set on every plan that holds something: the backstop tombstones it if nobody decided by then (PIN-278). */
   deleteAt?: number;
-  /** True when nothing is hidden: the report is queued and alerted only. */
+  /** True when nothing is hidden: the report is queued and alerted only, with no deadline. */
   queuedOnly: boolean;
 }
 
@@ -179,11 +179,19 @@ export type PlanResult = { ok: true; plan: HoldPlan } | { ok: false; error: "tar
 const HOUR_MS = 3_600_000;
 
 /**
- * The ADR-004 decision table. Pure: hides and locks only, never
- * deletes; the one deadline it sets is acted on later by the
- * backstop, and never for `illegal`.
+ * The ADR-004 decision table (decision 4 as amended by PIN-278).
+ * Pure: hides and locks only, never deletes; the deadline it sets on
+ * every holding plan is acted on later by the backstop, `illegal`
+ * included (its Storage holds keep the bytes as evidence).
  */
 export function planReportHold(input: ReportPlanInput): PlanResult {
+  const result = planHold(input);
+  if (!result.ok || result.plan.queuedOnly) return result;
+  return { ok: true, plan: { ...result.plan, deleteAt: input.now + input.takedownHours * HOUR_MS } };
+}
+
+/** What to hide and lock; the deadline is added by `planReportHold`. */
+function planHold(input: ReportPlanInput): PlanResult {
   const severity: ReportSeverity = input.reason === "illegal" ? "high" : "normal";
   const scenes = input.boardScenes ?? [];
   const visibleScenes = scenes.filter((scene) => !scene.hidden);
@@ -194,7 +202,6 @@ export function planReportHold(input: ReportPlanInput): PlanResult {
     const sceneIds = visibleScenes
       .filter((scene) => scene.elementIds.includes(element.id))
       .map((scene) => scene.id);
-    const timed = input.reason === "likeness" && element.faceFlag === true;
     // `illegal` on a pin: its objects (and its scenes') get the Storage
     // hold too, so no later delete can free the evidence.
     return {
@@ -202,7 +209,6 @@ export function planReportHold(input: ReportPlanInput): PlanResult {
       plan: {
         held: { elementIds: [element.id], sceneIds, boardReview: false, storageHold: severity === "high" },
         severity,
-        ...(timed ? { deleteAt: input.now + input.takedownHours * HOUR_MS } : {}),
         queuedOnly: false,
       },
     };

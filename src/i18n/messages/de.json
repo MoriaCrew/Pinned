@@ -294,7 +294,7 @@
   "board.reportCancel": "Abbrechen",
   "board.reportClose": "Schließen",
   "board.reportDone": "Fertig",
-  "board.reportHeld": "Ausgeblendet, während wir prüfen. Deine Referenz: {ref}",
+  "board.reportHeld": "Jetzt ausgeblendet und in {hours} Stunden entfernt, falls wir es nicht freigeben. Deine Referenz: {ref}",
   "board.reportReceived": "Meldung erhalten. Wir schauen es uns an. Deine Referenz: {ref}",
   "board.reportFollowUp": "Fragen zu einer Meldung? Schreib an diese Adresse und gib die Referenz an:",
   "board.underReviewNotice": "Diese Pinnwand ist pausiert, während wir eine Meldung prüfen.",

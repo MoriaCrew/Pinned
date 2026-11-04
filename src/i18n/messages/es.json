@@ -294,7 +294,7 @@
   "board.reportCancel": "Cancelar",
   "board.reportClose": "Cerrar",
   "board.reportDone": "Listo",
-  "board.reportHeld": "Oculto mientras revisamos. Tu referencia: {ref}",
+  "board.reportHeld": "Oculto por ahora y se eliminará en {hours} horas a menos que lo aprobemos. Tu referencia: {ref}",
   "board.reportReceived": "Recibido. Lo revisaremos. Tu referencia: {ref}",
   "board.reportFollowUp": "¿Dudas sobre un reporte? Escríbenos a esta dirección y menciona la referencia:",
   "board.underReviewNotice": "Este tablero está en pausa mientras revisamos un reporte.",
