@@ -29,6 +29,10 @@ dates and marks what the record does not show. §3 counts re-run on
 page; §5 records the F6/F7 pass; §6 adds "Who built it?"; §8 holds
 answers drafted to paste. Re-run §3 at the freeze commit.
 
+Nov 4 refresh (PIN-274): §3 counts re-run on `dev` at `d958f29` (240
+merged PRs, 2,091 tests); [`build-log.md`](build-log.md) extended to
+Nov 4 with the same sources.
+
 ## 1. One-page pitch
 
 **Pinneds Studio — your stuff, pinned together.**
@@ -202,10 +206,10 @@ synthetic images.
 | Cost per photo (T5, **estimate**) | **≈ $0.020**/photo (bar ≤ $0.05). SAM bills one image per concept call (`usage.images_processed=1`); provider dashboard is authoritative | `eval/studio-findings.md` (T5); `docs/11` §8 |
 | Cost per scene (T5, **estimate**) | **≈ $0.01**/scene (bar ≤ $0.10). Meta's published Muse Image price is a flat $0.01 per generated image, whatever the tokens; the PIN-50 spike had priced tokens at Spark rates (≈ $0.022). Provider dashboard is authoritative | `src/gateway/costs.ts`; `docs/16-ai-usage.md`; `eval/studio-findings.md` (T5) |
 | Refusals (T6) | 0/10 harmless prompts refused (3 with synthetic people) | `eval/studio-findings.md` (T6) |
-| Automated tests | **1,879 passed / 3 skipped** (165 files, one of them skipped), `AI_MOCK=1`, as of Nov 2, 2026 on `dev` (tip `a90cd7b`). **Recount at freeze**; CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
-| Pull requests | **215 merged** (225 opened), including 3 promotions to `main`, as of Nov 2, 2026, 19:20 UTC — a moving number; **recount at freeze** (command below) | `gh pr list --state all --limit 500` |
-| Review gate | All 215 merged PRs have a Cursor Bugbot check run on their final commit (209 clean, 6 neutral); Bugbot opened 241 review threads on 85 of them; CI and gitleaks passed on all 215 (as of Nov 2) | GitHub check runs; [`build-log.md`](build-log.md) §7 |
-| Who built what | Muse Code: 98 merged PRs from its working copy only (setup, Meta model wiring, the 29-PR overnight core, the 9 Stripe PRs, sign-in, security fixes). Claude Code: 106. Both: 6. Promotions: 3. Not shown: 2 (as of Nov 2) | [`build-log.md`](build-log.md) |
+| Automated tests | **2,091 passed / 3 skipped** (181 files, one of them skipped), `AI_MOCK=1`, as of Nov 4, 2026 on `dev` (tip `d958f29`). CI never makes paid calls | `npm test` (`package.json`); CI config `.github/workflows/ci.yml` |
+| Pull requests | **240 merged** (252 opened), including 4 promotions to `main`, as of Nov 4, 2026, 16:00 UTC — a moving number (command below) | `gh pr list --state all --limit 500` |
+| Review gate | All 240 merged PRs have a Cursor Bugbot check run on their final commit (234 clean, 6 neutral); Bugbot opened 264 review threads on 94 of them; CI and gitleaks passed on all 240 (as of Nov 4) | GitHub check runs; [`build-log.md`](build-log.md) §7 |
+| Who built what | Muse Code: 98 merged PRs from its working copy only (setup, Meta model wiring, the 29-PR overnight core, the 9 Stripe PRs, sign-in, security fixes). Claude Code: 124. Both: 6. Promotions: 4. Not shown: 8, six of them Nov 3–4 PRs whose Linear close comments name Muse Code (as of Nov 4) | [`build-log.md`](build-log.md) |
 | Repo public | `MoriaCrew/Pinned`, visibility PUBLIC, AGPL-3.0 | `gh repo view` (Oct 29); `LICENSE`, `README.md` |
 | UI languages | Six translated by Muse Spark Open plus a reviewer pass; first pass **$0.98** in total. No native-speaker review yet | `docs/18-i18n.md` ("Costs", "Who reviewed what") |
 | Usage (people / pins / scenes) | Not a fixed number — captured fresh per §4 on record and submit days | `scripts/usage-report.mjs` (`npm run usage:report`) |
@@ -287,7 +291,7 @@ approves.
 | F3 | Prod promotion: `dev` → `main`/prod per the hosting setup, then a real end-to-end play on `<PROD_URL>` (create board → pin → scene → remix → share → delete) | Robin + Agent (Robin owns promotion/approval; agent must never push `main`/prod itself) | `<PROD_URL>` plays the full loop with live models; `/api/health` answers |
 | F4 | Two boards on prod (`docs/DEPLOY.md` §6.3): the judges' board (the video board; link private, judging overrides) and the demo template board (`npm run seed:demo`; its slug, never the judges', is what `DEMO_BOARD_SLUG` holds; "See a board" copies it into a fresh board per visitor, PIN-251) | Agent prepares, Robin approves host/env changes | `<DEMO_BOARD_URL from Linear>` opens a populated, non-empty board; two "See a board" clicks land on two different populated boards, neither the judges' nor the template |
 | F5 | Hosted budget sanity: confirm the deployed `AI_DAILY_BUDGET_USD` / call limit env values are sized for judge + family traffic (`docs/11` A2: code default $5 / 500 calls, dev the same; prod $50 / 10,000 during judging per Robin, Oct 31, see `docs/DEPLOY.md`; verify the live values, do not assume) | Robin | Live values checked in the hosting env and matching A2 |
-| F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners. Nov 2 (PIN-248): re-run on `dev` `a90cd7b`; run again at the freeze commit | Agent | Packet matches freeze-commit reality |
+| F6 | This packet refreshed: §3 test count + PR count re-run at the freeze commit, §1 links block placeholders assigned owners. Nov 2 (PIN-248): re-run on `dev` `a90cd7b`; Nov 4 (PIN-274): re-run on `dev` `d958f29` | Agent | Packet matches freeze-commit reality |
 | F7 | Known-v1-limits honesty pass on `README.md` + this file (1-day `tmp/` lifecycle backstop applied vs the app-side delete, cost-estimate labelling, optional sign-in scope, non-Meta Higgsfield assets disclosed). Nov 2 (PIN-248): lifecycle, estimate labels and Higgsfield disclosure checked; §6 sign-in scope corrected (optional on prod too); build claims now cite `build-log.md`. Open: the `/models` "Built with Meta tools" line names only Muse Code (PIN-249, operator's call before freeze) | Agent | No claim in the packet or README that the code doesn't back |
 
 ### Video (Nov 3–4)
@@ -580,6 +584,6 @@ a reviewer pass for six languages, $0.98 for the first pass in
 total (`docs/18-i18n.md`). The opinion part is the submitter's.
 
 **Survey items** — the submitter's own answers. Facts for the Muse
-Code question: 98 of the 215 merged PRs came from its working copy
+Code question: 98 of the 240 merged PRs came from its working copy
 only, including the 29-PR overnight Studio core and the 9 Stripe
-PRs (as of Nov 2; `build-log.md`).
+PRs (as of Nov 4; `build-log.md`).
