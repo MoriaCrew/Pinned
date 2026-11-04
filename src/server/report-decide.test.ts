@@ -320,6 +320,32 @@ describe("report decisions (PIN-272)", () => {
     expect((await h.reports.get(queued.id))?.status).toBe("open");
   });
 
+  it("a partial Storage hold (one setHold failed) is still released by a dismiss and still protects until then", async () => {
+    const h = await harness();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const original = h.store.setHold.bind(h.store);
+    h.store.setHold = async (ref, held) => {
+      if (held && ref.endsWith("s-both/scene.webp")) throw new Error("gcs down");
+      return original(ref, held);
+    };
+    const partial = await h.file(SLUG, { scope: "board", reason: "illegal" });
+    expect(partial.held.storageHold).toBe(false);
+    expect(partial.held.storageRefs?.length).toBe(5);
+    for (const ref of [...refsOf("mug"), ...refsOf("friend"), sceneRef("s-mug")]) expect(h.store.isHeld(ref)).toBe(true);
+    // Another board report's close-out keeps what the partial hold covers.
+    const other = await h.file(SLUG, { scope: "element", targetId: "mug", reason: "illegal" });
+    const otherDone = await takedownReport(other.id, h.deps);
+    expect((await releaseReportHolds(otherDone!.record, h.deps)).kept).toBeGreaterThan(0);
+    expect(h.store.isHeld(refsOf("mug")[0])).toBe(true);
+    // The partial hold's own dismiss releases exactly what it managed to hold.
+    const outcome = await dismissReport(partial.id, h.deps);
+    expect(outcome?.released.storage).toBe(true);
+    for (const ref of [...refsOf("mug"), ...refsOf("friend"), sceneRef("s-mug")]) expect(h.store.isHeld(ref)).toBe(false);
+    // The released record keeps the list of what it held, flag off: the operator line reads "released", not "partial".
+    expect(await h.reports.get(partial.id)).toMatchObject({ holdsReleasedAt: expect.any(Number), held: { storageHold: false } });
+    expect((await h.reports.get(partial.id))?.held.storageRefs?.length).toBe(5);
+  });
+
   it("references stay the only board id in a decision's record", async () => {
     const h = await harness();
     const report = await h.file(SLUG, { scope: "board", reason: "inappropriate" });

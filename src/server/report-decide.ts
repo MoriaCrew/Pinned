@@ -59,13 +59,17 @@ export interface HoldReleaseResult {
 const OBJECT_OWNER = /^(?:elements|scenes)\/boards\/([A-Za-z0-9_-]{22})\//;
 
 /**
- * A report whose Storage hold still stands: `held.storageHold` is
- * turned off by `releaseReportHolds` (a dismiss, or the close-out), so
- * two takedowns sharing objects release in turn instead of protecting
- * each other for good.
+ * A report whose Storage hold still stands: the full set, or the part
+ * that succeeded before a `setHold` failure (`storageHold` false, but
+ * `storageRefs` listed). `releaseReportHolds` (a dismiss, or the
+ * close-out) stamps `holdsReleasedAt` and keeps the list as the record
+ * of what was held, so a released report no longer counts and two
+ * takedowns sharing objects release in turn instead of protecting each
+ * other for good.
  */
 function stillHoldsStorage(report: ReportRecord): boolean {
-  return report.held.storageHold;
+  if (report.holdsReleasedAt !== undefined) return false;
+  return report.held.storageHold || (report.held.storageRefs?.length ?? 0) > 0;
 }
 
 /**
@@ -182,9 +186,10 @@ export async function dismissReport(
   if (record.held.boardReview && !stillReview) {
     released.boardReview = await deps.boards.setBoardReview(record.boardId, null);
   }
-  if (record.held.storageHold) {
-    // Only this report's own objects, minus what any other holding
-    // report (open, or a takedown awaiting its close-out) still needs.
+  if (stillHoldsStorage(record)) {
+    // Only this report's own objects (a partial hold included), minus
+    // what any other holding report (open, or a takedown awaiting its
+    // close-out) still needs.
     const holds = await releaseReportHolds(record, deps);
     released.storage = holds.failed === 0;
   }
