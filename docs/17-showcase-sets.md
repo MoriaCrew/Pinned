@@ -13,7 +13,8 @@ Image composes the scene. After that, files are only resized and
 cropped, never retouched by hand. The older `classic` set predates the
 recipe: its photo came from Higgsfield text-to-image, and its cut-outs
 and scene are eval fixtures (`public/landing/README.md`). It is
-synthetic too.
+synthetic too, and two of its cut-outs had a hole made transparent by
+hand, which that README records.
 
 Related:
 

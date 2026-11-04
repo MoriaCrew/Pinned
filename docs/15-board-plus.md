@@ -1289,7 +1289,7 @@ error, 0 clean, 2 usage/config.
 default branch, `main`) and on `workflow_dispatch`. The repo is
 public, so its log and step summary are too: the step summary is
 a heading naming the environment and the exit code (see the
-`Billing reconciliation` step in the workflow) and the summary
+`Reconcile (fail = alert)` step in the workflow) and the summary
 JSON only. For the rows behind a red run, run the
 script in an operator terminal (command above). The job runs in
 GitHub Environment `reconcile-dev` or `reconcile-prod`: the
@@ -1485,9 +1485,10 @@ is the reference.
 2. **The prod switch** was a separate config-only PR (PIN-210, #203,
    "turn on live billing on prod"). It added one block to
    `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
-   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":20}}`
-   (judging-week value, set Nov 2: 20 free creations per new board,
-   back to 5 after judging; the dev backend ignores that file). It
+   and `POLICY_OVERRIDES_JSON` with credits on and `starterMakes` 5;
+   that value was raised to 20 on Nov 2 for judging week (20 free
+   creations per new board, back to 5 after judging; the dev backend
+   ignores that file). It
    was to merge only after step 4. It is on `main` now, so the
    `apphosting.prod.yaml` block is the source of truth for prod; a
    later config-only change goes through `docs/DEPLOY.md` section 4
