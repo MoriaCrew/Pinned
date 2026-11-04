@@ -123,6 +123,7 @@ describe("loadBoardCard", () => {
       delete: h.store.delete.bind(h.store),
       listPrefix: h.store.listPrefix.bind(h.store),
       copy: h.store.copy.bind(h.store),
+      setHold: h.store.setHold.bind(h.store),
       async get(ref) {
         if (calls++ === 0) throw new Error("storage hiccup");
         return h.store.get(ref);

@@ -170,6 +170,8 @@ export function publicBoard(board: Board) {
       : board.theme ?? null,
     counters: board.counters,
     createdAt: board.createdAt,
+    // PIN-266: a board-wide report hold; the page shows a banner and the write routes answer 423.
+    underReview: board.reviewAt !== undefined,
   };
 }
 

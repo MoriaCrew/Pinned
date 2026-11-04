@@ -764,6 +764,123 @@ export function describeBoardRepositoryContract(
       expect((await repo.deleteElement("ghost")).deleted).toBe(false);
     });
 
+    it("holdElement blanks the refs and hides the scenes using it; releaseElement brings both back (PIN-269)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createElement(makeElement());
+      await repo.createElement(makeElement({ id: "el-2", createdAt: 1_210, cutoutRef: "elements/el-2/cutout.png", flattenedRef: "elements/el-2/flat.png" }));
+      await repo.createPin(makePin({ status: "pinned" }));
+      await repo.putScene(makeScene());
+      await repo.putScene(makeScene({ id: "scene-2", elementIds: ["el-2"], createdAt: 1_410 }));
+      await repo.putScene(makeScene({ id: "scene-3", elementIds: ["el-1", "el-2"], createdAt: 1_420 }));
+      // Tombstoned by its maker before the report (PIN-142): final, whatever happens to el-1.
+      await repo.putScene(makeScene({ id: "scene-4", createdAt: 1_430, hidden: true, deletedAt: 1_500, deletedBy: "maker" }));
+
+      expect(await repo.holdElement("el-1")).toEqual({ held: true, hiddenSceneIds: ["scene-1", "scene-3"] });
+      const held = await repo.getElement("el-1");
+      expect(held?.cutoutRef).toBe("held:elements/el-1/cutout.png");
+      expect(held?.flattenedRef).toBe("held:elements/el-1/flat.png");
+      expect(held?.label).toBe("teal mug");
+      // The pin stays; only scenes leave the board.
+      expect((await repo.getPin("pin-1"))?.status).toBe("pinned");
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["scene-2"]);
+      expect((await repo.getBoard(SLUG))?.counters).toEqual({ participantCount: 0, elementCount: 2, pinCount: 1, sceneCount: 1 });
+      // Idempotent, and a ghost is a no-op result.
+      expect(await repo.holdElement("el-1")).toEqual({ held: true, hiddenSceneIds: [] });
+      expect(await repo.holdElement("ghost")).toEqual({ held: false, hiddenSceneIds: [] });
+
+      expect(await repo.releaseElement("el-1")).toBe(true);
+      const released = await repo.getElement("el-1");
+      expect(released?.cutoutRef).toBe("elements/el-1/cutout.png");
+      expect(released?.flattenedRef).toBe("elements/el-1/flat.png");
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["scene-1", "scene-2", "scene-3"]);
+      expect((await repo.getScene("scene-1"))?.hidden).toBeUndefined();
+      // The tombstone stays hidden.
+      expect((await repo.getScene("scene-4"))?.hidden).toBe(true);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(3);
+      expect(await repo.releaseElement("ghost")).toBe(false);
+    });
+
+    it("releaseElement never resurrects a scene over a deleted, still-held or tombstoned pin (PIN-269)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createElement(makeElement());
+      await repo.createElement(makeElement({ id: "el-2", createdAt: 1_210, cutoutRef: "elements/el-2/cutout.png", flattenedRef: "elements/el-2/flat.png" }));
+      await repo.createElement(makeElement({ id: "el-3", createdAt: 1_220, cutoutRef: "elements/el-3/cutout.png", flattenedRef: "elements/el-3/flat.png" }));
+      await repo.putScene(makeScene({ id: "both", elementIds: ["el-1", "el-2"] }));
+      await repo.putScene(makeScene({ id: "with-deleted", elementIds: ["el-1", "el-3"], createdAt: 1_410 }));
+      await repo.putScene(makeScene({ id: "gone", elementIds: ["el-1"], createdAt: 1_420 }));
+
+      expect((await repo.holdElement("el-1")).hiddenSceneIds).toEqual(["both", "with-deleted", "gone"]);
+      // A second hold on el-2 finds "both" already hidden: nothing new.
+      expect(await repo.holdElement("el-2")).toEqual({ held: true, hiddenSceneIds: [] });
+      // el-3 is deleted for good; "gone" is tombstoned by its maker.
+      await repo.deleteElement("el-3");
+      await repo.putScene(makeScene({ id: "gone", elementIds: ["el-1"], createdAt: 1_420, hidden: true, deletedAt: 1_500, deletedBy: "maker" }));
+
+      expect(await repo.releaseElement("el-1")).toBe(true);
+      // "both" waits for el-2, "with-deleted" has lost el-3, "gone" is final.
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual([]);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(0);
+      // Releasing el-2 restores "both" (its elements are all back), nothing else.
+      expect(await repo.releaseElement("el-2")).toBe(true);
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["both"]);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(1);
+      expect((await repo.getScene("gone"))?.hidden).toBe(true);
+      expect((await repo.getScene("with-deleted"))?.hidden).toBe(true);
+    });
+
+    it("hideScene / unhideScene move one scene and its count; tombstones and held pins block the return (PIN-269)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard());
+      await repo.createElement(makeElement());
+      await repo.putScene(makeScene());
+      await repo.putScene(makeScene({ id: "scene-2", createdAt: 1_410 }));
+
+      expect(await repo.hideScene("scene-1")).toBe(true);
+      expect(await repo.hideScene("scene-1")).toBe(false);
+      expect(await repo.hideScene("ghost")).toBe(false);
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["scene-2"]);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(1);
+
+      // Held pin: the scene stays hidden until the hold is released.
+      await repo.holdElement("el-1");
+      expect(await repo.unhideScene("scene-1")).toBe(false);
+      await repo.releaseElement("el-1");
+      // releaseElement already brought scene-1 and scene-2 back.
+      expect((await repo.listScenes(SLUG)).map((s) => s.id)).toEqual(["scene-1", "scene-2"]);
+      expect(await repo.unhideScene("scene-1")).toBe(false);
+      expect(await repo.hideScene("scene-2")).toBe(true);
+      expect(await repo.unhideScene("scene-2")).toBe(true);
+      expect((await repo.getBoard(SLUG))?.counters.sceneCount).toBe(2);
+
+      // A tombstone is final (PIN-142): never unhidden.
+      await repo.putScene(makeScene({ id: "scene-3", createdAt: 1_420, hidden: true, deletedAt: 1_500, deletedBy: "host" }));
+      expect(await repo.unhideScene("scene-3")).toBe(false);
+      expect(await repo.unhideScene("ghost")).toBe(false);
+    });
+
+    it("setBoardReview sets and clears reviewAt on a live board only; counters and version untouched (PIN-269)", async () => {
+      const repo = makeRepo();
+      await repo.createBoard(makeBoard({ version: 3 }));
+      await repo.createElement(makeElement());
+      expect(await repo.setBoardReview(SLUG, 2_000)).toBe(true);
+      const under = await repo.getBoard(SLUG);
+      expect(under?.reviewAt).toBe(2_000);
+      expect(under?.version).toBe(3);
+      expect(under?.counters.elementCount).toBe(1);
+      // The flag survives an ordinary counter write.
+      await repo.createElement(makeElement({ id: "el-2", createdAt: 1_210 }));
+      expect((await repo.getBoard(SLUG))?.reviewAt).toBe(2_000);
+      expect(await repo.setBoardReview(SLUG, null)).toBe(true);
+      const cleared = await repo.getBoard(SLUG);
+      expect(cleared?.reviewAt).toBeUndefined();
+      expect(cleared?.counters.elementCount).toBe(2);
+      expect(await repo.setBoardReview("missing", 2_000)).toBe(false);
+      await repo.deleteBoard(SLUG, 3_000);
+      expect(await repo.setBoardReview(SLUG, 2_000)).toBe(false);
+    });
+
     it("stored writes are isolated from later caller mutation", async () => {
       const repo = makeRepo();
       await repo.createBoard(makeBoard());
