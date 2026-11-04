@@ -227,8 +227,8 @@ keys come from Secret Manager, never git. Design and runbook:
   photos are Higgsfield images (SAM 3.1 cut out the stickers). The try-on and cat landing
   sets are Meta end to end.
 - **AI-written text is English in places.** Pin names and some scene text stay English
-  whatever the UI language (PIN-200). Generated idea chips follow the UI language
-  (PIN-214); the fixed starter chips stay English until their translations land.
+  whatever the UI language (PIN-200). Idea chips, generated (PIN-214) and fixed, follow
+  the UI language.
 - **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
   checked them yet. Latin-script languages only.
 

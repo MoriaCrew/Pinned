@@ -5,8 +5,9 @@ _Status: Accepted Oct 28, 2026 (PIN-49). Supersedes the game architecture in
 Spec: `docs/11-studio.md` §5._
 
 _Since then (Nov 4, 2026): three more ports (`ChipSuggester`, `TapNamer`,
-`SpeechTranscriber`) run under the same chain, and the `tmp/` lifecycle rule is
-1 day (A6 closed). Current state: `docs/19-meta-models.md`._
+`SpeechTranscriber`) run under the same chain, and the `tmp/` lifecycle rule in the
+repo is 1 day (A6; the operator applies it per bucket, `docs/DEPLOY.md` §6). Current
+state: `docs/19-meta-models.md`._
 
 ## Context
 

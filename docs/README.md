@@ -4,8 +4,9 @@ One line per document, in reading order for a first-time visitor. Start with the
 [`README.md`](../README.md), then [`19-meta-models.md`](19-meta-models.md) for how each
 Meta model is used and [`11-studio.md`](11-studio.md) for the spec. Internal runbooks for
 whoever runs the hosted service are grouped near the end; the archive holds the photo game
-Pinneds started as. Numbers 01, 02, 05, 08 and 09 are archived with that game; 04 was
-removed before the pivot.
+Pinneds started as. Numbers 01, 02 and 05 are archived with that game, 08 and 09 were
+superseded by `14-design-system.md` and archived on Oct 31; 04 was removed before the
+pivot.
 
 ## Start here
 
@@ -66,7 +67,7 @@ the record; do not apply them.
 | [`archive/02-architecture.md`](archive/02-architecture.md) | Game architecture, including ADR-001 and ADR-002 |
 | [`archive/05-research-synthesis.md`](archive/05-research-synthesis.md) | Day-1 research synthesis |
 | [`archive/08-ux-principles.md`](archive/08-ux-principles.md) | First minimal, icon-first UX rules (superseded by `14-design-system.md`) |
-| [`archive/09-design-system.md`](archive/09-design-system.md) | Per-board looks and themes from the game era (superseded by `14-design-system.md`) |
+| [`archive/09-design-system.md`](archive/09-design-system.md) | The first-generation Studio look and its per-board themes (superseded by `14-design-system.md`) |
 
 ## Key files outside `docs/`
 
