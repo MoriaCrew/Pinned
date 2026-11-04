@@ -216,8 +216,10 @@ prints `<slug> live|deleted` to your terminal only.
    ```sh
    npm run report:ops -- --project <project> release-holds --id <reportId>
    ```
-   then the objects of a tombstoned board go with the next storage
-   sweep, or by hand: `gcloud storage rm "gs://<bucket>/elements/boards/<slug>/**"`
+   releases exactly the objects that report held, minus any object
+   another report still holds (an open one, or a takedown not yet
+   closed out). Then the objects of a tombstoned board go with the next
+   storage sweep, or by hand: `gcloud storage rm "gs://<bucket>/elements/boards/<slug>/**"`
    and the `scenes/` folder. Nothing in the app sweeps a
    hand-tombstoned board by itself. False alarm instead: `dismiss`
    (or, on the manual path, delete the `deletedAt` field, undo step

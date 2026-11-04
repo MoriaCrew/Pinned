@@ -68,10 +68,14 @@ export class FirestoreReportStore implements ReportStore {
   }
 
   async listOpenForBoard(boardId: string): Promise<ReportRecord[]> {
+    return (await this.listForBoard(boardId)).filter((record) => record.status === "open");
+  }
+
+  async listForBoard(boardId: string): Promise<ReportRecord[]> {
     const snap = await this.db.collection(REPORTS).where("boardId", "==", boardId).get();
     return snap.docs
       .map((doc) => fromData(doc.data()))
-      .filter((record): record is ReportRecord => record !== null && record.status === "open")
+      .filter((record): record is ReportRecord => record !== null)
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 

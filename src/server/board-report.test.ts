@@ -157,18 +157,19 @@ describe("createReport (PIN-270)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const result = await createReport(SLUG, { scope: "board", reason: "illegal" }, null, h.deps);
     expect(result.record.severity).toBe("high");
-    expect(result.record.held).toEqual({ elementIds: ["mug", "friend", "copy"], sceneIds: ["s-mug", "s-both"], boardReview: true, storageHold: true });
+    expect(result.record.held).toMatchObject({ elementIds: ["mug", "friend", "copy"], sceneIds: ["s-mug", "s-both"], boardReview: true, storageHold: true });
     expect(result.record).not.toHaveProperty("deleteAt");
-    for (const ref of [
+    const expectedHeld = [
       ...refsOf("mug"),
       ...refsOf("friend"),
       `scenes/boards/${SLUG}/s-mug/scene.webp`,
       `scenes/boards/${SLUG}/s-both/scene.webp`,
       `scenes/boards/${SLUG}/s-mug/preview.webp`,
       ...foreign,
-    ]) {
-      expect(h.store.isHeld(ref)).toBe(true);
-    }
+    ];
+    for (const ref of expectedHeld) expect(h.store.isHeld(ref)).toBe(true);
+    // The record lists exactly what it held, so a release never has to guess.
+    expect(new Set(result.record.held.storageRefs)).toEqual(new Set(expectedHeld));
     expect(h.store.isHeld(`tmp/boards/${SLUG}/jobs/j/working.webp`)).toBe(false);
     expect(loggedEvents(log)[0]).toMatchObject({ severity: "CRITICAL", reason: "illegal", held: { storage: true } });
   });
@@ -177,13 +178,18 @@ describe("createReport (PIN-270)", () => {
     const h = await harness();
     vi.spyOn(console, "log").mockImplementation(() => {});
     const pin = await createReport(SLUG, { scope: "element", targetId: "friend", reason: "illegal" }, null, h.deps);
-    expect(pin.record.held).toEqual({ elementIds: ["friend"], sceneIds: ["s-both"], boardReview: false, storageHold: true });
+    expect(pin.record.held).toMatchObject({ elementIds: ["friend"], sceneIds: ["s-both"], boardReview: false, storageHold: true });
     for (const ref of [...refsOf("friend"), `scenes/boards/${SLUG}/s-both/scene.webp`]) expect(h.store.isHeld(ref)).toBe(true);
+    expect(new Set(pin.record.held.storageRefs)).toEqual(new Set([...refsOf("friend"), `scenes/boards/${SLUG}/s-both/scene.webp`]));
     for (const ref of [...refsOf("mug"), `scenes/boards/${SLUG}/s-mug/scene.webp`, `scenes/boards/${SLUG}/s-mug/preview.webp`]) expect(h.store.isHeld(ref)).toBe(false);
     expect((await h.boards.getBoard(SLUG))?.reviewAt).toBeUndefined();
 
     const scene = await createReport(SLUG, { scope: "scene", targetId: "s-mug", reason: "illegal" }, null, h.deps);
-    expect(scene.record.held).toEqual({ elementIds: [], sceneIds: ["s-mug"], boardReview: false, storageHold: true });
+    expect(scene.record.held).toMatchObject({ elementIds: [], sceneIds: ["s-mug"], boardReview: false, storageHold: true });
+    expect(new Set(scene.record.held.storageRefs)).toEqual(new Set([`scenes/boards/${SLUG}/s-mug/scene.webp`, `scenes/boards/${SLUG}/s-mug/preview.webp`]));
+    // An illegal report on a scene another hold hid first still lists it (the decision covers it).
+    const again = await createReport(SLUG, { scope: "scene", targetId: "s-both", reason: "illegal" }, null, h.deps);
+    expect(again.record.held).toMatchObject({ sceneIds: ["s-both"], storageHold: true });
     // The scene's whole folder, preview included; the pin it uses stays unheld in Storage.
     expect(h.store.isHeld(`scenes/boards/${SLUG}/s-mug/scene.webp`)).toBe(true);
     expect(h.store.isHeld(`scenes/boards/${SLUG}/s-mug/preview.webp`)).toBe(true);

@@ -47,6 +47,9 @@ export function describeReportStoreContract(name: string, makeStore: () => Repor
       expect((await store.listOpenForBoard("board-slug-00000000001")).map((r) => r.id)).toEqual(["a", "b"]);
       expect((await store.listOpenForBoard("board-b")).map((r) => r.id)).toEqual(["other"]);
       expect(await store.listOpenForBoard("nobody")).toEqual([]);
+      // Every status, oldest first: what a hold release must respect.
+      expect((await store.listForBoard("board-slug-00000000001")).map((r) => r.id)).toEqual(["a", "c", "b"]);
+      expect(await store.listForBoard("nobody")).toEqual([]);
       // The operator's queue: open reports of every board, oldest first, capped.
       expect((await store.listOpen(10)).map((r) => r.id)).toEqual(["a", "other", "b"]);
       expect((await store.listOpen(2)).map((r) => r.id)).toEqual(["a", "other"]);

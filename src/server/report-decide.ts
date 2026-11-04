@@ -6,8 +6,8 @@ import "server-only";
  * reported thing the way the product deletes (element cascade, scene
  * tombstone, board tombstone + unlink + storage sweep); the backstop
  * takes down the reports whose deadline passed, never an `illegal`
- * one. Storage temporary holds are released only by `releaseStorageHolds`
- * (the close-out of docs/20 §8), never by a takedown: a held object
+ * one. Storage temporary holds are released only by `releaseReportHolds`
+ * (a dismiss, or the close-out of docs/20 §7), never by a takedown: a held object
  * refuses deletion, which is the point. Run through
  * `scripts/report-ops.ts`; never from a request.
  */
@@ -18,7 +18,7 @@ import type { ReportStore } from "../domain/report-store";
 import type { UserRepository } from "../domain/user-repository";
 import { deleteSceneObjects } from "./board-api";
 import { unlinkMyBoards } from "./board-delete";
-import { listBoardObjectRefs } from "./board-report";
+import { listBoardObjectRefs, listTargetObjectRefs } from "./board-report";
 import { elementBytesStillNeeded, sweepDeletedBoardStorage } from "./board-storage";
 import type { DerivativeStore } from "./derivative-store";
 import { logServerError } from "./safe-log";
@@ -50,7 +50,7 @@ function isGoneBoard(error: unknown): boolean {
 
 export interface HoldReleaseResult {
   released: number;
-  /** Objects left held: they sit under another board whose own open report holds them as evidence. */
+  /** Objects left held: another report (open, or a confirmed takedown awaiting its close-out) still holds them as evidence. */
   kept: number;
   failed: number;
 }
@@ -58,36 +58,62 @@ export interface HoldReleaseResult {
 /** The board a stored object belongs to, from its folder; null for any other path. */
 const OBJECT_OWNER = /^(?:elements|scenes)\/boards\/([A-Za-z0-9_-]{22})\//;
 
+/** A report whose Storage hold still stands: open, or taken down and not yet closed out. */
+function stillHoldsStorage(report: ReportRecord): boolean {
+  return report.held.storageHold && report.status !== "dismissed";
+}
+
 /**
- * Release the Storage temporary holds on everything the report's hold
- * could have covered (the same folders `listBoardObjectRefs` holds;
- * docs/20 §7 close-out, or a false alarm), tombstoned boards included.
- * A library copy's bytes live under another board's folder: those stay
- * held while that board has an open report with a Storage hold of its
- * own (its evidence is not this report's to release). Best-effort per
- * object; returns how many were released, kept and failed.
+ * The objects a report's Storage hold covers: what it recorded at hold
+ * time, or, for a record written before `storageRefs` existed, the
+ * board's folders (board-wide hold) or its targets' objects as the
+ * records stand now.
  */
-export async function releaseStorageHolds(
-  boardId: string,
+async function coveredRefs(report: ReportRecord, deps: Pick<ReportDecideDeps, "boards" | "store">): Promise<string[]> {
+  if (report.held.storageRefs) return report.held.storageRefs;
+  const [elements, scenes] = await Promise.all([
+    deps.boards.listElements(report.boardId),
+    deps.boards.listScenes(report.boardId, { includeHidden: true }),
+  ]);
+  if (report.held.boardReview) return listBoardObjectRefs(report.boardId, elements, scenes, deps.store);
+  const sceneIds = new Set(report.held.sceneIds.concat(report.scope === "scene" && report.targetId ? [report.targetId] : []));
+  return listTargetObjectRefs(
+    report.boardId,
+    elements.filter((e) => report.held.elementIds.includes(e.id)),
+    scenes.filter((s) => sceneIds.has(s.id)),
+    deps.store,
+  );
+}
+
+/**
+ * Release the Storage temporary holds one report set (a false alarm, or
+ * the docs/20 §7 close-out of a confirmed takedown): exactly its own
+ * objects, minus any object another report still holds, on this board
+ * (open, or a takedown awaiting its own close-out) or on the board a
+ * library copy's bytes belong to. Best-effort per object; returns how
+ * many were released, kept and failed.
+ */
+export async function releaseReportHolds(
+  report: ReportRecord,
   deps: Pick<ReportDecideDeps, "boards" | "store" | "reports">,
 ): Promise<HoldReleaseResult> {
   const result: HoldReleaseResult = { released: 0, kept: 0, failed: 0 };
-  const [elements, scenes] = await Promise.all([
-    deps.boards.listElements(boardId),
-    deps.boards.listScenes(boardId, { includeHidden: true }),
-  ]);
-  const evidenceElsewhere = new Map<string, boolean>();
-  const heldAsEvidence = async (owner: string): Promise<boolean> => {
-    if (owner === boardId) return false;
-    if (!evidenceElsewhere.has(owner)) {
-      const open = await deps.reports.listOpenForBoard(owner);
-      evidenceElsewhere.set(owner, open.some((r) => r.held.storageHold));
+  const own = await coveredRefs(report, deps);
+  if (own.length === 0) return result;
+  const owners = new Set<string>([report.boardId]);
+  for (const ref of own) {
+    const owner = OBJECT_OWNER.exec(ref)?.[1];
+    if (owner) owners.add(owner);
+  }
+  const protectedRefs = new Set<string>();
+  for (const owner of owners) {
+    for (const other of await deps.reports.listForBoard(owner)) {
+      if (other.id === report.id || !stillHoldsStorage(other)) continue;
+      for (const ref of await coveredRefs(other, deps)) protectedRefs.add(ref);
     }
-    return evidenceElsewhere.get(owner) === true;
-  };
-  for (const ref of await listBoardObjectRefs(boardId, elements, scenes, deps.store)) {
-    const owner = OBJECT_OWNER.exec(ref)?.[1] ?? boardId;
-    if (await heldAsEvidence(owner)) {
+  }
+  for (const ref of own) {
+    if (protectedRefs.has(ref)) {
       result.kept += 1;
       continue;
     }
@@ -121,9 +147,10 @@ export async function dismissReport(
   if (!record) return null;
   const others = (await deps.reports.listOpenForBoard(record.boardId)).filter((r) => r.id !== id);
   const stillElements = new Set(others.flatMap((r) => r.held.elementIds));
-  const stillScenes = new Set(others.flatMap((r) => r.held.sceneIds));
+  // A scene another open report is about stays hidden, whether that
+  // report hid it itself or found it hidden already.
+  const stillScenes = new Set(others.flatMap((r) => r.held.sceneIds.concat(r.scope === "scene" && r.targetId ? [r.targetId] : [])));
   const stillReview = others.some((r) => r.held.boardReview);
-  const stillStorage = others.some((r) => r.held.storageHold);
   const released: ReleasedCounts = { elements: 0, scenes: 0, boardReview: false, storage: false };
 
   for (const elementId of record.held.elementIds) {
@@ -145,8 +172,10 @@ export async function dismissReport(
   if (record.held.boardReview && !stillReview) {
     released.boardReview = await deps.boards.setBoardReview(record.boardId, null);
   }
-  if (record.held.storageHold && !stillStorage) {
-    const holds = await releaseStorageHolds(record.boardId, deps);
+  if (record.held.storageHold) {
+    // Only this report's own objects, minus what any other holding
+    // report (open, or a takedown awaiting its close-out) still needs.
+    const holds = await releaseReportHolds(record, deps);
     released.storage = holds.failed === 0;
   }
   return { record, released };

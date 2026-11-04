@@ -7,7 +7,7 @@ import { InMemoryUserRepository } from "../domain/user-repository";
 import { resolvePolicy } from "../policy/policy";
 import { createReport, type ReportDeps } from "./board-report";
 import { InMemoryDerivativeStore } from "./derivative-store";
-import { dismissReport, releaseStorageHolds, sweepDueReports, takedownReport, type ReportDecideDeps } from "./report-decide";
+import { dismissReport, releaseReportHolds, sweepDueReports, takedownReport, type ReportDecideDeps } from "./report-decide";
 
 /**
  * The operator side (PIN-272): holds set by real reports (createReport),
@@ -130,8 +130,8 @@ describe("report decisions (PIN-272)", () => {
       expect(h.store.isHeld(ref)).toBe(true);
     }
     expect(await h.users.getUserBoard(UID, SLUG)).toBeNull();
-    // Close-out: release the holds, then the objects can go.
-    expect(await releaseStorageHolds(SLUG, h.deps)).toEqual({ released: 6, kept: 0, failed: 0 });
+    // Close-out: release this report's holds, then the objects can go.
+    expect(await releaseReportHolds(result!.record, h.deps)).toEqual({ released: 6, kept: 0, failed: 0 });
     expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
   });
 
@@ -246,10 +246,46 @@ describe("report decisions (PIN-272)", () => {
     expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
     // The other board's evidence is not this report's to release.
     expect(srcRefs.every((ref) => h.store.isHeld(ref))).toBe(true);
-    expect(await releaseStorageHolds(SLUG, h.deps)).toMatchObject({ kept: 2, failed: 0 });
+    expect(await releaseReportHolds(outcome!.record, h.deps)).toMatchObject({ kept: 2, failed: 0 });
 
     await dismissReport(theirs.id, h.deps);
     expect(srcRefs.some((ref) => h.store.isHeld(ref))).toBe(false);
+  });
+
+  it("an illegal scene report on a scene another hold hid keeps it hidden through that hold's dismiss", async () => {
+    const h = await harness();
+    const pinReport = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "inappropriate" }); // hides s-both
+    const sceneReport = await h.file(SLUG, { scope: "scene", targetId: "s-both", reason: "illegal" });
+    expect(sceneReport.held).toMatchObject({ sceneIds: ["s-both"], storageHold: true });
+    await dismissReport(pinReport.id, h.deps);
+    expect((await h.boards.getElement("friend"))?.cutoutRef).toBe(refsOf("friend")[0]);
+    expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug"]);
+    expect(h.store.isHeld(sceneRef("s-both"))).toBe(true);
+    await dismissReport(sceneReport.id, h.deps);
+    expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug", "s-both"]);
+    expect(h.store.isHeld(sceneRef("s-both"))).toBe(false);
+  });
+
+  it("a dismiss never clears the evidence holds of a confirmed takedown on the same board", async () => {
+    const h = await harness();
+    const confirmed = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "illegal" });
+    const taken = await takedownReport(confirmed.id, h.deps, "confirmed");
+    expect(taken?.outcome).toBe("element_deleted");
+    // The record is gone, the objects are held and still there.
+    expect(await h.boards.getElement("friend")).toBeNull();
+    for (const ref of refsOf("friend")) {
+      expect(await h.store.get(ref)).not.toBeNull();
+      expect(h.store.isHeld(ref)).toBe(true);
+    }
+    // A later illegal pin report on the same board, dismissed as a false alarm.
+    const later = await h.file(SLUG, { scope: "element", targetId: "mug", reason: "illegal" });
+    const outcome = await dismissReport(later.id, h.deps);
+    expect(outcome?.released.storage).toBe(true);
+    expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
+    for (const ref of refsOf("friend")) expect(h.store.isHeld(ref)).toBe(true);
+    // The close-out of the takedown releases exactly its own objects.
+    expect(await releaseReportHolds(taken!.record, h.deps)).toMatchObject({ kept: 0, failed: 0 });
+    for (const ref of refsOf("friend")) expect(h.store.isHeld(ref)).toBe(false);
   });
 
   it("references stay the only board id in a decision's record", async () => {

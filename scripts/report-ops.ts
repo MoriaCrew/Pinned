@@ -9,7 +9,7 @@
  *   show --id <reportId>            one report in full (message included: operator terminal only)
  *   dismiss --id <reportId> [--note "..."]   false alarm: restore what the report hid
  *   takedown --id <reportId> [--note "..."]  confirmed: remove the reported thing for everyone
- *   release-holds --id <reportId>   close-out: release the Storage holds on the report's board
+ *   release-holds --id <reportId>   close-out: release the Storage holds this report set (minus what another report still holds)
  *   sweep [--batch <n>]             timed takedown of due reports (the daily backstop)
  *
  * --project is required and never read from ADC, gcloud or the env
@@ -28,7 +28,7 @@ import { FirestoreReportStore } from "../src/server/firestore-report-store";
 import { FirestoreUserRepository } from "../src/server/firestore-user-repository";
 import {
   dismissReport,
-  releaseStorageHolds,
+  releaseReportHolds,
   sweepDueReports,
   takedownReport,
   type ReportDecideDeps,
@@ -147,9 +147,9 @@ async function main(): Promise<number> {
           console.error(`No report ${id} in ${project}.`);
           return 1;
         }
-        const released = await releaseStorageHolds(record.boardId, deps);
+        const released = await releaseReportHolds(record, deps);
         console.log(
-          `released ${released.released} object hold(s), kept ${released.kept} (evidence of another board's open report), ${released.failed} failed (ref ${record.reference}).`,
+          `released ${released.released} object hold(s) of this report, kept ${released.kept} (another report still holds them), ${released.failed} failed (ref ${record.reference}).`,
         );
         return released.failed === 0 ? 0 : 1;
       }

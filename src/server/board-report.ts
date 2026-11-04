@@ -18,6 +18,7 @@ import {
   type ReportHeld,
   type ReportInputError,
   type ReportRecord,
+  type ReportScope,
   type ReporterKind,
 } from "../domain/board-report";
 import type { ReportStore } from "../domain/report-store";
@@ -100,7 +101,7 @@ export async function createReport(
   });
   if (!planned.ok) throw new BoardApiError("Board not found.", 404);
   const plan = planned.plan;
-  const held = await applyHold(slug, plan.held, elements, scenes, now, deps);
+  const held = await applyHold(slug, input.scope, plan.held, elements, scenes, now, deps);
   const record: ReportRecord = {
     id: deps.newId?.() ?? randomUUID(),
     boardId: slug,
@@ -147,6 +148,7 @@ export async function createReport(
  */
 async function applyHold(
   slug: string,
+  scope: ReportScope,
   planned: ReportHeld,
   elements: readonly Element[],
   scenes: readonly Scene[],
@@ -163,10 +165,14 @@ async function applyHold(
   }
   for (const id of planned.sceneIds) {
     if (sceneIds.has(id)) continue;
-    if (await deps.boards.hideScene(id)) sceneIds.add(id);
+    // A scene report lists its scene even when another hold hid it
+    // first: the decision covers it, and a dismiss of that other hold
+    // must not bring it back while this report is open.
+    if ((await deps.boards.hideScene(id)) || scope === "scene") sceneIds.add(id);
   }
   const boardReview = planned.boardReview ? await deps.boards.setBoardReview(slug, now) : false;
   let storageHold = false;
+  const storageRefs: string[] = [];
   if (planned.storageHold) {
     storageHold = true;
     // A board-wide hold covers the board's folders; a pin or scene hold
@@ -182,13 +188,20 @@ async function applyHold(
     for (const ref of refs) {
       try {
         await deps.store.setHold(ref, true);
+        storageRefs.push(ref);
       } catch (error) {
         storageHold = false;
         logServerError("report storage hold failed", error);
       }
     }
   }
-  return { elementIds, sceneIds: [...sceneIds], boardReview, storageHold };
+  return {
+    elementIds,
+    sceneIds: [...sceneIds],
+    boardReview,
+    storageHold,
+    ...(planned.storageHold ? { storageRefs } : {}),
+  };
 }
 
 /**

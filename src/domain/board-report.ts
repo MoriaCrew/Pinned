@@ -35,6 +35,13 @@ export interface ReportHeld {
   sceneIds: string[];
   boardReview: boolean;
   storageHold: boolean;
+  /**
+   * The stored objects this report put a Storage temporary hold on
+   * (unprefixed refs), recorded at hold time so a release covers
+   * exactly these, whatever happened to the records since (a taken-down
+   * pin has no record left to compute them from). Absent without a hold.
+   */
+  storageRefs?: string[];
 }
 
 export const NOTHING_HELD: Readonly<ReportHeld> = Object.freeze({
