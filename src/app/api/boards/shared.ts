@@ -24,7 +24,10 @@ import { getDerivativeStore } from "../../../server/derivative-store";
 import { getCreditLedgerStore } from "../../../server/credit-ledger-store";
 import { getStarterAllowanceStore } from "../../../server/starter-allowance-store";
 import { PhotoIntakeError } from "../../../server/photo-intake";
+import { getReportStore } from "../../../server/report-store";
+import type { ReportDeps } from "../../../server/board-report";
 import { logServerError } from "../../../server/safe-log";
+import { t, type Locale } from "../../../i18n";
 
 export const JSON_HEADERS = { "Cache-Control": "no-store" };
 
@@ -80,6 +83,30 @@ export function boardApiDeps(policy: Policy): BoardApiDeps {
     starterAllowance: getStarterAllowanceStore(),
     policy,
   };
+}
+
+/** Report & hold deps (PIN-270): the board repository, Storage and the reports collection. */
+export function reportDeps(policy: Policy): ReportDeps {
+  return {
+    boards: getBoardRepository(),
+    store: getDerivativeStore(),
+    reports: getReportStore(),
+    policy,
+  };
+}
+
+/**
+ * 423 while a board-wide report hold is on (PIN-270, `Board.reviewAt`):
+ * uploads, scenes and tap-adds wait for the operator's decision. A
+ * missing board is left to the route's own uniform 404.
+ */
+export async function rejectUnderReview(slug: string, locale: Locale): Promise<NextResponse | null> {
+  const board = await getBoardRepository().getBoard(slug);
+  if (board?.reviewAt === undefined) return null;
+  return NextResponse.json(
+    { error: t(locale, "request.boardUnderReview"), code: "board_under_review" },
+    { status: 423, headers: JSON_HEADERS },
+  );
 }
 
 export function sessionDeps(policy: Policy): BoardSessionDeps {

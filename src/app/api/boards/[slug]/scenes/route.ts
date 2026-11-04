@@ -19,6 +19,7 @@ import {
   errorResponse,
   notFound,
   policyForBoard,
+  rejectUnderReview,
   slugGate,
   viewerFor,
 } from "../../shared";
@@ -83,6 +84,9 @@ export async function POST(
     );
   }
   const body: unknown = capped.value;
+  // PIN-270: a board under a report hold makes nothing new until the operator decides.
+  const paused = await rejectUnderReview(slug, locale);
+  if (paused) return paused;
 
   try {
     const policy = await policyForBoard(slug);
