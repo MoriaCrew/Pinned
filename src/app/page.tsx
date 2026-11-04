@@ -199,19 +199,31 @@ export default async function HomePage({
               <StepText locale={locale} n={3} title={t(locale, "landing.step3")} body={t(locale, "landing.step3Body")} />
             </li>
           </ol>
-          {demoVideoUrl ? (
-            // PIN-263: a link out, never an embedded player (no third-party trackers on this page).
-            <ButtonLink
-              variant="secondary"
-              icon="play"
-              href={demoVideoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="pn-landing-video"
-            >
-              {t(locale, "landing.video")}
-              <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
-            </ButtonLink>
+          {demoVideoUrl || promoPostUrl ? (
+            // PIN-263: links out, never an embedded player or widget (no third-party trackers on this page).
+            // PIN-265: the video and the launch post sit together, out of the footer.
+            <div className="pn-landing-promo">
+              {demoVideoUrl ? (
+                <ButtonLink
+                  variant="secondary"
+                  icon="play"
+                  href={demoVideoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pn-landing-video"
+                >
+                  {t(locale, "landing.video")}
+                  <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
+                </ButtonLink>
+              ) : null}
+              {promoPostUrl ? (
+                <a className="pn-landing-promo-link" href={promoPostUrl} target="_blank" rel="noopener noreferrer">
+                  {t(locale, "landing.xPost")}
+                  <Icon name="launch" size={18} />
+                  <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
+                </a>
+              ) : null}
+            </div>
           ) : null}
         </section>
 
@@ -228,17 +240,16 @@ export default async function HomePage({
                   {line.text}
                 </li>
               ))}
+              {/* PIN-265: the link that explains this list closes it. */}
+              <li className="pn-landing-meta-more">
+                <a href="/models">
+                  {t(locale, "landing.meta.more")}
+                  <Icon name="arrow" size={18} />
+                </a>
+              </li>
             </ul>
           </section>
-          <SiteLinks locale={locale}>
-            <a href="/models">{t(locale, "landing.meta.more")}</a>
-            {promoPostUrl ? (
-              <a href={promoPostUrl} target="_blank" rel="noopener noreferrer">
-                {t(locale, "landing.xPost")}
-                <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
-              </a>
-            ) : null}
-          </SiteLinks>
+          <SiteLinks locale={locale} />
         </footer>
       </div>
     </main>

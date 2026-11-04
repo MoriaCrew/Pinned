@@ -640,8 +640,10 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-note { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--ink-muted); }
 .pn-landing-how { grid-area: how; display: grid; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-5); border-top: 2px dashed var(--line-strong); }
 .pn-landing-steps { display: grid; gap: var(--space-5); margin: 0; padding: 0; list-style: none; }
-/* PIN-263: the demo video link closes "How it works"; it sizes to its label, not the column. */
-.pn-landing-video { justify-self: start; }
+/* PIN-263/265: the demo video and the launch post close "How it works" together; they size to their labels. */
+.pn-landing-promo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); }
+.pn-landing-promo-link { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); color: var(--ink); font: 600 15px/20px var(--font-ui); text-decoration: underline; text-underline-offset: 4px; }
+.pn-landing-promo-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .pn-landing-step { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: var(--space-4); }
 .pn-landing-art { position: relative; aspect-ratio: 1; width: 100%; display: grid; place-items: center; }
 .pn-landing-art .pn-print-wrap { width: 88%; }
@@ -663,14 +665,22 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-meta-list { display: grid; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; font: 500 14px/20px var(--font-ui); }
 .pn-landing-meta-list li { display: flex; align-items: center; gap: var(--space-2); }
 .pn-landing-meta-list .pn-icon { flex: none; }
+/* PIN-265: the models link closes the credit it explains. */
+.pn-landing-meta-more a { gap: 6px; color: var(--ink); font-weight: 600; text-decoration: underline; }
 /* Footer links (PIN-26): Privacy, Terms, source; each a 44px target. */
-.pn-foot-links { display: flex; flex-wrap: wrap; column-gap: var(--space-5); }
-.pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
+/* PIN-265: one quiet utility row. Links sit in a list; CSS draws the dots (empty alt text: never read aloud, never part of a link). */
+.pn-foot-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--space-4); }
+.pn-foot-list { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; }
+.pn-foot-list > li { display: inline-flex; align-items: center; }
+.pn-foot-list > li + li::before { content: "·"; content: "·" / ""; padding: 0 var(--space-2); color: var(--ink-muted); }
+.pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 13px/18px var(--font-ui); text-decoration: none; text-underline-offset: 4px; }
+.pn-foot-links a:hover { color: var(--ink); text-decoration: underline; }
 .pn-foot-links a[aria-current="page"] { color: var(--ink); text-decoration: none; }
+.pn-landing-foot .pn-foot-links { margin-top: var(--space-4); padding-top: var(--space-2); border-top: 2px dashed var(--line-strong); }
 .pn-foot-links a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* PIN-247: the footer's language switch, a link-sized button (globe + current language). */
-.pn-foot-lang { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
-.pn-foot-lang:hover { color: var(--ink); }
+.pn-foot-lang { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); text-decoration: none; text-underline-offset: 4px; cursor: pointer; }
+.pn-foot-lang:hover { color: var(--ink); text-decoration: underline; }
 .pn-foot-lang:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (min-width: 540px) {
