@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { REPORT_REASONS, type ReportReason } from "../../../domain/board-report";
 import { t, tf, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/client";
@@ -183,11 +183,16 @@ export function ReportBoard({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReportResult | null>(null);
+  // One request at a time, whatever the render state says in between.
+  const inFlight = useRef(false);
   if (!reportRef) return null;
 
   const close = () => {
+    // Escape, the scrim and the X all land here: while the answer is
+    // on its way the sheet stays, so the receipt is seen and the form
+    // cannot be sent twice.
+    if (inFlight.current) return;
     setOpen(false);
-    setSending(false);
     setError(null);
     if (result) {
       setResult(null);
@@ -200,7 +205,8 @@ export function ReportBoard({
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (!canSendReport(reason, message) || sending || !reason) return;
+    if (!canSendReport(reason, message) || inFlight.current || !reason) return;
+    inFlight.current = true;
     setSending(true);
     setError(null);
     try {
@@ -226,6 +232,7 @@ export function ReportBoard({
     } catch {
       setError(t(locale, "request.reportFailed"));
     } finally {
+      inFlight.current = false;
       setSending(false);
     }
   };
