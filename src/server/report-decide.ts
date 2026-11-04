@@ -299,10 +299,10 @@ export interface SweepSummary {
 }
 
 /**
- * The timed takedown (ADR-004 decision 4): open reports whose
- * `deleteAt` passed, `batch` at a time, oldest deadline first. Only a
- * face-flagged likeness report ever carries a deadline; an `illegal`
- * report is skipped here whatever its record says.
+ * The timed takedown (ADR-004 decision 4, amended by PIN-278): open
+ * reports whose `deleteAt` passed, `batch` at a time, oldest deadline
+ * first. Every holding report carries a deadline, `illegal` included:
+ * its takedown keeps the Storage holds, so the bytes stay as evidence.
  */
 export async function sweepDueReports(deps: ReportDecideDeps, now: number, batch: number): Promise<SweepSummary> {
   const summary: SweepSummary = { due: 0, takenDown: 0, skipped: 0 };
@@ -310,10 +310,6 @@ export async function sweepDueReports(deps: ReportDecideDeps, now: number, batch
   const due = await deps.reports.listOpenDue(now, batch);
   summary.due = due.length;
   for (const record of due) {
-    if (record.reason === "illegal") {
-      summary.skipped += 1;
-      continue;
-    }
     const result = await takedownReport(record.id, { ...deps, now: () => now }, "timed takedown (takedownHours)");
     if (result) summary.takenDown += 1;
     else summary.skipped += 1;

@@ -1,4 +1,4 @@
-# 07 — SAM lab (PIN-36)
+# 07. SAM lab
 
 Dev-only tool at `/lab/sam` (enabled by `PINNED_LAB=1` on dev, or
 locally in memory mode; 404 elsewhere). Built to learn what SAM 3.1

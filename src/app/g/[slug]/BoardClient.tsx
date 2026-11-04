@@ -108,6 +108,8 @@ export interface BoardClientPolicy {
   jobPollIntervalMs: number;
   /** Policy report.messageMaxChars: the report sheet's message cap (PIN-271). */
   reportMessageMaxChars: number;
+  /** Policy takedownHours: the deadline a hold's receipt quotes (PIN-278). */
+  takedownHours: number;
   uploadMaxPx: number;
   uploadJpegQuality: number;
   pinsPerScene: { min: number; max: number };
@@ -1585,9 +1587,12 @@ function BoardBody({
           email={legalContactEmail}
           reportRef={reportRef}
           messageMaxChars={policy.reportMessageMaxChars}
+          takedownHours={policy.takedownHours}
           targets={{
             // The pins on the grid only: leftover candidates are never on the board for others.
-            pins: cards.filter((card) => card.status === "pinned").map((card) => ({ id: card.element.id, label: card.element.label })),
+            pins: cards
+              .filter((card) => card.status === "pinned" && !card.element.held)
+              .map((card) => ({ id: card.element.id, label: card.element.label })),
             // The same catalogue numbers the prints show ("Nº 03": ready scenes, oldest first).
             scenes: [...numbers.entries()].map(([id, index]) => ({ id, index })),
           }}

@@ -1,4 +1,4 @@
-# 12 — Submission packet (PIN-81)
+# 12. Submission packet
 
 _Status: freeze-prep packet, Oct 29, 2026, refreshed Oct 31
 (PIN-219). Feature freeze Tue Nov 3, 2026 (end of day);
@@ -83,7 +83,7 @@ PR numbers and dates: [`build-log.md`](build-log.md).
 | Judges' board (private link from the PIN-81 tracker entry; never commit; not the landing demo board, `docs/DEPLOY.md` §6.3) | `<DEMO_BOARD_URL from Linear>` |
 | Pitch video (~3 min, §2; public since Nov 3) | https://www.youtube.com/watch?v=q6lkrA6fsCI |
 | How the app uses Meta's models (in the app, on prod since promotion #2, Nov 2) | https://pinneds.com/models |
-| Build log: who built what, with PR numbers | https://github.com/MoriaCrew/Pinned/blob/main/docs/build-log.md (on `main` only after the next promotion; use `blob/dev/…` until then) |
+| Build log: who built what, with PR numbers | https://github.com/MoriaCrew/Pinned/blob/main/docs/build-log.md |
 | Dev backend (live models; the only live demo before Nov 1) | https://dev.pinneds.com |
 
 Notes for whoever fills this in:

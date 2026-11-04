@@ -1,11 +1,11 @@
 # PIN-272 report backstop: the timed takedown of ADR-004.
 #
-# A face-flagged pin reported as someone's likeness is hidden at once
-# and tombstoned by itself once Policy.takedownHours have passed with
-# no operator decision (docs/20, docs/adr/004-report-and-hold.md).
-# The app has no scheduler, so this job runs `report:ops sweep`
-# daily; a report filed through the day waits at most one run past
-# its deadline. Content reported as illegal is never touched here.
+# Whatever a report hid is tombstoned by itself once Policy.takedownHours
+# have passed with no operator decision (PIN-278; docs/20,
+# docs/adr/004-report-and-hold.md). The app has no scheduler, so this
+# job runs `report:ops sweep` every six hours; a report waits at most
+# one run past its deadline. Content reported as illegal is taken down
+# too, with its Storage holds kept as evidence.
 #
 # PUBLIC REPO: anyone can read this job's log. The sweep prints counts
 # only (due / takenDown / skipped), never a report id, reference, slug
@@ -37,7 +37,7 @@ name: Report sweep
 
 on:
   schedule:
-    - cron: "47 6 * * *" # daily 06:47 UTC, from the default branch (main)
+    - cron: "17 */6 * * *" # every 6 h at :17 UTC, from the default branch (main)
   workflow_dispatch:
     inputs:
       environment:

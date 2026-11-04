@@ -109,6 +109,7 @@ export function BoardThings({
                 state={picking && pickIndex !== undefined ? "picked" : "rest"}
                 pickIndex={pickIndex}
                 foil={card.pinId === foilPinId}
+                held={card.element.held}
                 onToggle={() => onTapPin(card.pinId)}
               />
               {mine && !picking ? <PinMore card={card} deletion={deletion} onRename={onRename} /> : null}

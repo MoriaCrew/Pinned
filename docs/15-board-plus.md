@@ -1,17 +1,32 @@
-# 15 — Board Plus (PIN-103)
+# 15. Board Plus and creations
 
-Server seam for an optional paid add-on. The UI is built
-separately; this page is the contract it builds on.
-`PLUS_MODE` is `off` (nothing can be bought), `mock` (demo) or
-`stripe` (the Board Plus pack via hosted Checkout, PIN-149; the
-makes and Plus land by webhook only, PIN-150 / PIN-181).
+Server seam for an optional paid add-on, introduced in PIN-103.
+The UI is built separately; this page is the contract it builds on.
+`PLUS_MODE` is `off` (nothing can be bought, the default), `mock`
+(demo) or `stripe` (the Board Plus pack via hosted Checkout,
+PIN-149; the creations and Plus land by webhook only, PIN-150 /
+PIN-181).
+
+**In one screen.** Board Plus is the one paid thing in Pinneds: a
+single pack, bought once for one board, that unlocks every look and
+foil stickers, removes the free-photo limit and adds 20 creations,
+for €2.99 through hosted Stripe Checkout. Any member can buy it for
+everyone on the board. A creation is one AI scene (adding a photo and
+cutting it out never uses one); when a board runs out, scenes fall
+back to free collages, so nothing stops working and guests never have
+to pay. New boards start with a free pool of 5 creations and 15 free
+photos, for a maker's first 3 boards in 7 days (prod gives 20
+creations during judging week). Nothing is sold while `PLUS_MODE=off`,
+the code default; dev runs Stripe in test mode and prod runs live
+Stripe. The rest of this page is the contract for the code and the
+operator runbook.
 
 ## What it is
 
 - The core loop is free while `Policy.credits.enabled` is off
-  (the shipped default, PIN-151): uploads, cut-outs, pins, scenes
-  and the AI budget are unchanged. With credits on, AI makes
-  ("creations" in the UI) spend the board pool instead (PIN-151
+  (the code default, PIN-151): uploads, cut-outs, pins, scenes
+  and the AI budget are unchanged. With credits on, AI creations
+  (`makes` in code) spend the board pool instead (PIN-151
   below). **A creation is one AI scene (PIN-229):** adding a photo
   and its cut-outs never uses one, so discarding cut-outs costs
   nothing; every AI scene uses one, even one the person does not
@@ -35,7 +50,7 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 > - **Who is a maker:** the signed-in user when sign-in is on and
 >   the request carries a session, else the client address the
 >   rate limiter uses (`clientIp` in `src/server/rate-limit.ts`,
->   PIN-112) — IPv4 as is, IPv6 grouped by its /64, anything
+>   PIN-112): IPv4 as is, IPv6 grouped by its /64, anything
 >   unreadable in one shared bucket. People behind one shared
 >   IPv4 (office, school or event Wi-Fi, some mobile carriers)
 >   share one allowance while signed out; signing in gives each
@@ -57,8 +72,8 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   unchanged.
 > - **The hard wall** stays the site-wide daily AI budget
 >   (`dailyBudgetUsd` / `dailyCallLimit`), which free and paid
->   makes share today (PIN-206 splits it). Tuning ideas after
->   launch: PIN-207.
+>   creations share today (splitting them is tracked as PIN-206).
+>   Tuning ideas after launch: PIN-207.
 
 > **Free photos rule (PIN-230).** Since a creation is an AI scene
 > (PIN-229), a free board's photo cost (~$0.02 a photo, docs/16)
@@ -86,12 +101,12 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
 >   use the Policy value. A board's own override
 >   (`policyOverrides.credits.freePhotosPerBoard`) wins over the
 >   stored amount: an operator's explicit choice for that one
->   board. (The demo board needs none: it is a normal board and
->   gets Plus, so no photo limit, once billing is live, DEPLOY
->   §6.4.)
+>   board. (The judges' board needs none: it is a normal board that
+>   gets Plus, so it has no photo limit, once billing is live;
+>   `docs/DEPLOY.md` section 6, step 4.)
 > - **At the limit:** `POST /photos` answers a typed 429
 >   `{ code: "free_photos_used" }` before intake, any job or any
->   AI call — checked before the daily cap, since waiting a day
+>   AI call, checked before the daily cap, since waiting a day
 >   would not help. The batch queue stops on it like the other
 >   coded 429s. A lost-response replay of a counted photo still
 >   gets its job back.
@@ -125,11 +140,13 @@ makes and Plus land by webhook only, PIN-150 / PIN-181).
   existing `Board.themeId`; `isBoardThemeId` accepts every skin id
   plus the first-generation theme ids.
 
-## The purchase (PIN-181)
+## The purchase
+
+Introduced in PIN-181.
 
 | What | Who can buy | Billing | Grants | Policy |
 | --- | --- | --- | --- | --- |
-| Board Plus · 20 creations (`pinneds_plus_20`) | any joined member or the host | €2.99 once, this board | 20 makes + `Board.plus = { plan: "board", source: "stripe" }` | `credits.packs`, `credits.plusOnPurchase` |
+| Board Plus · 20 creations (`pinneds_plus_20`) | any joined member or the host | €2.99 once, this board | 20 creations + `Board.plus = { plan: "board", source: "stripe" }` | `credits.packs`, `credits.plusOnPurchase` |
 
 It is bought through the credits buy route (PIN-149) and granted
 by the webhook (PIN-150 section). The plan ids `board` / `host`
@@ -258,7 +275,7 @@ host-only but answers every failure with the uniform 404
 - `GET /billing/return?intent={id}&result=success|cancel` → 302.
   The return redirector Stripe points at: it resolves the opaque
   intent server-side and lands on `/g/{slug}?billing=processing`
-  (success) or `?billing=cancelled` (cancel). It grants nothing —
+  (success) or `?billing=cancelled` (cancel). It grants nothing:
   credits arrive by webhook only (PIN-150), hence "processing".
   Unknown, expired and malformed intents all land on `/` with no
   flag, indistinguishable from each other. It is read-only
@@ -320,33 +337,38 @@ is `off`. Adapters live in `src/billing/` behind the `Checkout`
 port (`startCheckout({ slug, plan })`, which throws a typed
 `BoardNotFoundError` when the board is gone).
 
-- `off` (default; prod): every checkout answers `unavailable` and
+- `off` (the code default, used when `PLUS_MODE` is unset or not
+  an exact known value): every checkout answers `unavailable` and
   writes nothing. A leftover `source: "mock"` grant **does not
   count** in `off` (`hasPlus(board, mode)`): it unlocks no skin
   and the view shows `active: false`. A board already wearing a
   Plus skin keeps the stored id; the UI decides how to render
-  that (follow-up). The UI should present Plus honestly as not
-  available yet — never a buy button that pretends.
-- `mock` (dev backend via `apphosting.dev.yaml`; locally via
-  `.env.local`): grants the entitlement at once with
+  that (follow-up). The UI presents Plus honestly as not
+  available, never a buy button that pretends.
+- `mock` (locally via `.env.local`; the dev backend used it
+  until PIN-153): grants the entitlement at once with
   `source: "mock"`. No money moves; the UI must say it is a demo.
   The stored source keeps mock grants distinguishable forever.
   Never set `mock` on prod.
 - `stripe` (PIN-149): sells the Board Plus pack through hosted
-  Stripe Checkout (adapter section below). Requires
-  `STRIPE_SECRET_KEY` in the same env — `stripe` without a key
-  parses as `off` in config (fail closed: sells nothing, never
-  errors per request; `GET /api/health` shows the effective
-  mode). Plus comes only with that pack (PIN-181): the plan
-  route still answers `unavailable`, and a stored
+  Stripe Checkout (adapter section below). Requires both
+  `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in the same env,
+  and, when `STRIPE_EXPECTED_LIVEMODE` (`live` or `test`) is set,
+  a key of that mode. Otherwise `stripe` parses as `off` in config
+  (fail closed: sells nothing, never errors per request;
+  `GET /api/health` shows the effective mode; `src/config.ts`,
+  `parsePlusMode`). Plus comes only with that pack (PIN-181): the
+  plan route still answers `unavailable`, and a stored
   `source: "stripe"` grant counts while a mock one does not.
-  **Dev runs `stripe` since PIN-153** (sandbox only: the dev
-  backend flips together with `Policy.credits.enabled` and
-  the registered webhook endpoint - PIN-153 section below).
-  Prod stays `off` until the PIN-210 prod switch turns on live
-  Stripe ("Going live on prod" below). PIN-149/PIN-150
-  deliberately shipped reference-only so no backend ever took
-  a payment with no fulfilment path.
+  **Dev runs `stripe` since PIN-153** (sandbox only, with
+  `STRIPE_EXPECTED_LIVEMODE=test`: the dev backend flips together
+  with `Policy.credits.enabled` and the registered webhook
+  endpoint, PIN-153 section below). **Prod runs `stripe` with live
+  Stripe since the PIN-210 prod switch** (`apphosting.prod.yaml`
+  on `main`, `STRIPE_EXPECTED_LIVEMODE=live`; "Going live on
+  prod" below). PIN-149/PIN-150 deliberately shipped
+  reference-only so no backend ever took a payment with no
+  fulfilment path.
 
 Check a backend with `GET /api/health` → `plusMode`.
 
@@ -381,11 +403,14 @@ list.
 | `checkoutPerIp` | 20 / 600,000 ms | buy route per-IP brake |
 | `webhookMaxBytes` | 1,048,576 | webhook body cap (PIN-178) |
 
-## Stripe catalog (PIN-146)
+## Stripe catalog
 
-What Pinneds sells is committed code: `src/billing/catalog.ts`
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
+Introduced in PIN-146. What Pinneds sells is committed code:
+`src/billing/catalog.ts`
 (`CATALOG_ITEMS`, catalog version `dev-v1`). Amounts are EUR
-cents, tax-inclusive (TTC) — the displayed price is the charged
+cents, tax-inclusive (TTC): the displayed price is the charged
 price. Runtime slices import the manifest; nothing reads Stripe
 object ids from config.
 
@@ -395,7 +420,7 @@ object ids from config.
 | `pinneds_credits_25` | 25 makes | €4.99 one-time | retired (PIN-181) |
 | `pinneds_credits_60` | 60 makes | €9.99 one-time | retired (PIN-181) |
 | `pinneds_credits_150` | 150 makes | €19.99 one-time | retired (PIN-181) |
-| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft — seeded, not offered |
+| `pinneds_host_monthly` | host plan | €4.99/month recurring | draft, seeded, not offered |
 
 "Creations" is the customer-facing word for makes; code keeps
 `credits`/`makes`. The Checkout page shows the item's name
@@ -420,7 +445,7 @@ when a price is replaced.
 
 `scripts/seed-stripe-catalog.mjs` converges a Stripe **sandbox**
 onto the manifest (plain `fetch`, no SDK; it mirrors the
-manifest — a test pins the mirror). It is a dry-run unless
+manifest; a test pins the mirror). It is a dry-run unless
 `--apply` is passed, takes the secret from the env var named by
 `--env-var` (never printed; a live key is refused unless
 `--live --i-understand-live`, PIN-210), and prints item keys and
@@ -434,7 +459,7 @@ node --env-file=.env.local scripts/seed-stripe-catalog.mjs --env-var STRIPE_PINN
 Convergence: a product matched by metadata is reused (updated
 in place on copy/metadata drift); a price matched by lookup key
 is reused only when amount, currency, product, tax behavior and
-recurrence all match — those fields are immutable, so drift
+recurrence all match (those fields are immutable), so drift
 mints a new price with `transfer_lookup_key=true` and archives
 the old one. The price lookup reads archived prices too (Stripe
 lists only active ones unless asked, paginated like every list):
@@ -449,15 +474,14 @@ idempotency keys, and re-running a converged sandbox creates
 nothing. The pure decision functions
 (`catalogValidationErrors`, `planProduct`, `planPrice`,
 `buildCatalogPlan`) are unit-tested in
-`src/billing/catalog.test.ts`. This slice changes no runtime
-behavior in that slice; the runtime adapter followed in
-PIN-149 (below).
+`src/billing/catalog.test.ts`. That change added no runtime
+behaviour; the runtime adapter followed in PIN-149 (below).
 
-## Credit ledger (PIN-147)
+## Credit ledger
 
-`src/domain/credit-ledger.ts` is the pure per-board makes ledger
-(board-loop debit wiring lands in PIN-151, below):
-no Stripe calls in the domain — checkout/webhook
+Introduced in PIN-147. `src/domain/credit-ledger.ts` is the pure
+per-board makes ledger (board-loop debit wiring landed in PIN-151,
+below): no Stripe calls in the domain. The checkout and webhook
 slices translate Stripe events into its operations, taking amounts
 from `Policy.credits` (packs pinned to the PIN-146 catalog by a
 test, `starterMakes` granted once per board (5 since PIN-181),
@@ -501,9 +525,9 @@ dispute's (PIN-233); debits spend only `available`. Persistence sits behind the
 operation is one atomic per-board read-modify-write and a refusal
 writes nothing.
 
-## Credit storage + checkout intents (PIN-148)
+## Credit storage + checkout intents
 
-`FirestoreCreditLedgerStore`
+Introduced in PIN-148. `FirestoreCreditLedgerStore`
 (`src/server/firestore-credit-ledger-store.ts`) implements the
 ledger port by running the pure ops inside one Firestore
 transaction per board, so concurrent debits cannot overspend and
@@ -511,12 +535,12 @@ concurrent grants cannot double-credit; a throw aborts the
 transaction and writes nothing. Storage is multi-doc so no
 document grows unbounded:
 
-- `creditAccounts/{boardId}` — the account head only (`balance`,
+- `creditAccounts/{boardId}`: the account head only (`balance`,
   `frozen`, `pendingClawback`, `starterGranted`,
   `frozenByDispute`).
-- `creditAccounts/{boardId}/purchases/{purchaseId}` — one doc
+- `creditAccounts/{boardId}/purchases/{purchaseId}`: one doc
   per recorded purchase.
-- `creditAccounts/{boardId}/entries/{eventId}` — one append-only
+- `creditAccounts/{boardId}/entries/{eventId}`: one append-only
   doc per applied entry, keyed by event id, with an internal
   `_seq` (append order, stripped on reads; the board-repository
   pattern).
@@ -528,7 +552,7 @@ restart. Unknown boards read a zero balance. All access is
 direct doc reads plus whole-subcollection reads sorted in code:
 **no new composite indexes**, so `firestore.indexes.json` is
 unchanged and no index deploy is needed for this slice.
-`firestore.rules` stays deny-all — the Admin SDK server path
+`firestore.rules` stays deny-all: the Admin SDK server path
 owns these collections.
 
 `CheckoutIntent` (`src/server/checkout-intent.ts`, Firestore impl
@@ -538,12 +562,12 @@ UUID intent id; the board mapping exists only inside the stored
 record at `checkoutIntents/{intentId}` (top-level by intent id,
 so a webhook resolves it with one direct get). The
 public/Stripe-facing shape (`toPublicCheckoutIntent`) carries
-only the opaque intent id plus the pack offer — no board slug or
+only the opaque intent id plus the pack offer; no board slug or
 internal board id may ever reach Stripe metadata,
 `client_reference_id` or URLs; the checkout slice must send the
 intent id and nothing board-identifying. `purchaseId` equals the
 intent id (one opaque identity per purchase); creating an intent
-writes nothing to the ledger — the caller drives
+writes nothing to the ledger; the caller drives
 `recordPurchase`/`closePurchase` with that id. Intent `expiresAt`
 is `createdAt + Policy.credits.intentTtlSeconds`, and the
 per-board pending cap (`Policy.credits.pendingIntentCapPerBoard`,
@@ -552,7 +576,7 @@ against `checkoutIntentBoards/{boardId}` (`pendingIntentIds`),
 lazily expiring stale pending intents so an abandoned tab
 cannot block a board forever. `close`/`expire` free the cap
 slot. No routes, Stripe calls or board-loop wiring landed in
-this slice — store selection arrived with PIN-149, the first
+this slice; store selection arrived with PIN-149, the first
 slice to call these stores (below).
 
 Since PIN-178 the TTL only governs that cap slot. Intent status
@@ -565,11 +589,11 @@ finalizes an `expired` intent, so a late grant lands on it.
 The old `resolvePending` ("still payable") call is gone: the
 webhook resolves an intent by id whatever its status.
 
-## Stripe Checkout adapter + buy route (PIN-149)
+## Stripe Checkout adapter + buy route
 
-`StripeCreditCheckout` (`src/billing/stripe-checkout.ts`,
+Introduced in PIN-149. `StripeCreditCheckout` (`src/billing/stripe-checkout.ts`,
 official `stripe` SDK, server-only) implements the additive
-`CreditCheckout` port next to the plan-based `Checkout` port —
+`CreditCheckout` port next to the plan-based `Checkout` port:
 packs are not Plus plans, so the plan port's shape stays
 untouched and keeps answering `unavailable` in stripe mode.
 The client is dependency-injected (tests run a fake; no network
@@ -602,8 +626,8 @@ How a buy flows (`buyCredits`, `src/server/credit-checkout.ts`):
    fails, the intent and purchase are closed again so the cap
    slot is freed, and the caller gets a generic 503.
 
-Session parameters (checked against the current Stripe docs —
-Checkout Sessions create + Adaptive Pricing):
+Session parameters (checked against the current Stripe docs:
+Checkout Sessions create and Adaptive Pricing):
 
 - `mode: "payment"`, one line item at quantity 1 on the EUR
   base price. `expires_at` tracks the intent's expiry (floored
@@ -613,14 +637,13 @@ Checkout Sessions create + Adaptive Pricing):
   freed. A session paid in the gap after the intent's TTL
   still grants (PIN-178); the webhook stays the grant
   authority.
-- `adaptive_pricing: { enabled: true }` — Stripe presents the
+- `adaptive_pricing: { enabled: true }`: Stripe presents the
   payer's local currency and handles conversion; the session
   still settles in EUR. This only takes effect on eligible
   sessions and follows the Dashboard's Adaptive Pricing
-  setting; if the account cannot use it (e.g. a Managed
-  Payments conflict, to verify when the mode is first flipped
-  on dev), the fallback is explicit `currency_options` on the
-  catalog prices — not built today.
+  setting; if the account cannot use it (for example a Managed
+  Payments conflict), the fallback is explicit `currency_options`
+  on the catalog prices, not built today.
 - **No `payment_method_types`.** That is the legacy static
   list; eligible methods are Dashboard-managed (dynamic payment
   methods) and naming types would override the Dashboard
@@ -642,11 +665,12 @@ Hosted wiring in this slice was reference-only: dev referenced
 `STRIPE_SECRET_KEY` from Secret Manager in
 `apphosting.dev.yaml` but kept `PLUS_MODE=mock`, and prod
 referenced nothing, so no hosted backend took a Stripe payment
-before webhook grants landed. PIN-153 flips dev (below).
+before webhook grants landed. PIN-153 flipped dev (below).
 
-## Stripe webhook (PIN-150)
+## Stripe webhook
 
-`POST /api/billing/stripe/webhook` (Node runtime) is the only
+Introduced in PIN-150. `POST /api/billing/stripe/webhook` (Node
+runtime) is the only
 grant authority for credit packs: it hands the RAW body +
 `Stripe-Signature` header to the SDK's `constructEvent` with
 `STRIPE_WEBHOOK_SECRET` (env name via `src/config.ts`; the dev secret exists since
@@ -666,8 +690,8 @@ and every dead letter below. The service
 client (`src/billing/stripe-webhook.ts`), so tests verify
 real signatures with the SDK signer and fake only retrievals.
 
-Events PIN-153 must register on the endpoint (snapshot
-payloads, API version pinned in lockstep with the SDK) -
+Events registered on the endpoint by PIN-153 (snapshot
+payloads, API version pinned in lockstep with the SDK),
 exactly `STRIPE_WEBHOOK_EVENT_TYPES` in the service:
 
 - `checkout.session.completed`
@@ -731,11 +755,11 @@ and dispute lifecycle pages):
   money, mirroring the makes claw: once the makes clawback has
   landed, the webhook clears `Board.plus`
   (`decidePlusRevocation`) when a purchase is taken all the way
-  back — the money taken back on it (cumulative settled refunds
+  back: the money taken back on it (cumulative settled refunds
   plus lost disputes, `takenBackEurCents`) reaching the pack
   price; partial refunds and partial losses never. The event
   that gets there claws the remainder and names the reason
-  (`full_refund`, or `dispute_lost` with its dispute id) — and
+  (`full_refund`, or `dispute_lost` with its dispute id), and
   leaves a `Board.plusRevocation` tombstone with the removed
   grant. If another granted purchase on the board is still live
   (its take-back below its price, even with its makes clawed
@@ -758,7 +782,7 @@ and dispute lifecycle pages):
   actually-due revoke dead-letters `plus_revoke_unavailable`.
 - `async_payment_failed` + `expired` are the terminal
   events: they close the intent and its ledger purchase,
-  never grant; a purchase the ledger refuses to close (e.g.
+  never grant; a purchase the ledger refuses to close (for example
   partially pre-clawed) dead-letters for an operator. Stripe
   never reports one session both expired and paid, so a paid
   event after `expired` would dead-letter `dead_intent`.
@@ -861,19 +885,20 @@ pack (PIN-181); a separate host plan stays unbuilt: the draft
 Refunds and disputes claw back makes and, when a purchase is
 taken all the way back, revoke its Plus too (PIN-242 above).
 
-## Pool debit on makes (PIN-151)
+## Pool debit on makes
 
-`src/server/credit-pool.ts` is the one place the board loop
-touches the ledger. Everything sits behind
+Introduced in PIN-151. `src/server/credit-pool.ts` is the one
+place the board loop touches the ledger. Everything sits behind
 **`Policy.credits.enabled`, default `false`** (deep-overridable
 via env `POLICY_OVERRIDES_JSON` or per board, like every other
-credits key). While off, no ledger method is ever called — no
+credits key). While off, no ledger method is ever called: no
 starter grants, no debits, no pool gate, no `credits` field in
-the board view — so `AUTH_MODE=link-only` behaviour is exactly
+the board view, so `AUTH_MODE=link-only` behaviour is exactly
 the pre-credit behaviour, and the untouched existing suites
 prove it. Flipping the flag off mid-life restores that at once.
-No hosted backend enables it in this slice (activation is
-PIN-153). While on but unwired (no store in deps — only
+PIN-151 enabled it on no hosted backend; dev turned it on in
+PIN-153 and prod in PIN-210 (both via `POLICY_OVERRIDES_JSON`).
+While on but unwired (no store in deps, only
 possible in a test harness) the pool reads empty and debits
 refuse: fail closed, never gift a make.
 
@@ -885,9 +910,9 @@ Since PIN-205 creation first decides the amount for the maker
 (the pool, or 0 past `starterBoardsPerMaker`; "Free creations
 rule" above) and stores it on the board; a lazy grant uses that
 stored amount, and the Policy default only for boards without it.
-Every later credit touch — a board-view balance read (each
-5-second poll), a photo preflight, a scene run or a make's
-debit — first reads the account head with `getBalance`: one
+Every later credit touch (a board-view balance read on each
+5-second poll, a photo preflight, a scene run or a make's
+debit) first reads the account head with `getBalance`: one
 `creditAccounts/{boardId}` doc read, no transaction, no
 `purchases`/`entries` read (PIN-179). Only a missing head or
 `starterGranted: false` (a board that predates the flag, or a
@@ -908,7 +933,7 @@ PIN-151 photo row below applies again.
 | --- | --- | --- |
 | Photo (`DecomposeJob`) | only with `photosUseMakes`: the job finishing `ready` (one completed job per photo, any element count) | by default every photo; always failures/refusals, cap denies, tap-adds and tap naming on its working copy |
 | Scene/remix (`SceneJob`) | a ready scene recorded kind `ai` | refusals/failures, any collage (`AI_MOCK`, over-budget fallback, pool-empty lane) |
-| Riders | — | suggestion chips, dictation: still only Policy-capped |
+| Riders | none | suggestion chips, dictation: still only Policy-capped |
 
 **Debit points (exact seams).** Debit event ids are
 `debit:photo:{jobId}` / `debit:scene:{jobId}`, so a retry or
@@ -926,14 +951,14 @@ claim gates already refuse a second run).
   stale sweep, PIN-64), exactly as with credits off.
 - Scene: inside `runSceneJob`, after the composed image is
   stored and before the terminal `finish` syncs a `ready`
-  Scene — the only state the image route serves.
+  Scene, the only state the image route serves.
 
 **Idempotent uploads + stale runners.** A photo POST may carry a
 client-minted `uploadId` that becomes the job id (docs/06): a
 replay returns the existing job before the pool preflight, so it
 can never reach this seam twice. The runner also checks its own
-deadline (the summed Policy timeouts + `Policy.staleJobMarginMs` for its non-AI tail) *before* debiting — past it
-the job fails `stale_running` with no debit — and every job-store
+deadline (the summed Policy timeouts + `Policy.staleJobMarginMs` for its non-AI tail) *before* debiting: past it
+the job fails `stale_running` with no debit. Every job-store
 write is compare-and-set on the expected status. If a debited
 runner nevertheless loses its guarded `ready` finish (the
 board-api stale sweep at bound + 2 x margin failed
@@ -944,7 +969,7 @@ the make under the deterministic ledger event
 retries of the finish can never double-refund). If the request
 died after debiting (no live runner to refund), the sweep checks
 the ledger instead and keeps the paid job's candidates
-confirmable — the board never pays for a result it cannot pin.
+confirmable: the board never pays for a result it cannot pin.
 
 **Race rule.** The ledger debit is one atomic per-board
 read-modify-write, so two makes racing for the last credit
@@ -957,7 +982,7 @@ Once a debit lands the make is
 paid: the ready outcome is recorded on the job first, and if
 the terminal write itself throws it is retried once instead of
 discarding or overwriting the result. A non-pool ledger failure at the seam fails the job
-`credit_debit_failed` with the same discard/delete — failing
+`credit_debit_failed` with the same discard/delete, failing
 closed without claiming the pool was empty. An exception in
 the photo run before the seam also discards landed candidates
 while credits are on (off, the keep-what-landed PIN-64 rule
@@ -968,7 +993,7 @@ stands).
 photo.
 Scene: the existing free collage lane composes instead (the
 composer port is never called, the scene is honestly kind
-`collage` at $0, nothing debits) — decided inside
+`collage` at $0, nothing debits), decided inside
 `runSceneJob` before composing, exactly like the budget
 fallback it joins. The Policy daily caps and the PIN-61 AI
 budget gates keep applying in every mode; a pool-empty collage
@@ -995,9 +1020,10 @@ concurrent first touches grant once; replay after reload) runs
 against the fake Firestore in
 `src/server/firestore-credit-ledger-store.test.ts`.
 
-## Plus sheet + creations UI (PIN-152, PIN-182, PIN-183, PIN-231)
+## Plus sheet + creations UI
 
-The user-facing word for makes is **creations** (the code keeps
+Introduced in PIN-152 and reworked in PIN-182, PIN-183 and
+PIN-231. The user-facing word for makes is **creations** (the code keeps
 `makes` / `credits`). There is exactly one sheet that asks for
 money, the Board Plus sheet (`PlusSheet` in `src/ui/skin-picker.tsx`,
 mounted by `PlusFlow` in `src/app/g/[slug]/PlusFlow.tsx`); the
@@ -1022,7 +1048,7 @@ announced (`aria-live="polite"`).
   quiet line under the title in the board-meta style, no card:
   "N creations left · Get Plus", where "Get Plus" is a text button
   that opens the Plus sheet. At zero: "Out of creations. New scenes
-  will be collages." plus the same button — the free collage lane,
+  will be collages." plus the same button: the free collage lane,
   still labelled `Collage` on the print. Once the board has Plus
   the button reads "Add creations" (the same label on every way
   into the sheet below). The button is left out while billing is
@@ -1094,8 +1120,9 @@ announced (`aria-live="polite"`).
   Processing means "adding your creations…": the banner refetches
   the board a few times, and only a real rise in
   `availableMakes` (over the count kept from buy time) may
-  say "Your creations are in — N creations left." (plus "Plus is
-  on." once the refetched view has `plus.active`) — granting stays
+  say that the creations are in and how many are left (plus
+  "Plus is on." once the refetched view has `plus.active`;
+  `makes.added`, `makes.addedPlus`). Granting stays
   webhook-only (PIN-150) and the redirect alone never claims
   success. No rise after the refetches lands on a neutral "still
   waiting" line; cancelled/failed returns get one neutral line
@@ -1197,9 +1224,11 @@ code), `src/server/my-boards.test.ts` and `src/app/me/library-parts.test.ts`
 hosted flip ships with this slice: `Policy.credits.enabled`
 stays default `false` and no hosted `PLUS_MODE` changes.
 
-## Reconciliation + dev activation (PIN-153)
+## Reconciliation + dev activation
 
-`npm run billing:reconcile` (`scripts/billing-reconciliation.mjs`,
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
+Introduced in PIN-153. `npm run billing:reconcile` (`scripts/billing-reconciliation.mjs`,
 pure report logic in `src/domain/billing-reconciliation.ts`) is
 the operator safety net: a read-only join of paid Stripe
 Checkout Sessions (listed with the runtime key, by env name)
@@ -1254,8 +1283,8 @@ The script is automation-ready, in three output modes. Human mode
 (operator terminal) keeps the lines above and ends with one
 parseable `RECONCILIATION_JSON:{...}` line. `--json` sends the
 human lines to stderr and prints only the full payload
-(`{stripe, project, summary, report}`) on stdout — operator
-terminal only, since the report carries ids. `--summary-only` is
+(`{stripe, project, summary, report}`) on stdout (operator
+terminal only, since the report carries ids). `--summary-only` is
 the public-log mode: stdout is only `{stripe, project, summary}`,
 stderr only the aggregate `billing reconciliation …`, `SUMMARY …`
 and `refunds-disputes …` lines, and an error prints the Stripe
@@ -1268,7 +1297,7 @@ summary (`summarizeBillingReconciliation` in
 counts and booleans only, pinned by tests) carries
 `paidNoGrantCount`, `grantNoPaymentCount`, `deadLetterTotal`,
 `pendingPastTtlCount`, `anomalyCount`, `clean`, and
-`needsAttention` — true exactly when paid-no-grant > 0 or
+`needsAttention`, true exactly when paid-no-grant > 0 or
 `deadLetterTotal > 0`, the alert condition. Exit stays 1 for any
 non-clean report (a superset of the alert condition) or a runtime
 error, 0 clean, 2 usage/config.
@@ -1277,15 +1306,16 @@ error, 0 clean, 2 usage/config.
 `--summary-only` daily (06:17 UTC; GitHub runs the cron from the
 default branch, `main`) and on `workflow_dispatch`. The repo is
 public, so its log and step summary are too: the step summary is
-the heading `## Billing reconciliation (<env>) — exit <code>` and
-the summary JSON only. For the rows behind a red run, run the
+a heading naming the environment and the exit code (see the
+`Reconcile (fail = alert)` step in the workflow) and the summary
+JSON only. For the rows behind a red run, run the
 script in an operator terminal (command above). The job runs in
 GitHub Environment `reconcile-dev` or `reconcile-prod`: the
 dispatch input picks it, else repository variable
 `PINNED_RECONCILE_ENV` (`prod` selects `reconcile-prod`; unset or
 anything else is `reconcile-dev`; keep it unset until go-live). It
-authenticates to Google Cloud by Workload Identity Federation — no
-service-account key exists anywhere — and installs dependencies
+authenticates to Google Cloud by Workload Identity Federation (no
+service-account key exists anywhere) and installs dependencies
 with `npm ci --ignore-scripts` before that auth step, so no
 install-time code runs next to a credential. Every action is
 pinned to a full commit SHA.
@@ -1296,7 +1326,7 @@ paste them into issues, PRs or logs):
 1. **Environments.** Settings → Environments: create
    `reconcile-dev` and `reconcile-prod`. Restrict `reconcile-prod`
    deployment branches to `main` only (`reconcile-dev`: `main` and
-   `dev`). No required reviewers — they would hold the cron.
+   `dev`). No required reviewers: they would hold the cron.
 2. **Per environment** (not at repository level): secret
    `PINNED_RECONCILE_STRIPE_READ_KEY` (restricted read key:
    `rk_test_` in dev, `rk_live_` in prod; Checkout Sessions: Read,
@@ -1339,7 +1369,7 @@ gcloud iam service-accounts add-iam-policy-binding "$SA@$P.iam.gserviceaccount.c
 `<PROJECT_NUMBER>` comes from
 `gcloud projects describe "$P" --format="value(projectNumber)"`.
 Once enabled, a non-clean report or an error fails the run and
-lands in the step summary — that failed run is the dead-letter
+lands in the step summary; that failed run is the dead-letter
 alert, so watch Actions notifications for the workflow and drain
 dead letters per the runbook above before calling a billing change
 done. Never paste secret values into the workflow, issues or PRs.
@@ -1347,7 +1377,7 @@ done. Never paste secret values into the workflow, issues or PRs.
 **Refunds/disputes visibility (PIN-243).** Each run also lists
 Stripe refunds and disputes from the last 30 days
 (`refundsLast30Days`, `disputesLast30Days`, `openDisputes` in the
-summary; informational only — a refund is not an anomaly and
+summary; informational only: a refund is not an anomaly and
 never changes the exit code). The restricted read key in the
 PIN-210 table carries Charges and Refunds: Read and Payment
 Disputes: Read for this (the Dashboard's permission names; on the
@@ -1401,12 +1431,14 @@ and backfills the mapping; the PIN-147 pre-grant freeze /
 pre-clawback semantics then apply unchanged. A dispute for
 a genuinely unknown charge still dead-letters.
 
-## Going live on prod (PIN-210)
+## Going live on prod
 
-Prod (pinneds.com) sells the Board Plus pack with **live** Stripe
-only once the prod switch (merge order below) reaches `main`, after
-both live secrets exist: App Hosting fails the build when a
-referenced secret does not exist. The operator
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
+Introduced in PIN-210. Prod (pinneds.com) sells the Board Plus
+pack with **live** Stripe once the prod switch (merge order below)
+is on `main` and both live secrets exist: App Hosting fails the
+build when a referenced secret does not exist. The operator
 scripts default to sandbox. A live run needs a live key **and**
 `--live --i-understand-live`, touches only `moriacrew-pinned-prod`
 and `https://pinneds.com/api/billing/stripe/webhook`, and prints
@@ -1465,32 +1497,33 @@ is the reference.
    `gcloud secrets describe STRIPE_SECRET_KEY --project "$P" --format="value(name)"`,
    same for `STRIPE_WEBHOOK_SECRET`. Say so on PIN-210.
 
-**Merge order.** Live billing comes in two pieces (Robin, Oct 31):
+**Merge order.** Live billing came in two pieces (decided Oct 31):
 
-1. **This runbook and the operator scripts** (PIN-210, #182) merge
-   to `dev` before the Nov 3 freeze. They change nothing on prod or
-   dev: the scripts only run from an operator machine.
-2. **The prod switch** is a separate config-only PR (PIN-210, "turn
-   on live billing on prod"). It adds one block to
+1. **This runbook and the operator scripts** (PIN-210, #182)
+   merged to `dev` before the Nov 3 freeze. They change nothing on
+   prod or dev: the scripts only run from an operator machine.
+2. **The prod switch** was a separate config-only PR (PIN-210, #203,
+   "turn on live billing on prod"). It added one block to
    `apphosting.prod.yaml`: `PLUS_MODE=stripe`, both secret references
-   and `POLICY_OVERRIDES_JSON={"credits":{"enabled":true,"starterMakes":20}}`
-   (judging-week value, Robin Nov 2: 20 free creations per new board,
-   back to 5 after judging; the dev backend ignores that file). Merge
-   it only after step 4.
-   If that happens before the freeze, it rides promotion #2. If not,
-   run a config-only promotion as soon as step 4 is done, even during
-   judging week (`docs/DEPLOY.md` §4 recipe, §8). `dev` is frozen by
-   then, so that promotion carries only the switch.
+   and `POLICY_OVERRIDES_JSON` with credits on and `starterMakes` 5;
+   that value was raised to 20 on Nov 2 for judging week (20 free
+   creations per new board, back to 5 after judging; the dev backend
+   ignores that file). It
+   was to merge only after step 4. It is on `main` now, so the
+   `apphosting.prod.yaml` block is the source of truth for prod; a
+   later config-only change goes through `docs/DEPLOY.md` section 4
+   (promote) and section 8 (judging week).
 
 **Smoke after the rollout.** `GET https://pinneds.com/api/health`
 shows `plusMode: "stripe"`; a webhook POST with a bad
 `Stripe-Signature` answers 400; a new board shows 20 creations
 (the judging-week `starterMakes`).
-Robin buys the €2.99 pack **on the demo board** with a real card
-and keeps it (`docs/DEPLOY.md` §6.4: the demo board is a normal
-board, and this makes it a paying customer's board). Checkout says
-"Board Plus · 20 creations", the demo board shows Plus and 20 more
-creations, and the endpoint's delivery in Workbench is 200. Refund
+The operator buys the €2.99 pack **on the judges' board** with a
+real card and keeps it (`docs/DEPLOY.md` section 6, step 4: the
+judges' board is a normal board, and this makes it a paying
+customer's board). Checkout says
+"Board Plus · 20 creations", the judges' board shows Plus and 20
+more creations, and the endpoint's delivery in Workbench is 200. Refund
 check, on a throwaway board: buy the pack again, then refund it in
 the Dashboard (Payments → the payment → Refund, full). The refund
 events claw back the 20 creations and revoke the board's Plus
@@ -1505,7 +1538,7 @@ session grants once billing is back, or refund it). The pool
 stays on; `"enabled":false` in the override stops it too.
 Stopping for good: disable the endpoint in Workbench.
 
-**Go-live ops runbook (PIN-243; operator Dashboard steps —
+**Go-live ops runbook (PIN-243; operator Dashboard steps,
 documented here, never executed by an agent).** Run in order
 around the prod-switch merge above; this is Checklist B of
 `docs/security-review-2026-11-01.md` made executable:
@@ -1514,29 +1547,30 @@ around the prod-switch merge above; this is Checklist B of
    dev rollout, Stripe Dashboard (test mode) → Developers →
    Webhooks → the `dev.pinneds.com` endpoint → "Send test event"
    (`checkout.session.completed`): the delivery must be **200**,
-   not 400 (bad signature — Secret Manager
+   not 400 (bad signature: Secret Manager
    `STRIPE_WEBHOOK_SECRET` does not pair with the endpoint; roll
    the secret in Workbench and re-store it, PIN-153 section) and
    not 503 (billing off / config fail-closed; check
-   `GET /api/health` `plusMode` and the PIN-243/§F6 pairing +
-   livemode guards). Repeat against the live endpoint after the
-   prod rollout. Only this test delivery (or the live smoke
-   below) proves the pairing — Stripe never returns the secret.
+   `GET /api/health` `plusMode` and the pairing and live-mode
+   guards, finding F6 in `docs/security-review-2026-11-01.md`).
+   Repeat against the live endpoint after the prod rollout. Only
+   this test delivery (or the live smoke below) proves the
+   pairing: Stripe never returns the secret.
 2. **Check delivery history for accumulated 503s.** Same endpoint
    page → delivery history: during the billing-off era the prod
    webhook answered 503, so look for a backlog of failed/pending
    deliveries. Stripe retries for up to three days; resend only
    events for real paid sessions once pairing is proven, and let
    test/noise deliveries expire. A fresh run of non-2xx after
-   go-live means grants are not landing — stop and reconcile.
-3. **Live EUR 2.99 buy + refund smoke.** The "Smoke after the
-   rollout" paragraph above, unchanged: buy the pack on the demo
-   board with a real card and keep it; buy again on a throwaway
-   board and refund in full in the Dashboard (Payments → the
-   payment → Refund); confirm the 20 creations claw back, the
+   go-live means grants are not landing: stop and reconcile.
+3. **Live €2.99 buy + refund smoke.** The "Smoke after the
+   rollout" paragraph above, unchanged: buy the pack on the
+   judges' board with a real card and keep it; buy again on a
+   throwaway board and refund in full in the Dashboard (Payments →
+   the payment → Refund); confirm the 20 creations claw back, the
    endpoint delivery is 200, and the live reconcile command there
-   exits 0 (`clean=true`, `needsAttention=false`). Since PIN-242 (stacked below) note the changed behaviour:
-   a full refund also revokes Plus - confirm that here too.
+   exits 0 (`clean=true`, `needsAttention=false`). Since PIN-242 a
+   full refund also revokes Plus: confirm that here too.
 4. **Rollback rehearsal.** Set `PLUS_MODE=off` in
    `apphosting.prod.yaml` and roll out `main` (Rollback paragraph
    above): buying answers "unavailable", the webhook 503s and

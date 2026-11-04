@@ -259,8 +259,8 @@ Nov 2, 19:30 UTC, and again Nov 4, 16:20 UTC):
 
 | Day (ET) | Muse Code | Claude Code |
 | --- | --- | --- |
-| Oct 26 | Repo guardrails before kickoff; scaffold, Firebase, App Hosting, live models on dev (#1–#18; #11 not shown, #16 is a promotion) | — |
-| Oct 27 – Oct 28 morning | The photo-game prototype (#19–#39, not #31) and domains (#40–#42) | — |
+| Oct 26 | Repo guardrails before kickoff; scaffold, Firebase, App Hosting, live models on dev (#1–#18; #11 not shown, #16 is a promotion) | None |
+| Oct 27 – Oct 28 morning | The photo-game prototype (#19–#39, not #31) and domains (#40–#42) | None |
 | Oct 28 14:56 – Oct 29 06:26 | The Studio core (#43–#71) | Drafted the hand-off before the run |
 | Oct 29 | Sign-in (#72–#79); hardening (#80, #84, #88, #92, #93) | Design system and UI rebuild (#81–#107 without Muse Code's, to Oct 30 06:14) |
 | Oct 30 | Tap naming, photo choice, dictation (#100, #103, #106); AI call log (#108, #110); Stripe billing (#117–#132) | Scene viewer, delete, rename, board delete (§5) |

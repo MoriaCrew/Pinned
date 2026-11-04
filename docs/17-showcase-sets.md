@@ -1,4 +1,4 @@
-# Landing showcase sets: how to make, add or change one
+# 17. Landing showcase sets: how to make, add or change one
 
 The landing page shows one **showcase set** per visit (PIN-175): the
 hero sticker pile, then the three "How it works" pictures. This page
@@ -6,17 +6,22 @@ is the working recipe for making a set, adding it to the landing and
 changing it later. The try-on and cat sets went through it on
 Oct 30 and 31, 2026.
 
-The rule for every set (PIN-170): every photo is synthetic, and every
-sticker and scene is made by this app's own pipeline. Spark names the
-things, SAM 3.1 cuts them out and Muse Image composes the scene. After
-that, files are only resized and cropped, never retouched by hand.
+The rule for every set made with this recipe (PIN-170): every photo is
+synthetic, and every sticker and scene is made by this app's own
+pipeline. Muse Spark names the things, SAM 3.1 cuts them out and Muse
+Image composes the scene. After that, files are only resized and
+cropped, never retouched by hand. The older `classic` set predates the
+recipe: its photo came from Higgsfield text-to-image, and its cut-outs
+and scene are eval fixtures (`public/landing/README.md`). It is
+synthetic too, and two of its cut-outs had a hole made transparent by
+hand, which that README records.
 
 Related:
 
 - Spike decisions and evidence:
   [`eval/showcase/README.md`](../eval/showcase/README.md) (PIN-171).
-- How the landing draws a set: `docs/14-design-system.md`, "Showcase
-  sets".
+- How the landing draws a set: the "Showcase sets" entry in
+  [`docs/14-design-system.md`](14-design-system.md).
 - What each shipped file is made from:
   [`public/landing/README.md`](../public/landing/README.md).
 
@@ -59,9 +64,9 @@ Run it as `node scripts/showcase-build.mjs <command>` or
   pass `--live`. `run` refuses a live app unless you pass `--live`.
 - **Specs hold no local paths.** A friend's photo is a relative name
   inside the photos folder (`cat/aye.webp`), so a spec can be
-  committed. PIN-172's manifest (`eval/showcase/sets.json`) is read the
-  same way: `plan` and `run` take one set spec, or a manifest
-  `{ "sets": [ ... ] }` plus set ids.
+  committed. `plan` and `run` take one set spec, or a manifest
+  `{ "sets": [ ... ] }` plus set ids (`scripts/showcase/spec.mjs`).
+  PIN-172's manifest is not in the repository.
 - **Nothing secret in output.** Board slugs, session cookies and keys
   are never printed, logged or written to `run.json`.
 
@@ -160,7 +165,7 @@ What cuts well, from the runs so far:
 - **Contrast.** Put a thing on a plain surface of another colour. A
   cream cable-knit scarf on a cream bench came out ragged.
 - **On its own.** Don't rest a thing on large furniture. With a scarf
-  on a green armchair, Spark named the armchair and dropped the scarf.
+  on a green armchair, Muse Spark named the armchair and dropped the scarf.
 - **Pairs give one sticker.** Tan suede boots came out as one boot.
 - **Big enough.** A person photo also yields small extras (tote,
   plant, sneakers). The tote cut-out was 82 px wide, too small for the
@@ -197,8 +202,9 @@ for a dry run of the whole chain before any live run.
 
 Also unset the Stripe variables, `DEMO_BOARD_SLUG` and
 `FIRESTORE_EMULATOR_HOST` (`serve` does). A live server also gets
-longer model timeouts through `POLICY_OVERRIDES_JSON` (Spark 90 s,
-SAM 60 s, scene 180 s; a longer value in the env file wins), and a
+longer model timeouts through `POLICY_OVERRIDES_JSON` (Muse Spark
+90 s, SAM 3.1 60 s, scene 180 s; a longer value in the env file wins;
+`LIVE_TIMEOUTS_MS` in `scripts/showcase/serve.mjs`), and a
 throwaway `SESSION_SECRET` when the env has none. Live calls run only on
 the operator's machine. CI stays on `AI_MOCK=1`.
 
@@ -248,7 +254,7 @@ set, and sets run one after another. These are the same calls
    - Download `GET /api/boards/{slug}/scenes/{id}/image`.
 
 Pick a scene's elements by a pattern on the label or description, not
-by an exact label. Spark names the same thing differently from run to
+by an exact label. Muse Spark names the same thing differently from run to
 run ("Smiling Woman", then "Selfie Woman").
 
 `run` reads a set spec like this one. Photo names are relative to the
@@ -507,7 +513,7 @@ work folder, outside git.
 - Source photos, raw outputs and run records stay outside git: the
   script's work folder, `.showcase-work/`, is git-ignored. A spec holds
   only relative photo names, so it holds no local path and may be
-  committed (PIN-172's manifest is one).
+  committed.
 - The model key lives in the operator's env file outside the repo.
   Never copy, print or log it, and never paste it into a PR or Linear.
   The script takes the env file path from `--env-file` or

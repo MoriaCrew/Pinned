@@ -1,5 +1,7 @@
 # Deploying Pinneds (dev → prod)
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 _Owner: Robin. Every operator step below is written so a local Claude
 Code session with `gcloud`, `firebase` and `gh` logged in can run it,
 with Robin approving each command. Console-only steps are marked
@@ -282,7 +284,7 @@ element; delete the throwaway board.
      ```
      Test-fire once per project with a report on a throwaway board
      (`docs/launch-ops-runbook.md` §3 rule: an alert nobody saw
-     arrive is not an alert). The daily backstop
+     arrive is not an alert). The backstop (every 6 h)
      (`.github/workflows/report-sweep.yml`) needs its own identity:
      its header lists the operator steps.
    - GCP billing budget (e.g. $25) with 50/90/100 % emails. Meta

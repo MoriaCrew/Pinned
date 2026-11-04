@@ -18,6 +18,8 @@ export interface BoardViewElement {
   label: string;
   faceFlag: boolean;
   imageUrl: string;
+  /** PIN-279: under a report hold; the picture is a 404 and the pin is not pickable. */
+  held?: boolean;
 }
 
 export interface BoardViewPin {

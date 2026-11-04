@@ -242,6 +242,9 @@
   filter: drop-shadow(var(--kw) 0 0 var(--keyline)) drop-shadow(calc(-1 * var(--kw)) 0 0 var(--keyline)) drop-shadow(0 var(--kw) 0 var(--keyline)) drop-shadow(0 calc(-1 * var(--kw)) 0 var(--keyline)) var(--lift);
   transition: filter .25s ease, opacity .25s ease;
 }
+/* PIN-279: a pin under a report hold shows a quiet placeholder where its picture was. */
+.pn-sticker-held { position: absolute; inset: 5px; display: grid; place-items: center; padding: 6px; border: 2px dashed var(--keyline); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-muted); font: 600 12px/14px var(--font-ui); text-align: center; overflow-wrap: anywhere; }
+.pn-sticker[data-held] { rotate: 0deg; }
 .pn-sticker::before { content: ""; display: var(--pushpin); position: absolute; z-index: 2; top: 2px; left: 50%; width: 15px; height: 15px; translate: -50% 0; border-radius: 50%;
   background: radial-gradient(circle at 34% 32%, color-mix(in srgb, var(--accent) 35%, var(--surface-raised)) 0 2.5px, var(--accent) 3.5px); box-shadow: 1px 4px 3px var(--shade); }
 .pn-sticker[data-state="picked"] { scale: 1.06; rotate: 0deg; }

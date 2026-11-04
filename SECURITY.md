@@ -1,4 +1,4 @@
-# Security — public-repo guardrails for Pinned
+# Security: public-repo guardrails
 
 This repository is **public for its entire life**. Anything committed is
 world-readable forever, including in git history after deletion. These
@@ -16,13 +16,13 @@ photo. They apply to the human operator and to coding agents alike.
 
 Setup per clone: `pre-commit install` (see `AGENTS.md`). Never bypass a
 gate with `--no-verify`, force-push, or an allowlist edit in the same PR
-as the code it unblocks — allowlist changes need their own reviewed PR.
+as the code it unblocks. Allowlist changes need their own reviewed PR.
 
 ## Never commit (any branch, any file, any commit message)
 
-- API keys, tokens, passwords, session secrets (Meta, Baseten, Modal,
-  Fireworks, Stripe secret keys and the webhook signing secret,
-  Firebase, DB, storage) — values live only in local `.env`, host
+- API keys, tokens, passwords, session secrets (Meta, Baseten, Stripe
+  secret keys and the webhook signing secret, Firebase, DB, storage
+  and any other provider key). Values live only in local `.env`, host
   env, Secret Manager, GitHub Actions secrets. `.env.example` holds
   names with empty values.
 - Private keys/certs (`*.pem`, `*.key`, `*.p12`), credential JSON,
@@ -31,22 +31,24 @@ as the code it unblocks — allowlist changes need their own reviewed PR.
   photos together, emails, chat screenshots with identities. Test assets
   in `eval/` must be consented samples, clearly synthetic where possible.
 - Full request/response dumps from live AI calls containing user content.
-  Log shapes, counts, latency and cost — redact payloads (`--redact`).
+  Log shapes, counts, latency and cost; redact payloads (`--redact`).
 
-## Rate-limit client address (PIN-112)
+## Rate-limit client address
 
 Per-IP limits key on one address from `X-Forwarded-For`. Entries a
 client sends come first; the hosting platform appends its own after
 them, so only the platform-appended client entry can be trusted.
 `CLIENT_IP_TRUSTED_HOPS=n` makes the key the entry `n` positions from
-the right end; unset keeps the first entry (local default). A hosted
-backend sets `n` only after measuring its layout with the lab probe
-`GET /api/lab/client-ip` (dev only; it answers header counts and
-positions, never an address — usage in the route comment).
-`CLIENT_IP_HEADER` (a platform header read first) stays unset unless
-the probe shows the platform overwrites a client-sent copy.
+the right end (too few entries fall back to the first); unset keeps
+the first entry (local default). Each hosted backend sets it in its App
+Hosting config (`apphosting*.yaml`) after measuring its layout with the
+lab probe `GET /api/lab/client-ip` (dev and local only; it answers
+header counts and positions, never an address).
+`CLIENT_IP_HEADER` (a platform header read first, used only when it
+holds a single value) stays unset unless the probe shows the platform
+overwrites a client-sent copy.
 
-## If something leaks anyway — rotate first
+## If something leaks anyway: rotate first
 
 1. **Revoke/rotate the credential immediately.** Deleting the file or
    rewriting history does not un-leak a key; rotation does.
@@ -54,33 +56,34 @@ the probe shows the platform overwrites a client-sent copy.
 3. Then clean up: remove the secret, and only if it was a credential
    that *cannot* be rotated (personal data), purge history and ask
    GitHub Support to drop cached views. Personal photos: treat as
-   incident — inform the person, purge, document in Linear.
+   incident: inform the person, purge, document in Linear.
 4. Record what happened (no secret values) in the relevant Linear issue.
 
-## Repository settings inventory (PIN-20)
+## Repository settings inventory
 
 Settings live in GitHub (not in git); this inventory is the record.
 Verify anytime with `gh api repos/MoriaCrew/Pinned/rulesets` and
 `gh api repos/MoriaCrew/Pinned/rules/branches/main`.
 
-- **Ruleset `Protect main`** (active, default branch): PR required
-  (0 approvals — solo; review threads must resolve; squash only),
+- **Ruleset `Protect main`** (active, on `main` and `dev`): PR required
+  (0 approvals, solo; review threads must resolve; squash only),
   required checks `check`, `gitleaks (full history)`, `Cursor Bugbot`
   (branches need not be strictly up-to-date), linear history, no
   force-push, no branch deletion. Repository Admin bypass is
   *pull-requests-only*: even admins (and agents using admin tokens)
   cannot push directly, but may bypass at PR merge as break-glass.
-- **Merges:** squash only; delete branch on merge; auto-merge and
-  update-branch enabled. Wiki and Discussions off.
+- **Merges:** squash only; auto-merge and update-branch enabled;
+  branches are not deleted on merge (stacked PRs are retargeted by
+  hand). Wiki and Discussions off.
 - **Actions:** default `GITHUB_TOKEN` permissions read-only; workflows
   cannot approve PR reviews.
 - **Security features:** secret scanning + push protection +
   non-provider patterns + validity checks + AI detection on;
   Dependabot alerts + security updates on; private vulnerability
   reporting on. Forking stays allowed (public open-source repo);
-  the AGPL — not settings — governs reuse.
+  the AGPL, not settings, governs reuse.
 
 ## Reporting
 
 Found a secret or personal data in this repo? Contact the owner via
-GitHub (@Robin-ELM) — please do not open a public issue quoting it.
+GitHub (@Robin-ELM). Please do not open a public issue quoting it.

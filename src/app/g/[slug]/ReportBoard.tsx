@@ -143,12 +143,24 @@ export function ReportForm({
   );
 }
 
-/** The receipt: what happened and the reference to quote. */
-export function ReportReceipt({ result, email }: { result: ReportResult; email?: string | null }) {
+/** The receipt: what happened (a hold names its deadline, Policy `takedownHours`; PIN-278) and the reference to quote. */
+export function ReportReceipt({
+  result,
+  email,
+  takedownHours,
+}: {
+  result: ReportResult;
+  email?: string | null;
+  takedownHours: number;
+}) {
   const locale = useLocale();
   return (
     <div className={styles.reportReceipt} role="status">
-      <p>{tf(locale, result.held ? "board.reportHeld" : "board.reportReceived", { ref: result.reference })}</p>
+      <p>
+        {result.held
+          ? tf(locale, "board.reportHeld", { ref: result.reference, hours: takedownHours })
+          : tf(locale, "board.reportReceived", { ref: result.reference })}
+      </p>
       {email ? (
         <p className={styles.reportManual}>
           {t(locale, "board.reportFollowUp")} <span className={styles.reportMono}>{email}</span>
@@ -164,6 +176,7 @@ export function ReportBoard({
   reportRef,
   targets,
   messageMaxChars,
+  takedownHours,
   onReported,
 }: {
   slug: string;
@@ -171,6 +184,8 @@ export function ReportBoard({
   reportRef?: string | null;
   targets: ReportTargets;
   messageMaxChars: number;
+  /** Policy `takedownHours`, quoted on a hold's receipt. */
+  takedownHours: number;
   onReported?: (result: ReportResult) => void;
 }) {
   const locale = useLocale();
@@ -281,7 +296,7 @@ export function ReportBoard({
           keyboardAware
         >
           {result ? (
-            <ReportReceipt result={result} email={email} />
+            <ReportReceipt result={result} email={email} takedownHours={takedownHours} />
           ) : (
             <form onSubmit={(event) => void send(event)}>
               <ReportForm

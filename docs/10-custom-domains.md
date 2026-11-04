@@ -1,4 +1,4 @@
-# 10 — Custom domains (pinneds.com)
+# 10. Custom domains (pinneds.com)
 
 Status: Firebase domains created 2026-10-28; DNS applied at
 GoDaddy the same day. Ownership is ACTIVE for apex + dev;
