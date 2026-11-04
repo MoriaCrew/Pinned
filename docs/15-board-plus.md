@@ -7,6 +7,20 @@ The UI is built separately; this page is the contract it builds on.
 PIN-149; the creations and Plus land by webhook only, PIN-150 /
 PIN-181).
 
+**In one screen.** Board Plus is the one paid thing in Pinneds: a
+single pack, bought once for one board, that unlocks every look and
+foil stickers, removes the free-photo limit and adds 20 creations,
+for €2.99 through hosted Stripe Checkout. Any member can buy it for
+everyone on the board. A creation is one AI scene (adding a photo and
+cutting it out never uses one); when a board runs out, scenes fall
+back to free collages, so nothing stops working and guests never have
+to pay. New boards start with a free pool of 5 creations and 15 free
+photos, for a maker's first 3 boards in 7 days (prod gives 20
+creations during judging week). Nothing is sold while `PLUS_MODE=off`,
+the code default; dev runs Stripe in test mode and prod runs live
+Stripe. The rest of this page is the contract for the code and the
+operator runbook.
+
 ## What it is
 
 - The core loop is free while `Policy.credits.enabled` is off
@@ -390,6 +404,8 @@ list.
 | `webhookMaxBytes` | 1,048,576 | webhook body cap (PIN-178) |
 
 ## Stripe catalog
+
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
 
 Introduced in PIN-146. What Pinneds sells is committed code:
 `src/billing/catalog.ts`
@@ -1210,6 +1226,8 @@ stays default `false` and no hosted `PLUS_MODE` changes.
 
 ## Reconciliation + dev activation
 
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
 Introduced in PIN-153. `npm run billing:reconcile` (`scripts/billing-reconciliation.mjs`,
 pure report logic in `src/domain/billing-reconciliation.ts`) is
 the operator safety net: a read-only join of paid Stripe
@@ -1414,6 +1432,8 @@ pre-clawback semantics then apply unchanged. A dispute for
 a genuinely unknown charge still dead-letters.
 
 ## Going live on prod
+
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
 
 Introduced in PIN-210. Prod (pinneds.com) sells the Board Plus
 pack with **live** Stripe once the prod switch (merge order below)
