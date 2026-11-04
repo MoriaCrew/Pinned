@@ -202,18 +202,12 @@ keys come from Secret Manager, never git. Design and runbook:
 
 ## Docs
 
-- [`docs/README.md`](docs/README.md): index of every doc
+- [`docs/README.md`](docs/README.md): index of every doc, in reading order
 - [`docs/19-meta-models.md`](docs/19-meta-models.md): each Meta model, prompt, cost and fallback
-- [`docs/build-log.md`](docs/build-log.md): who built what, PR by PR
 - [`docs/11-studio.md`](docs/11-studio.md): product and architecture spec
 - [`docs/adr/003-studio-architecture.md`](docs/adr/003-studio-architecture.md): Policy, ports, jobs, remix
-- [`docs/DEPLOY.md`](docs/DEPLOY.md): deploy runbook and env matrix
-- [`docs/13-auth.md`](docs/13-auth.md): optional Google sign-in
-- [`docs/15-board-plus.md`](docs/15-board-plus.md): Board Plus and creations
-- [`docs/16-ai-usage.md`](docs/16-ai-usage.md): AI call log and cost estimates
-- [`docs/17-showcase-sets.md`](docs/17-showcase-sets.md): how the landing sets are made
-- [`docs/18-i18n.md`](docs/18-i18n.md): languages and translation
-- [`SECURITY.md`](SECURITY.md) and [`AGENTS.md`](AGENTS.md): public-repo guardrails and agent rules
+- [`docs/build-log.md`](docs/build-log.md): who built what, PR by PR
+- [`SECURITY.md`](SECURITY.md): public-repo guardrails
 
 ## Known limits
 
@@ -227,8 +221,7 @@ keys come from Secret Manager, never git. Design and runbook:
   photos are Higgsfield images (SAM 3.1 cut out the stickers). The try-on and cat landing
   sets are Meta end to end.
 - **AI-written text is English in places.** Pin names and some scene text stay English
-  whatever the UI language (PIN-200). Idea chips, generated (PIN-214) and fixed, follow
-  the UI language.
+  whatever the UI language. Idea chips, generated and fixed, follow the UI language.
 - **Machine translations.** Muse Spark Open wrote and reviewed them; no native speaker has
   checked them yet. Latin-script languages only.
 

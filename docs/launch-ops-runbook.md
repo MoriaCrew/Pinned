@@ -1,4 +1,4 @@
-# Launch ops runbook (PIN-240)
+# Launch ops runbook
 
 _Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
 

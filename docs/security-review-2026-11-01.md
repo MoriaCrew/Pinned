@@ -1,4 +1,4 @@
-# Pinned — Pre-launch security review (dev / main), 2026-11-01
+# Pre-launch security review (dev and main), 2026-11-01
 
 _Operators only: the review as written on Nov 1, 2026, kept for the record with the status of each finding; the build log cites it as evidence. Start at the [docs index](README.md) for the product._
 

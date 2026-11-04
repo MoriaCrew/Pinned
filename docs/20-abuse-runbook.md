@@ -1,4 +1,4 @@
-# 20 — Abuse reports and illegal content (PIN-239, PIN-266)
+# 20. Abuse reports and illegal content
 
 _Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
 

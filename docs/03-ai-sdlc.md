@@ -1,4 +1,4 @@
-# Pinneds — AI SDLC: Linear → agent → PR → `dev` → `main`
+# 03. AI SDLC: Linear → agent → PR → `dev` → `main`
 
 _Internal process note: how the developer and the coding agents organise the work. The README and the build log cite it for context; it is not needed to use the app. Start at the [docs index](README.md)._
 
