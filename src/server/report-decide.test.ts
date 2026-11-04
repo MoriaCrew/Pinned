@@ -199,6 +199,21 @@ describe("report decisions (PIN-272)", () => {
     expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug", "s-both"]);
   });
 
+  it("a pin takedown keeps the picture of a scene another open report is about", async () => {
+    const h = await harness();
+    const sceneReport = await h.file(SLUG, { scope: "scene", targetId: "s-both", reason: "illegal" });
+    const pinReport = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "likeness" });
+    expect(pinReport.held.sceneIds).toEqual([]); // s-both was already hidden by the scene report
+    const result = await takedownReport(pinReport.id, h.deps);
+    expect(result?.outcome).toBe("element_deleted");
+    expect(await h.boards.getElement("friend")).toBeNull();
+    // The scene report's evidence stays (hold and picture); s-mug, used by mug only, is untouched.
+    expect(await h.store.get(sceneRef("s-both"))).not.toBeNull();
+    expect(h.store.isHeld(sceneRef("s-both"))).toBe(true);
+    expect((await h.reports.get(sceneReport.id))?.status).toBe("open");
+    expect(await h.store.get(sceneRef("s-mug"))).not.toBeNull();
+  });
+
   it("a report someone else decided first is left alone: the decision is claimed before anything is touched", async () => {
     const h = await harness();
     const report = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "likeness" });

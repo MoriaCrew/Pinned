@@ -169,7 +169,17 @@ async function applyHold(
   let storageHold = false;
   if (planned.storageHold) {
     storageHold = true;
-    for (const ref of await listBoardObjectRefs(slug, elements, scenes, deps.store)) {
+    // A board-wide hold covers the board's folders; a pin or scene hold
+    // covers that pin's objects and the folders of the scenes it hid.
+    const refs = planned.boardReview
+      ? await listBoardObjectRefs(slug, elements, scenes, deps.store)
+      : await listTargetObjectRefs(
+          slug,
+          elements.filter((e) => planned.elementIds.includes(e.id)),
+          scenes.filter((s) => planned.sceneIds.includes(s.id)),
+          deps.store,
+        );
+    for (const ref of refs) {
       try {
         await deps.store.setHold(ref, true);
       } catch (error) {
@@ -179,6 +189,34 @@ async function applyHold(
     }
   }
   return { elementIds, sceneIds: [...sceneIds], boardReview, storageHold };
+}
+
+/**
+ * The stored objects of a few records (an `illegal` report on one pin
+ * or one scene): each element's two refs and the folder of each scene
+ * as Storage lists it (preview included), with the records' refs as the
+ * floor when a listing fails.
+ */
+export async function listTargetObjectRefs(
+  slug: string,
+  elements: readonly Pick<Element, "cutoutRef" | "flattenedRef">[],
+  scenes: readonly Pick<Scene, "id" | "imageRef">[],
+  store: Pick<DerivativeStore, "listPrefix">,
+): Promise<string[]> {
+  const refs = new Set<string>();
+  for (const element of elements) {
+    refs.add(releaseRef(element.cutoutRef));
+    refs.add(releaseRef(element.flattenedRef));
+  }
+  for (const scene of scenes) {
+    if (scene.imageRef) refs.add(scene.imageRef);
+    try {
+      for (const ref of await store.listPrefix(`scenes/boards/${slug}/${scene.id}/`)) refs.add(ref);
+    } catch (error) {
+      logServerError("storage listing failed; holding the records' refs only", error);
+    }
+  }
+  return [...refs];
 }
 
 /**

@@ -173,6 +173,23 @@ describe("createReport (PIN-270)", () => {
     expect(loggedEvents(log)[0]).toMatchObject({ severity: "CRITICAL", reason: "illegal", held: { storage: true } });
   });
 
+  it("illegal on one pin or one scene holds that pin's objects and its scenes' folders, nothing else", async () => {
+    const h = await harness();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const pin = await createReport(SLUG, { scope: "element", targetId: "friend", reason: "illegal" }, null, h.deps);
+    expect(pin.record.held).toEqual({ elementIds: ["friend"], sceneIds: ["s-both"], boardReview: false, storageHold: true });
+    for (const ref of [...refsOf("friend"), `scenes/boards/${SLUG}/s-both/scene.webp`]) expect(h.store.isHeld(ref)).toBe(true);
+    for (const ref of [...refsOf("mug"), `scenes/boards/${SLUG}/s-mug/scene.webp`, `scenes/boards/${SLUG}/s-mug/preview.webp`]) expect(h.store.isHeld(ref)).toBe(false);
+    expect((await h.boards.getBoard(SLUG))?.reviewAt).toBeUndefined();
+
+    const scene = await createReport(SLUG, { scope: "scene", targetId: "s-mug", reason: "illegal" }, null, h.deps);
+    expect(scene.record.held).toEqual({ elementIds: [], sceneIds: ["s-mug"], boardReview: false, storageHold: true });
+    // The scene's whole folder, preview included; the pin it uses stays unheld in Storage.
+    expect(h.store.isHeld(`scenes/boards/${SLUG}/s-mug/scene.webp`)).toBe(true);
+    expect(h.store.isHeld(`scenes/boards/${SLUG}/s-mug/preview.webp`)).toBe(true);
+    expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
+  });
+
   it("listBoardObjectRefs falls back to the records' refs when a listing fails", async () => {
     const h = await harness();
     vi.spyOn(console, "error").mockImplementation(() => {});

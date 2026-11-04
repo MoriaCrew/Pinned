@@ -175,10 +175,15 @@ export async function takedownReport(
   const now = deps.now?.() ?? Date.now();
   const record = await deps.reports.decide(id, { status: "takedown", decidedAt: now, ...(note ? { note } : {}) });
   if (!record) return null;
+  // Scenes another open report on the board is about keep their
+  // pictures: that report (an `illegal` scene report included) decides
+  // them, not this one.
+  const others = await deps.reports.listOpenForBoard(record.boardId);
+  const keepScenePictures = new Set(others.flatMap((r) => r.held.sceneIds.concat(r.scope === "scene" && r.targetId ? [r.targetId] : [])));
   let outcome: TakedownOutcome = "already_gone";
   try {
     if (record.scope === "element" && record.targetId) {
-      outcome = await takedownElement(record.boardId, record.targetId, record.held.sceneIds, deps);
+      outcome = await takedownElement(record.boardId, record.targetId, record.held.sceneIds, keepScenePictures, deps);
     } else if (record.scope === "scene" && record.targetId) {
       outcome = await takedownScene(record.targetId, now, deps);
     } else if (record.scope === "board") {
@@ -194,6 +199,7 @@ async function takedownElement(
   boardId: string,
   elementId: string,
   heldSceneIds: readonly string[],
+  keepScenePictures: ReadonlySet<string>,
   deps: ReportDecideDeps,
 ): Promise<TakedownOutcome> {
   const element = await deps.boards.getElement(elementId);
@@ -217,6 +223,7 @@ async function takedownElement(
   // The scenes the cascade hid now, and the ones the report's hold hid
   // earlier (the cascade does not list those): their pictures go too.
   for (const sceneId of new Set([...result.hiddenSceneIds, ...heldSceneIds])) {
+    if (keepScenePictures.has(sceneId)) continue;
     const scene = await deps.boards.getScene(sceneId);
     if (scene?.boardId === boardId && scene.hidden && scene.elementIds.includes(elementId)) {
       await deleteSceneObjects(scene, deps.store);

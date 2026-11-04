@@ -186,10 +186,12 @@ export function planReportHold(input: ReportPlanInput): PlanResult {
       .filter((scene) => scene.elementIds.includes(element.id))
       .map((scene) => scene.id);
     const timed = input.reason === "likeness" && element.faceFlag === true;
+    // `illegal` on a pin: its objects (and its scenes') get the Storage
+    // hold too, so no later delete can free the evidence.
     return {
       ok: true,
       plan: {
-        held: { elementIds: [element.id], sceneIds, boardReview: false, storageHold: false },
+        held: { elementIds: [element.id], sceneIds, boardReview: false, storageHold: severity === "high" },
         severity,
         ...(timed ? { deleteAt: input.now + input.takedownHours * HOUR_MS } : {}),
         queuedOnly: false,
@@ -200,11 +202,14 @@ export function planReportHold(input: ReportPlanInput): PlanResult {
   if (input.scope === "scene") {
     const scene = input.scene;
     if (!scene) return { ok: false, error: "target_missing" };
-    const sceneIds = scene.hidden ? [] : [scene.id];
+    // An already hidden scene is queued only, unless the report says
+    // `illegal`: then it is listed all the same, so its folder gets the
+    // Storage hold and the operator's decision covers it.
+    const sceneIds = scene.hidden && severity !== "high" ? [] : [scene.id];
     return {
       ok: true,
       plan: {
-        held: { elementIds: [], sceneIds, boardReview: false, storageHold: false },
+        held: { elementIds: [], sceneIds, boardReview: false, storageHold: severity === "high" },
         severity,
         queuedOnly: sceneIds.length === 0,
       },
