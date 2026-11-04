@@ -133,6 +133,21 @@ describe("library strip (PIN-121)", () => {
 });
 
 describe("library pin state helpers (PIN-121)", () => {
+  it("a thing under a report hold reads held, whatever this sheet did or the board shows (PIN-279)", () => {
+    const held: MyPinCard = {
+      elementId: "mug",
+      label: "Teal mug",
+      description: "",
+      faceFlag: false,
+      held: true,
+      sourceBoardTitle: "Kitchen chaos",
+      imageUrl: "/api/me/elements/mug/image?kind=cutout",
+      createdAt: 1,
+    };
+    expect(libraryPinState(held, new Map([["mug", "pinned"]]), new Set(["mug"]))).toBe("held");
+    expect(libraryPinState({ ...held, held: false }, new Map(), new Set())).toBe("idle");
+  });
+
   it("treats an original as its own family", () => {
     expect(familyOf(card("lamp"))).toBe("lamp");
     expect(familyOf(card("copy", { familyId: "lamp" }))).toBe("lamp");

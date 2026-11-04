@@ -114,6 +114,7 @@ export async function listMyElements(
         label: element.label,
         description: element.description,
         faceFlag: element.faceFlag,
+        ...(isHeldRef(element.cutoutRef) ? { held: true } : {}),
         sourceBoardTitle: board.title,
         imageUrl: myPinImageUrl(element.id, "cutout"),
         createdAt: element.createdAt,

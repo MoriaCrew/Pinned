@@ -141,11 +141,11 @@ export function PinLibrary({
   return (
     <ul className="pn-pins pn-lib-pins" data-pinnable={boardSlug ? "" : undefined}>
       {cards.map((card) => (
-        <Pin key={card.elementId} as="li" src={card.imageUrl} label={card.label} seed={card.elementId}>
+        <Pin key={card.elementId} as="li" src={card.imageUrl} label={card.label} seed={card.elementId} held={card.held}>
           <span className="pn-lib-from">
             {tf(locale, "myPins.fromBoardTitle", { board: card.sourceBoardTitle })}
           </span>
-          {boardSlug ? <PinToBoardButton slug={boardSlug} elementId={card.elementId} label={card.label} /> : null}
+          {boardSlug && !card.held ? <PinToBoardButton slug={boardSlug} elementId={card.elementId} label={card.label} /> : null}
         </Pin>
       ))}
     </ul>

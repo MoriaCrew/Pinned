@@ -26,6 +26,8 @@ export function libraryPinLabel(state: LibraryPinState, locale: Locale): string 
       return t(locale, "add.libraryAlready");
     case "failed":
       return t(locale, "add.libraryRetry");
+    case "held":
+      return t(locale, "ui.underReview");
     default:
       return t(locale, "add.libraryPin");
   }
@@ -48,7 +50,7 @@ export function withLibraryCopy(
 }
 
 /** In flight or already on the board: a tap does nothing. */
-const isInert = (state: LibraryPinState) => state === "pinning" || state === "pinned" || state === "already";
+const isInert = (state: LibraryPinState) => state === "pinning" || state === "pinned" || state === "already" || state === "held";
 
 /**
  * The signed-in user's library (GET /api/me/elements) and the
@@ -211,6 +213,7 @@ export function LibraryStrip({
                       seed={card.elementId}
                       size={72}
                       state={state === "already" ? "dropped" : "rest"}
+                      held={state === "held"}
                     />
                     {state === "pinned" ? (
                       <span className="pn-add-strip-check" aria-hidden="true">
@@ -218,7 +221,7 @@ export function LibraryStrip({
                       </span>
                     ) : null}
                   </span>
-                  {state === "idle" ? (
+                  {state === "idle" || state === "held" ? (
                     <span className="pn-pin-tag">
                       <span className="pn-pin-tag-text">{card.label}</span>
                     </span>
@@ -230,7 +233,7 @@ export function LibraryStrip({
                   )}
                 </button>
                 <span className="pn-sr" role="status">
-                  {state === "idle" || state === "already" ? "" : spoken}
+                  {state === "idle" || state === "already" || state === "held" ? "" : spoken}
                 </span>
               </li>
             );
@@ -284,13 +287,13 @@ export function LibraryList({
         const state = stateOf(card);
         const done = state === "pinned" || state === "already";
         return (
-          <li key={card.elementId} className="pn-add-lib-row" data-done={done ? "" : undefined}>
-            <Sticker src={card.imageUrl} alt="" seed={card.elementId} size={64} />
+          <li key={card.elementId} className="pn-add-lib-row" data-done={done || state === "held" ? "" : undefined}>
+            <Sticker src={card.imageUrl} alt="" seed={card.elementId} size={64} held={state === "held"} />
             <span className="pn-add-lib-text">
               <b>{card.label}</b>
               <span>{tf(locale, "add.libraryFrom", { board: card.sourceBoardTitle })}</span>
             </span>
-            {done ? (
+            {state === "held" ? null : done ? (
               <span className="pn-add-lib-done" role="status">
                 <Icon name="check" size={18} />
                 {libraryPinLabel(state, locale)}

@@ -8,7 +8,7 @@
 import type { MyPinCard } from "./my-pins";
 
 /** One library thing's pin-here state on this board. */
-export type LibraryPinState = "idle" | "pinning" | "pinned" | "already" | "failed";
+export type LibraryPinState = "idle" | "pinning" | "pinned" | "already" | "failed" | "held";
 
 /**
  * Sticker placeholders while the library loads. A visual stand-in
@@ -61,6 +61,8 @@ export function libraryPinState(
   local: ReadonlyMap<string, LibraryPinState>,
   onBoard: ReadonlySet<string>,
 ): LibraryPinState {
+  // PIN-279: a thing under a report hold cannot be pinned anywhere, whatever this sheet did.
+  if (card.held) return "held";
   const mine = local.get(familyOf(card));
   if (mine) return mine;
   return onBoard.has(familyOf(card)) ? "already" : "idle";
