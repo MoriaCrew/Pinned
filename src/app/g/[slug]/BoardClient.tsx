@@ -1586,7 +1586,8 @@ function BoardBody({
           reportRef={reportRef}
           messageMaxChars={policy.reportMessageMaxChars}
           targets={{
-            pins: view.elements.map((element) => ({ id: element.id, label: element.label })),
+            // The pins on the grid only: leftover candidates are never on the board for others.
+            pins: cards.filter((card) => card.status === "pinned").map((card) => ({ id: card.element.id, label: card.element.label })),
             // The same catalogue numbers the prints show ("Nº 03": ready scenes, oldest first).
             scenes: [...numbers.entries()].map(([id, index]) => ({ id, index })),
           }}
