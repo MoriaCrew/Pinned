@@ -47,12 +47,14 @@ export function Sticker({
   const locale = useLocale();
   const vars: Record<string, string | number> = { "--t": tilt ?? stickerTilt(seed) };
   if (size !== undefined) vars["--pn-size"] = typeof size === "number" ? `${size}px` : size;
-  if (state === "cutting" || foil) vars["--src"] = `url("${src}")`;
+  // PIN-279: a held pin has no picture anywhere, foil mask included.
+  const foiled = Boolean(foil) && !held;
+  if (!held && (state === "cutting" || foiled)) vars["--src"] = `url("${src}")`;
   return (
     <span
       className={cx("pn-sticker", className)}
       data-state={state}
-      data-foil={foil ? "" : undefined}
+      data-foil={foiled ? "" : undefined}
       data-held={held ? "" : undefined}
       style={{ ...(vars as CSSProperties), ...style }}
     >
@@ -61,7 +63,7 @@ export function Sticker({
       ) : (
         <img src={src} alt={alt} draggable={false} loading={loading} decoding="async" />
       )}
-      {foil ? <span className="pn-foil" aria-hidden="true" /> : null}
+      {foiled ? <span className="pn-foil" aria-hidden="true" /> : null}
       {state === "picked" && pickIndex ? (
         <span className="pn-sticker-badge" aria-hidden="true">
           {pickIndex}
