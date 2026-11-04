@@ -42,21 +42,25 @@ import {
   type QuerySnapshot,
   type Transaction,
 } from "@google-cloud/firestore";
-import type {
-  Board,
-  BoardCounters,
-  BoardEvent,
-  Element,
-  Participant,
-  Pin,
-  PinStatus,
-  Scene,
+import {
+  holdRef,
+  isHeldRef,
+  releaseRef,
+  type Board,
+  type BoardCounters,
+  type BoardEvent,
+  type Element,
+  type Participant,
+  type Pin,
+  type PinStatus,
+  type Scene,
 } from "../domain/board";
 import {
   applyBoardSettings,
   type BoardRepository,
   type BoardSettingsMutator,
   type DeleteElementResult,
+  type HoldElementResult,
 } from "../domain/board-repository";
 import {
   decideJoin,
@@ -504,6 +508,169 @@ export class FirestoreBoardRepository implements BoardRepository {
         removedPinIds: orderedPins.map((row) => row.value.id),
         hiddenSceneIds: orderedScenes.map((row) => row.value.id),
       };
+    });
+  }
+
+  /**
+   * Report & hold (PIN-269): the deleteElement cascade's shape (reads,
+   * then writes, one transaction) with the element kept and its refs
+   * prefixed instead of deleted. Pins are untouched.
+   */
+  async holdElement(elementId: string): Promise<HoldElementResult> {
+    const found = await this.findOneById<Element>(ELEMENTS, elementId);
+    if (!found) return { held: false, hiddenSceneIds: [] };
+    const boardId = found.value.boardId;
+    return this.db.runTransaction(async (tx) => {
+      const elementSnap = await tx.get(found.ref);
+      if (!elementSnap.exists) return { held: false, hiddenSceneIds: [] };
+      const element = rowFrom<Element>(found.ref, elementSnap.data() as DocumentData);
+      const board = await this.requireBoardTx(tx, boardId);
+      const sceneQuery: Query = this.db
+        .collectionGroup(SCENES)
+        .where("elementIds", "array-contains", elementId);
+      const sceneRows = rowsFrom<Scene>(await tx.get(sceneQuery)).filter((row) => !row.value.hidden);
+      const otherBoards = new Map<string, Board>();
+      for (const sceneBoardId of new Set(sceneRows.map((row) => row.value.boardId))) {
+        if (sceneBoardId !== boardId) otherBoards.set(sceneBoardId, await this.requireBoardTx(tx, sceneBoardId));
+      }
+      const ordered = [...sceneRows].sort(
+        (a, b) => a.value.createdAt - b.value.createdAt || a.seq - b.seq,
+      );
+      tx.set(
+        found.ref,
+        toStored(
+          {
+            ...element.value,
+            cutoutRef: holdRef(element.value.cutoutRef),
+            flattenedRef: holdRef(element.value.flattenedRef),
+          },
+          element.seq,
+        ),
+      );
+      const deltas = new Map<string, number>();
+      for (const row of ordered) {
+        tx.set(row.ref, toStored({ ...row.value, hidden: true }, row.seq));
+        deltas.set(row.value.boardId, (deltas.get(row.value.boardId) ?? 0) - 1);
+      }
+      for (const [slug, delta] of deltas) {
+        const base = slug === boardId ? board : (otherBoards.get(slug) as Board);
+        tx.set(this.boardRef(slug), toFirestoreData(withCounters(base, { sceneCount: delta })));
+      }
+      return { held: true, hiddenSceneIds: ordered.map((row) => row.value.id) };
+    });
+  }
+
+  /** True when every element the scene uses exists unheld; `released` counts as present. */
+  private async sceneElementsPresentTx(
+    tx: Transaction,
+    scene: Scene,
+    released: string | null,
+    cache: Map<string, boolean>,
+  ): Promise<boolean> {
+    for (const id of scene.elementIds) {
+      if (id === released) continue;
+      if (!cache.has(id)) {
+        const other = await this.txFindOneById<Element>(tx, ELEMENTS, id);
+        cache.set(
+          id,
+          other !== null && !isHeldRef(other.value.cutoutRef) && !isHeldRef(other.value.flattenedRef),
+        );
+      }
+      if (!cache.get(id)) return false;
+    }
+    return true;
+  }
+
+  async releaseElement(elementId: string): Promise<boolean> {
+    const found = await this.findOneById<Element>(ELEMENTS, elementId);
+    if (!found) return false;
+    const boardId = found.value.boardId;
+    return this.db.runTransaction(async (tx) => {
+      const elementSnap = await tx.get(found.ref);
+      if (!elementSnap.exists) return false;
+      const element = rowFrom<Element>(found.ref, elementSnap.data() as DocumentData);
+      const board = await this.requireBoardTx(tx, boardId);
+      const sceneQuery: Query = this.db
+        .collectionGroup(SCENES)
+        .where("elementIds", "array-contains", elementId);
+      const candidates = rowsFrom<Scene>(await tx.get(sceneQuery)).filter(
+        (row) => row.value.hidden === true && row.value.deletedAt === undefined,
+      );
+      const cache = new Map<string, boolean>();
+      const restorable: StoredRow<Scene>[] = [];
+      for (const row of candidates) {
+        if (await this.sceneElementsPresentTx(tx, row.value, elementId, cache)) restorable.push(row);
+      }
+      const otherBoards = new Map<string, Board>();
+      for (const sceneBoardId of new Set(restorable.map((row) => row.value.boardId))) {
+        if (sceneBoardId !== boardId) otherBoards.set(sceneBoardId, await this.requireBoardTx(tx, sceneBoardId));
+      }
+      tx.set(
+        found.ref,
+        toStored(
+          {
+            ...element.value,
+            cutoutRef: releaseRef(element.value.cutoutRef),
+            flattenedRef: releaseRef(element.value.flattenedRef),
+          },
+          element.seq,
+        ),
+      );
+      const deltas = new Map<string, number>();
+      for (const row of restorable) {
+        const { hidden: _hidden, ...rest } = row.value;
+        tx.set(row.ref, toStored(rest, row.seq));
+        deltas.set(row.value.boardId, (deltas.get(row.value.boardId) ?? 0) + 1);
+      }
+      for (const [slug, delta] of deltas) {
+        const base = slug === boardId ? board : (otherBoards.get(slug) as Board);
+        tx.set(this.boardRef(slug), toFirestoreData(withCounters(base, { sceneCount: delta })));
+      }
+      return true;
+    });
+  }
+
+  async hideScene(sceneId: string): Promise<boolean> {
+    const found = await this.findOneById<Scene>(SCENES, sceneId);
+    if (!found) return false;
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(found.ref);
+      if (!snap.exists) return false;
+      const row = rowFrom<Scene>(found.ref, snap.data() as DocumentData);
+      const board = await this.requireBoardTx(tx, row.value.boardId);
+      if (row.value.hidden) return false;
+      tx.set(found.ref, toStored({ ...row.value, hidden: true }, row.seq));
+      tx.set(this.boardRef(row.value.boardId), toFirestoreData(withCounters(board, { sceneCount: -1 })));
+      return true;
+    });
+  }
+
+  async unhideScene(sceneId: string): Promise<boolean> {
+    const found = await this.findOneById<Scene>(SCENES, sceneId);
+    if (!found) return false;
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(found.ref);
+      if (!snap.exists) return false;
+      const row = rowFrom<Scene>(found.ref, snap.data() as DocumentData);
+      const board = await this.requireBoardTx(tx, row.value.boardId);
+      if (!row.value.hidden || row.value.deletedAt !== undefined) return false;
+      if (!(await this.sceneElementsPresentTx(tx, row.value, null, new Map()))) return false;
+      const { hidden: _hidden, ...rest } = row.value;
+      tx.set(found.ref, toStored(rest, row.seq));
+      tx.set(this.boardRef(row.value.boardId), toFirestoreData(withCounters(board, { sceneCount: 1 })));
+      return true;
+    });
+  }
+
+  /** Whole-doc set inside a transaction, like the counter writes, so a racing bump never drops the flag. */
+  async setBoardReview(slug: string, at: number | null): Promise<boolean> {
+    const ref = this.boardRef(slug);
+    return this.db.runTransaction(async (tx) => {
+      const board = liveBoardFrom(await tx.get(ref));
+      if (!board) return false;
+      const { reviewAt: _review, ...rest } = board;
+      tx.set(ref, toFirestoreData(at === null ? rest : { ...rest, reviewAt: at }));
+      return true;
     });
   }
 
