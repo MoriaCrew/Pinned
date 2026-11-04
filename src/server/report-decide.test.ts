@@ -288,6 +288,38 @@ describe("report decisions (PIN-272)", () => {
     for (const ref of refsOf("friend")) expect(h.store.isHeld(ref)).toBe(false);
   });
 
+  it("two takedowns sharing objects release in turn: a closed-out report protects nothing any more", async () => {
+    const h = await harness();
+    // A board-wide illegal report and a pin illegal report overlap on friend's objects and s-both.
+    const wide = await h.file(SLUG, { scope: "board", reason: "illegal" });
+    const narrow = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "illegal" });
+    const narrowDone = await takedownReport(narrow.id, h.deps);
+    const wideDone = await takedownReport(wide.id, h.deps);
+    expect(narrowDone?.outcome).toBe("element_deleted");
+    expect(wideDone?.outcome).toBe("board_deleted");
+    for (const ref of [...refsOf("mug"), ...refsOf("friend")]) expect(h.store.isHeld(ref)).toBe(true);
+    // Closing out the wide one keeps what the narrow one still holds.
+    const first = await releaseReportHolds(wideDone!.record, h.deps);
+    expect(first.kept).toBeGreaterThan(0);
+    expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
+    expect(h.store.isHeld(refsOf("friend")[0])).toBe(true);
+    expect((await h.reports.get(wide.id))).toMatchObject({ held: { storageHold: false }, holdsReleasedAt: NOW + HOUR });
+    // Closing out the narrow one frees the rest: the wide one no longer counts as holding.
+    const second = await releaseReportHolds((await h.reports.get(narrow.id))!, h.deps);
+    expect(second).toMatchObject({ kept: 0, failed: 0 });
+    for (const ref of [...refsOf("mug"), ...refsOf("friend"), sceneRef("s-mug"), sceneRef("s-both")]) expect(h.store.isHeld(ref)).toBe(false);
+  });
+
+  it("a queued-only scene report keeps nothing hidden: the report that hid the scene restores it", async () => {
+    const h = await harness();
+    const pinReport = await h.file(SLUG, { scope: "element", targetId: "friend", reason: "inappropriate" }); // hides s-both
+    const queued = await h.file(SLUG, { scope: "scene", targetId: "s-both", reason: "ownership" });
+    expect(queued.held).toEqual({ elementIds: [], sceneIds: [], boardReview: false, storageHold: false });
+    await dismissReport(pinReport.id, h.deps);
+    expect((await h.boards.listScenes(SLUG)).map((s) => s.id)).toEqual(["s-mug", "s-both"]);
+    expect((await h.reports.get(queued.id))?.status).toBe("open");
+  });
+
   it("references stay the only board id in a decision's record", async () => {
     const h = await harness();
     const report = await h.file(SLUG, { scope: "board", reason: "inappropriate" });

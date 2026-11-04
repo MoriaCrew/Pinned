@@ -82,5 +82,15 @@ export function describeReportStoreContract(name: string, makeStore: () => Repor
       expect((await store.get("rep-1"))?.status).toBe("takedown");
       expect(await store.decide("missing", { status: "dismissed", decidedAt: 4_500 })).toBeNull();
     });
+
+    it("markHoldsReleased turns the Storage hold off and stamps the time, whatever the status", async () => {
+      const store = makeStore();
+      await store.create(makeReport({ held: { elementIds: ["el-1"], sceneIds: [], boardReview: false, storageHold: true, storageRefs: ["elements/el-1/cutout.png"] } }));
+      await store.decide("rep-1", { status: "takedown", decidedAt: 4_000 });
+      const released = await store.markHoldsReleased("rep-1", 6_000);
+      expect(released).toMatchObject({ status: "takedown", holdsReleasedAt: 6_000, held: { storageHold: false, storageRefs: ["elements/el-1/cutout.png"] } });
+      expect(await store.get("rep-1")).toEqual(released);
+      expect(await store.markHoldsReleased("missing", 6_000)).toBeNull();
+    });
   });
 }

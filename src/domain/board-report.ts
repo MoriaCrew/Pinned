@@ -74,6 +74,8 @@ export interface ReportRecord {
   decidedAt?: number;
   /** Operator note on the decision; never a slug. */
   note?: string;
+  /** When this report's Storage holds were released (dismiss, or the close-out); `held.storageHold` is false from then on. */
+  holdsReleasedAt?: number;
 }
 
 export type ReportInputError = "invalid" | "message_required" | "message_too_long" | "email_invalid";

@@ -118,6 +118,17 @@ export class FirestoreReportStore implements ReportStore {
       return structuredClone(decided);
     });
   }
+
+  async markHoldsReleased(id: string, at: number): Promise<ReportRecord | null> {
+    const ref = this.ref(id);
+    return this.db.runTransaction(async (tx) => {
+      const current = fromData((await tx.get(ref)).data());
+      if (!current) return null;
+      const released: ReportRecord = { ...current, held: { ...current.held, storageHold: false }, holdsReleasedAt: at };
+      tx.set(ref, toData(released));
+      return structuredClone(released);
+    });
+  }
 }
 
 export interface FirestoreReportStoreOptions {

@@ -35,6 +35,8 @@ export interface ReportStore {
   listOpenDue(before: number, limit: number): Promise<ReportRecord[]>;
   /** Close an open report; null when missing or already decided. */
   decide(id: string, decision: ReportDecision): Promise<ReportRecord | null>;
+  /** Record that the report's Storage holds were released: `held.storageHold` false, `holdsReleasedAt` set. Null when missing. */
+  markHoldsReleased(id: string, at: number): Promise<ReportRecord | null>;
 }
 
 function clone<T>(value: T): T {
@@ -107,5 +109,13 @@ export class InMemoryReportStore implements ReportStore {
     };
     this.records.set(id, decided);
     return clone(decided);
+  }
+
+  async markHoldsReleased(id: string, at: number): Promise<ReportRecord | null> {
+    const current = this.records.get(id);
+    if (!current) return null;
+    const released: ReportRecord = { ...clone(current), held: { ...clone(current.held), storageHold: false }, holdsReleasedAt: at };
+    this.records.set(id, released);
+    return clone(released);
   }
 }

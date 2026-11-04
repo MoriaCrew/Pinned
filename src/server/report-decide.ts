@@ -58,9 +58,14 @@ export interface HoldReleaseResult {
 /** The board a stored object belongs to, from its folder; null for any other path. */
 const OBJECT_OWNER = /^(?:elements|scenes)\/boards\/([A-Za-z0-9_-]{22})\//;
 
-/** A report whose Storage hold still stands: open, or taken down and not yet closed out. */
+/**
+ * A report whose Storage hold still stands: `held.storageHold` is
+ * turned off by `releaseReportHolds` (a dismiss, or the close-out), so
+ * two takedowns sharing objects release in turn instead of protecting
+ * each other for good.
+ */
 function stillHoldsStorage(report: ReportRecord): boolean {
-  return report.held.storageHold && report.status !== "dismissed";
+  return report.held.storageHold;
 }
 
 /**
@@ -95,7 +100,7 @@ async function coveredRefs(report: ReportRecord, deps: Pick<ReportDecideDeps, "b
  */
 export async function releaseReportHolds(
   report: ReportRecord,
-  deps: Pick<ReportDecideDeps, "boards" | "store" | "reports">,
+  deps: Pick<ReportDecideDeps, "boards" | "store" | "reports" | "now">,
 ): Promise<HoldReleaseResult> {
   const result: HoldReleaseResult = { released: 0, kept: 0, failed: 0 };
   const own = await coveredRefs(report, deps);
@@ -125,6 +130,9 @@ export async function releaseReportHolds(
       logServerError("storage hold release failed", error);
     }
   }
+  // This report no longer holds anything: what it kept for another
+  // report is that report's to release.
+  await deps.reports.markHoldsReleased(report.id, deps.now?.() ?? Date.now());
   return result;
 }
 
@@ -147,9 +155,11 @@ export async function dismissReport(
   if (!record) return null;
   const others = (await deps.reports.listOpenForBoard(record.boardId)).filter((r) => r.id !== id);
   const stillElements = new Set(others.flatMap((r) => r.held.elementIds));
-  // A scene another open report is about stays hidden, whether that
-  // report hid it itself or found it hidden already.
-  const stillScenes = new Set(others.flatMap((r) => r.held.sceneIds.concat(r.scope === "scene" && r.targetId ? [r.targetId] : [])));
+  // A scene another open report holds stays hidden. A scene report
+  // lists its scene when it hid it or found it hidden under an
+  // `illegal` reason; a queued-only report lists nothing and keeps
+  // nothing hidden.
+  const stillScenes = new Set(others.flatMap((r) => r.held.sceneIds));
   const stillReview = others.some((r) => r.held.boardReview);
   const released: ReleasedCounts = { elements: 0, scenes: 0, boardReview: false, storage: false };
 
@@ -204,11 +214,11 @@ export async function takedownReport(
   const now = deps.now?.() ?? Date.now();
   const record = await deps.reports.decide(id, { status: "takedown", decidedAt: now, ...(note ? { note } : {}) });
   if (!record) return null;
-  // Scenes another open report on the board is about keep their
-  // pictures: that report (an `illegal` scene report included) decides
-  // them, not this one.
+  // Scenes another open report on the board holds keep their pictures:
+  // that report (an `illegal` scene report included) decides them, not
+  // this one.
   const others = await deps.reports.listOpenForBoard(record.boardId);
-  const keepScenePictures = new Set(others.flatMap((r) => r.held.sceneIds.concat(r.scope === "scene" && r.targetId ? [r.targetId] : [])));
+  const keepScenePictures = new Set(others.flatMap((r) => r.held.sceneIds));
   let outcome: TakedownOutcome = "already_gone";
   try {
     if (record.scope === "element" && record.targetId) {
