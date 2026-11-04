@@ -98,6 +98,21 @@ describe("sweepDeletedBoardStorage (PIN-169)", () => {
     expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 2, kept: 0, failed: 0 });
   });
 
+  it("deleting a board whose held copy was the last live pointer frees the source bytes (PIN-269)", async () => {
+    const h = await harness();
+    await h.boards.createElement(element("shared", DEAD));
+    await h.boards.createElement(element("copy-shared", COPIES, DEAD, "shared"));
+    expect((await h.boards.holdElement("copy-shared")).held).toBe(true);
+    await h.put(...files(DEAD, "shared"));
+    await h.boards.deleteBoard(DEAD, 2);
+    // The held live copy keeps the source's bytes.
+    expect(await sweepDeletedBoardStorage(DEAD, h.deps)).toEqual({ deleted: 0, kept: 2, failed: 0 });
+    // The copy's board goes while the copy is still held: nothing live points at the bytes any more.
+    await h.boards.deleteBoard(COPIES, 3);
+    expect(await sweepDeletedBoardStorage(COPIES, h.deps)).toEqual({ deleted: 2, kept: 0, failed: 0 });
+    expect(await h.store.listPrefix(folderOf(DEAD, "shared"))).toEqual([]);
+  });
+
   it("deleting the board that held the last live copy frees the kept bytes; a live source keeps its own", async () => {
     const h = await harness();
     await h.boards.createElement(element("shared", DEAD));

@@ -109,11 +109,15 @@ export async function sweepDeletedBoardStorage(
     // element folder. Once nothing live needs those bytes, this board
     // held the last live copy: free them as deleteMyElement would.
     for (const element of await deps.boards.listElements(slug)) {
-      const folder = elementFolder(element.cutoutRef);
+      // A held copy (PIN-269) keeps the same refs behind `held:`; the
+      // bytes are the same bytes, and this board is gone either way.
+      const cutoutRef = releaseRef(element.cutoutRef);
+      const flattenedRef = releaseRef(element.flattenedRef);
+      const folder = elementFolder(cutoutRef);
       if (!folder || folder.startsWith(prefixes[1])) continue;
-      if (elementFolder(element.flattenedRef) !== folder) continue;
-      if (await elementBytesStillNeeded(element.cutoutRef, deps.boards)) continue;
-      for (const ref of [element.cutoutRef, element.flattenedRef]) await remove(ref);
+      if (elementFolder(flattenedRef) !== folder) continue;
+      if (await elementBytesStillNeeded(cutoutRef, deps.boards)) continue;
+      for (const ref of [cutoutRef, flattenedRef]) await remove(ref);
     }
     // The three folders. An element folder is kept whole while a copy
     // on a live board points at its cut-out, decided from storage (not
