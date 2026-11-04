@@ -27,10 +27,16 @@ export interface ReportStore {
   listByReference(reference: string): Promise<ReportRecord[]>;
   /** Open reports on one board, oldest first. */
   listOpenForBoard(boardId: string): Promise<ReportRecord[]>;
+  /** Every report on one board, any status, oldest first (the holds a release must respect). */
+  listForBoard(boardId: string): Promise<ReportRecord[]>;
+  /** Open reports across boards for the operator's queue, oldest first, at most `limit`. */
+  listOpen(limit: number): Promise<ReportRecord[]>;
   /** Open reports whose `deleteAt` is before `before`, oldest deadline first, at most `limit`. */
   listOpenDue(before: number, limit: number): Promise<ReportRecord[]>;
   /** Close an open report; null when missing or already decided. */
   decide(id: string, decision: ReportDecision): Promise<ReportRecord | null>;
+  /** Record that the report's Storage holds were released: `held.storageHold` false, `holdsReleasedAt` set. Null when missing. */
+  markHoldsReleased(id: string, at: number): Promise<ReportRecord | null>;
 }
 
 function clone<T>(value: T): T {
@@ -64,6 +70,22 @@ export class InMemoryReportStore implements ReportStore {
       .map(clone);
   }
 
+  async listForBoard(boardId: string): Promise<ReportRecord[]> {
+    return [...this.records.values()]
+      .filter((record) => record.boardId === boardId)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map(clone);
+  }
+
+  async listOpen(limit: number): Promise<ReportRecord[]> {
+    if (limit <= 0) return [];
+    return [...this.records.values()]
+      .filter((record) => record.status === "open")
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, limit)
+      .map(clone);
+  }
+
   async listOpenDue(before: number, limit: number): Promise<ReportRecord[]> {
     if (limit <= 0) return [];
     return [...this.records.values()]
@@ -87,5 +109,13 @@ export class InMemoryReportStore implements ReportStore {
     };
     this.records.set(id, decided);
     return clone(decided);
+  }
+
+  async markHoldsReleased(id: string, at: number): Promise<ReportRecord | null> {
+    const current = this.records.get(id);
+    if (!current) return null;
+    const released: ReportRecord = { ...clone(current), held: { ...clone(current.held), storageHold: false }, holdsReleasedAt: at };
+    this.records.set(id, released);
+    return clone(released);
   }
 }

@@ -232,9 +232,11 @@ export interface BoardRepository {
    * non-tombstoned scene using the element comes back when all of its
    * elements exist unheld (a scene never resurrects over a deleted or
    * still-held pin; a scene another report hid returns once that hold
-   * is released too). False when the element is missing.
+   * is released too). Scenes listed in `keepHiddenSceneIds` stay hidden
+   * whatever their pins (a scene another open report holds on its own,
+   * PIN-272). False when the element is missing.
    */
-  releaseElement(elementId: string): Promise<boolean>;
+  releaseElement(elementId: string, keepHiddenSceneIds?: readonly string[]): Promise<boolean>;
   /** Hide one visible scene (sceneCount follows). True only when it was visible. */
   hideScene(sceneId: string): Promise<boolean>;
   /** Bring back a hidden, non-tombstoned scene whose elements all exist unheld. True only when it changed. */
@@ -563,7 +565,7 @@ export class InMemoryBoardRepository implements BoardRepository {
     return { held: true, hiddenSceneIds };
   }
 
-  async releaseElement(elementId: string): Promise<boolean> {
+  async releaseElement(elementId: string, keepHiddenSceneIds: readonly string[] = []): Promise<boolean> {
     const element = this.elements.get(elementId);
     if (!element) return false;
     this.requireBoard(element.boardId);
@@ -572,8 +574,10 @@ export class InMemoryBoardRepository implements BoardRepository {
       cutoutRef: releaseRef(element.cutoutRef),
       flattenedRef: releaseRef(element.flattenedRef),
     });
+    const keep = new Set(keepHiddenSceneIds);
     for (const scene of [...this.scenes.values()]) {
       if (!scene.hidden || scene.deletedAt !== undefined || !scene.elementIds.includes(elementId)) continue;
+      if (keep.has(scene.id)) continue;
       if (this.sceneElementsAllPresent(scene)) this.unhideStored(scene);
     }
     return true;

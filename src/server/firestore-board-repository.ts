@@ -581,10 +581,11 @@ export class FirestoreBoardRepository implements BoardRepository {
     return true;
   }
 
-  async releaseElement(elementId: string): Promise<boolean> {
+  async releaseElement(elementId: string, keepHiddenSceneIds: readonly string[] = []): Promise<boolean> {
     const found = await this.findOneById<Element>(ELEMENTS, elementId);
     if (!found) return false;
     const boardId = found.value.boardId;
+    const keep = new Set(keepHiddenSceneIds);
     return this.db.runTransaction(async (tx) => {
       const elementSnap = await tx.get(found.ref);
       if (!elementSnap.exists) return false;
@@ -594,7 +595,7 @@ export class FirestoreBoardRepository implements BoardRepository {
         .collectionGroup(SCENES)
         .where("elementIds", "array-contains", elementId);
       const candidates = rowsFrom<Scene>(await tx.get(sceneQuery)).filter(
-        (row) => row.value.hidden === true && row.value.deletedAt === undefined,
+        (row) => row.value.hidden === true && row.value.deletedAt === undefined && !keep.has(row.value.id),
       );
       const cache = new Map<string, boolean>();
       const restorable: StoredRow<Scene>[] = [];

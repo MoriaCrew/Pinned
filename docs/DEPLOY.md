@@ -180,6 +180,10 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" -X POST -H "sec-fetch-s
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'
 curl -s -H "Accept-Language: ja" https://pinneds.com/ | grep -o '<html lang="en"'
+# Report & hold (PIN-266, docs/20): the route exists and refuses a cross-site post; GET records nothing.
+# Never file a real report from here: on prod it hides content and alerts the operator.
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" -H "sec-fetch-site: cross-site" https://pinneds.com/api/boards/AAAAAAAAAAAAAAAAAAAAAA/report  # 403
+curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/boards/AAAAAAAAAAAAAAAAAAAAAA/report  # 405
 ```
 
 On a phone: create and join a board; upload a fixture photo from
@@ -262,6 +266,25 @@ element; delete the throwaway board.
      **(console: Monitoring → Uptime checks)**; the check also keeps
      the instance warm.
    - Alert on Cloud Run 5xx > 5 in 5 min for `pinned-web`.
+   - **Report alert (PIN-272, docs/20):** every report the app receives
+     is one structured line `report.received` on stdout (reference,
+     reason, scope, hold counts; never the board link). Turn it into
+     an email on the same channel: a log-based metric, then an alert
+     policy on it (console: Monitoring → Alerting → Create policy →
+     metric `logging/user/pinned_report_received`, condition "any
+     time series violates: count > 0 over 5 min", notification = the
+     email channel, documentation = "run
+     `npm run report:ops -- --project <p> pending`, then docs/20").
+     ```sh
+     gcloud logging metrics create pinned_report_received --project "$P" \
+       --description "Report & hold: a report was filed (docs/20)" \
+       --log-filter 'resource.type="cloud_run_revision" AND resource.labels.service_name="pinned-web" AND jsonPayload.event="report.received"'
+     ```
+     Test-fire once per project with a report on a throwaway board
+     (`docs/launch-ops-runbook.md` §3 rule: an alert nobody saw
+     arrive is not an alert). The daily backstop
+     (`.github/workflows/report-sweep.yml`) needs its own identity:
+     its header lists the operator steps.
    - GCP billing budget (e.g. $25) with 50/90/100 % emails. Meta
      spend is not on GCP billing: run
      `GCLOUD_PROJECT=moriacrew-pinned-prod npm run usage:costs -- --days 1`
@@ -292,7 +315,12 @@ the judges' board and kept (§6.4). Steps, smoke and rollback:
   pins, scenes since the last check; nobody but the recorded
   participants and the judges should appear), the demo template
   board (unchanged counts: 2 participants, its pins and 1 scene) and
-  a "See a board" click (lands on a fresh board), `usage:costs`.
+  a "See a board" click (lands on a fresh board), `usage:costs`, and
+  the reports queue: `npm run report:ops -- --project moriacrew-pinned-prod pending`
+  (an alert email means one just landed; decide each with `show`,
+  then `dismiss` or `takedown`, docs/20). The app already hid what
+  the report named, so the queue is never an emergency for the
+  content, only for the reporter waiting on an answer.
 - **Demo boards piling up or abused:** lower `demo.maxTotal` /
   `demo.maxPerIp` in `POLICY_OVERRIDES_JSON` (0 closes the demo; the
   landing then still shows the button, which answers "busy"), or

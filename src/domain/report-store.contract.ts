@@ -47,6 +47,13 @@ export function describeReportStoreContract(name: string, makeStore: () => Repor
       expect((await store.listOpenForBoard("board-slug-00000000001")).map((r) => r.id)).toEqual(["a", "b"]);
       expect((await store.listOpenForBoard("board-b")).map((r) => r.id)).toEqual(["other"]);
       expect(await store.listOpenForBoard("nobody")).toEqual([]);
+      // Every status, oldest first: what a hold release must respect.
+      expect((await store.listForBoard("board-slug-00000000001")).map((r) => r.id)).toEqual(["a", "c", "b"]);
+      expect(await store.listForBoard("nobody")).toEqual([]);
+      // The operator's queue: open reports of every board, oldest first, capped.
+      expect((await store.listOpen(10)).map((r) => r.id)).toEqual(["a", "other", "b"]);
+      expect((await store.listOpen(2)).map((r) => r.id)).toEqual(["a", "other"]);
+      expect(await store.listOpen(0)).toEqual([]);
     });
 
     it("listOpenDue: open reports with a deadline before `before`, oldest deadline first, capped", async () => {
@@ -74,6 +81,16 @@ export function describeReportStoreContract(name: string, makeStore: () => Repor
       expect(await store.decide("rep-1", { status: "dismissed", decidedAt: 4_500 })).toBeNull();
       expect((await store.get("rep-1"))?.status).toBe("takedown");
       expect(await store.decide("missing", { status: "dismissed", decidedAt: 4_500 })).toBeNull();
+    });
+
+    it("markHoldsReleased turns the Storage hold off and stamps the time, whatever the status", async () => {
+      const store = makeStore();
+      await store.create(makeReport({ held: { elementIds: ["el-1"], sceneIds: [], boardReview: false, storageHold: true, storageRefs: ["elements/el-1/cutout.png"] } }));
+      await store.decide("rep-1", { status: "takedown", decidedAt: 4_000 });
+      const released = await store.markHoldsReleased("rep-1", 6_000);
+      expect(released).toMatchObject({ status: "takedown", holdsReleasedAt: 6_000, held: { storageHold: false, storageRefs: ["elements/el-1/cutout.png"] } });
+      expect(await store.get("rep-1")).toEqual(released);
+      expect(await store.markHoldsReleased("missing", 6_000)).toBeNull();
     });
   });
 }

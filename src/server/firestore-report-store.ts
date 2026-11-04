@@ -68,11 +68,26 @@ export class FirestoreReportStore implements ReportStore {
   }
 
   async listOpenForBoard(boardId: string): Promise<ReportRecord[]> {
+    return (await this.listForBoard(boardId)).filter((record) => record.status === "open");
+  }
+
+  async listForBoard(boardId: string): Promise<ReportRecord[]> {
     const snap = await this.db.collection(REPORTS).where("boardId", "==", boardId).get();
     return snap.docs
       .map((doc) => fromData(doc.data()))
-      .filter((record): record is ReportRecord => record !== null && record.status === "open")
+      .filter((record): record is ReportRecord => record !== null)
       .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /** One equality query (no index entry); the oldest `limit` of what it returns, sorted here. */
+  async listOpen(limit: number): Promise<ReportRecord[]> {
+    if (limit <= 0) return [];
+    const snap = await this.db.collection(REPORTS).where("status", "==", "open").get();
+    return snap.docs
+      .map((doc) => fromData(doc.data()))
+      .filter((record): record is ReportRecord => record !== null)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, limit);
   }
 
   async listOpenDue(before: number, limit: number): Promise<ReportRecord[]> {
@@ -101,6 +116,17 @@ export class FirestoreReportStore implements ReportStore {
       };
       tx.set(ref, toData(decided));
       return structuredClone(decided);
+    });
+  }
+
+  async markHoldsReleased(id: string, at: number): Promise<ReportRecord | null> {
+    const ref = this.ref(id);
+    return this.db.runTransaction(async (tx) => {
+      const current = fromData((await tx.get(ref)).data());
+      if (!current) return null;
+      const released: ReportRecord = { ...current, held: { ...current.held, storageHold: false }, holdsReleasedAt: at };
+      tx.set(ref, toData(released));
+      return structuredClone(released);
     });
   }
 }

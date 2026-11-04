@@ -171,11 +171,18 @@ describe("planReportHold (PIN-268, ADR-004 decision table)", () => {
     expect(result.ok && planHoldsSomething(result.plan.held)).toBe(false);
   });
 
-  it("severity follows the reason alone", () => {
+  it("severity follows the reason alone, and illegal on a pin or a scene adds the Storage hold", () => {
     const high = planReportHold({ ...base, scope: "element", reason: "illegal", element: { id: "el-1", faceFlag: false } });
     expect(high.ok && high.plan.severity).toBe("high");
+    expect(high.ok && high.plan.held).toEqual({ elementIds: ["el-1"], sceneIds: ["sc-a"], boardReview: false, storageHold: true });
     const normal = planReportHold({ ...base, scope: "element", reason: "ownership", element: { id: "el-1", faceFlag: false } });
     expect(normal.ok && normal.plan.severity).toBe("normal");
+    expect(normal.ok && normal.plan.held.storageHold).toBe(false);
+    const scene = planReportHold({ ...base, scope: "scene", reason: "illegal", scene: { id: "sc-b", hidden: false } });
+    expect(scene.ok && scene.plan.held).toEqual({ elementIds: [], sceneIds: ["sc-b"], boardReview: false, storageHold: true });
+    // An already hidden scene reported as illegal is still listed, so its folder gets the hold (never queued only).
+    const hiddenIllegal = planReportHold({ ...base, scope: "scene", reason: "illegal", scene: { id: "sc-hidden", hidden: true } });
+    expect(hiddenIllegal.ok && hiddenIllegal.plan).toEqual({ held: { elementIds: [], sceneIds: ["sc-hidden"], boardReview: false, storageHold: true }, severity: "high", queuedOnly: false });
   });
 });
 
