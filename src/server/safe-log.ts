@@ -13,6 +13,23 @@ export function redactSlugs(text: string): string {
   return text.replace(SLUG_TOKEN, "<slug>");
 }
 
+export type EventSeverity = "INFO" | "WARNING" | "CRITICAL";
+
+/**
+ * One structured line on stdout (PIN-270): Cloud Logging turns a JSON
+ * line into `jsonPayload` and reads `severity`, so a log-based alert
+ * can match `jsonPayload.event`. Callers pass opaque values only
+ * (references, counts, enums); slug-shaped tokens are blanked anyway.
+ */
+export function logEvent(
+  event: string,
+  fields: Readonly<Record<string, unknown>>,
+  severity: EventSeverity = "INFO",
+): void {
+  // `event` and `severity` last: a field can never overwrite the alert keys.
+  console.log(redactSlugs(JSON.stringify({ ...fields, event, severity })));
+}
+
 export function logServerError(label: string, error: unknown): void {
   if (error instanceof Error) {
     console.error(label, {
