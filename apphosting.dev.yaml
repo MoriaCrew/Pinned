@@ -34,9 +34,9 @@ env:
   # Unset a value to take its link down (no code change).
   - variable: DEMO_VIDEO_URL
     value: https://youtu.be/q6lkrA6fsCI
-  # A test post until the launch post is published.
+  # PIN-280: the launch post, same as prod.
   - variable: PROMO_POST_URL
-    value: https://x.com/MoriaCrew/status/2099512136368071033
+    value: https://x.com/MoriaCrew/status/2118015726829125926
   - variable: DATA_BACKEND
     value: firestore
   - variable: FIREBASE_PROJECT_ID
