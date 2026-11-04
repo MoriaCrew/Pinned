@@ -768,6 +768,17 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 /* The sheet itself takes focus when it opens (so a screen reader starts at the title); it is not a control, so no ring around it. */
 .pn-make-sheet:focus { outline: none; }
 .pn-make-sheet > .pn-sheet-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--space-5)); padding: 4px var(--space-5); }
+
+/* ---------- Report sheet (PIN-271) ---------- */
+/* Two chip groups, a message and an email: long on a small phone, and typed into, so it takes the Make sheet's shape: the body scrolls, the title and the foot stay put, and the sheet rides above the keyboard by the measured --pn-keyboard-inset. */
+.pn-sheet.pn-report-sheet { display: flex; flex-direction: column; overflow: visible; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .pn-sheet.pn-report-sheet { transition: none; }
+}
+.pn-report-sheet > .pn-sheet-grab, .pn-report-sheet > .pn-sheet-head, .pn-report-sheet > .pn-sheet-foot { flex: none; }
+.pn-report-sheet > .pn-sheet-grab { align-self: center; }
+.pn-report-sheet:focus { outline: none; }
+.pn-report-sheet > .pn-sheet-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--space-5)); padding: 4px var(--space-5); }
 .pn-make-base { display: flex; align-items: center; gap: var(--space-3); min-width: 0; margin: 0; font: 650 15px/20px var(--font-ui); }
 .pn-make-base-thumb { flex: none; width: auto; height: 40px; border-radius: var(--radius-xs); object-fit: cover; box-shadow: 0 1px 3px var(--shade); }
 .pn-make-base-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
