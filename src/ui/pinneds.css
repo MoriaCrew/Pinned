@@ -371,8 +371,10 @@
 .pn-scrim { position: absolute; inset: 0; background: var(--scrim); }
 .pn-sheet { position: relative; display: grid; gap: var(--space-4); width: 100%; max-width: 560px; margin: 0 auto; padding: var(--space-2) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom)); border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-sheet); }
 .pn-sheet { border: var(--edge-w) solid var(--edge); border-bottom: 0; }
-/* PIN-261: a sheet never grows past the top of the screen; taller content scrolls inside it (Add and Make sheets keep their own rules). */
-.pn-sheet { max-height: calc(100vh - var(--space-5)); max-height: calc(100dvh - var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
+/* PIN-261: a sheet in the Sheet layer never grows past the top of the screen; taller content scrolls inside it.
+   Zero specificity on purpose: sheets that scroll an inner region (Make, Change look, Start) keep their own
+   max-height and set overflow back to visible; the scene viewer's panel is not in the layer, so its menus aren't clipped. */
+:where(.pn-sheet-layer > .pn-sheet) { max-height: calc(100vh - var(--space-5)); max-height: calc(100dvh - var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
 .pn-sheet-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line-strong); }
 .pn-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .pn-sheet-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(24px * var(--display-scale)); line-height: 1.1; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); }
@@ -742,7 +744,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 /* ---------- Make sheet (PIN-100; chat-style composer PIN-216) ---------- */
 /* Long on a small phone: the body scrolls, the title and the composer (the foot) stay put. */
 /* Rides above the on-screen keyboard (PIN-226): the sheet's hook measures --pn-keyboard-inset (0px when closed); the sheet lifts by it and its scrolling middle gives up the same height. */
-.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
+.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; overflow: visible; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
 @media (prefers-reduced-motion: reduce) {
   .pn-sheet.pn-make-sheet { transition: none; }
 }
