@@ -65,6 +65,12 @@ describe("UI kit components (PIN-97)", () => {
     expect(held).toContain("pn-sticker-held");
     expect(held).toContain("Under review");
     expect(held).not.toContain("<img");
+    // The foil perk never paints a held pin's shape either.
+    const foiled = html(h(Sticker, { src: "/a.webp", seed: "x", held: true, foil: true }));
+    expect(foiled).not.toContain("pn-foil");
+    expect(foiled).not.toContain("data-foil");
+    expect(foiled).not.toContain("--src");
+    expect(foiled).not.toContain("/a.webp");
     const pin = html(h(Pin, { src: "/a.webp", label: "Duck", owner: { id: "p1", name: "Robin" }, held: true, onToggle: () => {} }));
     expect(pin).not.toContain("<button");
     expect(pin).toContain("Under review");
