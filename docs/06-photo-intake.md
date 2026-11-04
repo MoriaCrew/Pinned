@@ -1,4 +1,4 @@
-# 06 — Photo intake and ephemeral storage (PIN-34)
+# 06. Photo intake and ephemeral storage
 
 ## Invariants
 

@@ -1,5 +1,7 @@
 # Deploying Pinneds (dev → prod)
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 _Owner: Robin. Every operator step below is written so a local Claude
 Code session with `gcloud`, `firebase` and `gh` logged in can run it,
 with Robin approving each command. Console-only steps are marked

@@ -1,6 +1,6 @@
-# ADR-004: Reports hold first, decide second, delete on a timer only for faces (PIN-266, Nov 4 2026)
+# ADR-004: Reports hold first, decide second, delete on a timer only for faces
 
-_Status: Accepted (Robin, Nov 4 2026). Extends ADR-003. Runbook:
+_Status: Accepted Nov 4, 2026 (PIN-266). Extends ADR-003. Runbook:
 `docs/20-abuse-runbook.md`. Policy row: `docs/11-studio.md` §5.1
 (`report.*`, `takedownHours`)._
 
