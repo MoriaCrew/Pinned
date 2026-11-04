@@ -16,6 +16,7 @@ import "server-only";
  * for everyone), logs by error name only (never a slug or ref), and a
  * later run removes what an earlier one missed or a late job wrote.
  */
+import { holdRef, releaseRef } from "../domain/board";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { isValidSlug } from "../domain/tokens";
 import type { DerivativeStore } from "./derivative-store";
@@ -48,7 +49,14 @@ export async function elementBytesStillNeeded(
   boards: NeedsBoards,
   exceptElementId?: string,
 ): Promise<boolean> {
-  for (const other of await boards.listElementsByCutoutRef(cutoutRef)) {
+  // A held element (PIN-269) keeps the same bytes behind a `held:`
+  // prefix, so both spellings of the ref count as still pointing at them.
+  const raw = releaseRef(cutoutRef);
+  const pointing = [
+    ...(await boards.listElementsByCutoutRef(raw)),
+    ...(await boards.listElementsByCutoutRef(holdRef(raw))),
+  ];
+  for (const other of pointing) {
     if (other.id === exceptElementId) continue;
     if (await isLiveBoard(boards, other.boardId)) return true;
   }
