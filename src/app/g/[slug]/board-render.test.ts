@@ -40,6 +40,18 @@ describe("board things grid (PIN-98)", () => {
     card({ pinId: "cand", status: "candidate" }),
   ];
 
+  it("a held pin keeps its tag and owner but is no pick toggle (PIN-279)", () => {
+    const held = [card({ pinId: "held", element: { id: "e-held", ownerId: "p1", label: "Teal mug", faceFlag: false, imageUrl: "/img/held", held: true } })];
+    const out = html(
+      h(BoardThings, { cards: held, count: 1, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion }),
+    );
+    expect(out).toContain('data-pin-id="held"');
+    expect(out).toContain("Under review");
+    expect(out).toContain("Teal mug");
+    expect(out).not.toContain("aria-pressed");
+    expect(out).not.toContain("/img/held");
+  });
+
   it("makes pinned things pick toggles and leaves candidates out of the grid (PIN-122)", () => {
     const out = html(
       h(BoardThings, { cards, count: 2, meId: "p1", picking: false, pickNumbers: new Map(), onTapPin: noop, deletion }),

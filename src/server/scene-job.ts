@@ -32,6 +32,7 @@ import type {
   Scene,
   SceneJob,
 } from "../domain/board";
+import { isHeldRef } from "../domain/board";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import { parseSceneSize, validSceneSize, type SceneSize } from "../domain/scene-ratio";
 import { startOfUtcDay } from "../domain/time";
@@ -68,6 +69,7 @@ export class SceneJobRequestError extends Error {
       | "bad_prompt"
       | "pins_per_scene"
       | "element_not_found"
+      | "element_under_review"
       | "scenes_per_participant_day"
       | "scenes_per_board_day"
       | "scene_id_conflict"
@@ -513,6 +515,11 @@ export async function startSceneJob(
         "One of those pins is not on this board anymore.",
         "element_not_found",
       );
+    }
+    // PIN-279: a pin under a report hold has no servable bytes. Refuse
+    // up front with a line the sheet can show, instead of a failed job.
+    if (isHeldRef(element.cutoutRef)) {
+      throw new SceneJobRequestError(userMessage("request.pinUnderReview"), "element_under_review");
     }
   }
 

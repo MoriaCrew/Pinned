@@ -63,11 +63,12 @@ describe("See all list (PIN-85 rows, PIN-121)", () => {
     const states = new Map([
       ["lamp", "already" as const],
       ["hat", "pinned" as const],
+      ["cap", "held" as const],
     ]);
     const out = renderToStaticMarkup(
       h(LibraryList, {
         status: "success",
-        cards: [card("mug", "Teal mug"), card("lamp", "Brass lamp"), card("hat", "Straw hat")],
+        cards: [card("mug", "Teal mug"), card("lamp", "Brass lamp"), card("hat", "Straw hat"), { ...card("cap", "Wool cap"), held: true }],
         stateOf: (c: MyPinCard) => states.get(c.elementId) ?? "idle",
         onPin: noop,
         onRetry: noop,
@@ -77,6 +78,9 @@ describe("See all list (PIN-85 rows, PIN-121)", () => {
     expect(out).toContain('aria-label="Pin here: Teal mug"');
     expect(out).toContain("Already here");
     expect(out).toContain("Pinned");
+    // PIN-279: a held thing shows the placeholder and no Pin here.
+    expect(out).toContain("pn-sticker-held");
+    expect(out).not.toContain("Pin here: Wool cap");
   });
 });
 

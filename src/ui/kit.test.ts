@@ -60,6 +60,18 @@ describe("UI kit components (PIN-97)", () => {
     expect(picked).toContain(">2<");
   });
 
+  it("a held sticker shows the under-review placeholder instead of a picture, and a held pin is no pick button (PIN-279)", () => {
+    const held = html(h(Sticker, { src: "/a.webp", seed: "x", held: true }));
+    expect(held).toContain("pn-sticker-held");
+    expect(held).toContain("Under review");
+    expect(held).not.toContain("<img");
+    const pin = html(h(Pin, { src: "/a.webp", label: "Duck", owner: { id: "p1", name: "Robin" }, held: true, onToggle: () => {} }));
+    expect(pin).not.toContain("<button");
+    expect(pin).toContain("Under review");
+    expect(pin).toContain("Duck");
+    expect(pin).toContain("Robin");
+  });
+
   it("makes a pickable pin a pressed button with a full spoken label", () => {
     const markup = html(
       h(Pin, {

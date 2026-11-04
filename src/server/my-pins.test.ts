@@ -208,6 +208,14 @@ async function makeHarness(): Promise<Harness> {
 }
 
 describe("listMyElements (PIN-85)", () => {
+  it("a thing under a report hold is flagged held, so no sheet offers to pin it (PIN-279)", async () => {
+    const h = await makeHarness();
+    await h.sceneDeps.boards.holdElement("el-mug");
+    const page = await listMyElements(ALICE, h.pins);
+    expect(page.elements.find((c) => c.elementId === "el-mug")).toMatchObject({ held: true });
+    expect(page.elements.find((c) => c.elementId === "el-lamp")).not.toHaveProperty("held");
+  });
+
   it("collects owned elements across claimed boards, newest first, title labels only", async () => {
     const h = await makeHarness();
     const page = await listMyElements(ALICE, h.pins);
