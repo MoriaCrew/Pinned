@@ -1,5 +1,7 @@
 # 20 — Abuse reports and illegal content (PIN-239, PIN-266)
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 One page for the human on duty. Scope: a report that a board, a pin
 or a scene holds illegal or abusive content, above all CSAM (child
 sexual abuse material), and the ordinary reports (someone's likeness,

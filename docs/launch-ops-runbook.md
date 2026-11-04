@@ -1,5 +1,7 @@
 # Launch ops runbook (PIN-240)
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 _Owner: Robin (operator). Launch guardrails for judging week:
 the hourly AI sub-cap, GCP budget alerts, the soft-kill drill,
 alert test-fires and demo-board protection. Context:

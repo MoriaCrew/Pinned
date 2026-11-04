@@ -1,5 +1,7 @@
 # Pinned — Pre-launch security review (dev / main), 2026-11-01
 
+_Operators only: this page is for whoever runs the hosted service. A visitor can skip it and start at the [docs index](README.md)._
+
 > **Status, Nov 2, 2026.** The findings below were fixed on `dev` in PIN-238–243
 > (#216, #218–#222) and reached prod with promotion #2 (#226): F1 report link, upload
 > consent line, takedown terms and the abuse runbook

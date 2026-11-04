@@ -1,8 +1,12 @@
-# ADR-003: Studio architecture — Policy as data, capability ports, jobs (PIN-49, Oct 28 2026)
+# ADR-003: Studio architecture (Policy as data, capability ports, jobs)
 
-_Status: Accepted. Supersedes the game architecture in
+_Status: Accepted Oct 28, 2026 (PIN-49). Supersedes the game architecture in
 `docs/archive/02` (ADR-001 hosting and ADR-002 no-friction stand).
 Spec: `docs/11-studio.md` §5._
+
+_Since then (Nov 4, 2026): three more ports (`ChipSuggester`, `TapNamer`,
+`SpeechTranscriber`) run under the same chain, and the `tmp/` lifecycle rule is
+1 day (A6 closed). Current state: `docs/19-meta-models.md`._
 
 ## Context
 
