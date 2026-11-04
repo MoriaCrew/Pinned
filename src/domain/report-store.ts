@@ -27,6 +27,8 @@ export interface ReportStore {
   listByReference(reference: string): Promise<ReportRecord[]>;
   /** Open reports on one board, oldest first. */
   listOpenForBoard(boardId: string): Promise<ReportRecord[]>;
+  /** Open reports across boards for the operator's queue, oldest first, at most `limit`. */
+  listOpen(limit: number): Promise<ReportRecord[]>;
   /** Open reports whose `deleteAt` is before `before`, oldest deadline first, at most `limit`. */
   listOpenDue(before: number, limit: number): Promise<ReportRecord[]>;
   /** Close an open report; null when missing or already decided. */
@@ -61,6 +63,15 @@ export class InMemoryReportStore implements ReportStore {
     return [...this.records.values()]
       .filter((record) => record.boardId === boardId && record.status === "open")
       .sort((a, b) => a.createdAt - b.createdAt)
+      .map(clone);
+  }
+
+  async listOpen(limit: number): Promise<ReportRecord[]> {
+    if (limit <= 0) return [];
+    return [...this.records.values()]
+      .filter((record) => record.status === "open")
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, limit)
       .map(clone);
   }
 

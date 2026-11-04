@@ -75,6 +75,17 @@ export class FirestoreReportStore implements ReportStore {
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
+  /** One equality query (no index entry); the oldest `limit` of what it returns, sorted here. */
+  async listOpen(limit: number): Promise<ReportRecord[]> {
+    if (limit <= 0) return [];
+    const snap = await this.db.collection(REPORTS).where("status", "==", "open").get();
+    return snap.docs
+      .map((doc) => fromData(doc.data()))
+      .filter((record): record is ReportRecord => record !== null)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, limit);
+  }
+
   async listOpenDue(before: number, limit: number): Promise<ReportRecord[]> {
     if (limit <= 0) return [];
     const snap = await this.db
