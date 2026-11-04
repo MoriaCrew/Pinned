@@ -1,11 +1,11 @@
-# 19 — Meta models in Pinneds (PIN-211)
+# 19. Meta models in Pinneds
 
 Pinneds uses five Meta models. Four run inside the app, behind six capability ports in
 `src/gateway/`; the fifth ran at build time to translate the UI. Per model: what goes in,
 what comes out, which Policy keys govern it, what happens when it fails, and what we
 measured. Spec: `docs/11-studio.md` §3 and §5.2; decisions:
 `docs/adr/003-studio-architecture.md`; cost accounting: `docs/16-ai-usage.md`.
-Visitors get the plain-language version in the app at `/models` (PIN-237): the cat
+Visitors get the plain-language version in the app at `/models`: the cat
 showcase set step by step, then what each model sees and never sees. Its claims follow
 this page: change both together.
 
@@ -24,17 +24,31 @@ authoritative.
 
 ## The shared path for every runtime call
 
-- **Adapters.** `src/gateway/ports.ts` defines the ports. `getCapabilityPorts`
-  (`src/gateway/index.ts`) returns the mock adapters (`mock-ports.ts`) under `AI_MOCK=1`,
-  the default, and the Meta adapters (`meta-ports.ts` over `meta-gateway.ts`: plain
-  `fetch` to `META_API_BASE_URL`, no provider SDK) otherwise. `fixture-ports.ts` replays
-  the PIN-50 spike (`eval/fixtures/studio/fixtures.json`) for contract tests.
-- **Decorators.** Product code only gets the decorated ports (`src/server/ai-ports.ts`).
-  `decoratePorts` (`src/gateway/decorators.ts`) runs: timeout (Policy `timeoutsMs`) → one
-  retry on 429/5xx (`retries`, `retryBackoffMs`) → reserve budget, fail closed
-  (`src/gateway/budget.ts`: `dailyBudgetUsd`, `dailyCallLimit` and the per-port caps
-  below) → call → one `AiCallLog` row with units, `promptVersion` and estimated cost →
-  a typed `ready / failed / refused` outcome.
+```mermaid
+flowchart LR
+  code["Product code"] --> ports["Decorated ports<br/>(src/server/ai-ports.ts)"]
+  ports --> t["Timeout"]
+  t --> r["Retry once on 429 or 5xx"]
+  r --> b["Reserve budget, fail closed"]
+  b --> c["Call"]
+  c --> l["Log estimated cost"]
+  l --> o["Outcome: ready, failed or refused"]
+  c --> meta["Meta adapter<br/>(meta-gateway.ts)"]
+  c --> mock["Mock adapter<br/>(AI_MOCK=1)"]
+  c --> fix["Fixture adapter<br/>(contract tests)"]
+  meta --> api["Meta Model API"]
+```
+
+_Six ports (`ElementNamer`, `Segmenter`, `SceneComposer`, `ChipSuggester`, `TapNamer`, `SpeechTranscriber`) share one chain; each call goes to one of three adapters._
+
+- **Adapters.** `getCapabilityPorts` (`src/gateway/index.ts`) returns the mock adapters
+  under `AI_MOCK=1`, the default, and the Meta adapters otherwise (plain `fetch` to
+  `META_API_BASE_URL`, no provider SDK). `fixture-ports.ts` replays the PIN-50 spike
+  (`eval/fixtures/studio/fixtures.json`) for contract tests.
+- **Decorators.** Product code only gets the decorated ports. `decoratePorts`
+  (`src/gateway/decorators.ts`) reads Policy `timeoutsMs`, `retries`, `retryBackoffMs`,
+  `dailyBudgetUsd`, `dailyCallLimit` and the per-port caps below (`src/gateway/budget.ts`).
+  Each row in the AI call log carries units, `promptVersion` and estimated cost.
 - **Refusals.** `classifyPortError` maps refusal and content-policy codes to `refused`.
   Callers turn `failed` and `refused` into a friendly line or a fallback, never a 500.
 - **Images out** leave as inline `data:` URLs built from the stripped working copy or a
@@ -116,8 +130,9 @@ the route passes `getLocale()` down, and the prompt names the language
   `scenesPerBoardPerDay` (40), and `credits.*` when credits are on.
 - Sent: `POST /responses` with only `model`, `store`, `input` and
   `tools: [{type: "image_generation", size}]`. Per pin a text label
-  "Element N (from <display name>): label — description", then the flattened cut-out; the
-  idea comes last. Owners' display names reach Muse Image only as these credit labels.
+  "Element N (from <display name>): label" (plus the description when it differs from the
+  label), then the flattened cut-out; the idea comes last. Owners' display names reach
+  Muse Image only as these credit labels.
 - Remix: the parent scene image goes first with the base-scene label, then the new pins.
   Stateless: no `previous_response_id`, and `store` is always `false` for a remix.
 - Refusal: HTTP 200 with no image is `refused` (`sceneImageOutcome`): a friendly line,

@@ -1,23 +1,27 @@
-# 13 — Sign-in (`AUTH_MODE`, PIN-57)
+# 13. Sign-in
 
-Server foundation landed in PIN-83; the sign-in button (PIN-84)
-and the cross-board library (PIN-85) build on it. Spec:
-`docs/11-studio.md` section 5.4; the original claim flow is in
-`docs/archive/02`.
+Sign-in is optional and sits behind `AUTH_MODE` (PIN-57). With
+`optional`, a participant may sign in with Google to get a personal
+library across boards (My boards and My pins); it never gates a
+board, because the board link stays the only way in. The server
+foundation is PIN-83, the sign-in button PIN-84 and the cross-board
+library PIN-85. Spec: `docs/11-studio.md` section 5.4.
 
 ## Modes
 
-- `AUTH_MODE=link-only` (the default; prod today): board
-  participants never authenticate. Every route below returns the
-  uniform 404 and no user code runs on the board flow — the
-  flag-off parity tests in `src/server/user-session.test.ts` and
+- `AUTH_MODE=link-only` (the default in code and in
+  `apphosting.yaml`): board participants never authenticate. Every
+  route below returns the uniform 404 and no user code runs on the
+  board flow. The flag-off parity tests in
+  `src/server/user-session.test.ts` and
   `src/app/api/auth/auth-routes.test.ts` are the contract.
-- `AUTH_MODE=optional`: a participant *may* sign in with Google.
+- `AUTH_MODE=optional` (set in `apphosting.dev.yaml` and
+  `apphosting.prod.yaml`): a participant *may* sign in with Google.
   The link-only board flow keeps working unchanged; sign-in only adds
   identity linking.
 
 Unknown `AUTH_MODE` values fail closed to `link-only`
-(`src/config.ts`, FR8).
+(`parseConfig` in `src/config.ts`).
 
 ## Flow (optional mode)
 
@@ -31,8 +35,8 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    added by PIN-83 solely for this verification. PIN-94: exchange
    always verifies with revocation checking, and only Policy
    `authAllowedProviders` (default `google.com`) may mint a
-   session — enabling another Firebase provider (e.g. Anonymous)
-   in a console cannot sign anyone in by itself. PIN-160: the
+   session, so enabling another Firebase provider (Anonymous, for
+   example) in a console cannot sign anyone in by itself. PIN-160: the
    exchange refuses a cross-site request (403 `cross_site`) or a
    non-JSON body (415) before any body read, so another site
    cannot plant its own session in a visitor's browser (login
@@ -50,10 +54,10 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
    automatically (never overwriting a different user's claim,
    never failing the join). Both paths maintain the
    `users/{uid}/boards/{slug}` index (doc-get/subcollection
-   reads only — no new Firestore index). Freshness (PIN-94,
+   reads only, so no new Firestore index). Freshness (PIN-94,
    narrowed by PIN-160): the user cookie carries the token's
    `auth_time`, and the Policy `authFreshWindowMs` window
-   (default 1h) now protects restore only — the one path that
+   (default 1h) now protects restore only, the one path that
    mints a participant cookie from the account alone; a stale
    restore restores nobody. The explicit claim route keeps its
    check (401 `stale_auth`), but join and board-open link the
@@ -68,35 +72,35 @@ Unknown `AUTH_MODE` values fail closed to `link-only`
 ## What is stored
 
 `users/{uid}` holds `uid`, optional `displayName` / `photoUrl`
-from the token, and timestamps. **Email is never stored** —
-nothing sends mail or keys identity off an address; the token's
-email claim is not even read. The profile and board index
-persist until a future account-deletion flow lands (not yet
-built; one board's row goes with "Remove from My boards",
-PIN-166); `userSessionDays` bounds the cookie only.
+from the token, and timestamps. **Email is never stored**:
+nothing sends mail or keys identity off an address, and the
+token's email claim is not even read. The profile and board index
+persist: there is no account-deletion flow yet (one board's row goes
+with "Remove from My boards", PIN-166), and `userSessionDays`
+bounds the cookie only.
 
 ## Operator steps to enable (per backend)
 
-Status Oct 29, 2026: done for both projects. The Google
-provider + authorized domains are enabled in dev and prod;
-the web config lives in Secret Manager under the
-`NEXT_PUBLIC_FIREBASE_*` names (referenced from
-`apphosting.yaml`, never literals in git — gitleaks enforces
-this). Dev runs `AUTH_MODE=optional` (PR #76); prod flips at
-promotion (PIN-76). The original runbook, for a new backend:
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
 
-1. Firebase console → Authentication → enable the Google
-   provider for the backend's project, and add the backend's
-   custom domain under Authentication → Settings →
-   Authorized domains.
-2. Register/copy the web app config; store
+Both projects (dev and prod) have the Google provider and the
+authorized domains enabled, and both run `AUTH_MODE=optional`. The
+web config lives in Secret Manager under the
+`NEXT_PUBLIC_FIREBASE_*` names (referenced from `apphosting.yaml`,
+never literals in git; gitleaks enforces this). The runbook, for
+a new backend:
+
+1. In the Firebase console, open Authentication and enable the
+   Google provider for the backend's project, then add the
+   backend's custom domain under Settings, Authorized domains.
+2. Register and copy the web app config; store
    `NEXT_PUBLIC_FIREBASE_API_KEY` and
    `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in Secret Manager
    (`firebase apphosting:secrets:set` + `grantaccess` for the
    backend) and set `AUTH_MODE=optional` in that backend's
    `apphosting.*.yaml`. The root layout reads the values
    server-side and may prerender at build, so the shared
-   config grants BUILD + RUNTIME availability — a rebuild is
+   config grants BUILD + RUNTIME availability, and a rebuild is
    required either way.
 3. Make sure the runtime service account can verify tokens
    (Application Default Credentials; App Hosting's compute
@@ -107,11 +111,11 @@ promotion (PIN-76). The original runbook, for a new backend:
 
 Until step 2 lands for a backend, the `NEXT_PUBLIC_*`
 values resolve empty and the sign-in UI stays hidden even in
-optional mode — no dead buttons.
+optional mode, so there are no dead buttons.
 
-## Auth domain: sign-in on the app's own host (PIN-163)
+## Auth domain: sign-in on the app's own host
 
-By default the web config's `authDomain` is the
+PIN-163. By default the web config's `authDomain` is the
 `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` secret, the project's
 `{project}.firebaseapp.com`, so Google's account chooser names
 that address. Putting the app host in the secret alone does not
@@ -134,33 +138,33 @@ paths, which Firebase Hosting serves and App Hosting does not
    project's own firebaseapp host, where only Firebase's reserved
    helper answers on these paths.
 2. authDomain: `src/config.ts` then serves the host of
-   `APP_BASE_URL` instead of the secret — only for an https
+   `APP_BASE_URL` instead of the secret, only for an https
    `APP_BASE_URL` and a valid project id (the proxy must exist);
    otherwise the secret's value, unchanged. The client project id
    always comes from `FIREBASE_PROJECT_ID`: `resolveAuthUi` never
    derives one from a non-firebaseapp authDomain.
-3. Flag off (the default, and prod today) is byte-identical to
+3. Flag off (unset, the default in code) is byte-identical to
    before; rollback is removing the flag and rebuilding.
+
+`apphosting.dev.yaml` and `apphosting.prod.yaml` both set
+`AUTH_SAME_ORIGIN` to `1`, so Google's chooser names the app host
+on `dev.pinneds.com` and `pinneds.com`.
+
+_Operators only: the rest of this section is console work, done once per environment._
 
 Operator step, per environment (console, not code):
 
-- Google Cloud console → APIs & Services → Credentials → the
-  project's web OAuth client → add the authorized redirect URI
-  `https://{app host}/__/auth/handler`, and keep the app host in
-  Firebase Authentication → Settings → Authorized domains.
-- Dev: done Oct 30 for `dev.pinneds.com`; `apphosting.dev.yaml`
-  sets `AUTH_SAME_ORIGIN=1`.
-- Prod, at promotion: add `https://pinneds.com/__/auth/handler`
-  to the prod project's web client, confirm `pinneds.com` is an
-  authorized domain, then set `AUTH_SAME_ORIGIN: "1"` beside
-  `AUTH_MODE: optional` in `apphosting.prod.yaml`.
+- In the Google Cloud console, open APIs & Services, Credentials,
+  the project's web OAuth client, and add the authorized redirect
+  URI `https://{app host}/__/auth/handler`. Keep the app host in
+  Firebase Authentication, Settings, Authorized domains.
 - Smoke after the rebuild: `GET https://{app host}/__/auth/handler`
   answers 200 (not the app's 404), and the Google chooser names
   the app host.
 
-## Sign-in UI + My boards + restore (PIN-84)
+## Sign-in UI, My boards and restore
 
-The client half of PIN-57b, still behind the same gates:
+PIN-84 is the client half, behind the same gates:
 
 1. Visibility: `resolveAuthUi` (src/domain/auth-ui.ts) enables
    the UI only when `AUTH_MODE=optional` AND the public web
@@ -186,7 +190,7 @@ The client half of PIN-57b, still behind the same gates:
    signed out. Each card's More menu has "Remove from My boards"
    (PIN-166): `DELETE /api/me/boards/{slug}` deletes the caller's
    own index row AND clears `userId` on the caller's own
-   participant there (only when it carries that uid) — never the
+   participant there (only when it carries that uid), never the
    board, nor anyone else's row or claim. The row alone would not
    hold (the next signed-in join or fresh `/claim` rewrites it).
    Side effects: the board's pins leave My pins and restore on
@@ -197,12 +201,12 @@ The client half of PIN-57b, still behind the same gates:
 4. Restore + auto-claim: in optional mode, `GET
    /api/boards/{slug}` with a user session but no participant
    cookie re-issues the participant cookie when the user holds
-   a claim on that board (the slug link is still required —
+   a claim on that board (the slug link is still required;
    sign-in never substitutes for it), and an unclaimed
    participant opening a board while signed in is claimed
    silently. Restore rotates `cookieSecretHash` like the
    reclaim-PIN path, so the previous device's cookie stops
-   working — the single-hash record cannot hold two live
+   working, because the single-hash record cannot hold two live
    cookies. Restore needs a fresh sign-in (PIN-94); the silent
    claim works at any sign-in age (PIN-160). Neither runs for a
    request the browser labels cross-site (`Sec-Fetch-Site` other
@@ -214,13 +218,12 @@ The client half of PIN-57b, still behind the same gates:
    Policy `signInNudge` (default true) and only ever shown
    when sign-in is available.
 
-Live Google proof still depends on the operator steps above;
-until then the hosted dev backend stays link-only and none of
-this renders there.
+A backend that has not finished the operator steps above stays
+link-only in practice: none of this renders there.
 
-## My pins library + pin-to-this-board (PIN-85)
+## My pins library and pin-to-this-board
 
-The cross-board library that closes PIN-57, behind the same
+PIN-85 is the cross-board library that closes PIN-57, behind the same
 gates (404 in link-only mode, 401 signed out):
 
 1. Library: `GET /api/me/elements` and the `/me/pins` page
@@ -228,19 +231,19 @@ gates (404 in link-only mode, 401 signed out):
    where their claim is live (user board index -> claimed
    participant -> `listElementsByOwner`), newest first,
    capped at Policy `libraryPageSize` (default 60). Only
-   PINNED things are listed (PIN-125): a candidate still in
+   PINNED elements are listed (PIN-125): a candidate still in
    review, left out, or cleared from the board's leftovers
    line keeps its element but never shows in the library
    (one pin read per board filters them). Cards
-   carry the source board's TITLE only — a slug never appears
+   carry the source board's TITLE only; a slug never appears
    in a library payload or URL. Each card also carries
    `familyId` (PIN-121): the original element's id for a
-   library copy (`sourceElementId`), else its own id — always
-   one of the caller's own things — so the Add sheet can tell
-   which things already sit on the board it is open on.
+   library copy (`sourceElementId`), else its own id (always
+   one of the caller's own pins), so the Add sheet can tell
+   which pins already sit on the board it is open on.
 2. Thumbnails: `GET /api/me/elements/{id}/image` authorizes
    by signed-in OWNERSHIP (the element's owner participant
-   must be claimed by the caller), not by board link — the
+   must be claimed by the caller), not by board link: the
    cross-board counterpart of the board-link image route.
    Every miss is the uniform 404. It stays `private, no-store`:
    the session, not the URL, authorizes it, so a cached copy
@@ -252,7 +255,7 @@ gates (404 in link-only mode, 401 signed out):
    participant; pinning twice returns `alreadyPinned`, never
    an error. The board Add sheet shows it under the photo
    target as the "From your other boards" strip (PIN-121; one
-   sticker per family, things already here greyed as "Already
+   sticker per family, pins already here greyed as "Already
    here", capped at Policy `libraryStripMax`, default 12) with
    "See all" for the full list; `/me/pins?board=<slug>` offers
    the same action per card.
@@ -262,9 +265,9 @@ gates (404 in link-only mode, 401 signed out):
    element under the pin's own board, so a true cross-board
    Pin cannot be written in this layout (and the delete
    cascade assumes the same). Pinning cross-board therefore
-   creates a copy Element on the target board — new id,
-   `sourceElementId` provenance, the SAME cutout/flattened
-   storage refs — owned by the current participant (the same
+   creates a copy Element on the target board (new id,
+   `sourceElementId` provenance, the SAME cut-out and flattened
+   storage refs) owned by the current participant (the same
    signed-in user, so credit stays theirs). Copies compose,
    remix and cascade natively from then on. `deleteMyElement`
    guards the shared objects: deleting the original or a
@@ -276,9 +279,9 @@ gates (404 in link-only mode, 401 signed out):
    its Firestore form needs the `sourceElementId` collection-
    group field index declared in `firestore.indexes.json`.
 
-## Scene delete (PIN-142, parent PIN-132)
+## Scene delete
 
-`DELETE /api/boards/{slug}/scenes/{sceneId}`: the scene's maker
+PIN-142. `DELETE /api/boards/{slug}/scenes/{sceneId}`: the scene's maker
 (participant cookie) or the board host (host cookie, see
 `docs/15-board-plus.md`). After the slug gate and the cross-site 403
 (no I/O), every failure before authorization is the uniform 404: no
@@ -295,9 +298,9 @@ route's `max-age` ends. The board view marks each scene `canDelete`
 (maker or host; only a UI hint, PIN-143), so a host's Delete shows
 after the first client poll (the page render has no host cookie).
 
-## Board delete (PIN-167)
+## Board delete
 
-`DELETE /api/boards/{slug}`: the board's host only (host cookie).
+PIN-167. `DELETE /api/boards/{slug}`: the board's host only (host cookie).
 Bodyless. After the slug gate come the cross-site 403 and the
 `Policy.boardDeletePerIp` 429, before any read; every other failure
 is the uniform 404 (no or bad host cookie, another board's host, an
@@ -318,9 +321,9 @@ after writing, and My boards skips one anyway, so a row left behind
 links nothing. Jobs in flight are not waited for: their board-record writes
 (elements, pins, scenes, events) are refused and they end quietly,
 but a job already running can still finish its AI call, update its
-own job doc and debit one make from the board's credit account. The
+own job doc and debit one creation from the board's credit account. The
 Firestore records stay (no route serves them; the shared-asset check
-below reads them). A library copy of a thing made on another live
+below reads them). A library copy of a pin made on another live
 board before the delete keeps working for its owner (it shares the
 original's bytes). Concurrent deletes: only the call that set the
 tombstone gets 204; the other gets the uniform 404. Errors on these
@@ -328,9 +331,9 @@ paths are logged with slug-shaped tokens blanked
 (`src/server/safe-log.ts`).
 
 Storage (PIN-169, `src/server/board-storage.ts`): then the board's
-three folders, built from the valid slug with the trailing slash —
-`tmp/boards/{slug}/`, `elements/boards/{slug}/`,
-`scenes/boards/{slug}/` — are listed and emptied, best-effort (never
+three folders, built from the valid slug with the trailing slash
+(`tmp/boards/{slug}/`, `elements/boards/{slug}/` and
+`scenes/boards/{slug}/`), are listed and emptied, best-effort (never
 fails the 204; errors logged by name only). Only an element folder
 whose cut-out a library copy on a live board still points at stays
 whole, decided from storage, so it holds even when the source record
@@ -361,10 +364,10 @@ Everyone else with the board open: the board poll's 404 (not a
 generic load error) renders the same not-found as an unknown link,
 which unmounts the board and so ends the polling.
 
-## Thing rename (PIN-156, parent PIN-134)
+## Pin rename
 
-`PATCH /api/boards/{slug}/elements/{elementId}` with JSON
-`{ label }`: the thing's owner only (participant cookie). After the
+PIN-156. `PATCH /api/boards/{slug}/elements/{elementId}` with JSON
+`{ label }`: the pin's owner only (participant cookie). After the
 slug gate come the checks that read nothing, so they answer the same
 for every element: cross-site 403, non-JSON 415, a body over
 `Policy.elementRenameMaxBytes` 413. Then every miss is the uniform
