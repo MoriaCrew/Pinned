@@ -5,6 +5,13 @@
  * Someone who already has boards gets their boards; everyone else
  * gets the demo, when there is one.
  */
+/**
+ * How many of the visitor's boards the landing needs to know about to
+ * choose: two tells "one" from "several". A decision threshold, not a
+ * tunable limit.
+ */
+export const LANDING_BOARDS_NEEDED = 2;
+
 export type LandingSecondary =
   | { kind: "demo" }
   | { kind: "myBoard"; slug: string }
