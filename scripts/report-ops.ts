@@ -65,7 +65,9 @@ function describe(record: ReportRecord, withMessage = false): string {
     `report ${record.id}  ref ${record.reference}  ${record.status}`,
     `  ${record.scope}${record.targetId ? ` ${record.targetId}` : ""}  reason ${record.reason}  severity ${record.severity}  by ${record.reporterKind}`,
     `  created ${at(record.createdAt)}  deleteAt ${at(record.deleteAt)}  decided ${at(record.decidedAt)}${record.note ? `  note: ${record.note}` : ""}`,
-    `  held: ${record.held.elementIds.length} element(s), ${record.held.sceneIds.length} scene(s), review ${record.held.boardReview}, storage hold ${record.held.storageHold}`,
+    `  held: ${record.held.elementIds.length} element(s), ${record.held.sceneIds.length} scene(s), review ${record.held.boardReview}, storage hold ${record.held.storageHold}${
+      !record.held.storageHold && (record.held.storageRefs?.length ?? 0) > 0 ? ` (partial: ${record.held.storageRefs?.length} object(s) held)` : ""
+    }${record.holdsReleasedAt ? `, released ${new Date(record.holdsReleasedAt).toISOString()}` : ""}`,
   ];
   if (withMessage) {
     lines.push(`  email: ${record.reporterEmail ?? "-"}`);
