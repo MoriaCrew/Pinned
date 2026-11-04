@@ -40,8 +40,10 @@ describe("UI kit helpers (PIN-97)", () => {
 });
 
 describe("UI kit components (PIN-97)", () => {
-  it("ships 24 icons, decorative unless titled", () => {
-    expect(ICON_NAMES).toHaveLength(24);
+  it("ships 26 icons, decorative unless titled", () => {
+    expect(ICON_NAMES).toHaveLength(26);
+    expect(ICON_NAMES).toContain("launch");
+    expect(ICON_NAMES).toContain("play");
     expect(ICON_NAMES).toContain("globe");
     expect(ICON_NAMES).toContain("mic");
     expect(ICON_NAMES).toContain("stop");

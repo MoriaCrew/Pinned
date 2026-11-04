@@ -38,7 +38,10 @@ export default async function HomePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const locale = await getLocale();
-  const demoEnabled = getConfig().demoBoardSlug !== null;
+  const config = getConfig();
+  const demoEnabled = config.demoBoardSlug !== null;
+  // PIN-263: judging-week links, each shown only while its env URL is set.
+  const { demoVideoUrl, promoPostUrl } = config;
   const demoTtlHours = getPolicy().demo.ttlHours;
   const query = await searchParams;
   // PIN-168: the host lands here after deleting a board while signed out.
@@ -106,7 +109,7 @@ export default async function HomePage({
             </ButtonLink>
             {demoEnabled ? (
               <form method="post" action="/api/demo" className="pn-landing-demo">
-                <Button type="submit" variant="secondary" size="lg" icon="scene">
+                <Button type="submit" variant="secondary" size="lg" icon="launch">
                   {t(locale, "landing.demo")}
                 </Button>
               </form>
@@ -184,6 +187,20 @@ export default async function HomePage({
               <StepText locale={locale} n={3} title={t(locale, "landing.step3")} body={t(locale, "landing.step3Body")} />
             </li>
           </ol>
+          {demoVideoUrl ? (
+            // PIN-263: a link out, never an embedded player (no third-party trackers on this page).
+            <ButtonLink
+              variant="secondary"
+              icon="play"
+              href={demoVideoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pn-landing-video"
+            >
+              {t(locale, "landing.video")}
+              <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
+            </ButtonLink>
+          ) : null}
         </section>
 
         <footer className="pn-landing-foot">
@@ -203,6 +220,12 @@ export default async function HomePage({
           </section>
           <SiteLinks locale={locale}>
             <a href="/models">{t(locale, "landing.meta.more")}</a>
+            {promoPostUrl ? (
+              <a href={promoPostUrl} target="_blank" rel="noopener noreferrer">
+                {t(locale, "landing.xPost")}
+                <span className="pn-sr"> {t(locale, "landing.newTab")}</span>
+              </a>
+            ) : null}
           </SiteLinks>
         </footer>
       </div>

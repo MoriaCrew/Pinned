@@ -640,6 +640,8 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-note { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--ink-muted); }
 .pn-landing-how { grid-area: how; display: grid; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-5); border-top: 2px dashed var(--line-strong); }
 .pn-landing-steps { display: grid; gap: var(--space-5); margin: 0; padding: 0; list-style: none; }
+/* PIN-263: the demo video link closes "How it works"; it sizes to its label, not the column. */
+.pn-landing-video { justify-self: start; }
 .pn-landing-step { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: var(--space-4); }
 .pn-landing-art { position: relative; aspect-ratio: 1; width: 100%; display: grid; place-items: center; }
 .pn-landing-art .pn-print-wrap { width: 88%; }

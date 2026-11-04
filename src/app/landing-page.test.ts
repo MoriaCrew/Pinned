@@ -160,3 +160,48 @@ describe("landing 'See a board' demo form (PIN-251)", () => {
     expect(plain).not.toContain(en["landing.demoUnavailable"]);
   });
 });
+
+describe("judging-week links (PIN-263)", () => {
+  const withLinks = async (links: { demoVideoUrl: string | null; promoPostUrl: string | null }) => {
+    const config = await import("../config");
+    const real = config.getConfig();
+    vi.spyOn(config, "getConfig").mockReturnValue({ ...real, demoBoardSlug: "tmplAAAAAAAAAAAAAAAAA1", ...links });
+  };
+  const anchor = (html: string, href: string) => new RegExp(`<a [^>]*href="${href.replace(/[.?/]/g, "\\$&")}"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
+
+  it("closes How it works with the demo video and puts the post in the footer, both opening a new tab", async () => {
+    await withLinks({ demoVideoUrl: "https://youtu.be/q6lkrA6fsCI", promoPostUrl: "https://x.com/MoriaCrew/status/1" });
+    const html = await landing({ set: "classic" });
+    const video = anchor(html, "https://youtu.be/q6lkrA6fsCI");
+    expect(video).toContain(en["landing.video"]);
+    expect(video).toContain('target="_blank"');
+    expect(video).toContain('rel="noopener noreferrer"');
+    expect(video).toContain(en["landing.newTab"]);
+    // Inside "How it works", after the steps.
+    const how = /<section class="pn-landing-how"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+    expect(how).toContain("https://youtu.be/q6lkrA6fsCI");
+    const post = anchor(html, "https://x.com/MoriaCrew/status/1");
+    expect(post).toContain(en["landing.xPost"]);
+    expect(post).toContain('target="_blank"');
+    expect(post).toContain('rel="noopener noreferrer"');
+    const foot = /<footer[\s\S]*?<\/footer>/.exec(html)?.[0] ?? "";
+    expect(foot).toContain("https://x.com/MoriaCrew/status/1");
+    // A link out, never an embedded player or widget.
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("platform.twitter.com");
+  });
+
+  it("shows neither link while its URL is unset", async () => {
+    await withLinks({ demoVideoUrl: null, promoPostUrl: null });
+    const html = await landing({ set: "classic" });
+    expect(html).not.toContain(en["landing.video"]);
+    expect(html).not.toContain(en["landing.xPost"]);
+  });
+
+  it("labels the demo button Demo board with the launch icon", async () => {
+    await withLinks({ demoVideoUrl: null, promoPostUrl: null });
+    const form = /<form [^>]*>[\s\S]*?<\/form>/.exec(await landing({ set: "classic" }))?.[0] ?? "";
+    expect(en["landing.demo"]).toBe("Demo board");
+    expect(form).toContain(en["landing.demo"]);
+  });
+});
