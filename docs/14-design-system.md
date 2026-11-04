@@ -41,7 +41,7 @@ Principles:
 ## UI kit
 
 - `src/ui/` holds the components (`import { … } from "../ui"`):
-  Icon (24 line icons), Wordmark, Button/ButtonLink, IconButton,
+  Icon (26 line icons), Wordmark, Button/ButtonLink, IconButton,
   Chip, Tag, Avatar/AvatarStack, TextField, Hint, Sticker, Pin,
   CreditLine, SceneCard, Developing, BoardHeader, SectionHead,
   FilterChips, Dock, Sheet, EmptyState, Menu, SkinPicker, TryOnBar,

@@ -76,6 +76,17 @@ export interface AppConfig {
    */
   legalContactEmail: string | null;
   /**
+   * Judging-week links on the landing (PIN-263): the demo video
+   * (DEMO_VIDEO_URL, shown under "How it works") and the launch post
+   * (PROMO_POST_URL, in the footer). Public plain values in the App
+   * Hosting env yaml. Only an https URL is kept; anything else is
+   * null and the link is not shown, so unsetting the env value takes
+   * a link down without a code change. Both open in a new tab: no
+   * player or widget is embedded (no third-party trackers).
+   */
+  demoVideoUrl: string | null;
+  promoPostUrl: string | null;
+  /**
    * Board Plus billing adapter (PIN-103, docs/15). "off" (the
    * default; anything but an exact known value) answers every
    * checkout "unavailable" and writes nothing; "mock" grants the
@@ -172,6 +183,19 @@ const CONTACT_EMAIL_PATTERN = /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[A-Za-z]{2,}$/;
 function parseContactEmail(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed && CONTACT_EMAIL_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+/** An absolute https URL, else null (PIN-263): no other scheme, no credentials, no spaces. */
+function parseHttpsUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || /\s/.test(trimmed)) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -287,6 +311,8 @@ export function parseConfig(
     }),
     demoBoardSlug: parseDemoBoardSlug(env.DEMO_BOARD_SLUG),
     legalContactEmail: parseContactEmail(env.LEGAL_CONTACT_EMAIL),
+    demoVideoUrl: parseHttpsUrl(env.DEMO_VIDEO_URL),
+    promoPostUrl: parseHttpsUrl(env.PROMO_POST_URL),
     plusMode: parsePlusMode(env),
     stripeSecretKey: nonEmpty(env.STRIPE_SECRET_KEY),
     stripeWebhookSecret: nonEmpty(env.STRIPE_WEBHOOK_SECRET),

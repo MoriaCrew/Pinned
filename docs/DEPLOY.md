@@ -43,6 +43,8 @@ Manager references by name.
 | `PINNED_LAB` | off | 1 | — (lab routes 404) |
 | `DEMO_BOARD_SLUG` | — | — | secret ref after seeding (§6) |
 | `LEGAL_CONTACT_EMAIL` | — (legal pages link to public GitHub issues) | `contact@moriacrew.com` | `contact@moriacrew.com` (a plain value: it is shown on `/privacy` and `/terms`) |
+| `DEMO_VIDEO_URL` | — (no video link) | `https://youtu.be/q6lkrA6fsCI` | `https://youtu.be/q6lkrA6fsCI` (PIN-263: "Watch the 3-minute demo" under How it works; https only, unset to hide) |
+| `PROMO_POST_URL` | — (no post link) | a test post | — until the launch post is published (PIN-263: "See the post on X" in the landing footer; https only) |
 | `runConfig` | — | base: min 0, max 2, 512 MiB | min **1**, max **4**, **1024 MiB**, concurrency 10 |
 | Secrets | — | `META_API_KEY`, `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `META_API_KEY`, `SESSION_SECRET`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` (+ Stripe and `DEMO_BOARD_SLUG` later) |
 
@@ -171,8 +173,9 @@ curl -s https://pinneds.com/api/health   # ok:true, aiMock:false, authMode:"opti
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/lab/sam          # 404
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/__/auth/handler  # 200
 curl -s -o /dev/null -w "%{http_code}\n" https://pinneds.com/api/me           # 401 when signed out
-curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked
-curl -s https://pinneds.com/ | grep -c 'href="/g/'   # 1: the landing demo link (DEMO_BOARD_SLUG); 0 on dev
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Stripe-Signature: t=1,v1=bad" -H "Content-Type: application/json" -d '{}' https://pinneds.com/api/billing/stripe/webhook   # 400: billing on, signature checked (411 without a body: the byte cap needs Content-Length)
+curl -s https://pinneds.com/ | grep -c 'action="/api/demo"'   # 1: the landing "See a board" form (DEMO_BOARD_SLUG set, PIN-251); 0 when the demo is off. The landing never links a board.
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" -X POST -H "sec-fetch-site: same-origin" -H "Content-Length: 0" https://pinneds.com/api/demo | sed -E 's#/g/[A-Za-z0-9_-]{22}#/g/<slug>#'   # 303 to a fresh demo board (a copy of the template, swept after its TTL); a second POST from the same address → 303 /?demo=busy (the per-address cap). Never record the slug; each POST uses one of this address's demo slots.
 # Languages (PIN-227): French browser → French, saved English wins, unknown → English
 curl -s -H "Accept-Language: fr-FR" https://pinneds.com/ | grep -o '<html lang="fr"\|Nos trucs, épinglés ensemble'
 curl -s -H "Accept-Language: fr-FR" -H "Cookie: pinneds_locale=en" https://pinneds.com/ | grep -o '<html lang="en"'

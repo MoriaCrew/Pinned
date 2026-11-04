@@ -316,16 +316,19 @@
 .pn-print-wrap { display: block; rotate: calc(var(--tilt) * var(--t, 0) * var(--print-tilt) * .5); }
 .pn-print { position: relative; display: grid; gap: 0; margin: 0; background: var(--print-holes), var(--print-bg); padding: var(--print-pad) var(--print-pad) var(--print-pad-bottom);
   border-radius: var(--print-radius); box-shadow: var(--shadow-print); -webkit-mask: var(--print-mask); mask: var(--print-mask); padding-top: var(--print-pad-top); }
+/* PIN-262: one column that never grows past the paper, so a long tag or word can't push the picture past the card's edge. */
+.pn-print { grid-template-columns: minmax(0, 1fr); }
+.pn-print .pn-tag { white-space: normal; }
 .pn-print-frame { position: relative; overflow: hidden; border-radius: 2px; background: var(--surface-sunk); }
 .pn-print-frame > img:not(.pn-develop-cut) { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* PIN-131: with onOpen the frame sits in a bare button that opens the scene viewer (no box of its own, so no shift). */
 .pn-print-open { display: block; width: 100%; padding: 0; border: 0; border-radius: 2px; background: none; color: inherit; cursor: zoom-in; -webkit-tap-highlight-color: transparent; }
 /* Kind tag and Nº sit on the paper under the picture, never on it (the tag has its own fill, the Nº is muted ink on the paper). */
-.pn-print-meta { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 2px 0; }
+.pn-print-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) 2px 0; }
 .pn-print-no { margin-left: auto; font: 650 11px/14px var(--font-mono); letter-spacing: .08em; color: var(--ink-muted); white-space: nowrap; }
 .pn-print-body { display: grid; gap: var(--space-3); padding: var(--space-3) 2px 0; }
 .pn-print-meta + .pn-print-body { padding-top: var(--space-2); }
-.pn-print-idea { margin: 0; font: 650 16px/22px var(--font-ui); color: var(--ink); }
+.pn-print-idea { margin: 0; font: 650 16px/22px var(--font-ui); color: var(--ink); overflow-wrap: anywhere; }
 .pn-print-actions { display: flex; align-items: center; gap: var(--space-2); }
 .pn-print-actions .pn-spacer { flex: 1; }
 .pn-prints { display: flex; gap: var(--space-4); overflow-x: auto; scroll-snap-type: x mandatory; padding: 6px var(--space-4) 18px; margin: 0 calc(-1 * var(--space-4)); list-style: none; scrollbar-width: none; }
@@ -336,9 +339,9 @@
 .pn-develop-frame { position: relative; overflow: hidden; border-radius: 2px; background: var(--develop-bg); isolation: isolate; }
 .pn-develop-frame::after { content: ""; position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--surface-raised) 30%, transparent)); mix-blend-mode: soft-light; animation: pn-develop 4s ease-in-out infinite alternate; }
 .pn-develop-cut { position: absolute; z-index: 1; width: 34%; height: auto; max-height: 60%; object-fit: contain; translate: -50% -50%; rotate: calc(var(--tilt) * var(--t, 0)); opacity: .55; filter: drop-shadow(2px 0 0 var(--keyline)) drop-shadow(-2px 0 0 var(--keyline)) drop-shadow(0 2px 0 var(--keyline)) drop-shadow(0 -2px 0 var(--keyline)) sepia(.6) blur(.4px); animation: pn-float 3.2s ease-in-out infinite alternate; }
-.pn-develop-status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.pn-develop-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .pn-develop-status .pn-tag { animation: pn-blink 1.4s steps(2, jump-none) infinite; }
-.pn-develop-line { margin: 0; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); }
+.pn-develop-line { margin: 0; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); overflow-wrap: anywhere; }
 @keyframes pn-develop { from { opacity: .2; } to { opacity: .9; } }
 @keyframes pn-float { from { translate: -50% -48%; } to { translate: -50% -53%; } }
 @keyframes pn-blink { 50% { opacity: .55; } }
@@ -371,6 +374,10 @@
 .pn-scrim { position: absolute; inset: 0; background: var(--scrim); }
 .pn-sheet { position: relative; display: grid; gap: var(--space-4); width: 100%; max-width: 560px; margin: 0 auto; padding: var(--space-2) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom)); border-radius: var(--sheet-radius) var(--sheet-radius) 0 0; background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-sheet); }
 .pn-sheet { border: var(--edge-w) solid var(--edge); border-bottom: 0; }
+/* PIN-261: a sheet in the Sheet layer never grows past the top of the screen; taller content scrolls inside it.
+   Zero specificity on purpose: sheets that scroll an inner region (Make, Change look, Start) keep their own
+   max-height and set overflow back to visible; the scene viewer's panel is not in the layer, so its menus aren't clipped. */
+:where(.pn-sheet-layer > .pn-sheet) { max-height: calc(100vh - var(--space-5)); max-height: calc(100dvh - var(--space-5)); overflow-y: auto; overscroll-behavior: contain; }
 .pn-sheet-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line-strong); }
 .pn-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .pn-sheet-title { margin: 0; font-family: var(--skin-display); font-weight: var(--display-weight); font-style: var(--display-style); font-size: calc(24px * var(--display-scale)); line-height: 1.1; letter-spacing: var(--display-tracking); text-transform: var(--display-transform); }
@@ -633,6 +640,10 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-note { margin: 0; font: 500 14px/20px var(--font-ui); color: var(--ink-muted); }
 .pn-landing-how { grid-area: how; display: grid; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-5); border-top: 2px dashed var(--line-strong); }
 .pn-landing-steps { display: grid; gap: var(--space-5); margin: 0; padding: 0; list-style: none; }
+/* PIN-263/265: the demo video and the launch post close "How it works" together; they size to their labels. */
+.pn-landing-promo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); }
+.pn-landing-promo-link { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); color: var(--ink); font: 600 15px/20px var(--font-ui); text-decoration: underline; text-underline-offset: 4px; }
+.pn-landing-promo-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .pn-landing-step { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: var(--space-4); }
 .pn-landing-art { position: relative; aspect-ratio: 1; width: 100%; display: grid; place-items: center; }
 .pn-landing-art .pn-print-wrap { width: 88%; }
@@ -654,14 +665,22 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 .pn-landing-meta-list { display: grid; gap: var(--space-1) var(--space-5); margin: 0; padding: 0; list-style: none; font: 500 14px/20px var(--font-ui); }
 .pn-landing-meta-list li { display: flex; align-items: center; gap: var(--space-2); }
 .pn-landing-meta-list .pn-icon { flex: none; }
+/* PIN-265: the models link closes the credit it explains. */
+.pn-landing-meta-more a { gap: 6px; color: var(--ink); font-weight: 600; text-decoration: underline; }
 /* Footer links (PIN-26): Privacy, Terms, source; each a 44px target. */
-.pn-foot-links { display: flex; flex-wrap: wrap; column-gap: var(--space-5); }
-.pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-underline-offset: 4px; }
+/* PIN-265: one quiet utility row. Links sit in a list; CSS draws the dots (empty alt text: never read aloud, never part of a link). */
+.pn-foot-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--space-4); }
+.pn-foot-list { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; }
+.pn-foot-list > li { display: inline-flex; align-items: center; }
+.pn-foot-list > li + li::before { content: "·"; content: "·" / ""; padding: 0 var(--space-2); color: var(--ink-muted); }
+.pn-foot-links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--ink-muted); font: 500 13px/18px var(--font-ui); text-decoration: none; text-underline-offset: 4px; }
+.pn-foot-links a:hover { color: var(--ink); text-decoration: underline; }
 .pn-foot-links a[aria-current="page"] { color: var(--ink); text-decoration: none; }
+.pn-landing-foot .pn-foot-links { margin-top: var(--space-4); padding-top: var(--space-2); border-top: 2px dashed var(--line-strong); }
 .pn-foot-links a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* PIN-247: the footer's language switch, a link-sized button (globe + current language). */
-.pn-foot-lang { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--ink-muted); font: 500 14px/20px var(--font-ui); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
-.pn-foot-lang:hover { color: var(--ink); }
+.pn-foot-lang { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--ink-muted); font: 500 13px/18px var(--font-ui); text-decoration: none; text-underline-offset: 4px; cursor: pointer; }
+.pn-foot-lang:hover { color: var(--ink); text-decoration: underline; }
 .pn-foot-lang:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (min-width: 540px) {
@@ -740,7 +759,7 @@ a.pn-btn:not(.pn-btn-quiet) { text-decoration: none; }
 /* ---------- Make sheet (PIN-100; chat-style composer PIN-216) ---------- */
 /* Long on a small phone: the body scrolls, the title and the composer (the foot) stay put. */
 /* Rides above the on-screen keyboard (PIN-226): the sheet's hook measures --pn-keyboard-inset (0px when closed); the sheet lifts by it and its scrolling middle gives up the same height. */
-.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
+.pn-sheet.pn-make-sheet { display: flex; flex-direction: column; overflow: visible; margin-bottom: var(--pn-keyboard-inset, 0px); max-height: calc(92vh - var(--pn-keyboard-inset, 0px)); max-height: calc(92dvh - var(--pn-keyboard-inset, 0px)); transition: margin-bottom .2s ease, max-height .2s ease; }
 @media (prefers-reduced-motion: reduce) {
   .pn-sheet.pn-make-sheet { transition: none; }
 }

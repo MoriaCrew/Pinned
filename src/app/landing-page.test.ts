@@ -73,6 +73,20 @@ describe("landing page showcase sets (PIN-175)", () => {
     expect(css).toMatch(/\.pn-landing-pile \{[^}]*position: relative;/);
   });
 
+  it("keeps the utility row to Privacy, Terms and Source as list items, then the language (PIN-265)", async () => {
+    const html = await landing({ set: "classic" });
+    const row = /<nav class="pn-foot-links"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? "";
+    const items = [...row.matchAll(/<li><a href="([^"]+)"[^>]*>([^<]+)<\/a><\/li>/g)].map((m) => [m[1], m[2]]);
+    expect(items).toEqual([
+      ["/privacy", en["footer.privacy"]],
+      ["/terms", en["footer.terms"]],
+      ["https://github.com/MoriaCrew/Pinned", en["footer.source"]],
+    ]);
+    expect(en["footer.source"]).toBe("Source code");
+    // The dots are CSS on the list items, never text inside a link.
+    expect(row).not.toContain("·");
+  });
+
   it("links Privacy, Terms and the source from the footer (PIN-26)", async () => {
     const html = await landing({ set: "classic" });
     const foot = /<footer class="pn-landing-foot">([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? "";
@@ -114,7 +128,11 @@ describe("landing Made with Meta AI credit (PIN-222)", () => {
     const html = await landing({ set: "classic" });
     for (const name of ["Muse Spark", "SAM 3.1", "Muse Image", "Muse Voice"]) expect(html).toContain(name);
     // PIN-237: the in-app explainer, not the developer doc on GitHub.
-    expect(html).toContain(`<a href="/models">${en["landing.meta.more"]}</a>`);
+    // PIN-265: the link closes the Meta AI list, with an arrow, and is no longer in the utility row.
+    const meta = /<ul class="pn-landing-meta-list">[\s\S]*?<\/ul>/.exec(html)?.[0] ?? "";
+    expect(meta).toMatch(new RegExp(`<a href="/models">${en["landing.meta.more"]}<svg`));
+    const row = /<nav class="pn-foot-links"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    expect(row).not.toContain('href="/models"');
     expect(html).not.toContain("docs/19-meta-models.md");
     expect(html).toContain(`>${en["footer.source"]}</a>`);
   });
@@ -158,5 +176,89 @@ describe("landing 'See a board' demo form (PIN-251)", () => {
     const plain = await landing({ demo: "nope" });
     expect(plain).not.toContain(en["landing.demoBusy"]);
     expect(plain).not.toContain(en["landing.demoUnavailable"]);
+  });
+});
+
+describe("judging-week links (PIN-263)", () => {
+  const withLinks = async (links: { demoVideoUrl: string | null; promoPostUrl: string | null }) => {
+    const config = await import("../config");
+    const real = config.getConfig();
+    vi.spyOn(config, "getConfig").mockReturnValue({ ...real, demoBoardSlug: "tmplAAAAAAAAAAAAAAAAA1", ...links });
+  };
+  const anchor = (html: string, href: string) => new RegExp(`<a [^>]*href="${href.replace(/[.?/]/g, "\\$&")}"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
+
+  it("closes How it works with the demo video and the post, both opening a new tab", async () => {
+    await withLinks({ demoVideoUrl: "https://youtu.be/q6lkrA6fsCI", promoPostUrl: "https://x.com/MoriaCrew/status/1" });
+    const html = await landing({ set: "classic" });
+    const video = anchor(html, "https://youtu.be/q6lkrA6fsCI");
+    expect(video).toContain(en["landing.video"]);
+    expect(video).toContain('target="_blank"');
+    expect(video).toContain('rel="noopener noreferrer"');
+    expect(video).toContain(en["landing.newTab"]);
+    // Inside "How it works", after the steps.
+    const how = /<section class="pn-landing-how"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+    expect(how).toContain("https://youtu.be/q6lkrA6fsCI");
+    const post = anchor(html, "https://x.com/MoriaCrew/status/1");
+    expect(post).toContain(en["landing.xPost"]);
+    expect(post).toContain('target="_blank"');
+    expect(post).toContain('rel="noopener noreferrer"');
+    // PIN-265: the post sits next to the video in How it works, not in the footer.
+    expect(how).toContain("https://x.com/MoriaCrew/status/1");
+    const foot = /<footer[\s\S]*?<\/footer>/.exec(html)?.[0] ?? "";
+    expect(foot).not.toContain("x.com/MoriaCrew");
+    // A link out, never an embedded player or widget.
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("platform.twitter.com");
+  });
+
+  it("shows neither link while its URL is unset", async () => {
+    await withLinks({ demoVideoUrl: null, promoPostUrl: null });
+    const html = await landing({ set: "classic" });
+    expect(html).not.toContain(en["landing.video"]);
+    expect(html).not.toContain(en["landing.xPost"]);
+  });
+
+  it("labels the demo button Demo board with the launch icon", async () => {
+    await withLinks({ demoVideoUrl: null, promoPostUrl: null });
+    const form = /<form [^>]*>[\s\S]*?<\/form>/.exec(await landing({ set: "classic" }))?.[0] ?? "";
+    expect(en["landing.demo"]).toBe("Demo board");
+    expect(form).toContain(en["landing.demo"]);
+  });
+});
+
+describe("signed-in visitors with boards (PIN-264)", () => {
+  const setup = async (slugs: string[] | null) => {
+    const config = await import("../config");
+    const real = config.getConfig();
+    vi.spyOn(config, "getConfig").mockReturnValue({ ...real, demoBoardSlug: "tmplAAAAAAAAAAAAAAAAA1" });
+    const viewer = await import("../server/landing-viewer");
+    vi.spyOn(viewer, "viewerBoardSlugs").mockResolvedValue(slugs);
+  };
+
+  it("opens the one board instead of the demo, and drops the demo note", async () => {
+    await setup(["boardAAAAAAAAAAAAAAAA1"]);
+    const html = await landing({ set: "classic" });
+    expect(html).toMatch(/<a [^>]*href="\/g\/boardAAAAAAAAAAAAAAAA1"[^>]*>[\s\S]*?See my board<\/a>/);
+    expect(html).not.toContain('action="/api/demo"');
+    expect(html).not.toContain("disappears after");
+  });
+
+  it("lists several boards on My boards", async () => {
+    await setup(["boardAAAAAAAAAAAAAAAA1", "boardBBBBBBBBBBBBBBBB2"]);
+    const html = await landing({ set: "classic" });
+    expect(html).toMatch(/<a [^>]*href="\/me\/boards"[^>]*>[\s\S]*?See my boards<\/a>/);
+    expect(html).not.toMatch(/href="\/g\//);
+    expect(html).not.toContain('action="/api/demo"');
+  });
+
+  it("keeps the demo for everyone else: signed out, or signed in with no boards", async () => {
+    for (const slugs of [null, []]) {
+      await setup(slugs);
+      const html = await landing({ set: "classic" });
+      expect(html).toContain('action="/api/demo"');
+      expect(html).not.toContain(en["landing.myBoard"]);
+      expect(html).not.toMatch(/href="\/g\//);
+      vi.restoreAllMocks();
+    }
   });
 });
