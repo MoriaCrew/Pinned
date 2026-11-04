@@ -5,7 +5,7 @@ import { InMemoryReportStore } from "../domain/report-store";
 import { boardReportRef } from "../domain/tokens";
 import { resolvePolicy } from "../policy/policy";
 import { publicBoard } from "./board-api";
-import { REPORT_RECEIVED_EVENT, createReport, type ReportDeps } from "./board-report";
+import { REPORT_RECEIVED_EVENT, createReport, listBoardObjectRefs, type ReportDeps } from "./board-report";
 import { BoardApiError } from "./board-session";
 import { InMemoryDerivativeStore } from "./derivative-store";
 
@@ -44,6 +44,8 @@ async function harness() {
   await boards.putScene(scene("s-mug", ["mug"]));
   await boards.putScene(scene("s-both", ["mug", "friend"]));
   for (const id of ["s-mug", "s-both"]) await store.put(`scenes/boards/${SLUG}/${id}/scene.webp`, Buffer.from("w"), "image/webp");
+  // A sibling no record points at (the strip preview, PIN-133).
+  await store.put(`scenes/boards/${SLUG}/s-mug/preview.webp`, Buffer.from("p"), "image/webp");
   let ids = 0;
   const deps: ReportDeps = { boards, store, reports, policy, now: () => NOW, newId: () => `rep-${++ids}` };
   return { boards, store, reports, policy, deps };
@@ -140,17 +142,44 @@ describe("createReport (PIN-270)", () => {
     expect(h.store.isHeld(refsOf("mug")[0])).toBe(false);
   });
 
-  it("whole board as illegal from anyone: the same plus Storage holds, severity high, CRITICAL line", async () => {
+  it("whole board as illegal from anyone: the same plus Storage holds on whole folders, severity high, CRITICAL line", async () => {
     const h = await harness();
+    // A library copy whose bytes live under another board's folder (PIN-85).
+    const OTHER = "ZyXwVuTsRqPoNmLkJiHgFe";
+    const foreign = [`elements/boards/${OTHER}/src/cutout.png`, `elements/boards/${OTHER}/src/flattened.jpg`, `elements/boards/${OTHER}/src/extra.bin`];
+    for (const ref of foreign) await h.store.put(ref, Buffer.from("x"), "image/png");
+    await h.boards.createElement({
+      id: "copy", boardId: SLUG, ownerId: "p1", label: "copy", description: "", maskBox: { x1: 0, y1: 0, x2: 1, y2: 1 },
+      cutoutRef: foreign[0], flattenedRef: foreign[1], sourcePhotoId: "job", faceFlag: false, sourceElementId: "src", createdAt: 1_250,
+    });
+    // A working copy must never be held.
+    await h.store.put(`tmp/boards/${SLUG}/jobs/j/working.webp`, Buffer.from("t"), "image/webp");
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const result = await createReport(SLUG, { scope: "board", reason: "illegal" }, null, h.deps);
     expect(result.record.severity).toBe("high");
-    expect(result.record.held).toEqual({ elementIds: ["mug", "friend"], sceneIds: ["s-mug", "s-both"], boardReview: true, storageHold: true });
+    expect(result.record.held).toEqual({ elementIds: ["mug", "friend", "copy"], sceneIds: ["s-mug", "s-both"], boardReview: true, storageHold: true });
     expect(result.record).not.toHaveProperty("deleteAt");
-    for (const ref of [...refsOf("mug"), ...refsOf("friend"), `scenes/boards/${SLUG}/s-mug/scene.webp`, `scenes/boards/${SLUG}/s-both/scene.webp`]) {
+    for (const ref of [
+      ...refsOf("mug"),
+      ...refsOf("friend"),
+      `scenes/boards/${SLUG}/s-mug/scene.webp`,
+      `scenes/boards/${SLUG}/s-both/scene.webp`,
+      `scenes/boards/${SLUG}/s-mug/preview.webp`,
+      ...foreign,
+    ]) {
       expect(h.store.isHeld(ref)).toBe(true);
     }
+    expect(h.store.isHeld(`tmp/boards/${SLUG}/jobs/j/working.webp`)).toBe(false);
     expect(loggedEvents(log)[0]).toMatchObject({ severity: "CRITICAL", reason: "illegal", held: { storage: true } });
+  });
+
+  it("listBoardObjectRefs falls back to the records' refs when a listing fails", async () => {
+    const h = await harness();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const elements = await h.boards.listElements(SLUG);
+    const scenes = await h.boards.listScenes(SLUG, { includeHidden: true });
+    const refs = await listBoardObjectRefs(SLUG, elements, scenes, { listPrefix: async () => { throw new Error("gcs down"); } });
+    expect(refs.sort()).toEqual([...refsOf("friend"), ...refsOf("mug"), `scenes/boards/${SLUG}/s-both/scene.webp`, `scenes/boards/${SLUG}/s-mug/scene.webp`].sort());
   });
 
   it("a Storage hold that fails is logged by name and recorded as not held; the report still lands", async () => {

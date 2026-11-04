@@ -26,6 +26,7 @@ import { userMessage } from "../i18n/user-message";
 import type { MessageKey } from "../i18n";
 import type { Policy } from "../policy/policy";
 import { BoardApiError } from "./board-session";
+import { boardStoragePrefixes } from "./board-storage";
 import type { DerivativeStore } from "./derivative-store";
 import { logEvent, logServerError } from "./safe-log";
 
@@ -168,13 +169,7 @@ async function applyHold(
   let storageHold = false;
   if (planned.storageHold) {
     storageHold = true;
-    const refs = new Set<string>();
-    for (const element of elements) {
-      refs.add(releaseRef(element.cutoutRef));
-      refs.add(releaseRef(element.flattenedRef));
-    }
-    for (const scene of scenes) if (scene.imageRef) refs.add(scene.imageRef);
-    for (const ref of refs) {
+    for (const ref of await listBoardObjectRefs(slug, elements, scenes, deps.store)) {
       try {
         await deps.store.setHold(ref, true);
       } catch (error) {
@@ -184,4 +179,47 @@ async function applyHold(
     }
   }
   return { elementIds, sceneIds: [...sceneIds], boardReview, storageHold };
+}
+
+/**
+ * Every stored object a board's records can reach (ADR-004: holds go
+ * on the board's folders): the board's own `elements/` and `scenes/`
+ * folders as Storage lists them (a scene's preview and any other
+ * sibling included), the folder of every library copy whose bytes live
+ * under another board, and the records' own refs as the floor when a
+ * listing fails. Never `tmp/`: working copies are not evidence we keep.
+ * Shared with the operator's close-out (`releaseStorageHolds`).
+ */
+export async function listBoardObjectRefs(
+  slug: string,
+  elements: readonly Pick<Element, "cutoutRef" | "flattenedRef">[],
+  scenes: readonly Pick<Scene, "imageRef">[],
+  store: Pick<DerivativeStore, "listPrefix">,
+): Promise<string[]> {
+  const refs = new Set<string>();
+  const folders = new Set<string>();
+  const prefixes = boardStoragePrefixes(slug);
+  const ownElements = prefixes?.[1];
+  if (prefixes) {
+    folders.add(prefixes[1]);
+    folders.add(prefixes[2]);
+  }
+  for (const element of elements) {
+    for (const ref of [releaseRef(element.cutoutRef), releaseRef(element.flattenedRef)]) {
+      refs.add(ref);
+      const folder = ref.slice(0, ref.lastIndexOf("/") + 1);
+      if (ref.startsWith("elements/") && folder.length > "elements/".length && !(ownElements && ref.startsWith(ownElements))) {
+        folders.add(folder);
+      }
+    }
+  }
+  for (const scene of scenes) if (scene.imageRef) refs.add(scene.imageRef);
+  for (const folder of folders) {
+    try {
+      for (const ref of await store.listPrefix(folder)) refs.add(ref);
+    } catch (error) {
+      logServerError("storage listing failed; holding the records' refs only", error);
+    }
+  }
+  return [...refs];
 }
