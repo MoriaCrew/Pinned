@@ -160,13 +160,14 @@ npm test
 npm run build
 ```
 
-On `dev` at `a90cd7b` (Nov 2, 2026), `npm test` reports **1,879 tests passed, 3
-skipped**, in 165 test files. CI (`.github/workflows/ci.yml`) runs all three with
-`AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full history on every
-PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook, and Cursor Bugbot
-reviews every PR: as of Nov 2, each of the 215 merged PRs passed CI and gitleaks and got a
-Bugbot review ([`docs/build-log.md`](docs/build-log.md)). Domain and Policy logic have
-unit tests; the gateway has contract tests that replay recorded spike fixtures
+On `dev` at `d958f29` (Nov 4, 2026), `npm test` reports **2,091 tests passed, 3
+skipped**, in 181 test files (one of them skipped). CI (`.github/workflows/ci.yml`) runs
+all three with `AI_MOCK=1`, so it never makes a paid model call. Gitleaks scans the full
+history on every PR (`.github/workflows/secret-scan.yml`) and runs as a pre-commit hook,
+and Cursor Bugbot reviews every PR: as of Nov 4, each of the 240 merged PRs passed CI and
+gitleaks and got a Bugbot review ([`docs/build-log.md`](docs/build-log.md)). Domain and
+Policy logic have unit tests; the gateway has contract tests that replay recorded spike
+fixtures
 (`eval/fixtures/studio/`). Live-model runs happen by hand, with cost logged; results are in
 [`eval/studio-findings.md`](eval/studio-findings.md).
 
