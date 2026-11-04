@@ -74,6 +74,8 @@ add sheet shows the budget line instead of the generic failure.
 
 ## Operator report
 
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
 ```sh
 npm run usage:costs -- --from 2026-10-01 --to 2026-10-31
 npm run usage:costs -- --days 7

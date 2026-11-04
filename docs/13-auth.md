@@ -81,6 +81,8 @@ bounds the cookie only.
 
 ## Operator steps to enable (per backend)
 
+_Operators only: this section is for whoever runs the hosted service; a visitor can skip it._
+
 Both projects (dev and prod) have the Google provider and the
 authorized domains enabled, and both run `AUTH_MODE=optional`. The
 web config lives in Secret Manager under the
@@ -147,6 +149,8 @@ paths, which Firebase Hosting serves and App Hosting does not
 `apphosting.dev.yaml` and `apphosting.prod.yaml` both set
 `AUTH_SAME_ORIGIN` to `1`, so Google's chooser names the app host
 on `dev.pinneds.com` and `pinneds.com`.
+
+_Operators only: the rest of this section is console work, done once per environment._
 
 Operator step, per environment (console, not code):
 

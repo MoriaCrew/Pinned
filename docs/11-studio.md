@@ -452,7 +452,8 @@ owning issue in brackets decides or verifies.
    **Default:** app deletes the working copy when pins are chosen
    (or at 24 h via a sweeper); operator tightens the lifecycle rule
    to 1 day as backstop. No 24 h claim in copy until both exist.
-   **Status:** the app side shipped; the 1-day rule is PIN-209 (A6).
+   **Status:** both shipped (A6); the operator applies the 1-day rule
+   per bucket (`docs/DEPLOY.md` §6 step 2).
    [PIN-53 + operator]
 6. **Slug validation:** a `%2F` slug reaches Firestore as a path.
    Validate at every route entry, or centrally in the repository?
