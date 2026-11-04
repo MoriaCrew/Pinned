@@ -4,6 +4,8 @@
   "landing.body": "Scatta una foto, noi ritagliamo quello che c'è dentro e i tuoi amici appuntano le loro sulla stessa bacheca.",
   "landing.start": "Crea una bacheca",
   "landing.demo": "Bacheca demo",
+  "landing.myBoard": "Vedi la mia bacheca",
+  "landing.myBoards": "Vedi le mie bacheche",
   "landing.demoTitle": "Bacheca demo",
   "landing.demoNote.one": "Una bacheca demo nuova solo per te. Scompare dopo {n} ora.",
   "landing.demoNote.other": "Una bacheca demo nuova solo per te. Scompare dopo {n} ore.",

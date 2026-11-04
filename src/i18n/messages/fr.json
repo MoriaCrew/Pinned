@@ -4,6 +4,8 @@
   "landing.body": "Prends une photo, on détoure ce qu'il y a dedans, et tes amis épinglent les leurs sur le même tableau.",
   "landing.start": "Créer un tableau",
   "landing.demo": "Tableau de démo",
+  "landing.myBoard": "Voir mon tableau",
+  "landing.myBoards": "Voir mes tableaux",
   "landing.demoTitle": "Tableau démo",
   "landing.demoNote.one": "Un tableau démo tout frais rien que pour toi. Il disparaît après {n} heure.",
   "landing.demoNote.other": "Un tableau démo tout frais rien que pour toi. Il disparaît après {n} heures.",

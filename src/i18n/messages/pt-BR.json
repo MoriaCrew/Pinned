@@ -4,6 +4,8 @@
   "landing.body": "Tire uma foto, a gente recorta o que tem nela e seus amigos fixam as deles no mesmo quadro.",
   "landing.start": "Criar quadro",
   "landing.demo": "Quadro demo",
+  "landing.myBoard": "Ver meu quadro",
+  "landing.myBoards": "Ver meus quadros",
   "landing.demoTitle": "Quadro demo",
   "landing.demoNote.one": "Um quadro demo novinho só para você. Desaparece depois de {n} hora.",
   "landing.demoNote.other": "Um quadro demo novinho só para você. Desaparece depois de {n} horas.",
