@@ -14,7 +14,7 @@ import "server-only";
  * (photo-intake, PIN-64). The bucket 1-day lifecycle backstop is
  * an operator step; until it lands no copy may claim 24h deletion.
  */
-import { emptyBoardCounters, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
+import { emptyBoardCounters, isHeldRef, type Board, type DecomposeJob, type Element, type Participant, type Pin, type Scene, type SceneJob } from "../domain/board";
 import { activityLines } from "../domain/board-activity";
 import { normalizeElementLabel } from "../domain/element-label";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
@@ -184,6 +184,9 @@ export function publicElement(slug: string, element: Element) {
     description: element.description,
     maskBox: element.maskBox,
     faceFlag: element.faceFlag,
+    // PIN-279: under a report hold the picture is a 404 and the pin
+    // cannot be picked; the flag says why, nothing else about the report.
+    held: isHeldRef(element.cutoutRef),
     createdAt: element.createdAt,
     imageUrl: elementImageUrl(slug, element.id, "cutout"),
     flattenedUrl: elementImageUrl(slug, element.id, "flattened"),
@@ -1352,7 +1355,7 @@ export async function requestScene(
         error.code === "scenes_per_participant_day" ||
         error.code === "scenes_per_board_day"
           ? 429
-          : error.code === "scene_id_conflict"
+          : error.code === "scene_id_conflict" || error.code === "element_under_review"
             ? 409
             : error.code === "element_not_found" ||
                 error.code === "parent_not_found"

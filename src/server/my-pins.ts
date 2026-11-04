@@ -29,7 +29,7 @@ import "server-only";
  * appears in a response or URL (title label only).
  */
 import { createHash, randomUUID } from "node:crypto";
-import type { Element, Participant, Pin } from "../domain/board";
+import { isHeldRef, type Element, type Participant, type Pin } from "../domain/board";
 import { isLiveBoard, type BoardRepository } from "../domain/board-repository";
 import {
   clampLibraryLimit,
@@ -39,6 +39,7 @@ import {
 import type { UserProfile } from "../domain/user";
 import type { UserRepository } from "../domain/user-repository";
 import type { Policy } from "../policy/policy";
+import { userMessage } from "../i18n/user-message";
 import { BoardApiError } from "./board-session";
 import type { DerivativeStore } from "./derivative-store";
 
@@ -224,6 +225,10 @@ export async function pinFromLibrary(
   const source = await deps.boards.getElement(sourceElementId);
   if (!source || !(await ownsElement(user, source, deps.boards))) {
     throw new BoardApiError("Element not found.", 404);
+  }
+  // PIN-279: a pin under a report hold is not copied anywhere.
+  if (isHeldRef(source.cutoutRef)) {
+    throw new BoardApiError(userMessage("request.pinUnderReview"), 409, "element_under_review");
   }
 
   const now = deps.now?.() ?? Date.now();
