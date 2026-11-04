@@ -214,7 +214,7 @@ stateDiagram-v2
   pending --> running: claim before call
   pending --> failed: stale sweep
   running --> ready
-  running --> failed
+  running --> failed: error or stale sweep
   running --> refused
   ready --> [*]
   failed --> [*]
