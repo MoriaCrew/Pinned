@@ -271,6 +271,8 @@
   flex-direction: column;
   max-height: 92vh;
   max-height: 92dvh;
+  /* The body below scrolls; the sheet itself must not (PIN-261). */
+  overflow: visible;
 }
 
 .lookSheet:focus {
